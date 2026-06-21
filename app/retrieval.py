@@ -20,6 +20,7 @@ from app.logging_config import log_event, setup_logging
 from app.models import PipelineOverrides, QueryContext, QueryExecutionPlan, QueryOptions
 from app.graph_retrieval import append_graph_expansion_postprocessor
 from app.lost_in_middle_reorder import append_lost_in_middle_reorder_postprocessor
+from app.multi_query_expansion import prepare_multi_query_expansion, wrap_engine_for_multi_query
 from app.pipeline_factory import (
     build_filters,
     build_postprocessors,
@@ -395,6 +396,15 @@ def build_query_engine(
         query_engine_cache_policy=execution_plan.query_engine_cache_policy,
     )
 
+    multi_query_variants: list[str] | None = None
+    if query_context is not None:
+        multi_query_variants, mq_trace = prepare_multi_query_expansion(
+            execution_plan=execution_plan,
+            query_context=query_context,
+            options=options,
+        )
+        query_context.trace["multi_query_expansion"] = mq_trace
+
     engine = build_query_engine_for_retrieval_mode(
         retrieval_mode=retrieval_mode,
         index=index,
@@ -407,6 +417,19 @@ def build_query_engine(
         postprocessors=postprocessors,
         query_context=query_context,
     )
+
+    if (
+        query_context is not None
+        and multi_query_variants
+        and len(multi_query_variants) > 1
+        and query_context.trace.get("multi_query_expansion", {}).get("expansion_enabled")
+    ):
+        engine = wrap_engine_for_multi_query(
+            engine,
+            variant_queries=multi_query_variants,
+            trace_sink=query_context.trace["multi_query_expansion"],
+            similarity_top_k=execution_plan.similarity_top_k,
+        )
 
     if cache_allowed:
         set_cached_query_engine(cache_key, engine)

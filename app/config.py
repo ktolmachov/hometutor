@@ -589,6 +589,8 @@ class RetrievalSettings(BaseSettings):
     rerank_top_n: int = 4
     rerank_model: str = "BAAI/bge-reranker-base"
     enable_lost_in_middle_reorder: bool = True
+    enable_multi_query: bool = False
+    multi_query_count: int = 3
     doc_top_k: int = 5
     chunk_size: int = 700
     chunk_overlap: int = 50
@@ -607,6 +609,13 @@ class RetrievalSettings(BaseSettings):
     def non_negative_int(cls, value: int) -> int:
         if value < 0:
             raise ValueError("must be >= 0")
+        return value
+
+    @field_validator("multi_query_count")
+    @classmethod
+    def multi_query_count_in_range(cls, value: int) -> int:
+        if value < 2 or value > 4:
+            raise ValueError("must be between 2 and 4")
         return value
 
     @field_validator("rag_profile", mode="before")

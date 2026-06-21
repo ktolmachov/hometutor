@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=75.0"]
-build-backend = "setuptools.backends._legacy:_Backend"
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "hometutor"
@@ -15,6 +15,7 @@ dependencies = [
     "llama-index-llms-openai==0.7.5",
     "llama-index-postprocessor-flag-embedding-reranker==0.5.0",
     "llama-index-retrievers-bm25==0.7.1",
+    "bm25s>=0.2.7",
     "llama-index-core==0.14.20",
     "chromadb==1.5.5",
     "python-dotenv==1.2.2",
@@ -62,6 +63,9 @@ dev = [
 all = [
     "hometutor[voice,ocr,otel,telegram,dev]",
 ]
+
+[project.scripts]
+ask = "app.ask_cli:main"
 
 [tool.setuptools.packages.find]
 include = ["app*"]

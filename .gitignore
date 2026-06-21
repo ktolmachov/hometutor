@@ -11,3 +11,5 @@ index_registry.json.lock
 index_meta.json
 eval_results/
 .pytest_cache/
+.python/
+hometutor.egg-info/

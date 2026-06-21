@@ -361,6 +361,24 @@ def process_micro_quiz_outcome(
     budget = with_budget("quiz_submit", _submit_body)
     payload = dict(budget.result)
     payload["latency_budget"] = budget_meta_to_session_event(budget.meta)
+    settings = get_settings()
+    if settings.session_tape_full_events_enabled and session_id:
+        try:
+            from app.session_tape import append_event
+
+            append_event(
+                session_id,
+                "quiz_attempt",
+                {
+                    "quiz_kind": "micro",
+                    "topic": (current_topic or "general").strip() or "general",
+                    "correct": payload.get("quiz_feedback", {}).get("status") == "correct",
+                    "difficulty_band": str(q.get("difficulty") or "medium").strip().lower() or "medium",
+                },
+                surface="quiz_submit",
+            )
+        except Exception as exc:  # noqa: BLE001 - analytics must not block quiz submit
+            logger.debug("session tape quiz_attempt skipped: %s", exc)
     maybe_append_budget_tape_event(session_id, budget.meta)
     return payload
 

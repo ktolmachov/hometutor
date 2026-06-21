@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Any
+from uuid import uuid4
 
 import streamlit as st
 
@@ -17,6 +18,8 @@ PROGRESS_FOCUS_STREAK_WEEKLY = "streak_weekly"
 
 
 def init_state() -> None:
+    if "_session_tape_id" not in st.session_state:
+        st.session_state["_session_tape_id"] = f"sess-{uuid4().hex[:12]}"
     defaults = {
         "history": [],
         "last_answer": None,

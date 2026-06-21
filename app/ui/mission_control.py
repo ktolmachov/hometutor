@@ -604,6 +604,27 @@ def render_kg_mission_card() -> None:
 
 def render_mission_control(index_stats: dict | None = None) -> None:
     """Render the single home hero with SSR and seven destination tiles."""
+    settings = get_settings()
+    if settings.session_tape_full_events_enabled and not st.session_state.get("_mission_loaded_emitted"):
+        try:
+            from app.session_tape import append_event
+
+            session_id = str(st.session_state.get("_session_tape_id") or "").strip()
+            if session_id:
+                append_event(
+                    session_id,
+                    "mission_loaded",
+                    {
+                        "status": "ready" if index_stats else "empty",
+                        "variant": "cockpit_v2" if settings.rag_course_cockpit_v2 else "classic",
+                    },
+                    surface="mission_control",
+                )
+                st.session_state["_mission_loaded_emitted"] = True
+        except Exception as exc:  # noqa: BLE001 - Mission Control must keep rendering
+            import logging
+
+            logging.getLogger(__name__).debug("mission_loaded tape event skipped: %s", exc)
     st.session_state["mission_control_course_options"] = build_mission_control_course_options(
         index_stats
     )

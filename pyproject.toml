@@ -56,12 +56,16 @@ telegram = [
     "aiogram==3.27.0",
     "apscheduler",
 ]
+ml = [
+    "pyarrow>=14.0",
+    "scikit-learn>=1.3",
+]
 dev = [
     "pytest==9.0.2",
     "pytest-cov==6.0.0",
 ]
 all = [
-    "hometutor[voice,ocr,otel,telegram,dev]",
+    "hometutor[voice,ocr,otel,telegram,ml,dev]",
 ]
 
 [project.scripts]

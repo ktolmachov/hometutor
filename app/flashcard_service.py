@@ -35,6 +35,7 @@ from app.user_state import (
     normalize_flashcard_tags,
     parse_flashcard_tags,
     save_flashcards_to_deck,
+    record_flashcard_review_log,
     set_kv,
     update_flashcard,
     update_flashcard_sr,
@@ -711,6 +712,20 @@ def review_flashcard(card_id: int, quality: int) -> dict[str, Any]:
     ).isoformat()
 
     update_flashcard_sr(card_id, new_ef, new_interval, new_reps, next_review, last_review)
+    try:
+        record_flashcard_review_log(
+            card_id=card_id,
+            deck_id=int(card["deck_id"]),
+            quality=q,
+            easiness_before=float(card["easiness"]),
+            easiness_after=float(new_ef),
+            interval_before=int(card["interval_days"] or 0),
+            interval_after=int(new_interval),
+            repetitions=int(new_reps),
+            reviewed_at=last_review,
+        )
+    except Exception as exc:  # noqa: BLE001 - review state is already persisted
+        logger.debug("flashcard_review_log insert failed: %s", exc)
 
     try:
         from app.user_state import increment_weekly_progress

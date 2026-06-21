@@ -381,6 +381,7 @@ class Settings(BaseSettings):
     home_rag_micro_quiz_offline: bool = False
     home_rag_e2e_offline: bool = False
     session_tape_debug_replay_enabled: bool = False
+    session_tape_full_events_enabled: bool = False
     # E30: single-pane course cockpit в Streamlit; выкл. по умолчанию — классический tab-flow без изменений
     rag_course_cockpit_v2: bool = False
 

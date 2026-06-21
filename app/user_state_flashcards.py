@@ -413,6 +413,45 @@ def update_flashcard_sr(
     _with_db(_work, write=True)
 
 
+def record_flashcard_review_log(
+    *,
+    card_id: int,
+    deck_id: int,
+    quality: int,
+    easiness_before: float,
+    easiness_after: float,
+    interval_before: int,
+    interval_after: int,
+    repetitions: int,
+    reviewed_at: str,
+) -> int:
+    def _work(conn: sqlite3.Connection) -> int:
+        cur = conn.execute(
+            """
+            INSERT INTO flashcard_review_log (
+                card_id, deck_id, quality, easiness_before, easiness_after,
+                interval_before, interval_after, repetitions, reviewed_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                int(card_id),
+                int(deck_id),
+                int(quality),
+                float(easiness_before),
+                float(easiness_after),
+                int(interval_before),
+                int(interval_after),
+                int(repetitions),
+                reviewed_at,
+            ),
+        )
+        conn.commit()
+        return int(cur.lastrowid or 0)
+
+    return _with_db(_work, write=True)
+
+
 def update_flashcard(card_id: int, front: str | None, back: str | None, tags: str | None) -> bool:
     now = _utc_now_iso()
 

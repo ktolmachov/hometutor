@@ -177,6 +177,20 @@ _SYNC_TABLE_COLUMNS: dict[str, frozenset[str]] = {
             "updated_at",
         }
     ),
+    "flashcard_review_log": frozenset(
+        {
+            "id",
+            "card_id",
+            "deck_id",
+            "quality",
+            "easiness_before",
+            "easiness_after",
+            "interval_before",
+            "interval_after",
+            "repetitions",
+            "reviewed_at",
+        }
+    ),
     "app_kv": frozenset({"key", "value", "updated_at"}),
 }
 _SYNC_TABLES_ORDER: tuple[str, ...] = tuple(_SYNC_TABLE_COLUMNS)
@@ -523,6 +537,28 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_fc_deck_review ON flashcards(deck_id, next_review)"
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS flashcard_review_log (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            card_id          INTEGER NOT NULL,
+            deck_id          INTEGER NOT NULL,
+            quality          INTEGER NOT NULL,
+            easiness_before  REAL    NOT NULL,
+            easiness_after   REAL    NOT NULL,
+            interval_before  INTEGER NOT NULL,
+            interval_after   INTEGER NOT NULL,
+            repetitions      INTEGER NOT NULL,
+            reviewed_at      TEXT    NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_fcrl_card ON flashcard_review_log(card_id, reviewed_at DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_fcrl_ts   ON flashcard_review_log(reviewed_at DESC)"
     )
     conn.execute(
         """

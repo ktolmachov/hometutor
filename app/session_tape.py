@@ -83,11 +83,14 @@ EVENT_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
 RESERVED_NOT_EMITTED = frozenset({"card_created", "dwell_ms"})
 
 _started_sessions: set[str] = set()
+_last_started_session_id: str | None = None
 
 
 def reset_session_started_cache_for_tests() -> None:
     """Clear in-process session_started dedup (tests only)."""
+    global _last_started_session_id
     _started_sessions.clear()
+    _last_started_session_id = None
 
 
 def sanitize_session_id(session_id: str) -> str:
@@ -185,9 +188,18 @@ def ensure_session_started(
     sessions_dir: Path | None = None,
 ) -> None:
     """Emit session_started once per session_id per process."""
+    global _last_started_session_id
     if session_id in _started_sessions:
         return
+    if _last_started_session_id and _last_started_session_id != session_id:
+        end_session(
+            _last_started_session_id,
+            reason="superseded_by_new_session",
+            course_id=course_id,
+            sessions_dir=sessions_dir,
+        )
     _started_sessions.add(session_id)
+    _last_started_session_id = session_id
     append_event(
         session_id,
         "session_started",

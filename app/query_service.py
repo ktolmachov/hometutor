@@ -1,3 +1,4 @@
+import hashlib
 import time
 import traceback
 import logging
@@ -79,6 +80,97 @@ from app.query_tutor_context import (
 logger = setup_logging()
 
 
+def _session_tape_full_events_enabled() -> bool:
+    return bool(get_settings().session_tape_full_events_enabled)
+
+
+def _append_full_session_tape_event(
+    session_id: str | None,
+    event_type: str,
+    payload: dict[str, Any],
+    *,
+    course_id: str | None = None,
+    surface: str | None = None,
+) -> None:
+    sid = str(session_id or "").strip()
+    if not sid or not _session_tape_full_events_enabled():
+        return
+    try:
+        from app.session_tape import append_event
+
+        append_event(
+            sid,
+            event_type,
+            payload,
+            course_id=course_id,
+            surface=surface,
+        )
+    except Exception as exc:  # noqa: BLE001 - analytics must not break answers
+        logger.debug("session tape full event skipped: %s", exc)
+
+
+def _confidence_for_tape(confidence: Any) -> Any:
+    if isinstance(confidence, dict):
+        if confidence.get("avg_source_score") is not None:
+            return confidence.get("avg_source_score")
+        if confidence.get("level") is not None:
+            return confidence.get("level")
+    return confidence
+
+
+def _emit_question_asked_event(question: str, options: QueryOptions) -> None:
+    surface = resolve_query_surface(options)
+    _append_full_session_tape_event(
+        options.session_id,
+        "question_asked",
+        {
+            "question_hash": hashlib.sha256(str(question or "").encode("utf-8")).hexdigest()[:16],
+            "char_length": len(str(question or "")),
+            "surface": surface,
+        },
+        course_id=options.folder_rel or options.folder,
+        surface=surface,
+    )
+
+
+def _emit_retrieval_completed_event(
+    options: QueryOptions,
+    rag_result: dict[str, Any],
+) -> None:
+    response = rag_result.get("response")
+    sources = getattr(response, "source_nodes", None) or []
+    pipeline_params = rag_result.get("pipeline_params") or {}
+    _append_full_session_tape_event(
+        options.session_id,
+        "retrieval_completed",
+        {
+            "source_count": len(sources),
+            "retrieval_mode": pipeline_params.get("retrieval_mode") or "unknown",
+            "latency_ms": float(rag_result.get("retrieval_ms") or rag_result.get("query_execute_ms") or 0.0),
+        },
+        course_id=options.folder_rel or options.folder,
+        surface=resolve_query_surface(options),
+    )
+
+
+def _emit_answer_surfaced_event(options: QueryOptions, result: Any) -> None:
+    if not isinstance(result, dict):
+        return
+    debug = result.get("debug") if isinstance(result.get("debug"), dict) else {}
+    sources = result.get("sources") if isinstance(result.get("sources"), list) else []
+    _append_full_session_tape_event(
+        options.session_id,
+        "answer_surfaced",
+        {
+            "confidence": _confidence_for_tape(result.get("confidence")),
+            "source_count": len(sources),
+            "total_answer_ms": float(debug.get("total_answer_ms") or 0.0),
+        },
+        course_id=options.folder_rel or options.folder,
+        surface=resolve_query_surface(options),
+    )
+
+
 def _compose_study_mode_question(question: str, options: QueryOptions) -> tuple[str, bool]:
     followup_context = (options.followup_context or "").strip()
     if not options.study_mode or not followup_context:
@@ -139,6 +231,7 @@ def _prepare_query_context(
         study_mode=options.study_mode,
         homework_mode=options.homework_mode,
     )
+    _emit_question_asked_event(question, options)
 
     pipeline_started = time.perf_counter()
     ctx = run_pipeline(effective_input_question, options)
@@ -669,6 +762,7 @@ def _answer_question_main_flow(
         return faq_result
 
     rag_result = _execute_rag_query(ctx, options, execution_plan)
+    _emit_retrieval_completed_event(options, rag_result)
     proc_result = _process_rag_response(
         response=rag_result["response"],
         ctx=ctx,
@@ -706,6 +800,7 @@ def _finalize_budgeted_answer(result: Any, meta, options: QueryOptions) -> Any:
         meta,
         course_id=options.folder_rel or options.folder,
     )
+    _emit_answer_surfaced_event(options, merged)
     return merged
 
 

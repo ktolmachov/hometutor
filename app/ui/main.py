@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 from app import user_state
 from app.config import get_settings
 from app.otel_tracing import init_otel_if_enabled
+from app.session_tape import ensure_session_started
 from app.ui.config_env_banner import render_config_env_banner as _render_config_env_banner
 from app.ui.offline_banner import render_offline_banner as _render_offline_banner
 from app.ui.quick_answer import render_quick_answer_tab as _render_quick_answer_tab
@@ -260,6 +261,13 @@ selected_view = st.selectbox(
     key="current_view",
     label_visibility="collapsed",
 )
+_session_tape_id = str(st.session_state.get("_session_tape_id") or "").strip()
+if _session_tape_id and get_settings().session_tape_full_events_enabled:
+    ensure_session_started(
+        _session_tape_id,
+        entry_surface=str(selected_view),
+        surface="streamlit",
+    )
 if selected_view != HOME_VIEW:
     render_back_to_home()
 

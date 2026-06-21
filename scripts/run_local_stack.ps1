@@ -106,7 +106,8 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "`n🔍 Pre-flight checks for local LLM integration..." -ForegroundColor Cyan
 
-$envPath2 = Join-Path $Root ".env"
+$DataRoot = if ($env:HOME_RAG_HOME) { $env:HOME_RAG_HOME } else { $Root }
+$envPath2 = Join-Path $DataRoot ".env"
 $configEnvPath = Join-Path $Root "config.env"
 
 function Remove-DotEnvInlineComment {

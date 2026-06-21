@@ -24,6 +24,11 @@ $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $Root
 
+# Data root: HOME_RAG_HOME env or default D:\AI\app
+$DataRoot = if ($env:HOME_RAG_HOME) { $env:HOME_RAG_HOME } else { "D:\AI\app" }
+if (-not (Test-Path $DataRoot)) { Write-Host "[!] Data root not found: $DataRoot" -ForegroundColor Yellow }
+$env:HOME_RAG_HOME = $DataRoot
+
 $Py = Join-Path $Root ".venv\Scripts\python.exe"
 if (-not (Test-Path -LiteralPath $Py)) {
     Write-Host "Не найден $Py" -ForegroundColor Red

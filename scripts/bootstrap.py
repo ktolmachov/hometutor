@@ -27,14 +27,15 @@ def main() -> int:
     errors: list[str] = []
     warnings: list[str] = []
 
-    env_path = root / ".env"
+    data_root = Path(os.getenv("HOME_RAG_HOME", "D:/AI/app"))
+    env_path = data_root / ".env"
     env_example = root / ".env.example"
     if not env_path.is_file():
-        errors.append(f"Нет файла {env_path} — скопируйте из {env_example.name}: copy .env.example .env")
+        errors.append(f"Нет файла {env_path} — скопируйте из {env_example.name} в {data_root}: copy .env.example {data_root}\\.env")
     elif not env_path.stat().st_size:
         errors.append(f"{env_path} пустой — задайте переменные (см. {env_example.name}).")
 
-    for name, path in (("data", root / "data"), ("chroma_db", root / "chroma_db")):
+    for name, path in (("data", data_root / "data"), ("chroma_db", data_root / "chroma_db")):
         if path.is_dir():
             continue
         try:
@@ -60,7 +61,7 @@ def main() -> int:
     except Exception as e:
         errors.append(f"Не удалось прочитать настройки: {e}")
 
-    logs_dir = root / "logs"
+    logs_dir = data_root / "logs"
     if not logs_dir.is_dir():
         try:
             logs_dir.mkdir(parents=True, exist_ok=True)

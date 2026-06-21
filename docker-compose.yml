@@ -1,11 +1,13 @@
 # hometutor — Docker-стек (FastAPI + Streamlit)
 #
-# Данные и индекс живут на хосте, контейнер видит их через volume mounts.
-# Индексацию делать на хосте: cd D:\AI\app && .\.venv\Scripts\python ingest.py
-# Контейнер подхватит свежий индекс без перезапуска.
+# Данные живут на хосте, контейнер видит их через volume mounts.
+# Путь к данным задаётся через HOME_RAG_HOME в .env (по умолчанию = ./ = корень репо).
 #
-# Запуск:
-#   docker compose up --build
+# Примеры:
+#   docker compose up --build                    # данные в ./data, ./chroma_db, ./logs
+#   HOME_RAG_HOME=D:/AI/app docker compose up    # данные в D:\AI\app\{data,chroma_db,logs}
+#
+# С LM Studio / llama.cpp:
 #   docker compose -f docker-compose.yml -f docker-compose.lmstudio.yml up --build
 #   docker compose -f docker-compose.yml -f docker-compose.llamacpp.yml up --build
 
@@ -18,15 +20,13 @@ services:
       - "127.0.0.1:8000:8000"   # FastAPI  → http://127.0.0.1:8000/docs
       - "127.0.0.1:8501:8501"   # Streamlit → http://127.0.0.1:8501
     volumes:
-      # Данные на хосте → контейнер. Индексация на хосте, контейнер читает.
-      # По умолчанию — относительно docker-compose.yml (= корень репо).
-      # Для деплоя в D:\AI\app\ — заменить ./ на D:\AI\app\
-      - ./data:/app/data               # документы + user_state.db + кэш
-      - ./chroma_db:/app/chroma_db     # векторный + BM25 индекс
-      - ./logs:/app/logs               # метрики, cost-логи
-      - ./.env:/app/.env:ro            # секреты (read-only)
+      - ${HOME_RAG_HOME:-D:/AI/app}/data:/app/data               # документы + user_state.db
+      - ${HOME_RAG_HOME:-D:/AI/app}/chroma_db:/app/chroma_db     # векторный + BM25 индекс
+      - ${HOME_RAG_HOME:-D:/AI/app}/logs:/app/logs               # метрики, cost-логи
+      - ${HOME_RAG_HOME:-D:/AI/app}/.env:/app/.env:ro            # секреты (read-only)
     env_file:
-      - .env
+      - path: ${HOME_RAG_HOME:-D:/AI/app}/.env
+        required: false
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:

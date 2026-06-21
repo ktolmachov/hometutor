@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+"""
+Проверка окружения перед запуском (US-1.2): .env, каталоги данных, API-ключ.
+
+Запуск из корня репозитория: ``python scripts/bootstrap.py``
+Exit code: 0 — ок, 1 — есть блокирующие проблемы.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+
+def main() -> int:
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+    root = Path(__file__).resolve().parent.parent
+    os.chdir(root)
+
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    env_path = root / ".env"
+    env_example = root / ".env.example"
+    if not env_path.is_file():
+        errors.append(f"Нет файла {env_path} — скопируйте из {env_example.name}: copy .env.example .env")
+    elif not env_path.stat().st_size:
+        errors.append(f"{env_path} пустой — задайте переменные (см. {env_example.name}).")
+
+    for name, path in (("data", root / "data"), ("chroma_db", root / "chroma_db")):
+        if path.is_dir():
+            continue
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            errors.append(f"Не удалось создать каталог {name}/ ({path}): {e}")
+
+    # Загрузка настроек после смены cwd
+    sys.path.insert(0, str(root))
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(env_path if env_path.is_file() else None)
+        from app.config import get_settings, reset_settings_cache
+
+        reset_settings_cache()
+        key = (get_settings().openai_api_key or "").strip()
+        if not key:
+            errors.append(
+                "OPENAI_API_KEY не задан — укажите в .env (или переменные окружения). "
+                "Без ключа LLM/embeddings не работают."
+            )
+    except Exception as e:
+        errors.append(f"Не удалось прочитать настройки: {e}")
+
+    logs_dir = root / "logs"
+    if not logs_dir.is_dir():
+        try:
+            logs_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            warnings.append(f"Каталог logs/: {e}")
+
+    for w in warnings:
+        print(f"warning: {w}", file=sys.stderr)
+
+    if errors:
+        print("bootstrap: проверка не пройдена:", file=sys.stderr)
+        for e in errors:
+            print(f"  - {e}", file=sys.stderr)
+        return 1
+
+    print("bootstrap: ок — .env и каталоги на месте, OPENAI_API_KEY задан.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

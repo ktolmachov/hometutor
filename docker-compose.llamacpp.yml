@@ -1,0 +1,24 @@
+# Опционально: llama.cpp server на хосте (Windows/macOS/Linux + Docker Desktop)
+#
+# Проблема: в .env указано LLM_API_BASE=http://127.0.0.1:8080/v1 — внутри контейнера
+# 127.0.0.1 это сам контейнер, а не хост с llama-server.
+#
+# Вариант A (рекомендуется): в .env использовать http://host.docker.internal:8080/v1
+# Вариант B (этот файл): мост socat — в namespace контейнера 127.0.0.1:8080 → хост:8080
+#
+# Запуск:
+#   docker compose -f docker-compose.yml -f docker-compose.llamacpp.yml up --build
+#
+# На хосте: llama-server слушает http://127.0.0.1:8080 (модель загружена).
+# Типичный запуск llama-server:
+#   llama-server -m model.gguf -c 8192 --host 0.0.0.0 --port 8080
+
+services:
+  llamacpp-bridge:
+    image: alpine/socat
+    network_mode: "service:hometutor"
+    command: ["TCP-LISTEN:8080,fork,reuseaddr", "TCP-CONNECT:host.docker.internal:8080"]
+    depends_on:
+      hometutor:
+        condition: service_started
+    restart: unless-stopped

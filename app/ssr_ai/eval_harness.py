@@ -10,7 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 _EVAL = ROOT / "tests" / "eval"
-_ARCHIVE = ROOT / "archive" / "ml_eval"
+_ARCHIVE = ROOT / "eval_data" / "ml_eval"
 
 _pfx = "".join(("s", "s", "r"))
 CASES_PATH = _EVAL / f"{_pfx}_ml_reranking_test_cases.json"

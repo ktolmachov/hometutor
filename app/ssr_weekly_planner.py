@@ -206,9 +206,9 @@ def generate_weekly_study_plan(
 def load_weekly_planner_fixtures(
     path: str | Path | None = None,
 ) -> list[dict[str, Any]]:
-    """Load canonical fixture list (tracked default under archive/ml_eval/ssr_level3/)."""
+    """Load canonical fixture list (tracked default under eval_data/ml_eval/ssr_level3/)."""
     base = Path(__file__).resolve().parents[1]
-    canonical = base / "archive" / "ml_eval" / "ssr_level3" / "ssr_weekly_plan_fixtures.json"
+    canonical = base / "eval_data" / "ml_eval" / "ssr_level3" / "ssr_weekly_plan_fixtures.json"
     legacy = base / "data" / "ml" / "ssr_weekly_plan_fixtures.json"
     if path is None:
         p = canonical if canonical.is_file() else legacy

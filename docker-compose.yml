@@ -1,36 +1,33 @@
-# home-rag — локальный стек (аналог run_local_stack.ps1 -SkipPip)
-# Запуск: docker compose up --build
-# LM Studio на хосте: docker compose -f docker-compose.yml -f docker-compose.lmstudio.yml up --build
-# См. doc/user_guide_details.md § Docker Compose
+# hometutor — Docker-стек (FastAPI + Streamlit)
+#
+# Данные и индекс живут на хосте, контейнер видит их через volume mounts.
+# Индексацию делать на хосте: cd D:\AI\app && .\.venv\Scripts\python ingest.py
+# Контейнер подхватит свежий индекс без перезапуска.
+#
+# Запуск:
+#   docker compose up --build
+#   docker compose -f docker-compose.yml -f docker-compose.lmstudio.yml up --build
+#   docker compose -f docker-compose.yml -f docker-compose.llamacpp.yml up --build
 
 services:
-  home-rag:
+  hometutor:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
-      # Хост → контейнер (UI и REST с машины разработчика)
       - "127.0.0.1:8000:8000"   # FastAPI  → http://127.0.0.1:8000/docs
       - "127.0.0.1:8501:8501"   # Streamlit → http://127.0.0.1:8501
     volumes:
-      # ┌─────────────────────────────┬──────────────────┬────────────────────────────┐
-      # │ Путь на хосте (от корня     │ В контейнере     │ Назначение                 │
-      # │ репозитория)                │                  │                            │
-      # ├─────────────────────────────┼──────────────────┼────────────────────────────┤
-      # │ ./data                      │ /app/data        │ Ваши PDF/MD/DOCX,          │
-      # │                             │                  │ user_state.db, граф        │
-      # │ ./chroma_db                 │ /app/chroma_db   │ Chroma + BM25-индекс       │
-      # │ ./logs                      │ /app/logs        │ SSR-профили, cost-логи     │
-      # │ ./.env                      │ /app/.env (ro)   │ Секреты и модели           │
-      # └─────────────────────────────┴──────────────────┴────────────────────────────┘
-      - ./data:/app/data
-      - ./chroma_db:/app/chroma_db
-      - ./logs:/app/logs
-      - ./.env:/app/.env:ro
+      # Данные на хосте → контейнер. Индексация на хосте, контейнер читает.
+      # По умолчанию — относительно docker-compose.yml (= корень репо).
+      # Для деплоя в D:\AI\app\ — заменить ./ на D:\AI\app\
+      - ./data:/app/data               # документы + user_state.db + кэш
+      - ./chroma_db:/app/chroma_db     # векторный + BM25 индекс
+      - ./logs:/app/logs               # метрики, cost-логи
+      - ./.env:/app/.env:ro            # секреты (read-only)
     env_file:
       - .env
     extra_hosts:
-      # Доступ из контейнера к сервисам на хосте (LM Studio, Ollama на 127.0.0.1 хоста)
       - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]

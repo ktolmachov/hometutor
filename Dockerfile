@@ -13,9 +13,9 @@ WORKDIR /app
 
 # Copy requirements first for Docker layer caching
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --timeout 120 --retries 3 -r requirements.txt
 
-COPY scripts/docker_entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY deploy/docker/docker_entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Application code (see .dockerignore)

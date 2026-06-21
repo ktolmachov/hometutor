@@ -1,0 +1,581 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "profile_id": "fx_01",
+      "due_flashcard_count": 5,
+      "overdue_days_max": 1.0,
+      "quiz_failure_active": false,
+      "weak_concepts": [],
+      "mastery_avg": 0.75,
+      "continuation_queue_min": 10,
+      "minutes_available_per_day": [
+        50,
+        53,
+        56,
+        59,
+        62,
+        50,
+        53
+      ]
+    },
+    {
+      "profile_id": "fx_02",
+      "due_flashcard_count": 9,
+      "overdue_days_max": 1.7,
+      "quiz_failure_active": false,
+      "weak_concepts": [],
+      "mastery_avg": 0.75,
+      "continuation_queue_min": 11,
+      "minutes_available_per_day": [
+        46,
+        49,
+        52,
+        55,
+        58,
+        46,
+        49
+      ]
+    },
+    {
+      "profile_id": "fx_03",
+      "due_flashcard_count": 13,
+      "overdue_days_max": 2.4,
+      "quiz_failure_active": false,
+      "weak_concepts": [],
+      "mastery_avg": 0.75,
+      "continuation_queue_min": 12,
+      "minutes_available_per_day": [
+        42,
+        45,
+        48,
+        51,
+        54,
+        42,
+        45
+      ]
+    },
+    {
+      "profile_id": "fx_04",
+      "due_flashcard_count": 17,
+      "overdue_days_max": 3.0999999999999996,
+      "quiz_failure_active": false,
+      "weak_concepts": [],
+      "mastery_avg": 0.75,
+      "continuation_queue_min": 13,
+      "minutes_available_per_day": [
+        38,
+        41,
+        44,
+        47,
+        35,
+        38,
+        41
+      ]
+    },
+    {
+      "profile_id": "fx_05",
+      "due_flashcard_count": 21,
+      "overdue_days_max": 3.8,
+      "quiz_failure_active": false,
+      "weak_concepts": [],
+      "mastery_avg": 0.75,
+      "continuation_queue_min": 14,
+      "minutes_available_per_day": [
+        34,
+        37,
+        40,
+        43,
+        31,
+        34,
+        37
+      ]
+    },
+    {
+      "profile_id": "fx_06",
+      "due_flashcard_count": 25,
+      "overdue_days_max": 4.5,
+      "quiz_failure_active": false,
+      "weak_concepts": [],
+      "mastery_avg": 0.75,
+      "continuation_queue_min": 15,
+      "minutes_available_per_day": [
+        55,
+        58,
+        61,
+        64,
+        52,
+        55,
+        58
+      ]
+    },
+    {
+      "profile_id": "fx_07",
+      "due_flashcard_count": 29,
+      "overdue_days_max": 5.199999999999999,
+      "quiz_failure_active": false,
+      "weak_concepts": [],
+      "mastery_avg": 0.75,
+      "continuation_queue_min": 16,
+      "minutes_available_per_day": [
+        51,
+        54,
+        57,
+        45,
+        48,
+        51,
+        54
+      ]
+    },
+    {
+      "profile_id": "fx_08",
+      "due_flashcard_count": 33,
+      "overdue_days_max": 5.8999999999999995,
+      "quiz_failure_active": false,
+      "weak_concepts": [],
+      "mastery_avg": 0.75,
+      "continuation_queue_min": 17,
+      "minutes_available_per_day": [
+        47,
+        50,
+        53,
+        41,
+        44,
+        47,
+        50
+      ]
+    },
+    {
+      "profile_id": "fx_09",
+      "due_flashcard_count": 37,
+      "overdue_days_max": 6.6,
+      "quiz_failure_active": false,
+      "weak_concepts": [],
+      "mastery_avg": 0.75,
+      "continuation_queue_min": 18,
+      "minutes_available_per_day": [
+        43,
+        46,
+        49,
+        37,
+        40,
+        43,
+        46
+      ]
+    },
+    {
+      "profile_id": "fx_10",
+      "due_flashcard_count": 41,
+      "overdue_days_max": 7.3,
+      "quiz_failure_active": false,
+      "weak_concepts": [],
+      "mastery_avg": 0.75,
+      "continuation_queue_min": 19,
+      "minutes_available_per_day": [
+        39,
+        42,
+        30,
+        33,
+        36,
+        39,
+        42
+      ]
+    },
+    {
+      "profile_id": "fx_11",
+      "due_flashcard_count": 4,
+      "overdue_days_max": 0.5,
+      "quiz_failure_active": true,
+      "weak_concepts": [
+        "c10_a",
+        "c10_b"
+      ],
+      "mastery_avg": 0.45,
+      "continuation_queue_min": 30,
+      "minutes_available_per_day": [
+        50,
+        53,
+        41,
+        44,
+        47,
+        50,
+        53
+      ]
+    },
+    {
+      "profile_id": "fx_12",
+      "due_flashcard_count": 5,
+      "overdue_days_max": 0.5,
+      "quiz_failure_active": true,
+      "weak_concepts": [
+        "c11_a",
+        "c11_b"
+      ],
+      "mastery_avg": 0.45,
+      "continuation_queue_min": 30,
+      "minutes_available_per_day": [
+        46,
+        49,
+        37,
+        40,
+        43,
+        46,
+        49
+      ]
+    },
+    {
+      "profile_id": "fx_13",
+      "due_flashcard_count": 2,
+      "overdue_days_max": 0.5,
+      "quiz_failure_active": true,
+      "weak_concepts": [
+        "c12_a",
+        "c12_b"
+      ],
+      "mastery_avg": 0.45,
+      "continuation_queue_min": 30,
+      "minutes_available_per_day": [
+        42,
+        30,
+        33,
+        36,
+        39,
+        42,
+        30
+      ]
+    },
+    {
+      "profile_id": "fx_14",
+      "due_flashcard_count": 3,
+      "overdue_days_max": 0.5,
+      "quiz_failure_active": true,
+      "weak_concepts": [
+        "c13_a",
+        "c13_b"
+      ],
+      "mastery_avg": 0.45,
+      "continuation_queue_min": 30,
+      "minutes_available_per_day": [
+        38,
+        26,
+        29,
+        32,
+        35,
+        38,
+        26
+      ]
+    },
+    {
+      "profile_id": "fx_15",
+      "due_flashcard_count": 4,
+      "overdue_days_max": 0.5,
+      "quiz_failure_active": true,
+      "weak_concepts": [
+        "c14_a",
+        "c14_b"
+      ],
+      "mastery_avg": 0.45,
+      "continuation_queue_min": 30,
+      "minutes_available_per_day": [
+        34,
+        22,
+        25,
+        28,
+        31,
+        34,
+        22
+      ]
+    },
+    {
+      "profile_id": "fx_16",
+      "due_flashcard_count": 0,
+      "overdue_days_max": 0.0,
+      "quiz_failure_active": false,
+      "weak_concepts": [
+        "w15"
+      ],
+      "mastery_avg": 0.55,
+      "continuation_queue_min": 20,
+      "minutes_per_weak_concept": 18.0,
+      "minutes_available_per_day": [
+        42,
+        45,
+        48,
+        51,
+        54,
+        42,
+        45
+      ]
+    },
+    {
+      "profile_id": "fx_17",
+      "due_flashcard_count": 0,
+      "overdue_days_max": 0.0,
+      "quiz_failure_active": false,
+      "weak_concepts": [
+        "w16"
+      ],
+      "mastery_avg": 0.55,
+      "continuation_queue_min": 20,
+      "minutes_per_weak_concept": 18.0,
+      "minutes_available_per_day": [
+        38,
+        41,
+        44,
+        47,
+        50,
+        38,
+        41
+      ]
+    },
+    {
+      "profile_id": "fx_18",
+      "due_flashcard_count": 0,
+      "overdue_days_max": 0.0,
+      "quiz_failure_active": false,
+      "weak_concepts": [
+        "w17"
+      ],
+      "mastery_avg": 0.55,
+      "continuation_queue_min": 20,
+      "minutes_per_weak_concept": 18.0,
+      "minutes_available_per_day": [
+        34,
+        37,
+        40,
+        43,
+        46,
+        34,
+        37
+      ]
+    },
+    {
+      "profile_id": "fx_19",
+      "due_flashcard_count": 0,
+      "overdue_days_max": 0.0,
+      "quiz_failure_active": false,
+      "weak_concepts": [
+        "w18"
+      ],
+      "mastery_avg": 0.55,
+      "continuation_queue_min": 20,
+      "minutes_per_weak_concept": 18.0,
+      "minutes_available_per_day": [
+        30,
+        33,
+        36,
+        39,
+        27,
+        30,
+        33
+      ]
+    },
+    {
+      "profile_id": "fx_20",
+      "due_flashcard_count": 0,
+      "overdue_days_max": 0.0,
+      "quiz_failure_active": false,
+      "weak_concepts": [
+        "w19"
+      ],
+      "mastery_avg": 0.55,
+      "continuation_queue_min": 20,
+      "minutes_per_weak_concept": 18.0,
+      "minutes_available_per_day": [
+        26,
+        29,
+        32,
+        35,
+        23,
+        26,
+        29
+      ]
+    },
+    {
+      "profile_id": "fx_21",
+      "due_flashcard_count": 0,
+      "overdue_days_max": 0.0,
+      "quiz_failure_active": false,
+      "weak_concepts": [],
+      "mastery_avg": 0.92,
+      "continuation_queue_min": 35,
+      "minutes_available_per_day": [
+        40,
+        43,
+        46,
+        49,
+        37,
+        40,
+        43
+      ]
+    },
+    {
+      "profile_id": "fx_22",
+      "due_flashcard_count": 0,
+      "overdue_days_max": 0.0,
+      "quiz_failure_active": false,
+      "weak_concepts": [],
+      "mastery_avg": 0.92,
+      "continuation_queue_min": 36,
+      "minutes_available_per_day": [
+        36,
+        39,
+        42,
+        30,
+        33,
+        36,
+        39
+      ]
+    },
+    {
+      "profile_id": "fx_23",
+      "due_flashcard_count": 0,
+      "overdue_days_max": 0.0,
+      "quiz_failure_active": false,
+      "weak_concepts": [],
+      "mastery_avg": 0.92,
+      "continuation_queue_min": 37,
+      "minutes_available_per_day": [
+        32,
+        35,
+        38,
+        26,
+        29,
+        32,
+        35
+      ]
+    },
+    {
+      "profile_id": "fx_24",
+      "due_flashcard_count": 0,
+      "overdue_days_max": 0.0,
+      "quiz_failure_active": false,
+      "weak_concepts": [],
+      "mastery_avg": 0.92,
+      "continuation_queue_min": 38,
+      "minutes_available_per_day": [
+        28,
+        31,
+        34,
+        22,
+        25,
+        28,
+        31
+      ]
+    },
+    {
+      "profile_id": "fx_25",
+      "due_flashcard_count": 0,
+      "overdue_days_max": 0.0,
+      "quiz_failure_active": false,
+      "weak_concepts": [],
+      "mastery_avg": 0.92,
+      "continuation_queue_min": 39,
+      "minutes_available_per_day": [
+        24,
+        27,
+        15,
+        18,
+        21,
+        24,
+        27
+      ]
+    },
+    {
+      "profile_id": "fx_26",
+      "due_flashcard_count": 9,
+      "overdue_days_max": 3.2,
+      "quiz_failure_active": false,
+      "weak_concepts": [
+        "mix_25"
+      ],
+      "mastery_avg": 0.62,
+      "continuation_queue_min": 25,
+      "minutes_available_per_day": [
+        48,
+        51,
+        39,
+        42,
+        45,
+        48,
+        51
+      ]
+    },
+    {
+      "profile_id": "fx_27",
+      "due_flashcard_count": 10,
+      "overdue_days_max": 3.2,
+      "quiz_failure_active": true,
+      "weak_concepts": [],
+      "mastery_avg": 0.62,
+      "continuation_queue_min": 25,
+      "minutes_available_per_day": [
+        44,
+        47,
+        35,
+        38,
+        41,
+        44,
+        47
+      ]
+    },
+    {
+      "profile_id": "fx_28",
+      "due_flashcard_count": 8,
+      "overdue_days_max": 3.2,
+      "quiz_failure_active": false,
+      "weak_concepts": [
+        "mix_27"
+      ],
+      "mastery_avg": 0.62,
+      "continuation_queue_min": 25,
+      "minutes_available_per_day": [
+        40,
+        28,
+        31,
+        34,
+        37,
+        40,
+        28
+      ]
+    },
+    {
+      "profile_id": "fx_29",
+      "due_flashcard_count": 9,
+      "overdue_days_max": 3.2,
+      "quiz_failure_active": true,
+      "weak_concepts": [],
+      "mastery_avg": 0.62,
+      "continuation_queue_min": 25,
+      "minutes_available_per_day": [
+        36,
+        24,
+        27,
+        30,
+        33,
+        36,
+        24
+      ]
+    },
+    {
+      "profile_id": "fx_30",
+      "due_flashcard_count": 10,
+      "overdue_days_max": 3.2,
+      "quiz_failure_active": false,
+      "weak_concepts": [
+        "mix_29"
+      ],
+      "mastery_avg": 0.62,
+      "continuation_queue_min": 25,
+      "minutes_available_per_day": [
+        32,
+        20,
+        23,
+        26,
+        29,
+        32,
+        20
+      ]
+    }
+  ]
+}

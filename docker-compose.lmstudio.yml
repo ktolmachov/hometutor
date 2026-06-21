@@ -14,16 +14,16 @@
 services:
   lmstudio-bridge:
     image: alpine/socat
-    network_mode: "service:home-rag"
+    network_mode: "service:hometutor"
     command: ["TCP-LISTEN:1234,fork,reuseaddr", "TCP-CONNECT:host.docker.internal:1234"]
     depends_on:
-      home-rag:
+      hometutor:
         condition: service_started
     restart: unless-stopped
 
   # Раскомментируйте блок ниже, если Ollama на хосте :11434 и в .env EMBED/LLM на 127.0.0.1:11434
   # ollama-bridge:
   #   image: alpine/socat
-  #   network_mode: "service:home-rag"
+  #   network_mode: "service:hometutor"
   #   command: ["TCP-LISTEN:11434,fork,reuseaddr", "TCP-CONNECT:host.docker.internal:11434"]
   #   restart: unless-stopped

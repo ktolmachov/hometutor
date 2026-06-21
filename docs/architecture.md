@@ -1,10 +1,10 @@
-# Архитектура `home-rag_v2`
+# Архитектура `hometutor`
 
 Актуализировано по коду на 2026-05-06 (PlantUML architecture views + doc sweep).
 
 ## Контекст
 
-`home-rag_v2` — локальный учебный RAG-сервис поверх документов из `data/`.
+`hometutor` — локальный учебный RAG-сервис поверх документов из `data/`.
 Проект сочетает Q&A по базе знаний, tutor-режим, quiz/review, topics/synthesis, прогресс обучения и локальную синхронизацию пользовательского состояния.
 
 ## PlantUML Architecture Views
@@ -15,7 +15,7 @@
 
 ```plantuml
 @startuml
-title home-rag_v2 - C4 Level 1: System Context
+title hometutor - C4 Level 1: System Context
 left to right direction
 skinparam shadowing false
 skinparam rectangle {
@@ -26,7 +26,7 @@ skinparam rectangle {
 actor Learner as "Learner"
 actor Maintainer as "Maintainer / Agent"
 
-rectangle "home-rag_v2\nLocal learning assistant" as System <<Software System>> {
+rectangle "hometutor\nLocal learning assistant" as System <<Software System>> {
 }
 
 folder "data/\nLocal documents" as Data
@@ -45,7 +45,7 @@ System --> Stores : persists index, progress, sessions, metrics
 
 ```plantuml
 @startuml
-title home-rag_v2 - C4 Level 2: Containers
+title hometutor - C4 Level 2: Containers
 left to right direction
 skinparam shadowing false
 skinparam componentStyle rectangle
@@ -96,7 +96,7 @@ Ingest --> Metrics : reindex telemetry
 
 ```plantuml
 @startuml
-title home-rag_v2 - C4 Level 3: Query / Tutor Component View
+title hometutor - C4 Level 3: Query / Tutor Component View
 left to right direction
 skinparam shadowing false
 skinparam componentStyle rectangle
@@ -147,7 +147,7 @@ QueryService --> UserState : learner goal / mastery
 
 ```plantuml
 @startuml
-title home-rag_v2 - C4 Level 3: Indexing Component View
+title hometutor - C4 Level 3: Indexing Component View
 left to right direction
 skinparam shadowing false
 skinparam componentStyle rectangle

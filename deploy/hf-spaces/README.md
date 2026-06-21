@@ -9,9 +9,9 @@ app_file: app/ui/main.py
 pinned: false
 ---
 
-# home-rag — Деплой на Hugging Face Spaces (Демо-режим)
+# hometutor — Деплой на Hugging Face Spaces (Демо-режим)
 
-Этот каталог содержит конфигурационные файлы для развёртывания **home-rag** в публичном демонстрационном режиме на платформе **Hugging Face Spaces**.
+Этот каталог содержит конфигурационные файлы для развёртывания **hometutor** в публичном демонстрационном режиме на платформе **Hugging Face Spaces**.
 
 В этом режиме приложение работает в связке: **Streamlit UI** + **облачная LLM (OpenRouter / OpenAI)** + заранее подготовленный демонстрационный корпус лекций (`demo_data/`) и скомпилированный векторный индекс (`demo_chroma_db/`).
 
@@ -21,7 +21,7 @@ pinned: false
 
 ### 👍 Плюсы:
 1. **Полностью бесплатно (Free Tier):** Hugging Face предоставляет бесплатный CPU-инстанс (2 vCPU, 16 ГБ RAM), которого с запасом хватает для Streamlit UI.
-2. **Публичный адрес 24/7:** Вы получаете постоянную HTTPS-ссылку вида `https://huggingface.co/spaces/<username>/home-rag`.
+2. **Публичный адрес 24/7:** Вы получаете постоянную HTTPS-ссылку вида `https://huggingface.co/spaces/<username>/hometutor`.
 3. **Безопасное хранение ключей:** API-ключи провайдеров и настройки хранятся в зашифрованных секретах платформы (HF Secrets).
 4. **Простой деплой:** Обновление приложения происходит стандартной отправкой коммитов (`git push spaces main`).
 
@@ -68,13 +68,13 @@ git commit -m "chore: pre-build demo database index"
 
 ### Шаг 3: Создание репозитория на Hugging Face
 1. Перейдите на [Hugging Face](https://huggingface.co/) и нажмите **New Space**.
-2. Укажите имя (например, `home-rag`), выберите SDK **Streamlit** и бесплатный тариф **CPU basic**.
+2. Укажите имя (например, `hometutor`), выберите SDK **Streamlit** и бесплатный тариф **CPU basic**.
 3. В созданном Space перейдите во вкладку **Settings** -> **Variables and secrets** и добавьте все переменные из таблицы выше.
 
 ### Шаг 4: Настройка локального репозитория
 Добавьте удалённый репозиторий Hugging Face в список remote вашего Git:
 ```bash
-git remote add spaces https://huggingface.co/spaces/ВАШ_ЛОГИН_HF/home-rag
+git remote add spaces https://huggingface.co/spaces/ВАШ_ЛОГИН_HF/hometutor
 ```
 
 ### Шаг 5: Обновление README и отправка кода

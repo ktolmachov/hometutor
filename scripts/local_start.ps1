@@ -1,7 +1,7 @@
 #requires -Version 5.1
 <#
 .SYNOPSIS
-  One-command localhost launcher for home-rag.
+  One-command localhost launcher for hometutor.
 
 .DESCRIPTION
   Runs a readiness gate first, then delegates to scripts\run_local_stack.ps1.

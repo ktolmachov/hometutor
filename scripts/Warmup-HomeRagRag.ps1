@@ -1,7 +1,7 @@
 #requires -Version 5.1
 <#
 .SYNOPSIS
-  Warm retrieval/reranker/query-engine inside a running home_rag API process.
+  Warm retrieval/reranker/query-engine inside a running hometutor API process.
 
 .EXAMPLE
   .\scripts\Warmup-HomeRagRag.ps1

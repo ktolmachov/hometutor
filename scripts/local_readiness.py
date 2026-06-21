@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Localhost-only readiness gate for home-rag.
+Localhost-only readiness gate for hometutor.
 
 The script is intentionally lightweight: it checks the local files, ports, and
 optional running endpoints needed for a dependable "start on localhost" path.

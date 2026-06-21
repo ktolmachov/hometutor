@@ -1,0 +1,22 @@
+{
+  "deck": {
+    "id": 1,
+    "name": "E2E Offline RAG Deck",
+    "card_count": 12,
+    "due_count": 12
+  },
+  "cards": [
+    {
+      "id": 1,
+      "deck_id": 1,
+      "deck_name": "E2E Offline RAG Deck",
+      "front": "What does retrieval add before generation?",
+      "back": "A compact set of source-grounded snippets.",
+      "tags": "e2e-offline, rag",
+      "interval_days": 0,
+      "repetitions": 0,
+      "ease_factor": 2.5,
+      "next_review": "2026-04-25T00:00:00+00:00"
+    }
+  ]
+}

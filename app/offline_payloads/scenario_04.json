@@ -1,0 +1,58 @@
+{
+  "success": true,
+  "scope": "topic",
+  "identifier": "retrieval-augmented-generation",
+  "num_questions": 5,
+  "motivation": "Offline demo quiz: +50 XP for a perfect run.",
+  "motivation_detail": "Deterministic e2e payload; no live LLM is used.",
+  "adaptive_level": "medium",
+  "mastery_estimate_percent": 64,
+  "xp_max": 50,
+  "questions": [
+    {
+      "id": "e2e-q1",
+      "q": "What is the core idea of retrieval augmented generation?",
+      "options": ["Use retrieved context before answering", "Skip source checking", "Train a new model for every question", "Return only file names"],
+      "correct": "A",
+      "explanation": "RAG retrieves relevant context and grounds the generated answer in it.",
+      "concept": "rag-basics",
+      "level": "recognition"
+    },
+    {
+      "id": "e2e-q2",
+      "q": "Why do source snippets matter?",
+      "options": ["They make claims inspectable", "They hide uncertainty", "They replace the answer", "They slow the UI on purpose"],
+      "correct": "A",
+      "explanation": "Snippets let the learner verify where an answer came from.",
+      "concept": "source-grounding",
+      "level": "recall"
+    },
+    {
+      "id": "e2e-q3",
+      "q": "Which signal should reduce confidence?",
+      "options": ["Conflicting sources", "Three matching sources", "Clear page labels", "Short latency"],
+      "correct": "A",
+      "explanation": "Conflicts are a reason to ask for clarification or mark lower confidence.",
+      "concept": "confidence",
+      "level": "transfer"
+    },
+    {
+      "id": "e2e-q4",
+      "q": "What should an offline demo avoid?",
+      "options": ["Live LLM calls", "Stable fixtures", "Source cards", "Screenshots"],
+      "correct": "A",
+      "explanation": "The demo must be deterministic and independent of provider keys.",
+      "concept": "offline-demo",
+      "level": "recognition"
+    },
+    {
+      "id": "e2e-q5",
+      "q": "What comes after a weak answer?",
+      "options": ["A focused review step", "Deleting the session", "Ignoring the miss", "Changing the topic randomly"],
+      "correct": "A",
+      "explanation": "The loop should route the learner to a targeted next action.",
+      "concept": "learning-loop",
+      "level": "transfer"
+    }
+  ]
+}

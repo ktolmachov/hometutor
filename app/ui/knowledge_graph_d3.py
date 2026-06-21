@@ -1,0 +1,1651 @@
+"""Beautiful D3.js knowledge-graph renderer — Wave 1 + Wave 2 + Wave 3 complete.
+
+Wave 1 packages shipped (all additive, zero breaking changes):
+  KG-01  build_weekly_plan()   — "Plan My Week" overlay (📅 mode)
+  KG-02  build_graph_health()  — Graph diagnostics panel (🔬)
+  KG-03  build_cluster_labels()— Named cluster hulls
+  KG-04  SVG export + permalink copy (⬇ SVG / 🔗 buttons)
+
+Wave 2 packages shipped:
+  KG-05  Guided path animation — BFS маршрут + D3 step-by-step reveal (🗺 кнопка)
+  KG-06  Forgetting decay overlay — Ebbinghaus retention → серый оверлей (🧠 кнопка)
+
+Wave 3 packages shipped:
+  KG-07  Mastery-over-time scrubber — temporal slider по quiz_results (⏱ кнопка)
+
+Public API (unchanged):
+    build_kg_payload(concepts, mastery_vector, learned_set, doc_index, due_reviews)
+    render_d3_knowledge_graph(concepts, mastery_vector, learned_set, ...)
+"""
+
+from __future__ import annotations
+
+import json
+import math
+from collections import deque
+from datetime import datetime, timezone
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Mapping, Sequence
+
+_D3_PATH = Path(__file__).resolve().parents[2] / "doc" / "assets" / "d3.v7.min.js"
+
+_LEVEL_META = {
+    "lesson":      {"label": "📘 Лекция",         "color": "#fbbf24"},
+    "beginner":    {"label": "🌱 Beginner",      "color": "#38bdf8"},
+    "intermediate":{"label": "🌿 Intermediate",   "color": "#a78bfa"},
+    "advanced":    {"label": "🌳 Advanced",       "color": "#fb7185"},
+    "unknown":     {"label": "❔ Без уровня",     "color": "#64748b"},
+}
+
+
+@lru_cache(maxsize=1)
+def _load_d3_source() -> str:
+    try:
+        return _D3_PATH.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def _norm_level(raw: Any) -> str:
+    lvl = str(raw or "").strip().lower()
+    return lvl if lvl in _LEVEL_META else "unknown"
+
+
+def _evidence_doc_label(doc_id: Any, doc_index: Mapping[str, Any]) -> str | None:
+    ref = str(doc_id or "").strip()
+    if not ref:
+        return None
+    meta = doc_index.get(ref, {}) if isinstance(doc_index, Mapping) else {}
+    if isinstance(meta, Mapping):
+        label = str(meta.get("relative_path") or meta.get("file_name") or "").strip()
+        if label:
+            return label
+    return ref
+
+
+def _reach_count(start: str, adj: Mapping[str, List[str]]) -> int:
+    seen: set[str] = set()
+    q: deque[str] = deque(adj.get(start, []))
+    while q:
+        n = q.popleft()
+        if n in seen:
+            continue
+        seen.add(n)
+        q.extend(adj.get(n, []))
+    return len(seen)
+
+
+def _connected_components(node_ids: Sequence[str], edges: Sequence[Dict[str, str]]) -> Dict[str, int]:
+    parent = {nid: nid for nid in node_ids}
+
+    def find(x: str) -> str:
+        root = x
+        while parent[root] != root:
+            root = parent[root]
+        while parent[x] != root:
+            parent[x], x = root, parent[x]
+        return root
+
+    for e in edges:
+        a, b = e["source"], e["target"]
+        if a in parent and b in parent:
+            ra, rb = find(a), find(b)
+            if ra != rb:
+                parent[ra] = rb
+
+    root_to_idx: Dict[str, int] = {}
+    return {nid: root_to_idx.setdefault(find(nid), len(root_to_idx)) for nid in node_ids}
+
+
+# ── Wave 1 analysis helpers ─────────────────────────────────────────
+
+def build_weekly_plan(
+    nodes: List[Dict[str, Any]],
+    due_reviews: List[Mapping[str, Any]] | None = None,
+    n: int = 5,
+) -> List[Dict[str, Any]]:
+    """Order concepts by study priority: overdue SRS > frontier > in-progress.
+
+    Returns up to *n* dicts with keys:
+      concept, reason, reason_label, mastery, days_overdue
+    """
+    import datetime
+
+    due_map: Dict[str, int] = {}
+    for row in (due_reviews or []):
+        cid = str(row.get("concept") or "").strip()
+        if not cid:
+            continue
+        nr = str(row.get("next_review") or "")
+        try:
+            nd = datetime.date.fromisoformat(nr[:10])
+            days_overdue = (datetime.date.today() - nd).days
+        except Exception:  # noqa: BLE001 - malformed review dates render as not overdue.
+            days_overdue = 0
+        due_map[cid] = days_overdue
+
+    seen: set[str] = set()
+    plan: List[Dict[str, Any]] = []
+
+    # 1 — overdue SRS reviews (most overdue first)
+    for cid, days in sorted(due_map.items(), key=lambda x: -x[1]):
+        if days < 0 or len(plan) >= n:
+            break
+        node = next((nd for nd in nodes if nd["id"] == cid), None)
+        if node and cid not in seen:
+            seen.add(cid)
+            plan.append({
+                "concept": cid,
+                "reason": "due_review",
+                "reason_label": f"🔁 повторение (просрочено {days}д)" if days else "🔁 повторение (сегодня)",
+                "mastery": node["mastery"],
+                "days_overdue": days,
+            })
+
+    # 2 — frontier (ready to learn)
+    for node in nodes:
+        if len(plan) >= n:
+            break
+        if node.get("frontier") and node["id"] not in seen:
+            seen.add(node["id"])
+            plan.append({
+                "concept": node["id"],
+                "reason": "frontier",
+                "reason_label": "✦ готово учить",
+                "mastery": node["mastery"],
+                "days_overdue": 0,
+            })
+
+    # 3 — in-progress (0 < mastery < 50 %, not learned, not frontier)
+    in_prog = sorted(
+        [nd for nd in nodes if 0 < nd["mastery"] < 50 and not nd.get("learned") and not nd.get("frontier") and nd["id"] not in seen],
+        key=lambda nd: -nd["mastery"],
+    )
+    for node in in_prog:
+        if len(plan) >= n:
+            break
+        seen.add(node["id"])
+        plan.append({
+            "concept": node["id"],
+            "reason": "in_progress",
+            "reason_label": f"📈 в процессе ({node['mastery']}%)",
+            "mastery": node["mastery"],
+            "days_overdue": 0,
+        })
+
+    return plan[:n]
+
+
+def build_graph_health(
+    nodes: List[Dict[str, Any]],
+    edges: List[Dict[str, str]],
+) -> Dict[str, Any]:
+    """Graph quality report: cycles, orphans, missing prerequisites, dead ends.
+
+    Returns dict with keys: score (0–100), cycles, orphans, missing, dead_ends.
+    """
+    node_ids = [n["id"] for n in nodes]
+    # directed adj: prereq → concept
+    adj: Dict[str, List[str]] = {nid: [] for nid in node_ids}
+    for e in edges:
+        if e["source"] in adj and e["target"] in adj:
+            adj[e["source"]].append(e["target"])
+
+    # iterative DFS cycle detection (avoids Python recursion limit)
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color: Dict[str, int] = {nid: WHITE for nid in node_ids}
+    cycles: List[List[str]] = []
+
+    for start in node_ids:
+        if color[start] != WHITE:
+            continue
+        stack = [(start, iter(adj.get(start, [])))]
+        path: List[str] = [start]
+        color[start] = GRAY
+        while stack:
+            _, children = stack[-1]
+            try:
+                child = next(children)
+                if color[child] == GRAY:
+                    idx = path.index(child)
+                    cycle = path[idx:]
+                    # deduplicate: only keep if not already seen
+                    key = frozenset(cycle)
+                    if not any(frozenset(c) == key for c in cycles):
+                        cycles.append(cycle[:])
+                elif color[child] == WHITE:
+                    color[child] = GRAY
+                    path.append(child)
+                    stack.append((child, iter(adj.get(child, []))))
+            except StopIteration:
+                color[stack.pop()[0]] = BLACK
+                if path:
+                    path.pop()
+
+    # undirected degree for orphan detection
+    degree: Dict[str, int] = {nid: 0 for nid in node_ids}
+    for e in edges:
+        degree[e["source"]] = degree.get(e["source"], 0) + 1
+        degree[e["target"]] = degree.get(e["target"], 0) + 1
+
+    orphans = [
+        n["id"] for n in nodes
+        if degree.get(n["id"], 0) == 0 and not n.get("learned")
+    ]
+    missing = [
+        {"concept": n["id"], "missing": n["missing"]}
+        for n in nodes if n.get("missing")
+    ]
+    dead_ends = [
+        n["id"] for n in nodes
+        if n.get("level") == "advanced"
+        and n.get("reach", 0) == 0
+        and not n.get("related")
+        and not n.get("learned")
+    ]
+
+    score = max(0, 100 - len(cycles) * 15 - len(orphans) * 5 - len(missing) * 3 - len(dead_ends) * 2)
+
+    return {
+        "score": score,
+        "cycles": [list(c) for c in cycles[:6]],
+        "orphans": orphans,
+        "missing": missing[:12],
+        "dead_ends": dead_ends,
+    }
+
+
+def build_cluster_labels(nodes: List[Dict[str, Any]]) -> Dict[str, str]:
+    """For each cluster pick the highest-reach concept as label."""
+    best: Dict[int, tuple[int, str]] = {}
+    for n in nodes:
+        cid = n.get("cluster", 0)
+        reach = n.get("reach", 0)
+        if cid not in best or reach > best[cid][0]:
+            best[cid] = (reach, n["id"])
+    return {str(cid): name for cid, (_, name) in best.items()}
+
+
+# ── KG-06: Ebbinghaus forgetting decay ───────────────────────────────
+
+def compute_decay(
+    last_review_iso: str | None,
+    easiness: float,
+    interval_days: int,
+) -> float:
+    """Ebbinghaus-SM2 retention: R = e^(-elapsed / stability).
+
+    stability = easiness * interval_days  (rough SM-2 approximation)
+    Returns a value in [0, 1] — 1.0 means fully retained, 0.0 = fully forgotten.
+    Returns 1.0 when ``last_review_iso`` is absent (never reviewed ≠ forgotten).
+    """
+    if not last_review_iso:
+        return 1.0
+    try:
+        last = datetime.fromisoformat(last_review_iso.replace("Z", "+00:00"))
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        elapsed = (datetime.now(tz=timezone.utc) - last).total_seconds() / 86400.0
+        stability = max(0.1, float(easiness) * max(1, int(interval_days)))
+        return round(min(1.0, max(0.0, math.exp(-elapsed / stability))), 4)
+    except Exception:  # noqa: BLE001 - invalid SR metadata falls back to full retention.
+        return 1.0
+
+
+def build_decay_vector(sr_records: List[Dict[str, Any]]) -> Dict[str, float]:
+    """Map concept_id → retention (0..1) from raw spaced-repetition rows."""
+    result: Dict[str, float] = {}
+    for row in sr_records:
+        cid = str(row.get("concept") or "").strip()
+        if not cid:
+            continue
+        result[cid] = compute_decay(
+            row.get("last_review"),
+            float(row.get("easiness") or 2.5),
+            int(row.get("interval_days") or 1),
+        )
+    return result
+
+
+# ── KG-07: mastery-over-time history ─────────────────────────────────
+
+_EMA_ALPHA = 0.35  # EMA smoothing for quiz score → mastery
+
+
+def build_mastery_history(
+    quiz_rows: List[Dict[str, Any]],
+    known_concept_ids: Iterable[str] | None = None,
+) -> List[Dict[str, Any]]:
+    """Build chronological mastery snapshots from raw quiz_results rows.
+
+    Args:
+        quiz_rows: list of {concept, score, timestamp} dicts, any order.
+        known_concept_ids: optional filter — only include concepts in the graph.
+
+    Returns:
+        List of snapshots sorted by date ascending:
+            [{"date": "2024-01-15", "mastery": {"Basics": 72.5, ...}}, ...]
+        Empty list when quiz_rows is empty.
+
+    Algorithm:
+        - Sort by timestamp ASC.
+        - EMA per concept (alpha=0.35): mastery = alpha*score + (1-alpha)*mastery.
+        - Snapshot at each new calendar date (date-boundary snapshot).
+        - Final snapshot always appended if the last day is not yet included.
+    """
+    if not quiz_rows:
+        return []
+
+    filter_ids: set[str] | None = None
+    if known_concept_ids is not None:
+        filter_ids = {str(c).strip() for c in known_concept_ids if str(c).strip()}
+
+    # Sort ascending by timestamp (lexicographic ISO works fine)
+    rows = sorted(quiz_rows, key=lambda r: str(r.get("timestamp") or ""))
+
+    ema: Dict[str, float] = {}        # concept → current mastery 0..1
+    snapshots: List[Dict[str, Any]] = []
+    last_date: str | None = None
+
+    def _take_snapshot(date: str) -> None:
+        if not ema:
+            return
+        subset = {
+            c: round(v * 100.0, 1)
+            for c, v in ema.items()
+            if filter_ids is None or c in filter_ids
+        }
+        if subset:
+            snapshots.append({"date": date, "mastery": subset})
+
+    for row in rows:
+        ts = str(row.get("timestamp") or "").strip()
+        if not ts:
+            continue
+        date = ts[:10]  # YYYY-MM-DD
+
+        concept = str(row.get("concept") or "").strip()
+        if not concept:
+            continue
+        if filter_ids is not None and concept not in filter_ids:
+            continue
+
+        try:
+            score = max(0.0, min(1.0, float(row.get("score") or 0.0)))
+        except (TypeError, ValueError):
+            score = 0.0
+
+        # Snapshot before processing a new day
+        if last_date is not None and date != last_date:
+            _take_snapshot(last_date)
+
+        ema[concept] = _EMA_ALPHA * score + (1.0 - _EMA_ALPHA) * ema.get(concept, score)
+        last_date = date
+
+    # Final snapshot for the last day
+    if last_date and (not snapshots or snapshots[-1]["date"] != last_date):
+        _take_snapshot(last_date)
+
+    return snapshots
+
+
+# ── Document path resolution (Obsidian / VS Code deep-links) ─────────
+
+def _document_paths(rel_path: str) -> tuple[str | None, str | None, str | None]:
+    """Resolve (source_abs, vault_md_abs, obs_uri) for a document card.
+
+    ``vault_md_abs`` / ``obs_uri`` are non-null only when a converted Markdown exists.
+    Failures degrade gracefully so the graph still renders.
+    """
+    try:
+        from app import obsidian_export as oe
+
+        src = oe.resolve_source(rel_path)
+        if src is None:
+            return None, None, None
+        md = oe.vault_target(src)
+        if md.exists():
+            return str(src), str(md), oe.obsidian_uri(md)
+        return str(src), None, None
+    except Exception:  # noqa: BLE001  # pragma: no cover - path lookup must not break graph rendering.
+        return None, None, None
+
+
+# ── Main payload builder ─────────────────────────────────────────────
+
+def build_kg_payload(
+    concepts: Mapping[str, Any],
+    mastery_vector: Mapping[str, float] | None = None,
+    learned_set: Iterable[str] | None = None,
+    doc_index: Mapping[str, Any] | None = None,
+    due_reviews: List[Mapping[str, Any]] | None = None,
+    sr_records: List[Dict[str, Any]] | None = None,
+    quiz_rows: List[Dict[str, Any]] | None = None,
+    typed_relations: Iterable[Mapping[str, Any]] | None = None,
+    compiler_health: Mapping[str, Any] | None = None,
+) -> Dict[str, Any]:
+    """Assemble all graph data for the D3 renderer."""
+    mastery_vector = mastery_vector or {}
+    learned = {str(x).strip() for x in (learned_set or []) if str(x).strip()}
+    doc_index = doc_index or {}
+    decay_vector = build_decay_vector(sr_records or [])
+
+    valid = {cid: data for cid, data in concepts.items() if isinstance(data, dict)}
+    ids = list(valid.keys())
+    id_set = set(ids)
+    label_to_id = {
+        str(data.get("label") or cid).strip(): cid
+        for cid, data in valid.items()
+        if str(data.get("label") or cid).strip()
+    }
+
+    def resolve_concept_id(value: Any) -> str | None:
+        ref = str(value or "").strip()
+        if ref in id_set:
+            return ref
+        return label_to_id.get(ref)
+
+    edges: List[Dict[str, Any]] = []
+    prereqs_map: Dict[str, List[str]] = {}
+    missing_map: Dict[str, List[str]] = {}
+    seen_edges: set[tuple[str, str]] = set()
+    for relation in typed_relations or []:
+        source = resolve_concept_id(relation.get("source_concept_id"))
+        target = resolve_concept_id(relation.get("target_concept_id"))
+        if not source or not target or source == target:
+            continue
+        key = (source, target)
+        if key in seen_edges:
+            continue
+        seen_edges.add(key)
+        edges.append({
+            "source": source,
+            "target": target,
+            "relation_type": str(relation.get("relation_type") or "related"),
+            "confidence": relation.get("confidence"),
+            "evidence_doc_id": relation.get("evidence_doc_id"),
+            "evidence_chunk_id": relation.get("evidence_chunk_id"),
+            "weak_evidence": relation.get("weak_evidence"),
+            "inferred_relation": relation.get("inferred_relation"),
+            "evidence_doc_label": _evidence_doc_label(relation.get("evidence_doc_id"), doc_index),
+        })
+
+    for cid, data in valid.items():
+        raw_prereqs = [str(p).strip() for p in (data.get("prerequisites") or []) if str(p).strip()]
+        prereqs = [resolved for p in raw_prereqs if (resolved := resolve_concept_id(p))]
+        prereqs_map[cid] = prereqs
+        missing_map[cid] = [p for p in raw_prereqs if resolve_concept_id(p) is None]
+        for p in prereqs:
+            key = (p, cid)
+            if key not in seen_edges:
+                seen_edges.add(key)
+                edges.append({
+                    "source": p,
+                    "target": cid,
+                    "relation_type": "prerequisite",
+                })
+
+    seen_related: set[tuple[str, str]] = set()
+    for cid, data in valid.items():
+        related = [str(r).strip() for r in (data.get("related_concepts") or []) if str(r).strip()]
+        for r in related:
+            related_id = resolve_concept_id(r)
+            if related_id:
+                canon = (min(cid, related_id), max(cid, related_id))
+                if canon not in seen_related:
+                    seen_related.add(canon)
+                    key = (cid, related_id)
+                    if key not in seen_edges and (related_id, cid) not in seen_edges:
+                        seen_edges.add(key)
+                        edges.append({
+                            "source": cid,
+                            "target": related_id,
+                            "relation_type": "related",
+                        })
+
+    fwd: Dict[str, List[str]] = {cid: [] for cid in ids}
+    unlocks: Dict[str, List[str]] = {cid: [] for cid in ids}
+    for e in edges:
+        fwd[e["source"]].append(e["target"])
+        unlocks[e["source"]].append(e["target"])
+
+    reach = {cid: _reach_count(cid, fwd) for cid in ids}
+    max_reach = max(reach.values()) if reach else 0
+    clusters = _connected_components(ids, edges)
+
+    def mastery_pct(cid: str, data: Mapping[str, Any]) -> float:
+        if cid in mastery_vector:
+            return round(float(mastery_vector[cid]) * 100.0, 1)
+        if cid in learned or bool(data.get("learned")):
+            return 100.0
+        return 0.0
+
+    nodes: List[Dict[str, Any]] = []
+    for cid, data in valid.items():
+        m = mastery_pct(cid, data)
+        is_learned = cid in learned or bool(data.get("learned")) or m >= 80.0
+        prereqs = prereqs_map[cid]
+        prereqs_ready = all(
+            (p in mastery_vector and mastery_vector[p] * 100 >= 80)
+            or p in learned
+            or bool(valid.get(p, {}).get("learned"))
+            for p in prereqs if p in id_set
+        )
+        frontier = (not is_learned) and m < 80.0 and prereqs_ready
+
+        related = list(data.get("related_documents") or data.get("documents") or [])
+        related_cards = []
+        for rp in related[:12]:
+            meta = doc_index.get(str(rp), {}) if isinstance(doc_index, Mapping) else {}
+            path = meta.get("relative_path") or meta.get("file_name") or str(rp)
+            src_abs, md_abs, obs_uri = _document_paths(path)
+            related_cards.append({
+                "path": path,
+                "meta": " · ".join(p for p in [
+                    str(meta.get("doc_type") or "").strip(),
+                    str(meta.get("difficulty") or "").strip(),
+                ] if p) or "document",
+                "summary": str(meta.get("summary") or "")[:220],
+                "src_abs": src_abs,
+                "md_abs": md_abs,
+                "obs_uri": obs_uri,
+                "is_txt": bool(src_abs and src_abs.lower().endswith(".txt")),
+            })
+
+        nodes.append({
+            "id": cid, "label": str(data.get("label") or cid),
+            "level": _norm_level(data.get("level")),
+            "desc": str(data.get("description") or "").strip(),
+            "mastery": m, "learned": bool(is_learned), "frontier": bool(frontier),
+            "prereqs": prereqs, "unlocks": sorted(set(unlocks[cid])),
+            "missing": missing_map[cid],
+            "reach": reach[cid],
+            "centrality": round(reach[cid] / max_reach, 4) if max_reach else 0.0,
+            "cluster": clusters.get(cid, 0),
+            "related": related_cards,
+            # KG-06: forgetting decay — null when no SRS record exists yet
+            "decay": decay_vector.get(cid),
+        })
+
+    stats = {
+        "total": len(nodes), "edges": len(edges),
+        "learned": sum(1 for n in nodes if n["learned"]),
+        "frontier": sum(1 for n in nodes if n["frontier"]),
+        "missing": sum(1 for n in nodes if n["missing"]),
+        "avg_mastery": round(sum(n["mastery"] for n in nodes) / len(nodes), 1) if nodes else 0.0,
+        "clusters": len(set(clusters.values())) if clusters else 0,
+    }
+
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "levels": _LEVEL_META,
+        "stats": stats,
+        # Wave 1 enrichments
+        "weekly_plan": build_weekly_plan(nodes, due_reviews),
+        "health": build_graph_health(nodes, edges),
+        "cluster_labels": build_cluster_labels(nodes),
+        # Wave 2 enrichments
+        "decay_vector": decay_vector,          # KG-06: {concept_id: retention 0..1}
+        # Wave 3 enrichments
+        "mastery_history": build_mastery_history(quiz_rows or [], ids),  # KG-07
+        "compiler_health": dict(compiler_health) if isinstance(compiler_health, Mapping) else None,
+    }
+
+
+def build_kg_html(payload: Mapping[str, Any]) -> str:
+    d3_src = _load_d3_source()
+    d3_tag = f"<script>{d3_src}</script>" if d3_src else '<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>'
+    return (
+        _HTML_TEMPLATE
+        .replace("__D3_TAG__", d3_tag)
+        .replace("__NODES__",         json.dumps(payload["nodes"],         ensure_ascii=False))
+        .replace("__EDGES__",         json.dumps(payload["edges"],         ensure_ascii=False))
+        .replace("__LEVELS__",        json.dumps(payload["levels"],        ensure_ascii=False))
+        .replace("__STATS__",         json.dumps(payload["stats"],         ensure_ascii=False))
+        .replace("__WEEKLY_PLAN__",   json.dumps(payload["weekly_plan"],   ensure_ascii=False))
+        .replace("__HEALTH__",        json.dumps(payload["health"],        ensure_ascii=False))
+        .replace("__CLUSTER_LABELS__",json.dumps(payload["cluster_labels"],ensure_ascii=False))
+        .replace("__DECAY_VECTOR__",    json.dumps(payload.get("decay_vector", {}),    ensure_ascii=False))
+        .replace("__MASTERY_HISTORY__", json.dumps(payload.get("mastery_history", []), ensure_ascii=False))
+        .replace("__COMPILER_HEALTH__", json.dumps(payload.get("compiler_health"), ensure_ascii=False))
+    )
+
+
+def render_d3_knowledge_graph(
+    concepts: Mapping[str, Any],
+    mastery_vector: Mapping[str, float] | None = None,
+    learned_set: Iterable[str] | None = None,
+    doc_index: Mapping[str, Any] | None = None,
+    typed_relations: Iterable[Mapping[str, Any]] | None = None,
+    source_paths: list[str] | None = None,
+    *,
+    height: int = 720,
+) -> Dict[str, Any]:
+    """Render via ``st.components.v1.html``; return payload for companion widgets."""
+    import streamlit.components.v1 as components
+
+    due_reviews: List[Dict[str, Any]] = []
+    sr_records: List[Dict[str, Any]] = []
+    quiz_rows: List[Dict[str, Any]] = []
+    try:
+        from app.spaced_repetition import get_due_reviews, get_all_sr_concepts
+        from app.user_state import _with_db
+        due_reviews = get_due_reviews(limit=20)
+        sr_records = get_all_sr_concepts()
+    except Exception:  # noqa: BLE001 - missing review state leaves the optional overlay empty.
+        pass
+    try:
+        def _load_quiz(conn: Any) -> List[Dict[str, Any]]:
+            rows = conn.execute(
+                "SELECT concept, score, timestamp FROM quiz_results ORDER BY timestamp ASC LIMIT 4000"
+            ).fetchall()
+            return [dict(r) for r in rows]
+        quiz_rows = _with_db(_load_quiz)
+    except Exception:  # noqa: BLE001 - missing quiz history leaves the optional overlay empty.
+        pass
+
+    compiler_health = None
+    try:
+        from app.course_cache import resolve_compiler_health_for_kg
+
+        paths = [str(p).strip() for p in (source_paths or []) if str(p).strip()]
+        if paths:
+            compiler_health = resolve_compiler_health_for_kg(source_paths=paths)
+    except Exception:  # noqa: BLE001 - missing sidecar must not break graph render
+        compiler_health = None
+
+    payload = build_kg_payload(
+        concepts,
+        mastery_vector,
+        learned_set,
+        doc_index,
+        due_reviews,
+        sr_records,
+        quiz_rows,
+        typed_relations,
+        compiler_health=compiler_health,
+    )
+    if payload["nodes"]:
+        components.html(build_kg_html(payload), height=height, scrolling=False)
+    return payload
+
+
+# ── HTML template ────────────────────────────────────────────────────
+_HTML_TEMPLATE = r'''<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<style>
+  :root{
+    --bg:#0a0a0f;--glass:rgba(255,255,255,0.04);--border:rgba(255,255,255,0.08);
+    --txt:#e8e8f0;--txt2:#8888a0;--txt3:#555570;--acc:#8b5cf6;--acc2:#4a9eff;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{height:100%;}
+  body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--txt);overflow:hidden;}
+  #wrap{position:relative;width:100%;height:100vh;}
+  /* topbar */
+  .topbar{position:absolute;top:0;left:0;right:0;z-index:50;display:flex;align-items:center;gap:6px;padding:7px 12px;background:rgba(10,10,15,0.88);backdrop-filter:blur(18px);border-bottom:1px solid var(--border);flex-wrap:wrap;}
+  .modes{display:flex;gap:4px;flex-wrap:wrap;}
+  .mode-btn{display:flex;align-items:center;gap:4px;padding:5px 10px;background:var(--glass);border:1px solid transparent;border-radius:8px;color:var(--txt2);font:inherit;font-size:11px;font-weight:600;cursor:pointer;transition:all .18s;white-space:nowrap;}
+  .mode-btn:hover{background:rgba(255,255,255,0.07);color:var(--txt);}
+  .mode-btn.active{border-color:var(--acc);background:rgba(139,92,246,0.16);color:var(--txt);}
+  /* KG-04 tool buttons */
+  .tools{display:flex;gap:4px;}
+  .tool-btn{display:flex;align-items:center;gap:3px;padding:5px 9px;background:var(--glass);border:1px solid var(--border);border-radius:8px;color:var(--txt2);font:inherit;font-size:11px;cursor:pointer;transition:all .18s;white-space:nowrap;}
+  .tool-btn:hover{background:rgba(255,255,255,0.07);color:var(--txt);}
+  .tool-btn.on{border-color:var(--acc);background:rgba(139,92,246,0.14);color:var(--txt);}
+  /* search */
+  .search{position:relative;margin-left:auto;width:210px;}
+  .search input{width:100%;padding:6px 10px 6px 28px;background:var(--glass);border:1px solid var(--border);border-radius:8px;color:var(--txt);font:inherit;font-size:11px;outline:none;transition:border-color .2s;}
+  .search input:focus{border-color:var(--acc);}
+  .search::before{content:'🔍';position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:11px;pointer-events:none;}
+  .search-drop{position:absolute;top:34px;left:0;right:0;background:rgba(8,8,14,0.98);backdrop-filter:blur(18px);border:1px solid var(--border);border-radius:10px;max-height:240px;overflow-y:auto;display:none;z-index:60;}
+  .search-drop.show{display:block;}
+  .sd{display:flex;align-items:center;gap:7px;padding:7px 11px;font-size:12px;cursor:pointer;color:var(--txt2);}
+  .sd:hover,.sd.on{background:rgba(139,92,246,0.16);color:var(--txt);}
+  .sd .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+  /* legend */
+  .legend{position:absolute;bottom:12px;left:12px;z-index:40;display:flex;flex-direction:column;gap:5px;padding:9px 12px;background:rgba(16,16,24,0.84);backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:12px;font-size:11px;}
+  .lg-row{display:flex;align-items:center;gap:7px;color:var(--txt2);cursor:pointer;transition:opacity .15s;}
+  .lg-row.off{opacity:.3;}
+  .lg-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+  .lg-ring{width:12px;height:12px;border-radius:50%;border:2.5px solid #22c55e;flex-shrink:0;box-sizing:border-box;}
+  .lg-title{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--txt3);margin-top:4px;}
+  .lg-line{width:22px;height:0;border-top:2px solid var(--txt2);flex-shrink:0;}
+  .lg-line.dash{border-top-style:dashed;}
+  .lg-line.dot{border-top-style:dotted;}
+  .legend{max-height:42vh;overflow-y:auto;}
+  /* edge evidence panel */
+  .ep-panel{position:absolute;left:12px;bottom:140px;z-index:72;width:300px;max-height:46vh;background:rgba(10,10,15,0.97);backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:13px;overflow-y:auto;padding:16px;transform:translateY(12px);opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;}
+  .ep-panel.open{transform:translateY(0);opacity:1;pointer-events:auto;}
+  .ep-title{font-size:14px;font-weight:700;margin-bottom:8px;}
+  .ep-row{font-size:12px;color:var(--txt2);margin:6px 0;line-height:1.45;}
+  .ep-row b{color:var(--txt);font-weight:600;}
+  .ep-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:5px;font-size:10px;font-weight:700;margin-right:4px;margin-top:4px;}
+  .ep-weak{background:rgba(251,191,36,0.16);color:#fcd34d;border:1px solid rgba(251,191,36,0.35);}
+  .ep-inferred{background:rgba(148,163,184,0.16);color:#94a3b8;border:1px solid rgba(148,163,184,0.35);}
+  .dp-divider{height:1px;background:var(--border);margin:6px 0;}
+  /* stats */
+  .stats{position:absolute;top:46px;left:12px;z-index:40;display:flex;gap:12px;padding:7px 13px;background:rgba(16,16,24,0.84);backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:12px;font-size:11px;color:var(--txt2);}
+  .stats b{color:var(--txt);font-size:13px;}
+  .st{display:flex;flex-direction:column;gap:1px;}
+  /* tooltip */
+  .tip{position:fixed;z-index:200;pointer-events:none;max-width:310px;padding:12px 15px;background:rgba(18,18,28,0.97);backdrop-filter:blur(22px);border:1px solid rgba(255,255,255,0.1);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,0.5);opacity:0;transition:opacity .15s;font-size:12px;line-height:1.5;}
+  .tip.show{opacity:1;}
+  .tip h3{font-size:14px;margin-bottom:5px;}
+  .tip .lvl{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:600;}
+  .tip .bar{height:5px;border-radius:3px;background:rgba(255,255,255,0.08);margin:7px 0 3px;overflow:hidden;}
+  .tip .bar>i{display:block;height:100%;border-radius:3px;}
+  .tip .mut{color:var(--txt3);font-size:10px;text-transform:uppercase;letter-spacing:.5px;margin-top:7px;}
+  /* detail panel */
+  .panel{position:absolute;top:0;right:0;bottom:0;width:340px;z-index:70;background:rgba(10,10,15,0.97);backdrop-filter:blur(20px);border-left:1px solid var(--border);overflow-y:auto;padding:18px;transform:translateX(360px);transition:transform .3s ease;}
+  .panel.open{transform:translateX(0);}
+  .pclose{position:absolute;top:12px;right:12px;width:28px;height:28px;border-radius:8px;background:var(--glass);border:1px solid var(--border);color:var(--txt2);cursor:pointer;font-size:14px;}
+  .pclose:hover{background:rgba(255,255,255,0.08);color:var(--txt);}
+  .panel h2{font-size:17px;margin-bottom:6px;padding-right:34px;}
+  .badge{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:5px;font-size:10px;font-weight:700;margin-right:4px;}
+  .bdg-frontier{background:rgba(251,191,36,0.16);color:#fcd34d;border:1px solid rgba(251,191,36,0.35);}
+  .bdg-learned{background:rgba(34,197,94,0.16);color:#86efac;border:1px solid rgba(34,197,94,0.35);}
+  .bdg-missing{background:rgba(239,68,68,0.16);color:#fca5a5;border:1px solid rgba(239,68,68,0.35);}
+  .gauge{display:flex;align-items:center;gap:10px;margin:12px 0;}
+  .gauge .track{flex:1;height:9px;border-radius:5px;background:rgba(255,255,255,0.08);overflow:hidden;}
+  .gauge .track>i{display:block;height:100%;border-radius:5px;}
+  .gauge .pct{font-size:15px;font-weight:700;min-width:46px;text-align:right;}
+  .pdesc{font-size:13px;color:var(--txt2);line-height:1.6;margin:10px 0 16px;}
+  .ptitle{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--txt3);margin:14px 0 6px;display:flex;align-items:center;gap:6px;}
+  .chip{display:flex;align-items:center;gap:7px;padding:6px 9px;margin:3px 0;background:var(--glass);border-radius:7px;font-size:12px;cursor:pointer;transition:background .15s;}
+  .chip:hover{background:rgba(255,255,255,0.07);}
+  .chip .mini{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+  .chip .mm{margin-left:auto;font-size:10px;color:var(--txt3);}
+  .doccard{padding:9px 11px;margin:5px 0;background:var(--glass);border:1px solid var(--border);border-radius:8px;}
+  .doccard .dp{font-size:12px;font-weight:600;color:var(--acc2);word-break:break-word;}
+  .doccard .dm{font-size:10px;color:var(--txt3);margin:2px 0 4px;}
+  .doccard .ds{font-size:11px;color:var(--txt2);line-height:1.5;}
+  .doccard .acts{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px;}
+  .action-btn{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;padding:3px 8px;border-radius:6px;text-decoration:none;cursor:pointer;border:1px solid var(--border);background:rgba(255,255,255,0.04);color:var(--txt2);transition:background .15s,color .15s;}
+  .action-btn:hover{background:rgba(255,255,255,0.10);color:var(--txt);}
+  .action-btn.obs{border-color:rgba(124,92,255,0.45);color:#b9a7ff;}
+  .action-btn.obs:hover{background:rgba(124,92,255,0.18);}
+  .action-btn.obs.ready{border-color:rgba(74,222,128,0.55);color:#4ade80;background:rgba(74,222,128,0.07);}
+  .action-btn.obs.ready:hover{background:rgba(74,222,128,0.18);}
+  .action-btn.obs.notready{border-color:rgba(148,163,184,0.25);color:#64748b;cursor:default;}
+  .action-btn.vsc{border-color:rgba(56,139,253,0.4);color:#79c0ff;}
+  .action-btn.vsc:hover{background:rgba(56,139,253,0.16);}
+  /* KG-01 plan panel */
+  .pp{position:absolute;top:46px;left:12px;z-index:55;width:268px;background:rgba(12,12,20,0.97);backdrop-filter:blur(18px);border:1px solid var(--border);border-radius:13px;overflow:hidden;display:none;box-shadow:0 8px 32px rgba(0,0,0,0.45);}
+  .pp.show{display:block;}
+  .pp-hd{padding:9px 13px 7px;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--txt3);border-bottom:1px solid var(--border);}
+  .pc{display:flex;align-items:flex-start;gap:9px;padding:9px 12px;border-bottom:1px solid rgba(255,255,255,0.03);transition:background .12s;}
+  .pc:last-child{border-bottom:none;}
+  .pc .num{width:20px;height:20px;min-width:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;margin-top:1px;}
+  .pc .body{flex:1;min-width:0;}
+  .pc .name{font-size:12px;font-weight:600;color:var(--txt);margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .pc .why{font-size:10px;margin-bottom:5px;}
+  .pc .mbar{height:3px;border-radius:2px;background:rgba(255,255,255,0.08);overflow:hidden;}
+  .pc .mbar i{display:block;height:100%;border-radius:2px;}
+  .tag-due{color:#60a5fa;}.tag-frontier{color:#fcd34d;}.tag-progress{color:#a78bfa;}
+  /* KG-02 diagnostics panel */
+  .dp-panel{position:absolute;top:46px;right:12px;z-index:65;width:288px;background:rgba(12,12,20,0.97);backdrop-filter:blur(18px);border:1px solid var(--border);border-radius:13px;overflow:hidden;display:none;box-shadow:0 8px 32px rgba(0,0,0,0.45);max-height:76vh;overflow-y:auto;}
+  .dp-panel.show{display:block;}
+  .dp-hd{display:flex;align-items:center;padding:9px 13px;border-bottom:1px solid var(--border);gap:7px;}
+  .dp-title{font-size:11px;font-weight:700;color:var(--txt);flex:1;}
+  .dp-score{font-size:13px;font-weight:800;}
+  .dp-x{background:none;border:none;color:var(--txt3);cursor:pointer;font-size:14px;padding:0;line-height:1;}
+  .dp-x:hover{color:var(--txt);}
+  .dp-section{padding:7px 13px 3px;font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--txt3);}
+  .dp-item{display:flex;align-items:flex-start;gap:7px;padding:5px 13px;font-size:11px;color:var(--txt2);border-bottom:1px solid rgba(255,255,255,0.025);}
+  .dp-item .ic{flex-shrink:0;margin-top:1px;}
+  .dp-item b{color:var(--txt);font-weight:600;}
+  .dp-ok{display:flex;align-items:center;gap:7px;padding:8px 13px;font-size:11px;color:#6ee7b7;}
+  /* minimap */
+  .mini{position:absolute;bottom:12px;right:12px;z-index:40;width:150px;height:110px;background:rgba(14,14,22,0.8);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+  .mini canvas{width:100%;height:100%;}
+  /* hint */
+  .hint{position:absolute;bottom:130px;right:12px;z-index:40;display:flex;gap:8px;padding:5px 11px;background:rgba(14,14,22,0.8);backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:9px;font-size:9px;color:var(--txt3);pointer-events:none;}
+  .kb{padding:1px 5px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.14);border-radius:4px;font-family:monospace;color:var(--txt2);}
+  /* KG-04 toast */
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:300;padding:7px 18px;background:rgba(34,197,94,0.14);border:1px solid rgba(34,197,94,0.28);border-radius:10px;font-size:12px;color:#86efac;pointer-events:none;opacity:0;transition:opacity .25s;white-space:nowrap;}
+  .toast.show{opacity:1;}
+  svg{width:100%;height:100%;}
+  ::-webkit-scrollbar{width:5px;}
+  ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:3px;}
+  @keyframes pulse{0%,100%{stroke-opacity:.9;stroke-width:3;}50%{stroke-opacity:.3;stroke-width:6;}}
+  .frontier-halo{animation:pulse 2s ease-in-out infinite;}
+  /* KG-05 route panel */
+  .rp{position:absolute;top:60px;left:12px;z-index:60;width:230px;background:rgba(10,10,22,0.94);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.09);border-radius:14px;padding:13px 14px 15px;display:none;}
+  .rp.show{display:block;}
+  .rp-hd{font-size:10px;font-weight:700;color:var(--txt2);letter-spacing:.9px;text-transform:uppercase;margin-bottom:10px;}
+  .rp select{width:100%;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:7px;color:var(--txt);font-size:11px;padding:5px 7px;margin-bottom:7px;cursor:pointer;outline:none;}
+  .rp select option{background:#1a1a2e;}
+  .rp-find{width:100%;padding:7px;background:linear-gradient(135deg,#8b5cf6,#4a9eff);border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:.4px;}
+  .rp-find:hover{opacity:.85;}
+  .rp-steps{margin-top:10px;max-height:280px;overflow-y:auto;}
+  .rp-step{display:flex;align-items:center;gap:7px;padding:3px 0;font-size:11px;color:var(--txt2);}
+  .rp-arrow{padding:1px 0 1px 4px;font-size:10px;color:var(--txt3);}
+  .rs-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+  .rp-msg{font-size:10px;margin-top:7px;padding:5px 7px;border-radius:6px;}
+  .rp-err{color:#f87171;background:rgba(248,113,113,0.1);}
+  .rp-ok{color:#34d399;background:rgba(52,211,153,0.1);}
+  /* KG-06 decay overlay */
+  @keyframes decayPulse{0%,100%{opacity:.55;}50%{opacity:.2;}}
+  .decay-ring{animation:decayPulse 3s ease-in-out infinite;}
+  /* KG-07 scrubber bar */
+  .scrub{position:absolute;bottom:0;left:0;right:0;z-index:60;padding:9px 18px 10px;background:rgba(8,8,18,0.96);backdrop-filter:blur(18px);border-top:1px solid rgba(255,255,255,0.07);display:none;flex-direction:column;gap:5px;}
+  .scrub.show{display:flex;}
+  .scrub-row{display:flex;align-items:center;gap:10px;}
+  .scrub-date{font-size:12px;font-weight:700;color:var(--acc2);min-width:108px;}
+  .scrub-info{font-size:10px;color:var(--txt3);flex:1;}
+  .scrub-play{width:28px;height:28px;border-radius:8px;background:rgba(139,92,246,0.2);border:1px solid rgba(139,92,246,0.4);color:#c4b5fd;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .scrub-play:hover{background:rgba(139,92,246,0.35);}
+  .scrub-play.playing{background:rgba(239,68,68,0.2);border-color:rgba(239,68,68,0.4);color:#fca5a5;}
+  .scrub-track{flex:1;-webkit-appearance:none;appearance:none;height:4px;border-radius:3px;background:rgba(255,255,255,0.1);outline:none;cursor:pointer;}
+  .scrub-track::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#8b5cf6;border:2px solid rgba(255,255,255,0.3);cursor:pointer;}
+  .scrub-label{font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--txt3);}
+  .scrub-ghost{fill:none;stroke:#a78bfa;stroke-width:1.5;stroke-dasharray:4,3;opacity:0.35;pointer-events:none;}
+  /* tutor CTA hint inside node panel */
+  .tutor-cta{margin:10px 0 6px;padding:7px 10px;background:linear-gradient(135deg,rgba(139,92,246,0.15),rgba(74,158,255,0.1));border:1px solid rgba(139,92,246,0.3);border-radius:9px;font-size:11px;color:#c4b5fd;line-height:1.45;}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div class="topbar">
+    <div class="modes" id="modes"></div>
+    <div class="tools">
+      <button class="tool-btn" id="timebtn" title="История mastery по времени">⏱ История</button>
+      <button class="tool-btn" id="routebtn" title="Маршрут обучения (BFS)">🗺 Маршрут</button>
+      <button class="tool-btn" id="decaybtn" title="Забывание — оверлей Ebbinghaus">🧠 Забывание</button>
+      <button class="tool-btn" id="diagbtn" title="Диагностика графа">🔬 Диагностика</button>
+      <button class="tool-btn" id="expbtn" title="Скачать SVG">⬇ SVG</button>
+      <button class="tool-btn" id="linkbtn" title="Скопировать ссылку">🔗</button>
+    </div>
+    <div class="search"><input id="q" type="text" placeholder="Поиск... (/)" autocomplete="off"><div class="search-drop" id="qd"></div></div>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div class="legend" id="legend"></div>
+  <div class="mini"><canvas id="mmc"></canvas></div>
+  <div class="hint"><span><span class="kb">/</span> поиск</span><span><span class="kb">↑↓⏎</span> выбор</span><span><span class="kb">Esc</span> сброс</span></div>
+  <!-- KG-05 route panel -->
+  <div class="rp" id="rp">
+    <div class="rp-hd">🗺 Маршрут обучения</div>
+    <select id="rp-start"><option value="">— Старт —</option></select>
+    <select id="rp-end"><option value="">— Цель —</option></select>
+    <button class="rp-find" id="rp-find">Найти путь ▶</button>
+    <div id="rp-steps"></div>
+  </div>
+  <!-- KG-01 plan panel -->
+  <div class="pp" id="pp"><div class="pp-hd">📅 На неделю — план обучения</div><div id="pp-cards"></div></div>
+  <!-- KG-02 diagnostics panel -->
+  <div class="dp-panel" id="dp-panel">
+    <div class="dp-hd"><span class="dp-title">🔬 Здоровье графа</span><span class="dp-score" id="dp-score"></span><button class="dp-x" id="dp-close">✕</button></div>
+    <div id="dp-body"></div>
+    <div class="dp-divider"></div>
+    <div id="dp-compiler"></div>
+  </div>
+  <div class="ep-panel" id="ep-panel" data-testid="edge-evidence-panel"><button class="pclose" id="ep-close">✕</button><div id="epc"></div></div>
+  <!-- KG-04 toast -->
+  <div class="toast" id="toast"></div>
+  <svg id="svg"></svg>
+  <div class="panel" id="panel"><button class="pclose" id="pclose">✕</button><div id="pc"></div></div>
+  <!-- KG-07 scrubber bar -->
+  <div class="scrub" id="scrub">
+    <div class="scrub-row">
+      <button class="scrub-play" id="scrub-play" title="Воспроизвести">▶</button>
+      <input class="scrub-track" type="range" id="scrub-range" min="0" value="0">
+      <div class="scrub-date" id="scrub-date">—</div>
+    </div>
+    <div class="scrub-row">
+      <span class="scrub-label">История mastery ·</span>
+      <span class="scrub-info" id="scrub-info">Двигайте слайдер для перемотки</span>
+    </div>
+  </div>
+</div>
+<div class="tip" id="tip"></div>
+__D3_TAG__
+<script>
+const NODES=__NODES__,EDGES=__EDGES__,LEVELS=__LEVELS__,STATS=__STATS__;
+const WEEKLY_PLAN=__WEEKLY_PLAN__;
+const HEALTH=__HEALTH__;
+const COMPILER_HEALTH=__COMPILER_HEALTH__;
+const CLUSTER_LABELS=__CLUSTER_LABELS__;
+const DECAY_VECTOR=__DECAY_VECTOR__;        // KG-06: {concept_id: retention 0..1}
+const MASTERY_HISTORY=__MASTERY_HISTORY__;  // KG-07: [{date, mastery:{id:pct}}]
+const RELATION_STYLES={
+  prerequisite:{color:'#60a5fa',dash:null,width:2,opacity:0.75,marker:'arr-prereq',label:'prerequisite'},
+  precedes:{color:'#fbbf24',dash:'6,4',width:2,opacity:0.8,marker:'arr-precedes',label:'precedes'},
+  part_of:{color:'#34d399',dash:null,width:1.5,opacity:0.65,marker:null,label:'part_of'},
+  related:{color:'#a78bfa',dash:'2,4',width:1.5,opacity:0.55,marker:null,label:'related'},
+  extends:{color:'#fb923c',dash:null,width:2,opacity:0.75,marker:'arr-extends',label:'extends'},
+  uses:{color:'#94a3b8',dash:'4,3',width:1.8,opacity:0.7,marker:'arr-uses',label:'uses'},
+  contrasts:{color:'#f87171',dash:null,width:1.8,opacity:0.7,marker:null,label:'contrasts'},
+  unknown:{color:'#8888a0',dash:null,width:1.2,opacity:0.5,marker:'arr',label:'unknown'}
+};
+const RELATION_LABELS={
+  prerequisite:'Предварительное',precedes:'Следует за',part_of:'Часть',related:'Связано',
+  extends:'Расширяет',uses:'Использует',contrasts:'Контраст',unknown:'Неизвестно'
+};
+const nodeMap=new Map(NODES.map(n=>[n.id,n]));
+
+// ── Document deep-links (Obsidian / VS Code / copy) ──
+function _winPath(p){return (p||'').replace(/\//g,'\\');}
+function _obsidianUri(p){return 'obsidian://open?path='+encodeURIComponent(_winPath(p));}
+function _vscodeUri(p){return 'vscode://file/'+_winPath(p);}
+function _copyDocPath(p,btn){navigator.clipboard.writeText(_winPath(p)).then(()=>{const t=btn.textContent;btn.textContent='✓ Скопировано';setTimeout(()=>btn.textContent=t,1400);});}
+function _docActions(r){
+  if(!r.src_abs&&!r.md_abs)return'';
+  let btns='';
+  if(r.obs_uri){
+    btns+=`<a class="action-btn obs ready" href="${r.obs_uri}" title="✅ Конспект готов — открыть в Obsidian">🔮 Obsidian</a>`;
+  } else if(r.src_abs){
+    const hint=r.is_txt?'Нажмите «Подготовить для Obsidian» во вкладке Темы':'Откроется исходник (конспект не создан)';
+    const cls=r.is_txt?'obs notready':'obs';
+    const href=r.is_txt?'javascript:void(0)':_obsidianUri(r.src_abs);
+    btns+=`<a class="action-btn ${cls}" href="${href}" title="${hint}">🔮${r.is_txt?' нет конспекта':' Obsidian'}</a>`;
+  }
+  if(r.src_abs)btns+=`<a class="action-btn vsc" href="${_vscodeUri(r.src_abs)}" title="Открыть исходник в VS Code">🖥 VS Code</a>`;
+  if(r.src_abs)btns+=`<span class="action-btn cpy" data-copy="${(r.src_abs||'').replace(/"/g,'&quot;')}" title="Скопировать путь">📋 Путь</span>`;
+  return `<div class="acts">${btns}</div>`;
+}
+
+// directed + undirected adjacency
+const fwd=new Map(),rev=new Map();
+NODES.forEach(n=>{fwd.set(n.id,new Set());rev.set(n.id,new Set());});
+EDGES.forEach(e=>{if(nodeMap.has(e.source)&&nodeMap.has(e.target)){fwd.get(e.source).add(e.target);rev.get(e.target).add(e.source);}});
+
+function ancestors(id){const s=new Set(),st=[...rev.get(id)||[]];while(st.length){const x=st.pop();if(!s.has(x)){s.add(x);(rev.get(x)||[]).forEach(p=>st.push(p));}}return s;}
+function descendants(id){const s=new Set(),st=[...fwd.get(id)||[]];while(st.length){const x=st.pop();if(!s.has(x)){s.add(x);(fwd.get(x)||[]).forEach(p=>st.push(p));}}return s;}
+
+function masteryColor(m){if(m>=80)return'#22c55e';if(m>=50)return'#84cc16';if(m>=25)return'#f59e0b';if(m>0)return'#ef4444';return'rgba(255,255,255,0.12)';}
+function lvlColor(l){return(LEVELS[l]||LEVELS.unknown).color;}
+function R(d){const base=d.level==='lesson'?11:7;return base+Math.sqrt(d.reach||0)*3.4+(d.centrality||0)*6;}
+function arcPath(r,frac){frac=Math.max(0,Math.min(0.99999,frac));if(!frac)return'';const a=frac*2*Math.PI-Math.PI/2,sx=r*Math.cos(-Math.PI/2),sy=r*Math.sin(-Math.PI/2),ex=r*Math.cos(a),ey=r*Math.sin(a),lg=frac>.5?1:0;return`M${sx},${sy} A${r},${r} 0 ${lg} 1 ${ex},${ey}`;}
+
+// ── stats pill ──
+document.getElementById('stats').innerHTML=
+  `<div class="st"><b>${STATS.total}</b><span>концептов</span></div>`+
+  `<div class="st"><b>${STATS.avg_mastery}%</b><span>ср. mastery</span></div>`+
+  `<div class="st" style="color:#86efac"><b>${STATS.learned}</b><span>освоено</span></div>`+
+  `<div class="st" style="color:#fcd34d"><b>${STATS.frontier}</b><span>готово учить</span></div>`+
+  (STATS.missing?`<div class="st" style="color:#fca5a5"><b>${STATS.missing}</b><span>с пробелами</span></div>`:'')+
+  `<div class="st"><b>${STATS.clusters}</b><span>кластеров</span></div>`;
+
+// ── legend ──
+const hiddenLevels=new Set();
+const hiddenRelationTypes=new Set();
+let selectedEdgeId=null;
+function edgeKey(e){return`${e.source}${'→'}${e.target}`;}
+function relStyle(rt){return RELATION_STYLES[rt]||RELATION_STYLES.unknown;}
+function relCounts(){
+  const c={};
+  EDGES.forEach(e=>{const rt=e.relation_type||'prerequisite';c[rt]=(c[rt]||0)+1;});
+  return c;
+}
+let lgHtml='<div class="lg-title">Уровень (заливка)</div>';
+Object.entries(LEVELS).forEach(([k,v])=>{if(!NODES.some(n=>n.level===k))return;lgHtml+=`<div class="lg-row" data-lvl="${k}"><span class="lg-dot" style="background:${v.color}"></span>${v.label}</div>`;});
+lgHtml+='<div class="lg-title">Кольцо = mastery %</div><div class="lg-row" style="cursor:default"><span class="lg-ring"></span>заполнено → освоено</div>';
+const rc=relCounts();
+const relTypes=Object.keys(rc).filter(rt=>rc[rt]>0);
+lgHtml+=`<div class="lg-title" data-testid="relation-legend">Тип связи</div>`;
+if(relTypes.length){
+  relTypes.forEach(rt=>{
+    const st=relStyle(rt);
+    const dashCls=st.dash?(st.dash.includes('2')?'dot':'dash'):'';
+    lgHtml+=`<div class="lg-row" data-rel="${rt}"><span class="lg-line ${dashCls}" style="border-color:${st.color}"></span>${RELATION_LABELS[rt]||rt} <span style="color:var(--txt3)">(${rc[rt]})</span></div>`;
+  });
+}else{
+  lgHtml+='<div class="lg-row" style="cursor:default;color:var(--txt3)">Семантические связи: пока нет (только prerequisites)</div>';
+}
+document.getElementById('legend').innerHTML=lgHtml;
+document.querySelectorAll('.lg-row[data-lvl]').forEach(el=>el.addEventListener('click',()=>{const l=el.dataset.lvl;hiddenLevels.has(l)?hiddenLevels.delete(l):hiddenLevels.add(l);el.classList.toggle('off',hiddenLevels.has(l));applyFilters();}));
+document.querySelectorAll('.lg-row[data-rel]').forEach(el=>el.addEventListener('click',()=>{const r=el.dataset.rel;hiddenRelationTypes.has(r)?hiddenRelationTypes.delete(r):hiddenRelationTypes.add(r);el.classList.toggle('off',hiddenRelationTypes.has(r));applyFilters();}));
+function linkHidden(l){
+  const s=nodeMap.get(l.source.id||l.source),t=nodeMap.get(l.target.id||l.target);
+  const rt=l.relation_type||'prerequisite';
+  return hiddenLevels.has(s?.level)||hiddenLevels.has(t?.level)||hiddenRelationTypes.has(rt);
+}
+function styleLink(sel){
+  sel.attr('stroke',l=>relStyle(l.relation_type||'prerequisite').color)
+    .attr('stroke-width',l=>relStyle(l.relation_type||'prerequisite').width||1.5)
+    .attr('stroke-dasharray',l=>relStyle(l.relation_type||'prerequisite').dash||null)
+    .attr('stroke-opacity',l=>linkHidden(l)?0.02:(relStyle(l.relation_type||'prerequisite').opacity||0.6))
+    .attr('marker-end',l=>{const m=relStyle(l.relation_type||'prerequisite').marker;return m?`url(#${m})`:null;});
+}
+function applyFilters(){
+  nodeSel.select('.core').attr('fill-opacity',n=>hiddenLevels.has(n.level)?0.05:0.9);
+  nodeSel.select('text').attr('fill',n=>hiddenLevels.has(n.level)?'rgba(255,255,255,0.04)':'rgba(255,255,255,0.55)');
+  styleLink(link);
+  styleLink(linkHit);
+}
+
+// ── D3 setup ──
+const svg=d3.select('#svg'),W=window.innerWidth,H=window.innerHeight;
+svg.attr('viewBox',[0,0,W,H]);
+const defs=svg.append('defs');
+const root=svg.append('g');
+const zoom=d3.zoom().scaleExtent([0.15,4]).on('zoom',e=>{root.attr('transform',e.transform);drawMini();});
+svg.call(zoom);
+const hullG=root.append('g'),linkG=root.append('g'),linkHitG=root.append('g'),nodeG=root.append('g');
+const CCOLORS=['#8b5cf6','#4a9eff','#10b981','#f59e0b','#ef4444','#ec4899','#06b6d4','#a855f7','#14b8a6','#fb7185','#f97316','#6366f1'];
+
+const simNodes=NODES.map(n=>({...n}));
+const simLinks=EDGES.filter(e=>nodeMap.has(e.source)&&nodeMap.has(e.target)).map(e=>({...e,source:e.source,target:e.target}));
+
+const sim=d3.forceSimulation(simNodes)
+  .force('link',d3.forceLink(simLinks).id(d=>d.id).distance(d=>70+R(d.source)+R(d.target)).strength(0.35))
+  .force('charge',d3.forceManyBody().strength(-340).distanceMax(560))
+  .force('center',d3.forceCenter(W/2,H/2))
+  .force('collide',d3.forceCollide().radius(d=>R(d)+10))
+  .force('x',d3.forceX(W/2).strength(0.04)).force('y',d3.forceY(H/2).strength(0.04));
+
+function addMarker(id,color){
+  defs.append('marker').attr('id',id).attr('viewBox','0 -5 10 10').attr('refX',9).attr('refY',0)
+    .attr('markerWidth',5).attr('markerHeight',5).attr('orient','auto')
+    .append('path').attr('d','M0,-4L8,0L0,4').attr('fill',color);
+}
+addMarker('arr','rgba(168,168,200,0.5)');
+addMarker('arr-prereq','#60a5fa');
+addMarker('arr-precedes','#fbbf24');
+addMarker('arr-extends','#fb923c');
+addMarker('arr-uses','#94a3b8');
+
+const link=linkG.selectAll('line').data(simLinks,d=>edgeKey(d)).join('line').attr('pointer-events','none');
+styleLink(link);
+const linkHit=linkHitG.selectAll('line').data(simLinks,d=>edgeKey(d)).join('line')
+  .attr('stroke','transparent').attr('stroke-width',14).attr('stroke-opacity',0.001).style('cursor','pointer');
+
+const nodeSel=nodeG.selectAll('g').data(simNodes).join('g').attr('class','node').style('cursor','pointer')
+  .call(d3.drag()
+    .on('start',(e,d)=>{if(!e.active)sim.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y;})
+    .on('drag',(e,d)=>{d.fx=e.x;d.fy=e.y;})
+    .on('end',(e,d)=>{if(!e.active)sim.alphaTarget(0);d.fx=null;d.fy=null;}));
+
+nodeSel.filter(d=>d.frontier).append('circle').attr('class','halo frontier-halo')
+  .attr('r',d=>R(d)+5).attr('fill','none').attr('stroke','#fcd34d').attr('stroke-width',3);
+
+nodeSel.append('circle').attr('class','core')
+  .attr('r',d=>R(d)).attr('fill',d=>lvlColor(d.level)).attr('fill-opacity',0.9)
+  .attr('stroke',d=>lvlColor(d.level)).attr('stroke-width',1).attr('stroke-opacity',0.4);
+
+nodeSel.append('circle').attr('class','ring-bg')
+  .attr('r',d=>R(d)+3.5).attr('fill','none').attr('stroke','rgba(255,255,255,0.07)').attr('stroke-width',2.5);
+nodeSel.append('path').attr('class','ring')
+  .attr('d',d=>arcPath(R(d)+3.5,d.mastery/100)).attr('fill','none')
+  .attr('stroke',d=>masteryColor(d.mastery)).attr('stroke-width',2.5).attr('stroke-linecap','round');
+
+nodeSel.filter(d=>d.missing&&d.missing.length).append('circle')
+  .attr('r',3.4).attr('cx',d=>R(d)*0.72).attr('cy',d=>-R(d)*0.72)
+  .attr('fill','#ef4444').attr('stroke','#0a0a0f').attr('stroke-width',1);
+
+nodeSel.append('text').text(d=>d.label)
+  .attr('dy',d=>R(d)+13).attr('text-anchor','middle')
+  .attr('fill','rgba(255,255,255,0.55)').attr('font-size',d=>d.reach>3?11:9.5)
+  .attr('font-weight',d=>d.reach>3?600:400).style('pointer-events','none').style('user-select','none');
+
+// KG-01 plan overlay layer (updated on every tick)
+const planG=nodeG.append('g');
+const PLAN_COLORS=['#f87171','#fb923c','#fbbf24','#a3e635','#34d399'];
+// KG-05 route overlay layer
+const routeG=nodeG.append('g');
+// KG-06 decay overlay layer (gray circles proportional to forgetting)
+const decayG=nodeG.append('g');
+
+function linkCoords(d){
+  const x1=d.source.x,y1=d.source.y,dx=d.target.x-d.source.x,dy=d.target.y-d.source.y,L=Math.hypot(dx,dy)||1;
+  return{x1,y1,x2:d.target.x-dx/L*(R(d.target)+6),y2:d.target.y-dy/L*(R(d.target)+6)};
+}
+sim.on('tick',()=>{
+  link.each(function(d){const c=linkCoords(d);d3.select(this).attr('x1',c.x1).attr('y1',c.y1).attr('x2',c.x2).attr('y2',c.y2);});
+  linkHit.each(function(d){const c=linkCoords(d);d3.select(this).attr('x1',c.x1).attr('y1',c.y1).attr('x2',c.x2).attr('y2',c.y2);});
+  nodeSel.attr('transform',d=>`translate(${d.x},${d.y})`);
+  // KG-01: reposition plan halos on tick (data-joined, so d is a plan entry)
+  planG.selectAll('.ph').attr('cx',d=>d.node.x).attr('cy',d=>d.node.y);
+  planG.selectAll('.pn').attr('x',d=>d.node.x).attr('y',d=>d.node.y-R(d.node)-16);
+  // KG-05: reposition route halos on tick
+  routeG.selectAll('.rt').attr('cx',d=>d.node.x).attr('cy',d=>d.node.y);
+  // KG-06: reposition decay overlay circles on tick
+  decayG.selectAll('.dc').attr('cx',d=>d.node.x).attr('cy',d=>d.node.y);
+  // KG-03: cluster hulls + labels
+  drawHulls();
+  drawMini();
+});
+
+// KG-03: cluster hulls with centroid labels
+const hullLabelG=hullG.append('g').style('pointer-events','none');
+function drawHulls(){
+  const by={};
+  simNodes.forEach(n=>{(by[n.cluster]=by[n.cluster]||[]).push([n.x,n.y]);});
+  const entries=Object.entries(by);
+  hullG.selectAll('path.ch').data(entries).join('path').attr('class','ch')
+    .attr('d',([cid,pts])=>{
+      if(pts.length<3)return null;
+      const h=d3.polygonHull(pts);if(!h)return null;
+      const cx=d3.mean(pts,p=>p[0]),cy=d3.mean(pts,p=>p[1]);
+      const ex=h.map(([x,y])=>{const dx=x-cx,dy=y-cy,L=Math.hypot(dx,dy)||1;return[x+dx/L*26,y+dy/L*26];});
+      return'M'+ex.join('L')+'Z';
+    })
+    .attr('fill',([cid])=>CCOLORS[+cid%CCOLORS.length]).attr('fill-opacity',0.035)
+    .attr('stroke',([cid])=>CCOLORS[+cid%CCOLORS.length]).attr('stroke-opacity',0.08).attr('stroke-width',2);
+  hullLabelG.selectAll('text').data(entries).join('text')
+    .attr('x',([,pts])=>d3.mean(pts,p=>p[0])).attr('y',([,pts])=>d3.mean(pts,p=>p[1]))
+    .attr('text-anchor','middle').attr('dominant-baseline','middle')
+    .attr('fill',([cid])=>CCOLORS[+cid%CCOLORS.length]).attr('fill-opacity',0.22)
+    .attr('font-size',([,pts])=>pts.length>4?13:10).attr('font-weight',700).attr('letter-spacing',1)
+    .text(([cid])=>CLUSTER_LABELS[cid]||'');
+}
+
+// ── tooltip ──
+const tip=document.getElementById('tip');
+nodeSel.on('mouseenter',(e,d)=>{
+  const lv=LEVELS[d.level]||LEVELS.unknown;
+  const retVal=DECAY_VECTOR[d.id];
+  const retLine=decayMode&&retVal!=null?`<div style="font-size:10px;color:#94a3b8;margin-top:4px">🧠 Retention: <b>${Math.round(retVal*100)}%</b> (Ebbinghaus)</div>`:'';
+  tip.innerHTML=`<h3>${d.label}</h3><span class="lvl" style="background:${lv.color}22;color:${lv.color};border:1px solid ${lv.color}44">${lv.label}</span>`+
+    `<div class="bar"><i style="width:${d.mastery}%;background:${masteryColor(d.mastery)}"></i></div>`+
+    `<div style="font-size:10px;color:var(--txt3)">mastery ${d.mastery}% · открывает ${d.reach} концептов</div>`+
+    retLine+
+    (d.desc?`<div style="color:var(--txt2);margin-top:7px">${d.desc.slice(0,160)}${d.desc.length>160?'…':''}</div>`:'')+
+    `<div class="mut">← нужно: ${d.prereqs.length} · открывает →: ${d.unlocks.length}</div>`;
+  tip.classList.add('show');highlight(d);
+}).on('mousemove',e=>{tip.style.left=Math.min(e.clientX+15,window.innerWidth-320)+'px';tip.style.top=Math.min(e.clientY-8,window.innerHeight-180)+'px';})
+.on('mouseleave',()=>{tip.classList.remove('show');if(!panel.classList.contains('open'))resetHL();})
+.on('click',(e,d)=>{e.stopPropagation();closeEdgePanel();openPanel(d);});
+
+function fmtConf(v){
+  if(v==null||v===''||Number.isNaN(Number(v)))return null;
+  const n=Number(v);return n<=1?Math.round(n*100)+'%':Math.round(n)+'%';
+}
+const epPanel=document.getElementById('ep-panel'),epc=document.getElementById('epc');
+document.getElementById('ep-close').addEventListener('click',()=>closeEdgePanel());
+function closeEdgePanel(){
+  epPanel.classList.remove('open');selectedEdgeId=null;resetHL();
+}
+function openEdgePanel(e){
+  selectedEdgeId=edgeKey(e);
+  panel.classList.remove('open');
+  const rt=e.relation_type||'prerequisite';
+  const conf=fmtConf(e.confidence);
+  const doc=e.evidence_doc_label||e.evidence_doc_id;
+  let html=`<div class="ep-title">${RELATION_LABELS[rt]||rt}</div>`;
+  html+=`<div class="ep-row"><b>Документ:</b> ${doc||'нет evidence'}</div>`;
+  if(e.evidence_chunk_id)html+=`<div class="ep-row"><b>Фрагмент:</b> ID: ${e.evidence_chunk_id}</div>`;
+  if(conf!=null)html+=`<div class="ep-row"><b>Уверенность:</b> ${conf}</div>`;
+  else if(e.confidence!==undefined)html+=`<div class="ep-row"><b>Уверенность:</b> н/д</div>`;
+  if(e.weak_evidence)html+='<span class="ep-badge ep-weak">слабое evidence</span>';
+  if(e.inferred_relation)html+='<span class="ep-badge ep-inferred">выведено</span>';
+  epc.innerHTML=html;epPanel.classList.add('open');
+  link.attr('stroke-width',l=>edgeKey(l)===selectedEdgeId?3.5:relStyle(l.relation_type||'prerequisite').width||1.5);
+}
+linkHit.on('mouseenter',(ev,d)=>{
+  const rt=d.relation_type||'prerequisite';
+  const conf=fmtConf(d.confidence);
+  const doc=d.evidence_doc_label||d.evidence_doc_id||'—';
+  tip.innerHTML=`<h3>${RELATION_LABELS[rt]||rt}</h3><div style="font-size:11px;color:var(--txt2)">${doc}</div>`+
+    (conf!=null?`<div style="font-size:10px;color:var(--txt3);margin-top:4px">уверенность ${conf}</div>`:'');
+  tip.classList.add('show');
+}).on('mousemove',ev=>{tip.style.left=Math.min(ev.clientX+15,window.innerWidth-320)+'px';tip.style.top=Math.min(ev.clientY-8,window.innerHeight-180)+'px';})
+.on('mouseleave',()=>{if(!epPanel.classList.contains('open'))tip.classList.remove('show');})
+.on('click',(ev,d)=>{ev.stopPropagation();tip.classList.remove('show');openEdgePanel(d);});
+
+function highlight(d){
+  const anc=ancestors(d.id),desc=descendants(d.id);
+  nodeSel.select('.core').attr('fill-opacity',n=>n.id===d.id?1:anc.has(n.id)||desc.has(n.id)?0.85:0.08);
+  nodeSel.select('text').attr('fill',n=>n.id===d.id||anc.has(n.id)||desc.has(n.id)?'rgba(255,255,255,0.92)':'rgba(255,255,255,0.06)');
+  link.attr('stroke',l=>{const s=l.source.id,t=l.target.id;
+      if((anc.has(s)||s===d.id)&&(anc.has(t)||t===d.id))return'#60a5fa';
+      if((desc.has(s)||s===d.id)&&(desc.has(t)||t===d.id))return'#fcd34d';
+      return'rgba(255,255,255,0.02)';})
+    .attr('stroke-width',l=>{const s=l.source.id,t=l.target.id;return((anc.has(s)||s===d.id)&&(anc.has(t)||t===d.id))||((desc.has(s)||s===d.id)&&(desc.has(t)||t===d.id))?2.2:0.6;})
+    .attr('stroke-opacity',1);
+}
+function resetHL(){
+  if(selectedEdgeId)return;
+  nodeSel.select('.core').attr('fill-opacity',n=>hiddenLevels.has(n.level)?0.05:0.9);
+  nodeSel.select('text').attr('fill',n=>hiddenLevels.has(n.level)?'rgba(255,255,255,0.04)':'rgba(255,255,255,0.55)');
+  styleLink(link);
+  if(activeMode!=='all')applyMode(activeMode,true);
+}
+
+// ── detail panel ──
+const panel=document.getElementById('panel'),pc=document.getElementById('pc');
+document.getElementById('pclose').addEventListener('click',()=>{panel.classList.remove('open');resetHL();});
+let current=null;
+function chipFor(id){const n=nodeMap.get(id);if(!n)return`<div class="chip" style="cursor:default"><span class="mini" style="background:#ef4444"></span><span>${id}</span><span class="mm">нет в графе</span></div>`;
+  return`<div class="chip" data-id="${id}"><span class="mini" style="background:${lvlColor(n.level)}"></span><span>${n.label}</span><span class="mm">${n.mastery}%</span></div>`;}
+function openPanel(d){
+  current=d;
+  const lv=LEVELS[d.level]||LEVELS.unknown;
+  const badges=(d.frontier?'<span class="badge bdg-frontier">✦ готово учить</span>':'')+
+    (d.learned?'<span class="badge bdg-learned">✓ освоено</span>':'')+
+    (d.missing&&d.missing.length?`<span class="badge bdg-missing">⚠ ${d.missing.length} пробел(ов)</span>`:'');
+  // Tutor CTA — visible hint to scroll down in Streamlit after clicking
+  const tutorHint=`<div class="tutor-cta">🎓 Прокрутите вниз → <b>Действия с концептом</b> → Учить с тьютором</div>`;
+  pc.innerHTML=`<h2>${d.label}</h2><div>${badges}</div>`+
+    `<div style="margin-top:8px"><span class="lvl badge" style="background:${lv.color}22;color:${lv.color};border:1px solid ${lv.color}44">${lv.label}</span></div>`+
+    tutorHint+
+    `<div class="gauge"><div class="track"><i style="width:${d.mastery}%;background:${masteryColor(d.mastery)}"></i></div><div class="pct" style="color:${masteryColor(d.mastery)}">${d.mastery}%</div></div>`+
+    (d.desc?`<div class="pdesc">${d.desc}</div>`:'')+
+    `<div class="ptitle"><span style="color:#60a5fa">←</span> Сначала изучите (${d.prereqs.length})</div>`+
+      (d.prereqs.length?d.prereqs.map(chipFor).join(''):'<div style="font-size:11px;color:var(--txt3)">нет prerequisites — стартовая точка</div>')+
+    `<div class="ptitle"><span style="color:#fcd34d">→</span> Открывает (${d.unlocks.length})</div>`+
+      (d.unlocks.length?d.unlocks.map(chipFor).join(''):'<div style="font-size:11px;color:var(--txt3)">ничего не зависит от концепта</div>')+
+    (d.related&&d.related.length?`<div class="ptitle">📄 Документы (${d.related.length})</div>`+
+      d.related.map(r=>`<div class="doccard"><div class="dp">${r.path}</div><div class="dm">${r.meta}</div>${r.summary?`<div class="ds">${r.summary}</div>`:''}${_docActions(r)}</div>`).join(''):'');
+  pc.querySelectorAll('.chip[data-id]').forEach(el=>el.addEventListener('click',()=>{const t=simNodes.find(n=>n.id===el.dataset.id);if(t){focusNode(t);openPanel(t);}}));
+  pc.querySelectorAll('.action-btn.cpy[data-copy]').forEach(el=>el.addEventListener('click',()=>_copyDocPath(el.dataset.copy,el)));
+  panel.classList.add('open');highlight(d);
+  history.replaceState(null,'','#c='+encodeURIComponent(d.id));
+  // Tutor bridge: sync selected concept to parent URL so Streamlit can pick it up
+  try{
+    const pu=new URL(window.parent.location.href);
+    pu.searchParams.set('_kgc',d.id);
+    window.parent.history.replaceState(null,'',pu.toString());
+    // Signal bridge indicator via localStorage (read by polling bridge if present)
+    window.parent.localStorage.setItem('_kgc_ts', Date.now()+'|'+d.id);
+  }catch(_){}
+}
+function focusNode(d){const s=1.6;svg.transition().duration(550).call(zoom.transform,d3.zoomIdentity.translate(W/2-d.x*s,H/2-d.y*s).scale(s));}
+
+// ── KG-01: plan panel ──
+const pp=document.getElementById('pp'),ppCards=document.getElementById('pp-cards');
+function renderPlanPanel(){
+  if(!WEEKLY_PLAN.length){ppCards.innerHTML='<div style="padding:12px 13px;font-size:11px;color:var(--txt3)">Нет задач — всё освоено! 🎉</div>';return;}
+  ppCards.innerHTML=WEEKLY_PLAN.map((p,i)=>{const col=PLAN_COLORS[i]||'#888';const tc={'due_review':'tag-due','frontier':'tag-frontier','in_progress':'tag-progress'}[p.reason]||'';
+    return`<div class="pc"><div class="num" style="background:${col}1a;color:${col};border:1.5px solid ${col}44">${i+1}</div><div class="body"><div class="name">${p.concept}</div><div class="why ${tc}">${p.reason_label}</div><div class="mbar"><i style="width:${p.mastery}%;background:${masteryColor(p.mastery)}"></i></div></div></div>`;
+  }).join('');
+}
+renderPlanPanel();
+
+function applyPlanMode(){
+  const planData=WEEKLY_PLAN.map((p,i)=>{const node=simNodes.find(n=>n.id===p.concept);return node?{node,idx:i,color:PLAN_COLORS[i]||'#888'}:null;}).filter(Boolean);
+  const planIds=new Set(planData.map(p=>p.node.id));
+  nodeSel.select('.core').attr('fill-opacity',n=>planIds.has(n.id)?1:0.05);
+  nodeSel.select('text').attr('fill',n=>planIds.has(n.id)?'rgba(255,255,255,0.95)':'rgba(255,255,255,0.04)');
+  link.attr('stroke','rgba(255,255,255,0.025)').attr('stroke-width',0.5).attr('stroke-opacity',1);
+  // data-joined plan halos (positions updated every tick)
+  planG.selectAll('.ph').data(planData,d=>d.node.id).join('circle').attr('class','ph')
+    .attr('r',d=>R(d.node)+9).attr('fill','none').attr('stroke',d=>d.color).attr('stroke-width',3.5).attr('stroke-opacity',0.85)
+    .attr('cx',d=>d.node.x).attr('cy',d=>d.node.y);
+  planG.selectAll('.pn').data(planData,d=>d.node.id).join('text').attr('class','pn')
+    .attr('text-anchor','middle').attr('fill',d=>d.color).attr('font-size',11).attr('font-weight',800)
+    .attr('x',d=>d.node.x).attr('y',d=>d.node.y-R(d.node)-16)
+    .text(d=>d.idx+1);
+}
+function clearPlanMode(){planG.selectAll('*').remove();}
+
+// ── KG-02: diagnostics panel ──
+function renderDiag(){
+  const s=HEALTH.score||0;
+  const col=s>=80?'#22c55e':s>=60?'#84cc16':s>=40?'#f59e0b':'#ef4444';
+  document.getElementById('dp-score').textContent=s+'%';document.getElementById('dp-score').style.color=col;
+  let html='';
+  if(HEALTH.cycles&&HEALTH.cycles.length){
+    html+=`<div class="dp-section">⚠ Циклы в prerequisitах (${HEALTH.cycles.length})</div>`;
+    HEALTH.cycles.forEach(c=>{html+=`<div class="dp-item"><span class="ic">🔄</span><div>${c.map(n=>`<b>${n}</b>`).join(' → ')}</div></div>`;});
+  }else html+='<div class="dp-ok">✓ Циклов нет</div>';
+  if(HEALTH.missing&&HEALTH.missing.length){
+    html+=`<div class="dp-section">⚠ Пропущенные prerequisites (${HEALTH.missing.length})</div>`;
+    HEALTH.missing.forEach(m=>{html+=`<div class="dp-item"><span class="ic">❌</span><div><b>${m.concept}</b> требует: ${m.missing.join(', ')}</div></div>`;});
+  }else html+='<div class="dp-ok">✓ Все prerequisites в графе</div>';
+  if(HEALTH.orphans&&HEALTH.orphans.length){
+    html+=`<div class="dp-section">⚪ Изолированные концепты (${HEALTH.orphans.length})</div>`;
+    HEALTH.orphans.forEach(id=>{html+=`<div class="dp-item"><span class="ic">○</span><div><b>${id}</b></div></div>`;});
+  }else html+='<div class="dp-ok">✓ Нет изолированных узлов</div>';
+  if(HEALTH.dead_ends&&HEALTH.dead_ends.length){
+    html+=`<div class="dp-section">🔚 Advanced без документов (${HEALTH.dead_ends.length})</div>`;
+    HEALTH.dead_ends.forEach(id=>{html+=`<div class="dp-item"><span class="ic">📭</span><div><b>${id}</b></div></div>`;});
+  }
+  document.getElementById('dp-body').innerHTML=html;
+}
+function renderCompilerHealth(){
+  const host=document.getElementById('dp-compiler');
+  if(!host)return;
+  if(!COMPILER_HEALTH){
+    host.innerHTML='<div class="dp-section">Качество компиляции</div><div class="dp-item" data-testid="compiler-health-unavailable"><span class="ic">⚠</span><div>Отчёт качества недоступен</div></div>';
+    return;
+  }
+  const ch=COMPILER_HEALTH;
+  const badgeId=ch.gate_passed?'compiler-health-badge-ready':'compiler-health-badge-pending';
+  const badgeTxt=ch.gate_passed?'✓ Граф готов':'⚠ Качество графа в процессе';
+  const badgeCol=ch.gate_passed?'#6ee7b7':'#fcd34d';
+  let html='<div class="dp-section">Качество компиляции</div>';
+  html+=`<div class="dp-item"><span class="ic">${ch.gate_passed?'✓':'⚠'}</span><div><span data-testid="${badgeId}" style="color:${badgeCol};font-weight:700">${badgeTxt}</span></div></div>`;
+  if(ch.generation_id)html+=`<div class="dp-item"><span class="ic">🧬</span><div><b>Поколение:</b> ${String(ch.generation_id).slice(0,24)}</div></div>`;
+  const scope=ch.scope_label||ch.scope_hash;
+  if(scope)html+=`<div class="dp-item"><span class="ic">📁</span><div><b>Scope:</b> ${scope}</div></div>`;
+  if(ch.concept_count!=null)html+=`<div class="dp-item"><span class="ic">●</span><div><b>Концепты:</b> ${ch.concept_count}</div></div>`;
+  if(ch.semantic_relation_count!=null)html+=`<div class="dp-item"><span class="ic">↔</span><div><b>Семантические связи:</b> ${ch.semantic_relation_count}</div></div>`;
+  const p50=ch.confidence_p50;
+  html+=`<div class="dp-item"><span class="ic">◎</span><div><b>Confidence p50:</b> ${p50==null?'н/д':fmtConf(p50)}</div></div>`;
+  if(!ch.gate_passed&&ch.fail_reasons&&ch.fail_reasons.length){
+    ch.fail_reasons.slice(0,3).forEach(r=>{html+=`<div class="dp-item"><span class="ic">✗</span><div>${r}</div></div>`;});
+  }
+  if(ch.stale_binding)html+='<div class="dp-item"><span class="ic">⚠</span><div style="color:#fcd34d">Привязка устарела — пересоберите граф</div></div>';
+  host.innerHTML=html;
+}
+renderDiag();
+renderCompilerHealth();
+const diagBtn=document.getElementById('diagbtn'),dpPanel=document.getElementById('dp-panel');
+diagBtn.addEventListener('click',()=>{dpPanel.classList.toggle('show');diagBtn.classList.toggle('on',dpPanel.classList.contains('show'));});
+document.getElementById('dp-close').addEventListener('click',()=>{dpPanel.classList.remove('show');diagBtn.classList.remove('on');});
+
+// ── KG-04: SVG export + permalink copy ──
+function showToast(msg,ms=1800){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),ms);}
+document.getElementById('expbtn').addEventListener('click',()=>{
+  const el=document.querySelector('#svg'),clone=el.cloneNode(true);
+  const g=clone.querySelector('g');if(g)g.setAttribute('transform',d3.zoomTransform(el).toString());
+  clone.setAttribute('xmlns','http://www.w3.org/2000/svg');clone.setAttribute('style','background:#0a0a0f');
+  const blob=new Blob(['<?xml version="1.0"?>'+clone.outerHTML],{type:'image/svg+xml'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='knowledge_graph.svg';a.click();URL.revokeObjectURL(a.href);
+  showToast('✓ SVG скачан');
+});
+document.getElementById('linkbtn').addEventListener('click',()=>navigator.clipboard.writeText(location.href).then(()=>showToast('✓ Ссылка скопирована')));
+
+// ── KG-05: guided path animation ──────────────────────────────────────
+let routeAnimTimer=null;
+
+function _bfsPath(startId,endId){
+  // BFS following "unlocks" (forward prereq edges: start → what it teaches → endId)
+  const fwd={};
+  NODES.forEach(n=>{fwd[n.id]=n.unlocks||[];});
+  const q=[[startId,[startId]]],vis=new Set([startId]);
+  while(q.length){
+    const[cur,path]=q.shift();
+    if(cur===endId)return path;
+    for(const nb of(fwd[cur]||[])){if(!vis.has(nb)){vis.add(nb);q.push([nb,[...path,nb]]);}}
+  }
+  // fallback: BFS following prereqs backwards (endId → what requires it)
+  const rev={};
+  NODES.forEach(n=>{(n.prereqs||[]).forEach(p=>{(rev[p]=rev[p]||[]).push(n.id);});});
+  const q2=[[startId,[startId]]],vis2=new Set([startId]);
+  while(q2.length){
+    const[cur,path]=q2.shift();
+    if(cur===endId)return path;
+    for(const nb of(rev[cur]||[])){if(!vis2.has(nb)){vis2.add(nb);q2.push([nb,[...path,nb]]);}}
+  }
+  return null;
+}
+
+function clearRouteMode(){
+  if(routeAnimTimer){clearInterval(routeAnimTimer);routeAnimTimer=null;}
+  routeG.selectAll('.rt').remove();
+}
+
+const ROUTE_COLORS=['#f87171','#fb923c','#fbbf24','#a3e635','#34d399','#4a9eff','#a78bfa','#ec4899'];
+
+function animatePath(path){
+  clearRouteMode();
+  const pathSet=new Set(path);
+  nodeSel.select('.core').attr('fill-opacity',n=>pathSet.has(n.id)?1:0.05);
+  nodeSel.select('text').attr('fill',n=>pathSet.has(n.id)?'rgba(255,255,255,0.95)':'rgba(255,255,255,0.03)');
+  link.attr('stroke',l=>pathSet.has(l.source.id)&&pathSet.has(l.target.id)?'#a78bfa':'rgba(255,255,255,0.02)')
+    .attr('stroke-width',l=>pathSet.has(l.source.id)&&pathSet.has(l.target.id)?2.5:0.4);
+  // Create all halos at once, start invisible, reveal step-by-step
+  const routeData=path.map((id,i)=>{
+    const node=simNodes.find(n=>n.id===id);
+    return node?{node,idx:i,color:ROUTE_COLORS[i%ROUTE_COLORS.length]}:null;
+  }).filter(Boolean);
+  routeG.selectAll('.rt').data(routeData,d=>d.node.id).join('circle').attr('class','rt')
+    .attr('r',d=>R(d.node)+10).attr('fill','none')
+    .attr('stroke',d=>d.color).attr('stroke-width',3.5).attr('stroke-opacity',0)
+    .attr('cx',d=>d.node.x).attr('cy',d=>d.node.y);
+  let step=0;
+  routeAnimTimer=setInterval(()=>{
+    if(step>=routeData.length){clearInterval(routeAnimTimer);routeAnimTimer=null;return;}
+    const entry=routeData[step];
+    routeG.selectAll('.rt').filter(d=>d.node.id===entry.node.id)
+      .transition().duration(320).attr('stroke-opacity',0.92);
+    step++;
+  },460);
+}
+
+(function populateRouteSelects(){
+  const opts=NODES.map(n=>`<option value="${n.id}">${n.label}</option>`).join('');
+  document.getElementById('rp-start').innerHTML='<option value="">— Старт —</option>'+opts;
+  document.getElementById('rp-end').innerHTML='<option value="">— Цель —</option>'+opts;
+})();
+
+document.getElementById('rp-find').addEventListener('click',()=>{
+  const s=document.getElementById('rp-start').value,e=document.getElementById('rp-end').value;
+  const stepsEl=document.getElementById('rp-steps');
+  if(!s||!e){stepsEl.innerHTML='<div class="rp-msg rp-err">Выберите старт и цель</div>';return;}
+  if(s===e){stepsEl.innerHTML='<div class="rp-msg rp-err">Старт совпадает с целью</div>';return;}
+  const path=_bfsPath(s,e);
+  if(!path){stepsEl.innerHTML='<div class="rp-msg rp-err">Путь не найден в текущем графе</div>';return;}
+  const html=path.map((id,i)=>{const n=nodeMap.get(id);
+    return(i>0?'<div class="rp-arrow">↓</div>':'')+
+      `<div class="rp-step"><div class="rs-dot" style="background:${ROUTE_COLORS[i%ROUTE_COLORS.length]}"></div><span>${n?n.label:id}</span></div>`;}).join('');
+  stepsEl.innerHTML=`<div class="rp-msg rp-ok">Путь: ${path.length} шагов</div>`+html;
+  animatePath(path);
+  // focus on start node
+  const startNode=simNodes.find(n=>n.id===s);if(startNode)focusNode(startNode);
+});
+
+const routeBtn=document.getElementById('routebtn'),rpPanel=document.getElementById('rp');
+routeBtn.addEventListener('click',()=>{
+  const show=!rpPanel.classList.contains('show');
+  rpPanel.classList.toggle('show',show);
+  routeBtn.classList.toggle('on',show);
+  if(!show){clearRouteMode();resetModeVisual();}
+});
+
+// ── KG-06: forgetting decay overlay ───────────────────────────────────
+let decayMode=false;
+
+function applyDecayOverlay(){
+  const data=NODES.map(d=>{
+    const node=simNodes.find(n=>n.id===d.id);
+    const r=DECAY_VECTOR[d.id]??1.0;
+    return(node&&r<0.99)?{node,opacity:(1-r)*0.78}:null;
+  }).filter(Boolean);
+  decayG.selectAll('.dc').data(data,d=>d.node.id).join('circle').attr('class','dc')
+    .attr('r',d=>R(d.node)*0.94).attr('fill','#0d0d1f').attr('fill-opacity',d=>d.opacity)
+    .attr('cx',d=>d.node.x).attr('cy',d=>d.node.y).attr('pointer-events','none');
+}
+
+function clearDecayOverlay(){decayG.selectAll('.dc').remove();}
+
+document.getElementById('decaybtn').addEventListener('click',()=>{
+  decayMode=!decayMode;
+  document.getElementById('decaybtn').classList.toggle('on',decayMode);
+  if(decayMode){applyDecayOverlay();showToast('🧠 Оверлей забывания включён');}
+  else{clearDecayOverlay();showToast('🧠 Оверлей выключен');}
+});
+
+// ── KG-07: mastery-over-time scrubber ─────────────────────────────────
+const scrubEl=document.getElementById('scrub'),scrubRange=document.getElementById('scrub-range');
+const scrubDate=document.getElementById('scrub-date'),scrubInfo=document.getElementById('scrub-info');
+const scrubPlay=document.getElementById('scrub-play');
+const timeBtn=document.getElementById('timebtn');
+let scrubTimer=null,scrubActive=false;
+
+// Cumulative mastery: for each snapshot index, merge all preceding mastery values
+// so the scrubber always shows the full historical state up to that point.
+const SCRUB_SNAPSHOTS=(()=>{
+  if(!MASTERY_HISTORY.length)return[];
+  const cum={};
+  return MASTERY_HISTORY.map(snap=>{
+    Object.assign(cum,snap.mastery);
+    return{date:snap.date,mastery:{...cum}};
+  });
+})();
+
+function _fmtDate(iso){
+  if(!iso)return'—';
+  try{const d=new Date(iso+'T00:00:00');return d.toLocaleDateString('ru-RU',{day:'numeric',month:'short',year:'numeric'});}
+  catch{return iso;}
+}
+
+function applyScrubSnapshot(idx){
+  if(!SCRUB_SNAPSHOTS.length)return;
+  const snap=SCRUB_SNAPSHOTS[Math.max(0,Math.min(idx,SCRUB_SNAPSHOTS.length-1))];
+  const m=snap.mastery||{};
+  // Update simNode mastery in-place and re-render rings
+  simNodes.forEach(n=>{
+    if(m[n.id]!=null) n._scrub_mastery=m[n.id];
+    else n._scrub_mastery=null;
+  });
+  // Re-render mastery rings
+  nodeSel.select('.ring')
+    .attr('d',d=>{const v=(d._scrub_mastery??d.mastery)/100;return arcPath(R(d)+3.5,v);})
+    .attr('stroke',d=>masteryColor(d._scrub_mastery??d.mastery));
+  // Ghost ring to show current mastery delta
+  nodeG.selectAll('.scrub-ghost').data(simNodes.filter(n=>n._scrub_mastery!=null&&Math.abs(n._scrub_mastery-n.mastery)>3),d=>d.id)
+    .join('circle').attr('class','scrub-ghost')
+    .attr('r',d=>R(d)+6).attr('cx',0).attr('cy',0);
+  // Update date label + info
+  scrubDate.textContent='📅 '+_fmtDate(snap.date);
+  const learned=Object.values(m).filter(v=>v>=80).length;
+  const active=Object.keys(m).length;
+  scrubInfo.textContent=`${active} концептов активны · ${learned} освоено (≥80%)`;
+}
+
+function clearScrubSnapshot(){
+  simNodes.forEach(n=>delete n._scrub_mastery);
+  nodeSel.select('.ring')
+    .attr('d',d=>arcPath(R(d)+3.5,d.mastery/100))
+    .attr('stroke',d=>masteryColor(d.mastery));
+  nodeG.selectAll('.scrub-ghost').remove();
+  scrubDate.textContent='—';
+  scrubInfo.textContent='Двигайте слайдер для перемотки';
+}
+
+function stopScrubPlay(){
+  if(scrubTimer){clearInterval(scrubTimer);scrubTimer=null;}
+  scrubPlay.textContent='▶';scrubPlay.classList.remove('playing');
+}
+
+function startScrubPlay(){
+  stopScrubPlay();
+  let idx=parseInt(scrubRange.value)||0;
+  scrubPlay.textContent='⏸';scrubPlay.classList.add('playing');
+  scrubTimer=setInterval(()=>{
+    idx++;
+    if(idx>=SCRUB_SNAPSHOTS.length){stopScrubPlay();return;}
+    scrubRange.value=idx;
+    applyScrubSnapshot(idx);
+  },800);
+}
+
+if(SCRUB_SNAPSHOTS.length){
+  scrubRange.max=SCRUB_SNAPSHOTS.length-1;
+  scrubRange.addEventListener('input',()=>{stopScrubPlay();applyScrubSnapshot(parseInt(scrubRange.value));});
+  scrubPlay.addEventListener('click',()=>{if(scrubTimer)stopScrubPlay();else startScrubPlay();});
+  // Start at last snapshot (current state)
+  scrubRange.value=SCRUB_SNAPSHOTS.length-1;
+  applyScrubSnapshot(SCRUB_SNAPSHOTS.length-1);
+}else{
+  scrubPlay.disabled=true;
+  scrubInfo.textContent='Нет данных quiz — пройдите хотя бы один квиз';
+}
+
+timeBtn.addEventListener('click',()=>{
+  scrubActive=!scrubActive;
+  scrubEl.classList.toggle('show',scrubActive);
+  timeBtn.classList.toggle('on',scrubActive);
+  if(!scrubActive){stopScrubPlay();clearScrubSnapshot();}
+  else if(SCRUB_SNAPSHOTS.length){
+    applyScrubSnapshot(parseInt(scrubRange.value));
+  }
+});
+
+// ── modes ──
+const MODES=[
+  {k:'all',label:'🌐 Весь граф'},{k:'next',label:'✦ Что учить'},
+  {k:'progress',label:'📊 Прогресс'},{k:'gaps',label:'⚠ Пробелы'},
+  {k:'plan',label:'📅 На неделю'},
+];
+let activeMode='all';
+const modesEl=document.getElementById('modes');
+MODES.forEach(m=>{const b=document.createElement('button');b.className='mode-btn'+(m.k==='all'?' active':'');b.dataset.k=m.k;b.textContent=m.label;b.addEventListener('click',()=>{activeMode=m.k;document.querySelectorAll('.mode-btn').forEach(x=>x.classList.toggle('active',x.dataset.k===m.k));applyMode(m.k);});modesEl.appendChild(b);});
+
+function applyMode(k,keepLinks){
+  clearPlanMode();pp.classList.remove('show');
+  if(k==='all'){resetModeVisual();return;}
+  if(k==='plan'){applyPlanMode();pp.classList.add('show');return;}
+  let test;
+  if(k==='next')test=n=>n.frontier;
+  else if(k==='gaps')test=n=>(n.missing&&n.missing.length)||(n.mastery>0&&n.mastery<50);
+  else test=()=>true; // progress: show all but scale opacity by mastery
+  nodeSel.select('.core').attr('fill-opacity',n=>{if(k==='progress')return 0.2+0.8*(n.mastery/100);return test(n)?1:0.06;});
+  nodeSel.select('text').attr('fill',n=>{if(k==='progress')return'rgba(255,255,255,0.6)';return test(n)?'rgba(255,255,255,0.95)':'rgba(255,255,255,0.04)';});
+  if(!keepLinks)link.attr('stroke','rgba(255,255,255,0.04)').attr('stroke-width',0.7).attr('stroke-opacity',1);
+}
+function resetModeVisual(){
+  nodeSel.select('.core').attr('fill-opacity',n=>hiddenLevels.has(n.level)?0.05:0.9);
+  nodeSel.select('text').attr('fill',n=>hiddenLevels.has(n.level)?'rgba(255,255,255,0.04)':'rgba(255,255,255,0.55)');
+  styleLink(link);
+}
+
+// ── search ──
+let results=[],ri=-1;
+const q=document.getElementById('q'),qd=document.getElementById('qd');
+q.addEventListener('input',()=>{
+  const v=q.value.toLowerCase().trim();
+  if(!v){qd.classList.remove('show');results=[];resetHL();return;}
+  results=simNodes.filter(n=>n.label.toLowerCase().includes(v)||(n.desc||'').toLowerCase().includes(v)).slice(0,12);
+  ri=-1;renderDrop();
+  const ms=new Set(results.map(n=>n.id));
+  nodeSel.select('.core').attr('fill-opacity',n=>ms.has(n.id)?0.95:0.06);
+  nodeSel.select('text').attr('fill',n=>ms.has(n.id)?'rgba(255,255,255,0.9)':'rgba(255,255,255,0.04)');
+  link.attr('stroke','rgba(255,255,255,0.015)');
+  if(results.length===1)focusNode(results[0]);
+});
+function renderDrop(){
+  if(!results.length){qd.classList.remove('show');return;}
+  qd.innerHTML=results.map((n,i)=>`<div class="sd${i===ri?' on':''}" data-i="${i}"><span class="dot" style="background:${lvlColor(n.level)}"></span><span>${n.label}</span><span style="margin-left:auto;color:var(--txt3);font-size:10px">${n.mastery}%</span></div>`).join('');
+  qd.classList.add('show');
+  qd.querySelectorAll('.sd').forEach(el=>el.addEventListener('click',()=>{const n=results[+el.dataset.i];if(n){focusNode(n);openPanel(n);qd.classList.remove('show');q.value='';}}));
+}
+
+// ── minimap ──
+const mmc=document.getElementById('mmc').getContext('2d');
+document.getElementById('mmc').width=300;document.getElementById('mmc').height=220;
+function drawMini(){
+  const w=300,h=220;mmc.clearRect(0,0,w,h);
+  let mnX=Infinity,mxX=-Infinity,mnY=Infinity,mxY=-Infinity;
+  simNodes.forEach(n=>{mnX=Math.min(mnX,n.x);mxX=Math.max(mxX,n.x);mnY=Math.min(mnY,n.y);mxY=Math.max(mxY,n.y);});
+  const p=18,s=Math.min((w-p*2)/((mxX-mnX)||1),(h-p*2)/((mxY-mnY)||1)),ox=(w-(mxX-mnX)*s)/2,oy=(h-(mxY-mnY)*s)/2;
+  mmc.strokeStyle='rgba(255,255,255,0.06)';mmc.lineWidth=0.4;
+  simLinks.forEach(l=>{mmc.beginPath();mmc.moveTo((l.source.x-mnX)*s+ox,(l.source.y-mnY)*s+oy);mmc.lineTo((l.target.x-mnX)*s+ox,(l.target.y-mnY)*s+oy);mmc.stroke();});
+  simNodes.forEach(n=>{mmc.fillStyle=lvlColor(n.level);mmc.globalAlpha=0.75;mmc.beginPath();mmc.arc((n.x-mnX)*s+ox,(n.y-mnY)*s+oy,Math.max(1.4,R(n)*s*0.32),0,7);mmc.fill();});
+  mmc.globalAlpha=1;
+  const tr=d3.zoomTransform(svg.node());mmc.strokeStyle='rgba(139,92,246,0.55)';mmc.lineWidth=1;
+  mmc.strokeRect((-tr.x/tr.k-mnX)*s+ox,(-tr.y/tr.k-mnY)*s+oy,(W/tr.k)*s,(H/tr.k)*s);
+}
+
+// ── fit on settle + permalink ──
+sim.on('end',()=>{
+  let mnX=Infinity,mxX=-Infinity,mnY=Infinity,mxY=-Infinity;
+  simNodes.forEach(n=>{mnX=Math.min(mnX,n.x);mxX=Math.max(mxX,n.x);mnY=Math.min(mnY,n.y);mxY=Math.max(mxY,n.y);});
+  const pad=80,dx=mxX-mnX+pad*2,dy=mxY-mnY+pad*2,sc=Math.min(W/dx,H/dy)*0.92,cx=(mnX+mxX)/2,cy=(mnY+mxY)/2;
+  svg.transition().duration(750).call(zoom.transform,d3.zoomIdentity.translate(W/2,H/2).scale(sc).translate(-cx,-cy));
+  const hs=location.hash;if(hs.startsWith('#c=')){const n=simNodes.find(x=>x.id===decodeURIComponent(hs.slice(3)));if(n){focusNode(n);openPanel(n);}}
+});
+
+svg.on('click',()=>{panel.classList.remove('open');closeEdgePanel();qd.classList.remove('show');resetHL();});
+
+// ── keyboard ──
+document.addEventListener('keydown',e=>{
+  const inq=document.activeElement===q;
+  if(e.key==='ArrowDown'&&results.length){e.preventDefault();ri=Math.min(ri+1,results.length-1);renderDrop();}
+  else if(e.key==='ArrowUp'&&results.length){e.preventDefault();ri=Math.max(ri-1,0);renderDrop();}
+  else if(e.key==='Enter'&&ri>=0&&results.length){e.preventDefault();const n=results[ri];if(n){focusNode(n);openPanel(n);qd.classList.remove('show');q.value='';}}
+  else if(e.key==='Escape'){
+    if(epPanel.classList.contains('open')){closeEdgePanel();return;}
+    panel.classList.remove('open');qd.classList.remove('show');results=[];q.value='';
+    activeMode='all';document.querySelectorAll('.mode-btn').forEach(x=>x.classList.toggle('active',x.dataset.k==='all'));
+    resetHL();resetModeVisual();clearPlanMode();pp.classList.remove('show');
+    // KG-05: close route panel
+    rpPanel.classList.remove('show');routeBtn.classList.remove('on');clearRouteMode();
+    // KG-06: close decay overlay
+    if(decayMode){decayMode=false;document.getElementById('decaybtn').classList.remove('on');clearDecayOverlay();}
+    // KG-07: close scrubber
+    if(scrubActive){scrubActive=false;scrubEl.classList.remove('show');timeBtn.classList.remove('on');stopScrubPlay();clearScrubSnapshot();}
+    history.replaceState(null,'',location.pathname+location.search);
+  }else if(e.key==='/'&&!inq){e.preventDefault();q.focus();}
+});
+</script>
+</body>
+</html>'''

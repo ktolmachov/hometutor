@@ -1,0 +1,28 @@
+{
+  "sources": [
+    {
+      "text": "RAG combines retrieval over local materials with answer generation.",
+      "resource_id": "stub://rag-overview",
+      "file_name": "rag_overview.md",
+      "page_label": "1",
+      "page": "1",
+      "score": 0.96
+    },
+    {
+      "text": "Confidence should reflect source count, agreement and specificity.",
+      "resource_id": "stub://confidence",
+      "file_name": "confidence_notes.md",
+      "page_label": "2",
+      "page": "2",
+      "score": 0.81
+    },
+    {
+      "text": "Weak or conflicting evidence should be surfaced to the learner.",
+      "resource_id": "stub://trust",
+      "file_name": "source_trust.md",
+      "page_label": "4",
+      "page": "4",
+      "score": 0.67
+    }
+  ]
+}

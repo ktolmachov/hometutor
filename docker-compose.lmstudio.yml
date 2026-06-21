@@ -1,0 +1,29 @@
+# Опционально: LM Studio / Ollama на хосте (Windows/macOS/Linux + Docker Desktop)
+#
+# Проблема: в .env часто указано LLM_API_BASE=http://127.0.0.1:1234/v1 — внутри контейнера
+# 127.0.0.1 это сам контейнер, а не хост с LM Studio.
+#
+# Вариант A (рекомендуется): скопировать .env.docker.example → .env и host.docker.internal
+# Вариант B (этот файл): мост socat — в namespace контейнера 127.0.0.1:1234 → хост:1234
+#
+# Запуск:
+#   docker compose -f docker-compose.yml -f docker-compose.lmstudio.yml up --build
+#
+# На хосте: LM Studio слушает http://127.0.0.1:1234 (модель загружена).
+
+services:
+  lmstudio-bridge:
+    image: alpine/socat
+    network_mode: "service:home-rag"
+    command: ["TCP-LISTEN:1234,fork,reuseaddr", "TCP-CONNECT:host.docker.internal:1234"]
+    depends_on:
+      home-rag:
+        condition: service_started
+    restart: unless-stopped
+
+  # Раскомментируйте блок ниже, если Ollama на хосте :11434 и в .env EMBED/LLM на 127.0.0.1:11434
+  # ollama-bridge:
+  #   image: alpine/socat
+  #   network_mode: "service:home-rag"
+  #   command: ["TCP-LISTEN:11434,fork,reuseaddr", "TCP-CONNECT:host.docker.internal:11434"]
+  #   restart: unless-stopped

@@ -1,0 +1,5 @@
+# Тёмная тема в меню Streamlit оставляет портал selectbox/multiselect с чёрным фоном;
+# светлый base даёт корректные токены для Base Web. Фон основного приложения по-прежнему
+# задаётся в app/ui/styles.py (inject_styles) и app/ui_theme.css.
+[theme]
+base = "light"

@@ -1,0 +1,12 @@
+{
+  "topic": "Retrieval Augmented Generation",
+  "plan": [
+    "Separate retrieval from generation",
+    "Check every claim against sources",
+    "Practice with one short self-check"
+  ],
+  "learner_state": {
+    "mastery_level": "intermediate",
+    "next_action": "micro_quiz"
+  }
+}

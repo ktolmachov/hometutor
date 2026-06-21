@@ -1,0 +1,10 @@
+{
+  "date": "2026-04-25",
+  "blocks": [
+    {"title": "Source grounding", "minutes": 8, "why": "Confidence is below target after the last quiz.", "action": "Review 2 source cards"},
+    {"title": "Retrieval filters", "minutes": 10, "why": "Transfer questions are still weak.", "action": "Practice one scoped search"},
+    {"title": "Mini-quiz recovery", "minutes": 6, "why": "One concept needs recall reinforcement.", "action": "Take a 5-question quiz"}
+  ],
+  "diff_since_last": ["Moved confidence calibration earlier", "Reduced broad reading time by 12 minutes"],
+  "summary": "Three focused steps for today's local-first RAG practice."
+}

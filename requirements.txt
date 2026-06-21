@@ -1,0 +1,38 @@
+FlagEmbedding==1.3.5
+llama-index==0.14.20
+llama-index-vector-stores-chroma==0.5.5
+llama-index-embeddings-openai==0.6.0
+llama-index-llms-openai==0.7.5
+llama-index-postprocessor-flag-embedding-reranker==0.5.0
+llama-index-retrievers-bm25==0.7.1
+llama-index-core==0.14.20
+chromadb==1.5.5
+aiogram==3.27.0
+python-dotenv==1.2.2
+pydantic-settings==2.13.1
+filelock==3.25.2
+fastapi==0.135.3
+httpx==0.28.1
+uvicorn==0.43.0
+requests==2.33.1
+plotly==6.7.0
+pytest==9.0.2
+pytest-cov==6.0.0
+genanki==0.13.1
+beautifulsoup4==4.14.3
+opentelemetry-api==1.40.0
+opentelemetry-sdk==1.40.0
+tqdm==4.67.3
+pypdf==5.9.0
+streamlit==1.55.0
+streamlit-agraph==0.0.45
+watchdog==6.0.0  # used by Streamlit file-watching in local dev
+pandas==2.2.3
+numpy==2.4.3
+docling==2.31.0  # optional – OCR/Docling ingestion (INGEST_DOCLING_ENABLED=true); can be omitted in headless deployments
+SpeechRecognition==3.15.1  # optional - voice feature, can be omitted in headless/server deployments
+pyttsx3==2.99  # optional - voice feature, can be omitted in headless/server deployments
+qrcode[pil]==8.2
+pymupdf==1.27.2.3  # optional - scripts/export_slide_assets.py (рендер слайдов PDF в PNG), can be omitted in headless deployments
+opentelemetry-exporter-otlp-proto-http==1.40.0
+apscheduler  # optional - telegram daily reminders

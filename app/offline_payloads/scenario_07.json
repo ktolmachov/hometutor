@@ -1,0 +1,10 @@
+{
+  "quiz_mastery_rows": [
+    {"concept": "source-grounding", "mastery": 0.82, "attempts": 4},
+    {"concept": "confidence-calibration", "mastery": 0.48, "attempts": 2},
+    {"concept": "retrieval-filters", "mastery": 0.56, "attempts": 3}
+  ],
+  "mastery_vector": {"avg": 0.62, "recognition": 0.78, "recall": 0.58, "transfer": 0.49},
+  "weekly_goals": {"new_topics": 2, "reviews": 12, "quizzes": 3},
+  "gamification": {"daily_streak": 4, "total_xp": 340}
+}

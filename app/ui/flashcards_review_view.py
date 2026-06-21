@@ -1,0 +1,678 @@
+"""Review-session view for Flashcards hub."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+from typing import Any, Callable
+
+import streamlit as st
+
+from app.flashcard_handoff import (
+    FLASHCARD_HANDOFF_ENTRYPOINT,
+    build_flashcard_handoff_seed,
+    clear_flashcard_handoff_session_fields,
+    flashcard_handoff_session_fields,
+)
+from app.flashcard_handoff_timing import log_handoff_answer_ready, record_handoff_click
+from app.flashcard_service import (
+    build_flashcards_session_audit_export,
+    filter_due_cards_expert,
+    get_flashcard_expert_settings,
+    get_flashcard_rating_history,
+    set_flashcard_expert_settings,
+)
+from app.models import Message
+from app.session_store import session_store
+
+from app.ui.continuity_bridge import flashcard_gap_to_tutor_cta_ru, flashcards_expert_controls_intro_ru
+from app.ui.expert_controls import render_expert_controls
+from app.ui.flashcards_read_cache import (
+    due_count_cache_key,
+    flashcards_bootstrap,
+    flashcards_due_count,
+    invalidate_flashcards_due_counts_only,
+    invalidate_flashcards_read_cache,
+)
+from app.flashcards_review_receipt import (
+    build_fc_review_metric_dict_live,
+    build_fc_review_receipt_html,
+    build_fc_review_receipt_lines,
+    capture_fc_review_receipt_baseline,
+)
+from app.ui.flashcards_sections import FC_MAIN_SECTION_CREATE, pending_section_key
+from app.ui.session_state import (
+    FLASHCARDS_REVIEW_RECEIPT_BASELINE_KEY,
+    PENDING_CURRENT_VIEW_KEY,
+    PROGRESS_FOCUS_SECTION_KEY,
+    PROGRESS_FOCUS_STREAK_WEEKLY,
+)
+
+RATING_BUTTONS = [
+    ("🔴 Снова", "again", 0, "#c0392b"),
+    ("🟡 Трудно", "hard", 3, "#d68910"),
+    ("🟢 Хорошо", "good", 4, "#1e8449"),
+    ("⭐ Легко", "easy", 5, "#1a5276"),
+]
+
+_EXPERT_FILTER_DEFAULTS = {
+    "fc_expert_iv_min": 0,
+    "fc_expert_iv_max": 999,
+    "fc_expert_ef_min": 1.3,
+    "fc_expert_ef_max": 3.0,
+    "fc_expert_overdue_only": False,
+}
+
+_REVIEW_SCOPE_RESET_PENDING_KEY = "flashcards_review_scope_reset_pending"
+
+
+def apply_pending_review_scope_reset(
+    state: Any,
+    *,
+    reset_review_session_state: Callable[[Any], None],
+    review_scope_signature: Callable[[int | None, str | list[str] | tuple[str, ...] | None], str],
+) -> bool:
+    if not state.pop(_REVIEW_SCOPE_RESET_PENDING_KEY, False):
+        return False
+
+    state["flashcards_review_session_deck_id"] = None
+    state["flashcards_review_deck_sync_pending"] = None
+    state["flashcards_review_session_tags_text"] = ""
+    state["flashcards_review_session_tag_ids"] = []
+    state["flashcards_review_session_scope_signature"] = review_scope_signature(None, None)
+    reset_review_session_state(state)
+    return True
+
+
+def _fc_ensure_expert_filter_defaults() -> None:
+    for k, v in _EXPERT_FILTER_DEFAULTS.items():
+        st.session_state.setdefault(k, v)
+
+
+def _fc_audit_log(event: dict[str, Any]) -> None:
+    log = st.session_state.setdefault("flashcards_review_session_audit", [])
+    log.append(event)
+
+
+def _fc_sync_expert_filtered_queue() -> None:
+    raw = st.session_state.get("flashcards_review_queue_raw")
+    if not isinstance(raw, list):
+        return
+    _fc_ensure_expert_filter_defaults()
+    filtered = filter_due_cards_expert(
+        list(raw),
+        interval_min=int(st.session_state.get("fc_expert_iv_min", 0)),
+        interval_max=int(st.session_state.get("fc_expert_iv_max", 999)),
+        ef_min=float(st.session_state.get("fc_expert_ef_min", 1.3)),
+        ef_max=float(st.session_state.get("fc_expert_ef_max", 3.0)),
+        overdue_only=bool(st.session_state.get("fc_expert_overdue_only", False)),
+    )
+    st.session_state["flashcards_review_queue"] = filtered
+    idx = int(st.session_state.get("flashcards_review_index", 0))
+    if not filtered:
+        st.session_state["flashcards_review_index"] = 0
+        st.session_state["flashcards_card_flipped"] = False
+    elif idx >= len(filtered):
+        st.session_state["flashcards_review_index"] = 0
+        st.session_state["flashcards_card_flipped"] = False
+
+
+def build_flashcard_tutor_handoff_state(card: dict[str, Any]) -> dict[str, Any]:
+    """Session-state fields for Flashcard → Tutor gap handoff (excluding current_view).
+
+    Note: current_view is a selectbox widget key in main.py and cannot be modified after
+    the widget is instantiated. Use _request_navigate_to_tutor flag instead; main.py
+    checks this before rendering the selectbox.
+    """
+    deck_label = str(card.get("deck_name") or "карточки").strip()
+    front = str(card.get("front") or "").strip()
+    topic = str(card.get("topic") or deck_label or "карточки")
+    return {
+        "current_topic": topic,
+        "tutor_goal_subtopic": front[:120],
+        "tutor_goal_desired_outcome": "объяснить вопрос из карточки",
+        "tutor_goal_time_budget_min": 5,
+        "flashcard_review_return": True,
+        **flashcard_handoff_session_fields(topic),
+    }
+
+
+def _render_flashcards_expert_layer(
+    *,
+    deck_label: str,
+    selected_tags: list[str],
+    recovery_count: int,
+    idx: int,
+    total: int,
+    card: dict[str, Any] | None,
+    scope_signature: str,
+) -> None:
+    stats = st.session_state.get("flashcards_review_stats", {})
+    next_review_min = st.session_state.get("flashcards_review_session_next_review_min")
+    done = min(idx, total)
+    remaining = max(total - idx, 0)
+    interval = card.get("interval_days") if isinstance(card, dict) else None
+    repetitions = card.get("repetitions") if isinstance(card, dict) else None
+    ease = card.get("easiness") if isinstance(card, dict) else None
+    signals = [
+        f"колода: {deck_label}",
+        "теги: " + ", ".join(selected_tags) if selected_tags else "теги: все",
+        f"оценки: again {stats.get('again', 0)} / hard {stats.get('hard', 0)} / good {stats.get('good', 0)} / easy {stats.get('easy', 0)}",
+    ]
+    if interval is not None:
+        signals.append(f"интервал: {interval} дн.")
+    if repetitions is not None:
+        signals.append(f"повторений: {repetitions}")
+    if ease is not None:
+        signals.append(f"ease: {ease}")
+    if isinstance(next_review_min, str) and next_review_min:
+        signals.append(f"ближайший повтор: {next_review_min}")
+    render_expert_controls(
+        intro=flashcards_expert_controls_intro_ru(),
+        metrics=(
+            ("Пройдено", f"{done}/{total}", "текущая сессия"),
+            ("Осталось", str(remaining), "в очереди"),
+            ("Due", str(recovery_count), "в выбранном scope"),
+            ("Again", str(stats.get("again", 0)), "сигнал пробела"),
+        ),
+        signals=signals,
+        safe_actions=(
+            "Обновить очередь или сбросить фильтр можно в блоке фильтра повторения выше.",
+            "Если хвост большой, recovery-действие разносит очередь без изменения SM-2 настроек.",
+            "Переход к тьютору сохраняет карточку как пробел и открывает объяснение.",
+        ),
+        raw_debug_label="Текущая карточка (raw)",
+        raw_debug_payload=card,
+    )
+    with st.expander("Эксперт: фильтры очереди, история SM-2, аудит сессии", expanded=False):
+        _fc_ensure_expert_filter_defaults()
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.slider("Интервал (мин дн.)", 0, 365, key="fc_expert_iv_min")
+        with c2:
+            st.slider("Интервал (макс дн.)", 0, 999, key="fc_expert_iv_max")
+        with c3:
+            st.checkbox("Только просрочка по next_review", key="fc_expert_overdue_only")
+        e1, e2 = st.columns(2)
+        with e1:
+            st.slider("EF мин", 1.3, 3.0, key="fc_expert_ef_min")
+        with e2:
+            st.slider("EF макс", 1.3, 3.0, key="fc_expert_ef_max")
+        if st.button("Применить фильтры к загруженной очереди", key="fc_expert_apply_filters"):
+            _fc_sync_expert_filtered_queue()
+            st.rerun()
+        st.caption(
+            f"Сырьевая очередь: **{len(st.session_state.get('flashcards_review_queue_raw') or [])}** карточек · "
+            f"после фильтра: **{len(st.session_state.get('flashcards_review_queue') or [])}**."
+        )
+        cur_settings = get_flashcard_expert_settings()
+        if "fc_expert_min_ef_input" not in st.session_state:
+            st.session_state["fc_expert_min_ef_input"] = float(cur_settings.get("min_easiness", 2.5))
+        new_floor = st.number_input(
+            "Минимальный easiness (SM-2) после оценки",
+            min_value=1.3,
+            max_value=5.0,
+            step=0.1,
+            key="fc_expert_min_ef_input",
+        )
+        if st.button("Сохранить пол EF", key="fc_expert_save_min_ef"):
+            set_flashcard_expert_settings({"min_easiness": new_floor})
+            st.success("Сохранено в локальном хранилище (app_kv).")
+        if isinstance(card, dict) and card.get("id") is not None:
+            hist_kv = get_flashcard_rating_history(int(card["id"]), limit=10)
+            if hist_kv:
+                st.markdown("**История оценок (локально)**")
+                st.dataframe(hist_kv, width='stretch', hide_index=True)
+        audit = st.session_state.get("flashcards_review_session_audit") or []
+        st.markdown("**Журнал текущей сессии**")
+        st.caption("События оценки в этой вкладке до перезагрузки очереди.")
+        if audit:
+            st.dataframe(audit[-50:], width='stretch', hide_index=True)
+        payload = build_flashcards_session_audit_export(
+            deck_label=deck_label,
+            scope_signature=scope_signature,
+            events=list(audit),
+            stats=dict(stats),
+        )
+        st.download_button(
+            "Экспорт JSON сессии",
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            file_name="flashcards_review_session_expert.json",
+            mime="application/json",
+            key="fc_expert_dl_session_json",
+            width='stretch',
+        )
+
+
+def render_review(
+    *,
+    api_call: Callable[..., Any],
+    seed_review_scope: Callable[[int | None], None],
+    normalize_review_tag_selection: Callable[[str | list[str] | tuple[str, ...] | None], list[str]],
+    serialize_review_tags: Callable[[str | list[str] | tuple[str, ...] | None], str | None],
+    review_scope_signature: Callable[[int | None, str | list[str] | tuple[str, ...] | None], str],
+    reset_review_session_state: Callable[[Any], None],
+    build_review_due_params: Callable[[int | None, str | list[str] | tuple[str, ...] | None], dict[str, Any]],
+    review_summary_html: Callable[[dict[str, Any], int, str | None], str],
+    review_progress_ratio: Callable[[int, int], float],
+    merge_session_min_next_review: Callable[[Any, str | None], None],
+) -> None:
+    apply_pending_review_scope_reset(
+        st.session_state,
+        reset_review_session_state=reset_review_session_state,
+        review_scope_signature=review_scope_signature,
+    )
+
+    legacy_deck_filter = st.session_state.pop("flashcards_review_deck_filter", None)
+    if legacy_deck_filter is not None:
+        seed_review_scope(int(legacy_deck_filter))
+
+    st.markdown('<div data-testid="e2e-fc-jump-create-from-review"></div>', unsafe_allow_html=True)
+    if st.button("✨ Создать новую колоду", key="fc_jump_create_from_review", width='stretch'):
+        st.session_state[pending_section_key()] = FC_MAIN_SECTION_CREATE
+        st.rerun()
+
+    try:
+        decks = flashcards_bootstrap()["decks"]
+    except Exception as exc:  # noqa: BLE001 - non-critical UI load failure.
+        logging.getLogger(__name__).debug("Deck list load failed: %s", exc)
+        decks = []
+
+    deck_options: list[tuple[str, int | None]] = [("Все колоды", None)]
+    deck_options.extend((str(deck.get("name") or f"Колода {deck['id']}"), int(deck["id"])) for deck in decks)
+    deck_labels = [label for label, _deck_id in deck_options]
+    deck_ids_by_label = dict(deck_options)
+    deck_labels_by_id = {deck_id: label for label, deck_id in deck_options}
+
+    _deck_sel_key = "flashcards_review_scope_deck"
+    if "flashcards_review_deck_sync_pending" in st.session_state:
+        _pending = st.session_state.pop("flashcards_review_deck_sync_pending")
+        _pl = deck_labels_by_id.get(_pending, "Все колоды")
+        st.session_state[_deck_sel_key] = _pl if _pl in deck_labels else "Все колоды"
+
+    selected_deck_id = st.session_state.get("flashcards_review_session_deck_id")
+    sync_label = deck_labels_by_id.get(selected_deck_id, "Все колоды")
+    if sync_label not in deck_labels:
+        sync_label = "Все колоды"
+
+    if _deck_sel_key not in st.session_state or st.session_state[_deck_sel_key] not in deck_labels:
+        st.session_state[_deck_sel_key] = sync_label
+
+    st.markdown("#### Фильтр повторения")
+    c_scope, c_tags = st.columns([1, 2])
+    with c_scope:
+        deck_label = st.selectbox(
+            "Колода",
+            deck_labels,
+            key=_deck_sel_key,
+        )
+    with c_tags:
+        tags_text = st.text_input(
+            "Теги",
+            key="flashcards_review_session_tags_text",
+            placeholder="Например: algebra, formulas",
+        )
+
+    selected_deck_id = deck_ids_by_label[deck_label]
+    selected_tags = normalize_review_tag_selection(tags_text)
+    st.session_state["flashcards_review_session_deck_id"] = selected_deck_id
+    st.session_state["flashcards_review_session_tag_ids"] = selected_tags
+
+    scope_signature = review_scope_signature(selected_deck_id, selected_tags)
+    if st.session_state.get("flashcards_review_session_scope_signature") != scope_signature:
+        reset_review_session_state(st.session_state)
+        st.session_state["flashcards_review_session_scope_signature"] = scope_signature
+
+    scope_bits = []
+    if selected_deck_id is not None:
+        scope_bits.append(f"Колода: {deck_label}")
+    if selected_tags:
+        scope_bits.append("Теги: " + ", ".join(selected_tags))
+    st.caption(" · ".join(scope_bits) if scope_bits else "Повторение по всем due-карточкам.")
+
+    ser_tags_str = serialize_review_tags(selected_tags)
+    recovery_count = 0
+    schedule_info: dict[str, Any] = {}
+    cnt_p: dict[str, Any] = {}
+    try:
+        if selected_deck_id is not None:
+            cnt_p["deck_id"] = int(selected_deck_id)
+        if ser_tags_str:
+            cnt_p["tags"] = ser_tags_str
+        recovery_count = int(flashcards_due_count(due_count_cache_key(cnt_p)))
+        if recovery_count == 0:
+            schedule_info = api_call("GET", "/flashcards/due/schedule", params=cnt_p)
+    except Exception as exc:  # noqa: BLE001 - non-critical precheck failure.
+        logging.getLogger(__name__).debug("Due count load failed: %s", exc)
+        recovery_count = 0
+
+    if recovery_count > 20:
+        st.warning(
+            f"**Recovery-план:** в выбранной области **{recovery_count}** карточек к повторению. "
+            "Рекомендуем проходить по 5–7 в день. Можно разнести хвост очереди: "
+            "останутся только топ-7 по приоритету, остальные получат новые даты повторения."
+        )
+        _rk = hashlib.sha256(scope_signature.encode("utf-8")).hexdigest()[:24]
+        if st.button(
+            "Разнести хвост очереди на 5 дней",
+            key=f"fc_due_recovery_{_rk}",
+            width='stretch',
+            type="secondary",
+        ):
+            try:
+                payload: dict[str, Any] = {"keep_limit": 7, "stagger_days": 5}
+                if selected_deck_id is not None:
+                    payload["deck_id"] = int(selected_deck_id)
+                if ser_tags_str:
+                    payload["tags"] = ser_tags_str
+                moved = int(api_call("POST", "/flashcards/due/recovery", json=payload).get("moved") or 0)
+                st.success(f"Отложено карточек: **{moved}**.")
+                invalidate_flashcards_read_cache()
+                reset_review_session_state(st.session_state)
+                st.rerun()
+            except Exception as ex:  # noqa: BLE001 - UI displays API failure.
+                st.error(str(ex))
+
+    c_load, c_clear = st.columns([2, 1])
+    with c_load:
+        if st.button("Загрузить очередь", type="primary", width='stretch', key="flashcards_review_load_queue"):
+            st.session_state["flashcards_review_session_status"] = "loading"
+            try:
+                data = api_call("GET", "/flashcards/due", params=build_review_due_params(selected_deck_id, selected_tags))
+                queue = data.get("cards") or []
+                st.session_state["flashcards_review_queue_raw"] = list(queue)
+                st.session_state["flashcards_review_session_audit"] = []
+                _fc_ensure_expert_filter_defaults()
+                _fc_sync_expert_filtered_queue()
+                st.session_state["flashcards_review_index"] = 0
+                st.session_state["flashcards_card_flipped"] = False
+                st.session_state["flashcards_review_stats"] = {"again": 0, "hard": 0, "good": 0, "easy": 0}
+                st.session_state["flashcards_review_session_next_review_min"] = None
+                st.session_state["flashcards_review_session_status"] = "loaded"
+                st.session_state["flashcards_review_session_error"] = None
+                st.session_state[FLASHCARDS_REVIEW_RECEIPT_BASELINE_KEY] = (
+                    capture_fc_review_receipt_baseline(scope_signature)
+                )
+            except Exception as e:  # noqa: BLE001 - UI displays API failure.
+                st.session_state["flashcards_review_queue"] = []
+                st.session_state["flashcards_review_session_status"] = "error"
+                st.session_state["flashcards_review_session_error"] = str(e)
+    with c_clear:
+        if st.button("Сбросить фильтр", width='stretch', key="flashcards_review_clear_scope"):
+            st.session_state[_REVIEW_SCOPE_RESET_PENDING_KEY] = True
+            st.rerun()
+
+    status = st.session_state.get("flashcards_review_session_status", "idle")
+    if status == "error":
+        st.error(f"Не удалось загрузить очередь повторения: {st.session_state.get('flashcards_review_session_error')}")
+        return
+    if status == "idle":
+        st.info("Выберите область повторения и загрузите очередь.")
+        return
+
+    queue: list[dict] = st.session_state.get("flashcards_review_queue", [])
+    idx: int = st.session_state.get("flashcards_review_index", 0)
+    total = len(queue)
+
+    if total == 0:
+        if selected_tags:
+            st.info("Ничего не нашлось по выбранным тегам. Сбросьте фильтр или выберите другие теги.")
+        else:
+            next_review = schedule_info.get("next_review")
+            next_count = int(schedule_info.get("next_count") or 0)
+            if next_review:
+                st.info(
+                    f"Сейчас нет карточек к повторению. Ближайшие: **{next_count}** — "
+                    f"**{str(next_review)[:10]}**."
+                )
+            else:
+                st.info("Сейчас нет карточек к повторению.")
+            undoable_count = int(schedule_info.get("undoable_count") or 0)
+            if undoable_count > 0 and st.button(
+                f"Отменить разнесение хвоста ({undoable_count})",
+                width='stretch',
+                key="flashcards_review_undo_recovery",
+            ):
+                try:
+                    payload: dict[str, Any] = {}
+                    if selected_deck_id is not None:
+                        payload["deck_id"] = int(selected_deck_id)
+                    if ser_tags_str:
+                        payload["tags"] = ser_tags_str
+                    restored = int(
+                        api_call("POST", "/flashcards/due/recovery/undo", json=payload).get("restored") or 0
+                    )
+                    st.success(f"Возвращено в очередь: **{restored}** карточек.")
+                    invalidate_flashcards_read_cache()
+                    reset_review_session_state(st.session_state)
+                    st.rerun()
+                except Exception as ex:  # noqa: BLE001 - UI displays API failure.
+                    st.error(str(ex))
+        if st.button("Обновить", width='stretch'):
+            reset_review_session_state(st.session_state)
+            st.rerun()
+        return
+
+    if idx >= total:
+        from app.ui.flashcards_ui import (
+            _fc_receipt_baseline_valid,
+            _fc_review_completion_receipt_visible,
+        )
+
+        stats = st.session_state.get("flashcards_review_stats", {})
+        nr_min = st.session_state.get("flashcards_review_session_next_review_min")
+        nr_val = nr_min if isinstance(nr_min, str) else None
+        show_receipt = _fc_review_completion_receipt_visible(idx=idx, total=total, stats=stats)
+        _render_flashcards_expert_layer(
+            deck_label=deck_label,
+            selected_tags=selected_tags,
+            recovery_count=recovery_count,
+            idx=idx,
+            total=total,
+            card=None,
+            scope_signature=scope_signature,
+        )
+        if show_receipt:
+            baseline = st.session_state.get(FLASHCARDS_REVIEW_RECEIPT_BASELINE_KEY)
+            if _fc_receipt_baseline_valid(baseline, scope_signature):
+                after = build_fc_review_metric_dict_live(scope_signature=scope_signature)
+                lines, measurable = build_fc_review_receipt_lines(
+                    baseline,
+                    after,
+                    next_review_min=nr_val,
+                )
+                receipt_html = build_fc_review_receipt_html(
+                    lines,
+                    measurable=measurable,
+                    next_review_min=nr_val,
+                )
+                st.markdown(receipt_html, unsafe_allow_html=True)
+                if st.button(
+                    "Посмотреть в Progress",
+                    key="flashcards_review_progress_cta",
+                    type="primary",
+                    width="stretch",
+                ):
+                    st.session_state[PENDING_CURRENT_VIEW_KEY] = "Прогресс обучения"
+                    st.session_state[PROGRESS_FOCUS_SECTION_KEY] = PROGRESS_FOCUS_STREAK_WEEKLY
+                    st.rerun()
+            st.markdown(review_summary_html(stats, total, nr_val), unsafe_allow_html=True)
+        if st.button("🔁 Начать снова", width='stretch', type="secondary"):
+            reset_review_session_state(st.session_state)
+            st.rerun()
+        return
+
+    card = queue[idx]
+    flipped: bool = st.session_state.get("flashcards_card_flipped", False)
+
+    _render_flashcards_expert_layer(
+        deck_label=deck_label,
+        selected_tags=selected_tags,
+        recovery_count=recovery_count,
+        idx=idx,
+        total=total,
+        card=card,
+        scope_signature=scope_signature,
+    )
+
+    st.progress(
+        review_progress_ratio(idx, total),
+        text=f"Карточка {idx + 1} из {total} · Осталось: {total - idx - 1}",
+    )
+
+    deck_name = card.get("deck_name", "")
+    tags = card.get("tags") or ""
+    tags_html = f'<div class="fc-card-tags">{tags}</div>' if tags else ""
+    st.markdown(
+        f'<div class="flashcard flashcard-front">'
+        f'<div class="fc-card-label">Вопрос · {deck_name}</div>'
+        f'<div class="fc-card-text">{card["front"]}</div>'
+        f"{tags_html}"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    if flipped:
+        st.markdown(
+            f'<div class="flashcard flashcard-back">'
+            f'<div class="fc-card-label">Ответ</div>'
+            f'<div class="fc-card-text">{card["back"]}</div>'
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+        cols = st.columns(4)
+        for col, (label, q_label, quality, _color) in zip(cols, RATING_BUTTONS):
+            with col:
+                if st.button(label, key=f"rate_{q_label}_{idx}", width='stretch'):
+                    try:
+                        result = api_call(
+                            "POST",
+                            "/flashcards/review",
+                            json={"card_id": card["id"], "quality": quality},
+                        )
+                    except Exception as e:  # noqa: BLE001 - UI displays API failure.
+                        st.error(f"Не удалось сохранить оценку: {e}")
+                    else:
+                        merge_session_min_next_review(
+                            st.session_state,
+                            result.get("next_review") if isinstance(result, dict) else None,
+                        )
+                        _fc_audit_log(
+                            {
+                                "card_id": int(card["id"]),
+                                "label": q_label,
+                                "quality": quality,
+                            }
+                        )
+                        stats = st.session_state.get("flashcards_review_stats", {})
+                        stats[q_label] = stats.get(q_label, 0) + 1
+                        st.session_state["flashcards_review_stats"] = stats
+                        st.session_state["flashcards_review_index"] = idx + 1
+                        st.session_state["flashcards_card_flipped"] = False
+                        invalidate_flashcards_due_counts_only()
+                        st.rerun()
+        if st.button(flashcard_gap_to_tutor_cta_ru(), key=f"fc_gap_to_tutor_{idx}", width='stretch', type="secondary"):
+            try:
+                result = api_call(
+                    "POST",
+                    "/flashcards/review",
+                    json={"card_id": card["id"], "quality": 1},
+                )
+            except Exception as e:  # noqa: BLE001 - UI displays API failure.
+                st.error(f"Не удалось сохранить оценку перед переходом: {e}")
+            else:
+                merge_session_min_next_review(
+                    st.session_state,
+                    result.get("next_review") if isinstance(result, dict) else None,
+                )
+                _fc_audit_log(
+                    {
+                        "card_id": int(card["id"]),
+                        "label": "tutor_handoff",
+                        "quality": 1,
+                    }
+                )
+                stats = st.session_state.get("flashcards_review_stats", {})
+                stats["again"] = stats.get("again", 0) + 1
+                st.session_state["flashcards_review_stats"] = stats
+                st.session_state["flashcards_review_index"] = idx + 1
+                st.session_state["flashcards_card_flipped"] = False
+                # Apply handoff state. Assign current_view via deferred flag to avoid conflict
+                # with the selectbox widget in main.py (which cannot be modified after instantiation).
+                for key, value in build_flashcard_tutor_handoff_state(card).items():
+                    st.session_state[key] = value
+                # Seed Tutor with the exact failed card. This makes the first answer
+                # instant and keeps expensive RAG for follow-up questions.
+                import uuid as _uuid
+                _sid = st.session_state.get("tutor_session_id") or str(_uuid.uuid4())
+                st.session_state["tutor_session_id"] = _sid
+                record_handoff_click(
+                    st.session_state,
+                    card_id=int(card["id"]),
+                    topic=str(card.get("topic") or card.get("deck_name") or "карточки"),
+                )
+                _seed = build_flashcard_handoff_seed(card)
+                _history = session_store.get(_sid)
+                _history.extend(
+                    [
+                        Message(role="user", content=str(_seed["user_content"])),
+                        Message(
+                            role="assistant",
+                            content=str(_seed["assistant_content"]),
+                            metadata=dict(_seed["assistant_metadata"]),
+                        ),
+                    ]
+                )
+                session_store.save(
+                    _sid,
+                    _history,
+                    merge_metadata={
+                        "last_entrypoint": "flashcard_handoff_seed",
+                        "last_flashcard_id": int(card["id"]),
+                    },
+                )
+                _stored_history = session_store.get(_sid)
+                _assistant_idx = max(0, len(_stored_history) - 1)
+                st.session_state["tutor_handoff_check_self_pending"] = True
+                st.session_state["tutor_handoff_quiz_msg_idx"] = _assistant_idx
+                st.session_state["tutor_last_nba"] = {
+                    "concept": str(_seed.get("topic") or ""),
+                    "reason": "Карточка отмечена как непонятная; следующий шаг — короткая проверка.",
+                    "action": "Проверь меня",
+                    "route": "targeted_reinforcement",
+                }
+                st.session_state.pop("tutor_pending_prompt", None)
+                st.session_state.pop("tutor_pending_session_id", None)
+                log_handoff_answer_ready(
+                    st.session_state,
+                    api_debug={
+                        "engine_build_ms": 0.0,
+                        "retrieval_ms": 0.0,
+                        "llm_ms": 0.0,
+                        "rag_ms": 0.0,
+                        "post_processing_ms": 0.0,
+                        "total_answer_ms": 0.0,
+                        "cache_hit": True,
+                    },
+                )
+                clear_flashcard_handoff_session_fields(st.session_state)
+                st.session_state["_request_navigate_to_tutor"] = True
+                invalidate_flashcards_due_counts_only()
+                st.rerun()
+    else:
+        if st.button("👁 Показать ответ", width='stretch', type="primary", key=f"flip_{idx}"):
+            st.session_state["flashcards_card_flipped"] = True
+            st.rerun()
+
+    interval = card.get("interval_days", 0)
+    reps = card.get("repetitions", 0)
+    if reps == 0:
+        hint = "🆕 Новая карточка"
+    elif interval <= 1:
+        hint = "🔴 Интервал: 1 день"
+    elif interval <= 7:
+        hint = f"🟡 Интервал: {interval} дней"
+    else:
+        hint = f"🟢 Интервал: {interval} дней"
+    st.caption(hint)

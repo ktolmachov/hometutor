@@ -1,0 +1,26 @@
+---
+description: Политика запросов к LLM: ограничение контекста, запреты на файлы, сжатие
+alwaysApply: true
+---
+
+# LLM Request Policy
+
+## Context policy
+- Keep every LLM call under 12k estimated input tokens when possible.
+- Never read extra files beyond the explicit read-set.
+- Ignore prior responses/tools. Fresh context only.
+- Prefer 3-5 files max per call; for routine tasks prefer 2-3.
+
+## Large-file rules
+- Never include full contents of large files.
+- Large Python modules: use signatures only, imports only, or 1-2 selected blocks.
+- Large tests: include only relevant test cases / fixtures / assertions pattern.
+- Large docs: include only the relevant section, status table, last entry, or short summary.
+
+## Forbidden full-read files
+SSoT: `doc/token_safety_registry.json`. Check before reading:
+`python scripts/check_readset.py <file>...` — SAFE / WARN / BLOCK.
+
+## Compression rule
+- > 12k tokens — compress (trim history, use signatures/sections, drop low-signal files).
+- > 20k tokens — stop and report blocker. Max 1 retry after compression.

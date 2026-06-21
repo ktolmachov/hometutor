@@ -1,0 +1,31 @@
+---
+alwaysApply: true
+description: Короткие always-on правила процесса итераций.
+---
+
+## Рабочий процесс
+
+Источник scope, статусов и критериев: [doc/backlog_registry.yaml](../../doc/backlog_registry.yaml). [doc/tasklist.md](../../doc/tasklist.md) — только производный weekly view после sync. Стек/границы: [doc/vision.md](../../doc/vision.md). Код-правила: [conventions.mdc](conventions.mdc); полный `doc/conventions.md` в контекст **не** подтягивать — только TL;DR в начале файла и при необходимости [conventions_architecture.md](../../doc/conventions_architecture.md) / [conventions_reference.md](../../doc/conventions_reference.md).
+
+### Минимальный цикл
+
+1. План/ТЗ → согласование → реализация в рамках итерации.
+2. Проверка: целевой `pytest` (релевантные файлы/модули) + критерии из `backlog_registry.yaml`.
+3. Закрытие: обновить `backlog_registry.yaml`, затем регенерировать `tasklist.md`; один коммит на завершённую итерацию.
+
+### Запреты
+
+Оверинжиниринг; новый стек вне `vision`; задачи вне текущей итерации; пропуск тестов; коммит без обновления `backlog_registry.yaml`/derived `tasklist.md`.
+
+**Полный suite:** не запускать `pytest` на весь проект (`pytest` без узкого пути/маркера), если пользователь **явно** этого не попросил или в `backlog_registry.yaml` для текущей итерации **прямо** не требуется полный прогон. По умолчанию — только затронутые тесты.
+
+### Практика
+
+- Контекст давать точечно (цель + релевантные файлы), не скармливать весь репозиторий.
+- Для ударных backlog-пакетов начинать с контрактного prompt: `Goal`, `Scope`, `Files to inspect first`, `DoD`, `Do not touch`, `Output`. Один prompt = один package/outcome, без широкого анализа и без соседних эпох.
+- Если диалог потерял фокус — новый чат с кратким резюме и ссылками.
+- Перед завершением смотреть свой diff.
+
+### Token Budget
+
+Token policy: [llm-request-policy.mdc](llm-request-policy.mdc). Claude Code: [`CLAUDE.md`](../../CLAUDE.md).

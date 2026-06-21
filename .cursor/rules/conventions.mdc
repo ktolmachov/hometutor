@@ -1,0 +1,20 @@
+---
+alwaysApply: true
+---
+
+## Код-правила (short)
+
+Расширенные соглашения: [doc/conventions.md](../../doc/conventions.md) (TL;DR + навигация; детали вынесены в `conventions_architecture.md`, `conventions_reference.md`). Границы продукта: [doc/vision.md](../../doc/vision.md). При конфликте приоритет у полного текста в `doc/conventions*.md`.
+
+### Must-have
+
+- KISS: маленькие модули, явные зависимости, без лишних абстракций.
+- Конфиг только через `get_settings()` / `get_retrieval_settings()`.
+- LLM/embed только через `app/provider.py`.
+- HTTP только через `app/routers/*` (+ `api_requests.py` / `api_models.py`).
+- Бизнес-логика knowledge в `knowledge_service.py`, guardrails в `guardrails.py`.
+- Критичные сценарии покрывать `pytest`; `.venv` не коммитить.
+
+### Стиль (кратко)
+
+PEP 8, говорящие имена, комментарии только для неочевидной логики.

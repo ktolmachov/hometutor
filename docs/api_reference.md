@@ -65,6 +65,10 @@
 
 Главный endpoint для Q&A, tutor и multi-turn.
 
+| Method | Path | Назначение |
+|---|---|---|
+| POST | `/ask` | Q&A, tutor route, multi-turn и RAG profile selection |
+
 Основные поля:
 
 - `question`

@@ -224,7 +224,36 @@ def write_bundle_via_compiler(
             report_dict["published"] = True
             result.published = True
             result.quality_report.published = True
-    write_graph_quality_report_sidecar(bundle_dir, report_dict)
+        write_graph_quality_report_sidecar(bundle_dir, report_dict)
+    elif documents:
+        from app.knowledge_graph_payload import build_graph_payload_from_documents
+
+        heuristic_data = build_graph_payload_from_documents(documents, existing_concepts or {})
+        if heuristic_data.get("concepts"):
+            compiler_fail_reasons = list(report_dict.get("fail_reasons") or [])
+            heuristic_stats = _heuristic_bundle_stats(
+                bundle_dir,
+                heuristic_data,
+                generation_id=generation_id,
+                scope_hash=scope_hash,
+                report_overrides={
+                    "compiler_fail_reasons": compiler_fail_reasons,
+                    "heuristic_fallback": True,
+                    "fail_reasons": [
+                        *compiler_fail_reasons,
+                        "Heuristic fallback after compiler failure (metadata-only graph)",
+                    ],
+                    "source_paths": list(source_paths or []),
+                    "source_content_hashes": sorted(set(source_content_hashes or [])),
+                },
+            )
+            heuristic_stats["compiler_error"] = result.error
+            heuristic_stats["heuristic_fallback"] = True
+            heuristic_stats["truncated"] = result.truncated
+            return heuristic_stats
+        write_graph_quality_report_sidecar(bundle_dir, report_dict)
+    else:
+        write_graph_quality_report_sidecar(bundle_dir, report_dict)
 
     if bind_on_publish and result.gate_passed and source_paths:
         from app.course_cache import update_course_graph_binding
@@ -264,6 +293,7 @@ def _heuristic_bundle_stats(
     *,
     generation_id: str,
     scope_hash: str,
+    report_overrides: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     rel_count = int(data.pop("_relation_count", 0))
     persist_graph_bundle_to_dir(bundle_dir, data)
@@ -279,6 +309,8 @@ def _heuristic_bundle_stats(
         "gates": [],
         "fail_reasons": ["Heuristic fallback path — semantic gate не пройден"],
     }
+    if report_overrides:
+        report.update(report_overrides)
     write_graph_quality_report_sidecar(bundle_dir, report)
     return {
         "ok": True,

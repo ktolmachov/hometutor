@@ -367,10 +367,11 @@ class Settings(BaseSettings):
     history_path: Path = Field(default_factory=lambda: LOG_DIR / "history.jsonl")
     faq_memory_path: Path = Field(default_factory=lambda: BASE_DIR / "faq_memory.jsonl")
     index_meta_path: Path = Field(default_factory=lambda: BASE_DIR / "index_meta.json")
-    # TODO: переместить index_registry + index_meta в CHROMA_DIR одним deploy-шагом вместе с chroma
-    # (атомарная тройка: active_index.json уже в CHROMA_DIR, реестр/мета пока в BASE_DIR).
-    index_registry_path: Path = Field(default_factory=lambda: BASE_DIR / "index_registry.json")
-    index_registry_lock_path: Path = Field(default_factory=lambda: BASE_DIR / "index_registry.json.lock")
+    # Реестр поколений следует HOME_RAG_HOME (вместе с data/chroma), не корню code-репо.
+    index_registry_path: Path = Field(default_factory=lambda: HOME_RAG_HOME / "index_registry.json")
+    index_registry_lock_path: Path = Field(
+        default_factory=lambda: HOME_RAG_HOME / "index_registry.json.lock"
+    )
     active_index_state_path: Path = Field(default_factory=lambda: CHROMA_DIR / "active_index.json")
 
     # Локальное состояние обучения: прогресс чтения, закладки, заметки (итерация 17 ч.1)

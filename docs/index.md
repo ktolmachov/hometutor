@@ -2,7 +2,7 @@
 
 Актуализировано: 2026-06-23.
 
-`hometutor` — runtime-репозиторий локального учебного RAG-приложения. Здесь живут приложение, API, UI, запуск, deployment и эксплуатационная документация. Процессные материалы, backlog, user stories, demo screenshots и длинные сценарные артефакты вынесены в `hometutor-studio`.
+`hometutor` — runtime-репозиторий локального учебного RAG-приложения. Здесь живут приложение, API, UI, запуск, deployment и эксплуатационная документация. Demo screenshots сохранены в `docs/screenshots/final/`; исходные сценарные манифесты, генератор demo-документа, backlog, user stories и процессные материалы вынесены в `hometutor-studio`.
 
 ## Быстрый старт по ролям
 
@@ -21,7 +21,7 @@
 |---|---|
 | [user_guide.md](user_guide.md) | главная карта продукта и пользовательских режимов |
 | [quickstart.md](quickstart.md) | локальный запуск, индекс, первый учебный цикл |
-| [quickstart_demo.md](quickstart_demo.md) | ручной demo lane без отсутствующих screenshot-артефактов |
+| [quickstart_demo.md](quickstart_demo.md) | screenshot-витрина demo-сценариев и правила её обновления |
 | [api_reference.md](api_reference.md) | актуальная карта HTTP endpoints |
 | [architecture.md](architecture.md) | runtime-архитектура и границы хранилищ |
 | [technical_specification.md](technical_specification.md) | техническая спецификация runtime-системы |
@@ -43,7 +43,7 @@
 
 ## Что было исправлено при актуализации
 
-- Убраны ссылки на отсутствующие `docs/screenshots/*`, `docs/scenarios/*`, `user_scenarios.md`, `user_guide_details.md`, `prompts_catalog.md`, `personalized_learner_model.md`.
+- Убраны ссылки на отсутствующие `docs/scenarios/*`, `user_scenarios.md`, `user_guide_details.md`, `prompts_catalog.md`, `personalized_learner_model.md`; demo screenshots оставлены как локальные артефакты `docs/screenshots/final/*`.
 - Уточнено, что `config.env` является tracked defaults, а `.env` — локальным override.
 - Убраны упоминания несуществующих entrypoints вроде `ask.py` и `run_eval.py`.
 - `doc/`-ссылки заменены на `docs/` или помечены как материалы `hometutor-studio`.

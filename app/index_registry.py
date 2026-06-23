@@ -1,8 +1,8 @@
 """
 Canonical index generation registry (blue-green).
 
-Single source of truth: index_registry.json at project root (or INDEX_REGISTRY_PATH).
-Migrates from legacy chroma_db/active_index.json on first read if registry is absent.
+Single source of truth: index_registry.json under HOME_RAG_HOME (INDEX_REGISTRY_PATH).
+Migrates from legacy chroma_db/active_index.json or code-repo index_registry.json on first read.
 """
 
 from __future__ import annotations
@@ -135,6 +135,32 @@ def _load_registry_disk_nolock() -> dict[str, Any]:
             base["index_version"] = int(raw.get("index_version") or 0)
             return base
         return raw
+
+    from app.config import BASE_DIR, HOME_RAG_HOME
+
+    legacy_registry = BASE_DIR / "index_registry.json"
+    if (
+        legacy_registry != REGISTRY_PATH
+        and legacy_registry.exists()
+        and HOME_RAG_HOME != BASE_DIR
+    ):
+        try:
+            raw = json.loads(legacy_registry.read_text(encoding="utf-8"))
+        except Exception as exc:  # noqa: BLE001 — migration best-effort only.
+            logger.warning(
+                "Failed to migrate index registry from code repo | from=%s | error=%s",
+                legacy_registry,
+                exc,
+            )
+            raw = None
+        if isinstance(raw, dict):
+            _write_registry_disk_nolock(raw)
+            logger.info(
+                "Migrated index_registry from code repo to HOME_RAG_HOME | from=%s | to=%s",
+                legacy_registry,
+                REGISTRY_PATH,
+            )
+            return raw
 
     migrated = _migrate_from_legacy_active_index()
     if migrated is not None:

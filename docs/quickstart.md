@@ -67,7 +67,7 @@ $env:HOME_RAG_HOME = (Get-Location).Path
 |---|---|
 | исходные материалы и `user_state.db` | `data/` |
 | Chroma/BM25 индекс | `chroma_db/` |
-| active generation pointer | `index_registry.json` |
+| active generation pointer | `index_registry.json` (в корне `HOME_RAG_HOME`, не в code-репо) |
 | логи, метрики, SSR-профили | `logs/` |
 
 ## 4. Запуск
@@ -132,6 +132,7 @@ docker compose -f docker-compose.yml -f docker-compose.llamacpp.yml up --build
 | API не стартует | порт `8000`, `.env`, `OPENAI_API_KEY`, доступность LLM endpoint |
 | UI не открывается | порт `8501`, запущен ли `main.py`, значение `UI_API_BASE_URL` |
 | нет источников | был ли выполнен `ingest.py`, есть ли файлы в `data/`, не пуст ли `chroma_db/` |
+| Knowledge Graph пустой | graph LLM / `graph_quality_report.json` в `data/graph_generations/`; пересборка: `scripts/rebuild_knowledge_graph.py` |
 | локальный LLM недоступен | `LLM_API_BASE`, id модели, запущен ли LM Studio/llama.cpp |
 | REST возвращает `401` | задан `HOME_RAG_API_KEY`; добавьте заголовок `X-API-Key` |
 

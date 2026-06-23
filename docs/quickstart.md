@@ -133,6 +133,7 @@ docker compose -f docker-compose.yml -f docker-compose.llamacpp.yml up --build
 | UI не открывается | порт `8501`, запущен ли `main.py`, значение `UI_API_BASE_URL` |
 | нет источников | был ли выполнен `ingest.py`, есть ли файлы в `data/`, не пуст ли `chroma_db/` |
 | Knowledge Graph пустой | graph LLM / `graph_quality_report.json` в `data/graph_generations/`; пересборка: `scripts/rebuild_knowledge_graph.py` |
+| проверить graph LLM перед сменой модели | `scripts/probe_graph_llm.py --live-doc --no-cache` → отчёт в `logs/graph_llm_probe_report.json` |
 | локальный LLM недоступен | `LLM_API_BASE`, id модели, запущен ли LM Studio/llama.cpp |
 | REST возвращает `401` | задан `HOME_RAG_API_KEY`; добавьте заголовок `X-API-Key` |
 

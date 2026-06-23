@@ -1,0 +1,109 @@
+{
+  "scenario_id": "scenario_18",
+  "started_at": "2026-06-20T18:56:12.966Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_home_modes_hub",
+      "caption": "Six modes on Home",
+      "narration": "The hub frames the day: answer, tutor, cards, progress.",
+      "file": "01_home_modes_hub.png",
+      "taken_at": "2026-06-20T18:56:15.690Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 408,
+        "streamlit_ready": 0,
+        "screenshot": 99,
+        "total": 507
+      }
+    },
+    {
+      "step": 2,
+      "slug": "02_flashcards_due_surface",
+      "caption": "Flashcards review surface",
+      "narration": "SM-2 queue has a dedicated mode reachable from Home.",
+      "file": "02_flashcards_due_surface.png",
+      "taken_at": "2026-06-20T18:56:16.457Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 423,
+        "streamlit_ready": 0,
+        "screenshot": 103,
+        "total": 526
+      }
+    },
+    {
+      "step": 3,
+      "slug": "03_progress_next_actions",
+      "caption": "Progress tab with next-step context",
+      "narration": "Metrics plus a clear suggestion for what to do next.",
+      "file": "03_progress_next_actions.png",
+      "taken_at": "2026-06-20T18:56:17.942Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 427,
+        "streamlit_ready": 0,
+        "screenshot": 164,
+        "total": 591
+      }
+    },
+    {
+      "step": 4,
+      "slug": "04_back_to_home_rhythm",
+      "caption": "Back to Home hub",
+      "narration": "The loop closes: return to the mode selector after checking progress.",
+      "file": "04_back_to_home_rhythm.png",
+      "taken_at": "2026-06-20T18:56:18.664Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 426,
+        "streamlit_ready": 0,
+        "screenshot": 98,
+        "total": 524
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-06-20T18:56:18.664Z",
+  "total_duration_ms": 5698,
+  "shot_count": 4,
+  "timings_summary": {
+    "wait": {
+      "sum": 1684,
+      "avg": 421,
+      "p95": 427
+    },
+    "streamlit_ready": {
+      "sum": 0,
+      "avg": 0,
+      "p95": 0
+    },
+    "screenshot": {
+      "sum": 464,
+      "avg": 116,
+      "p95": 164
+    },
+    "total": {
+      "sum": 2148,
+      "avg": 537,
+      "p95": 591
+    }
+  }
+}

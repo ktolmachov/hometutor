@@ -1,0 +1,4 @@
+{"scenario_id":"scenario_04","step":1,"slug":"01_quiz_question_presented","file":"01_quiz_question_presented.png","timings_ms":{"wait":621,"streamlit_ready":45,"screenshot":67,"total":733},"taken_at":"2026-06-20T18:54:25.652Z"}
+{"scenario_id":"scenario_04","step":2,"slug":"02_quiz_answer_selected","file":"02_quiz_answer_selected.png","timings_ms":{"wait":411,"streamlit_ready":9,"screenshot":53,"total":473},"taken_at":"2026-06-20T18:54:26.134Z"}
+{"scenario_id":"scenario_04","step":3,"slug":"03_quiz_feedback_correct_or_hint","file":"03_quiz_feedback_correct_or_hint.png","timings_ms":{"wait":413,"streamlit_ready":8,"screenshot":52,"total":473},"taken_at":"2026-06-20T18:54:26.617Z"}
+{"scenario_id":"scenario_04","step":4,"slug":"04_quiz_next_action_cta","file":"04_quiz_next_action_cta.png","timings_ms":{"wait":412,"streamlit_ready":9,"screenshot":50,"total":471},"taken_at":"2026-06-20T18:54:27.135Z"}

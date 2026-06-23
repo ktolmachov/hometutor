@@ -1,0 +1,109 @@
+{
+  "scenario_id": "scenario_25",
+  "started_at": "2026-06-20T18:56:43.025Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_mastery_vector_overview",
+      "caption": "Mastery vector: обзор по концептам",
+      "narration": "Один экран показывает, что уже устойчиво, а что требует внимания.",
+      "file": "01_mastery_vector_overview.png",
+      "taken_at": "2026-06-20T18:56:43.929Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 530,
+        "streamlit_ready": 16,
+        "screenshot": 93,
+        "total": 639
+      }
+    },
+    {
+      "step": 2,
+      "slug": "02_graduated_concepts",
+      "caption": "Graduated: стабильно освоенные темы",
+      "narration": "Зелёные концепты можно не трогать перед экзаменом.",
+      "file": "02_graduated_concepts.png",
+      "taken_at": "2026-06-20T18:56:45.223Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 410,
+        "streamlit_ready": 777,
+        "screenshot": 89,
+        "total": 1276
+      }
+    },
+    {
+      "step": 3,
+      "slug": "03_weak_concepts_priority",
+      "caption": "Weak spots: приоритет на последние дни",
+      "narration": "Система сама находит темы ниже порога mastery.",
+      "file": "03_weak_concepts_priority.png",
+      "taken_at": "2026-06-20T18:56:45.816Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 418,
+        "streamlit_ready": 15,
+        "screenshot": 100,
+        "total": 533
+      }
+    },
+    {
+      "step": 4,
+      "slug": "04_cta_to_tutor",
+      "caption": "CTA «Разобрать» по weak-концепту",
+      "narration": "Один клик — целевая tutor-сессия по слабому месту.",
+      "file": "04_cta_to_tutor.png",
+      "taken_at": "2026-06-20T18:56:46.369Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 410,
+        "streamlit_ready": 18,
+        "screenshot": 99,
+        "total": 527
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-06-20T18:56:46.369Z",
+  "total_duration_ms": 3344,
+  "shot_count": 4,
+  "timings_summary": {
+    "wait": {
+      "sum": 1768,
+      "avg": 442,
+      "p95": 530
+    },
+    "streamlit_ready": {
+      "sum": 826,
+      "avg": 207,
+      "p95": 777
+    },
+    "screenshot": {
+      "sum": 381,
+      "avg": 95,
+      "p95": 100
+    },
+    "total": {
+      "sum": 2975,
+      "avg": 744,
+      "p95": 1276
+    }
+  }
+}

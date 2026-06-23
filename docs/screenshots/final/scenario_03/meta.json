@@ -1,0 +1,127 @@
+{
+  "scenario_id": "scenario_03",
+  "started_at": "2026-06-20T18:54:16.951Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_answer_with_learn_cta",
+      "caption": "Готовый ответ с кнопкой «Учить эту тему 5 минут»",
+      "narration": "Аня видит ответ — и прямо здесь предложение перейти в режим обучения.",
+      "file": "01_answer_with_learn_cta.png",
+      "taken_at": "2026-06-20T18:54:22.303Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 411,
+        "streamlit_ready": 19,
+        "screenshot": 113,
+        "total": 543
+      }
+    },
+    {
+      "step": 2,
+      "slug": "02_tutor_context_handoff",
+      "caption": "Tutor открыт: контекст темы и вопроса сохранён",
+      "narration": "Переход без потери контекста — тема и исходный вопрос уже в Tutor.",
+      "file": "02_tutor_context_handoff.png",
+      "taken_at": "2026-06-20T18:54:23.424Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 703,
+        "streamlit_ready": 43,
+        "screenshot": 104,
+        "total": 850
+      }
+    },
+    {
+      "step": 3,
+      "slug": "03_tutor_topic_plan",
+      "caption": "План разбора темы: 3 шага",
+      "narration": "Система предлагает структуру: что объяснить и в каком порядке.",
+      "file": "03_tutor_topic_plan.png",
+      "taken_at": "2026-06-20T18:54:23.577Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 26,
+        "screenshot": 97,
+        "total": 123
+      }
+    },
+    {
+      "step": 4,
+      "slug": "04_tutor_simple_explanation",
+      "caption": "Объяснение простыми словами — шаг 1",
+      "narration": "Первый шаг плана: концепция объяснена без жаргона.",
+      "file": "04_tutor_simple_explanation.png",
+      "taken_at": "2026-06-20T18:54:23.725Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 28,
+        "screenshot": 91,
+        "total": 119
+      }
+    },
+    {
+      "step": 5,
+      "slug": "05_tutor_next_step_cta",
+      "caption": "CTA «Следующий шаг: проверь понимание»",
+      "narration": "Tutor сам предлагает перейти к проверке — мост к мини-квизу.",
+      "file": "05_tutor_next_step_cta.png",
+      "taken_at": "2026-06-20T18:54:24.522Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 627,
+        "streamlit_ready": 31,
+        "screenshot": 91,
+        "total": 749
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-06-20T18:54:24.523Z",
+  "total_duration_ms": 7572,
+  "shot_count": 5,
+  "timings_summary": {
+    "wait": {
+      "sum": 1741,
+      "avg": 348,
+      "p95": 703
+    },
+    "streamlit_ready": {
+      "sum": 147,
+      "avg": 29,
+      "p95": 43
+    },
+    "screenshot": {
+      "sum": 496,
+      "avg": 99,
+      "p95": 113
+    },
+    "total": {
+      "sum": 2384,
+      "avg": 477,
+      "p95": 850
+    }
+  }
+}

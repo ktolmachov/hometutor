@@ -1,0 +1,4 @@
+{"scenario_id":"scenario_10","step":1,"slug":"01_home_resume_card","file":"01_home_resume_card.png","timings_ms":{"wait":0,"streamlit_ready":0,"screenshot":120,"total":120},"taken_at":"2026-06-20T18:54:50.161Z"}
+{"scenario_id":"scenario_10","step":2,"slug":"02_plan_diff_today","file":"02_plan_diff_today.png","timings_ms":{"wait":0,"streamlit_ready":217,"screenshot":105,"total":322},"taken_at":"2026-06-20T18:54:51.114Z"}
+{"scenario_id":"scenario_10","step":3,"slug":"03_due_queue_soft_recovery","file":"03_due_queue_soft_recovery.png","timings_ms":{"wait":312,"streamlit_ready":14,"screenshot":190,"total":516},"taken_at":"2026-06-20T18:54:51.688Z"}
+{"scenario_id":"scenario_10","step":4,"slug":"04_reindex_profile_badge","file":"04_reindex_profile_badge.png","timings_ms":{"wait":313,"streamlit_ready":18,"screenshot":96,"total":427},"taken_at":"2026-06-20T18:54:52.860Z"}

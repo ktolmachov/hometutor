@@ -1,0 +1,109 @@
+{
+  "scenario_id": "scenario_14",
+  "started_at": "2026-06-20T18:55:03.712Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_open_sync_controls",
+      "caption": "Открыты expert controls синхронизации",
+      "narration": "В одном месте собраны export/import действия.",
+      "file": "01_open_sync_controls.png",
+      "taken_at": "2026-06-20T18:55:04.478Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 59,
+        "screenshot": 80,
+        "total": 139
+      }
+    },
+    {
+      "step": 2,
+      "slug": "02_export_bundle",
+      "caption": "Экспорт полного sync-bundle",
+      "narration": "Файл включает learner state, прогресс и учебные артефакты.",
+      "file": "02_export_bundle.png",
+      "taken_at": "2026-06-20T18:55:04.599Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 0,
+        "screenshot": 75,
+        "total": 75
+      }
+    },
+    {
+      "step": 3,
+      "slug": "03_import_bundle",
+      "caption": "Импорт и восстановление",
+      "narration": "После импорта система подтверждает восстановление состояния.",
+      "file": "03_import_bundle.png",
+      "taken_at": "2026-06-20T18:55:05.219Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 60,
+        "screenshot": 65,
+        "total": 125
+      }
+    },
+    {
+      "step": 4,
+      "slug": "04_post_restore_validation",
+      "caption": "Проверка после restore",
+      "narration": "Resume, due-очередь и прогресс доступны сразу.",
+      "file": "04_post_restore_validation.png",
+      "taken_at": "2026-06-20T18:55:06.279Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 58,
+        "screenshot": 331,
+        "total": 389
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-06-20T18:55:06.280Z",
+  "total_duration_ms": 2568,
+  "shot_count": 4,
+  "timings_summary": {
+    "wait": {
+      "sum": 0,
+      "avg": 0,
+      "p95": 0
+    },
+    "streamlit_ready": {
+      "sum": 177,
+      "avg": 44,
+      "p95": 60
+    },
+    "screenshot": {
+      "sum": 551,
+      "avg": 138,
+      "p95": 331
+    },
+    "total": {
+      "sum": 728,
+      "avg": 182,
+      "p95": 389
+    }
+  }
+}

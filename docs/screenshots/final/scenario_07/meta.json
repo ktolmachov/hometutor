@@ -1,0 +1,109 @@
+{
+  "scenario_id": "scenario_07",
+  "started_at": "2026-06-20T18:54:37.858Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_progress_unified_strip",
+      "caption": "Полоса прогресса: тема / mastery% / due / streak",
+      "narration": "Один взгляд — вся картина: что знаешь, что пора повторить.",
+      "file": "01_progress_unified_strip.png",
+      "taken_at": "2026-06-20T18:54:39.741Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 1072,
+        "streamlit_ready": 105,
+        "screenshot": 93,
+        "total": 1270
+      }
+    },
+    {
+      "step": 2,
+      "slug": "02_mastery_timeline",
+      "caption": "График mastery за 7 дней",
+      "narration": "Кривая роста — видно, что знания накапливаются.",
+      "file": "02_mastery_timeline.png",
+      "taken_at": "2026-06-20T18:54:40.271Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 415,
+        "streamlit_ready": 14,
+        "screenshot": 78,
+        "total": 507
+      }
+    },
+    {
+      "step": 3,
+      "slug": "03_weak_spots_panel",
+      "caption": "Слабые темы (mastery < 50%) + CTA «Разобрать»",
+      "narration": "Три темы, требующие внимания — система сама их нашла.",
+      "file": "03_weak_spots_panel.png",
+      "taken_at": "2026-06-20T18:54:40.847Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 422,
+        "streamlit_ready": 15,
+        "screenshot": 74,
+        "total": 511
+      }
+    },
+    {
+      "step": 4,
+      "slug": "04_streak_and_next_action",
+      "caption": "Streak 5 дней + предложение на сегодня",
+      "narration": "Серия не прерывается — система знает когда ты учился.",
+      "file": "04_streak_and_next_action.png",
+      "taken_at": "2026-06-20T18:54:41.388Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 417,
+        "streamlit_ready": 17,
+        "screenshot": 83,
+        "total": 517
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-06-20T18:54:41.388Z",
+  "total_duration_ms": 3530,
+  "shot_count": 4,
+  "timings_summary": {
+    "wait": {
+      "sum": 2326,
+      "avg": 582,
+      "p95": 1072
+    },
+    "streamlit_ready": {
+      "sum": 151,
+      "avg": 38,
+      "p95": 105
+    },
+    "screenshot": {
+      "sum": 328,
+      "avg": 82,
+      "p95": 93
+    },
+    "total": {
+      "sum": 2805,
+      "avg": 701,
+      "p95": 1270
+    }
+  }
+}

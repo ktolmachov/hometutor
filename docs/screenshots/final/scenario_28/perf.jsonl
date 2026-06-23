@@ -1,0 +1,4 @@
+{"scenario_id":"scenario_28","step":1,"slug":"01_cockpit_header","file":"01_cockpit_header.png","timings_ms":{"wait":514,"streamlit_ready":7,"screenshot":294,"total":815},"taken_at":"2026-06-20T18:57:23.354Z"}
+{"scenario_id":"scenario_28","step":2,"slug":"02_daily_briefing","file":"02_daily_briefing.png","timings_ms":{"wait":416,"streamlit_ready":9,"screenshot":75,"total":500},"taken_at":"2026-06-20T18:57:23.900Z"}
+{"scenario_id":"scenario_28","step":3,"slug":"03_rotator_panel","file":"03_rotator_panel.png","timings_ms":{"wait":414,"streamlit_ready":8,"screenshot":66,"total":488},"taken_at":"2026-06-20T18:57:24.395Z"}
+{"scenario_id":"scenario_28","step":4,"slug":"04_graduation_progress","file":"04_graduation_progress.png","timings_ms":{"wait":409,"streamlit_ready":9,"screenshot":78,"total":496},"taken_at":"2026-06-20T18:57:24.932Z"}

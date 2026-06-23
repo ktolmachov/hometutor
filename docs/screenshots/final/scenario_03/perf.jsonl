@@ -1,0 +1,5 @@
+{"scenario_id":"scenario_03","step":1,"slug":"01_answer_with_learn_cta","file":"01_answer_with_learn_cta.png","timings_ms":{"wait":411,"streamlit_ready":19,"screenshot":113,"total":543},"taken_at":"2026-06-20T18:54:22.303Z"}
+{"scenario_id":"scenario_03","step":2,"slug":"02_tutor_context_handoff","file":"02_tutor_context_handoff.png","timings_ms":{"wait":703,"streamlit_ready":43,"screenshot":104,"total":850},"taken_at":"2026-06-20T18:54:23.424Z"}
+{"scenario_id":"scenario_03","step":3,"slug":"03_tutor_topic_plan","file":"03_tutor_topic_plan.png","timings_ms":{"wait":0,"streamlit_ready":26,"screenshot":97,"total":123},"taken_at":"2026-06-20T18:54:23.577Z"}
+{"scenario_id":"scenario_03","step":4,"slug":"04_tutor_simple_explanation","file":"04_tutor_simple_explanation.png","timings_ms":{"wait":0,"streamlit_ready":28,"screenshot":91,"total":119},"taken_at":"2026-06-20T18:54:23.725Z"}
+{"scenario_id":"scenario_03","step":5,"slug":"05_tutor_next_step_cta","file":"05_tutor_next_step_cta.png","timings_ms":{"wait":627,"streamlit_ready":31,"screenshot":91,"total":749},"taken_at":"2026-06-20T18:54:24.522Z"}

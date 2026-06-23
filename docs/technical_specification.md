@@ -1,37 +1,65 @@
-# Техническая Спецификация `hometutor`
+# Техническая спецификация hometutor
 
-Актуализировано по коду на 2026-04-12.
+Актуализировано по runtime-коду: 2026-06-23.
 
 ## Назначение
 
-`hometutor` — локальная Python-система для работы с учебной базой знаний из `data/`.
-Система индексирует документы, отвечает на вопросы с источниками, поддерживает tutor-маршрут, quiz/review, темы, learning plan, прогресс обучения и локальный sync состояния.
+`hometutor` — локальное Python-приложение для обучения по пользовательским материалам. Система индексирует документы, отвечает на вопросы с источниками, поддерживает tutor-route, quiz, flashcards, SM-2, adaptive plan, Smart Study Router, локальный прогресс и sync.
 
-## Entry Points
+Этот репозиторий содержит runtime-продукт. Процессные документы, backlog, user stories и screenshot-витрина находятся вне этого репозитория, в `hometutor-studio`.
 
-- `main.py` — FastAPI API
-- `app/ui/main.py` — Streamlit UI
-- `ask.py` — CLI-вопросы
-- `ingest.py` — индексация
-- `telegram_bot.py` — Telegram-бот
-- `run_eval.py` — offline evaluation
-- `run_eval_compare.py` — сравнение конфигураций eval
+## Entry points
+
+| Entry point | Назначение |
+|---|---|
+| `main.py` | FastAPI API на `0.0.0.0:8000` |
+| `app/ui/main.py` | Streamlit UI |
+| `ingest.py` | индексация документов |
+| `telegram_bot.py` | Telegram bot |
+| `scripts/local_start.ps1` | one-command localhost launcher |
+| `scripts/local_readiness.py` | readiness gate |
+| `scripts/Warmup-HomeRagRag.ps1` | retrieval warmup через API |
+
+В этом runtime-репозитории нет `ask.py`, `run_eval.py`, `run_eval_compare.py` и `tests/` как локальных entrypoints/каталогов.
 
 ## Стек
 
-- Python
-- FastAPI
+- Python, FastAPI, Uvicorn
 - Streamlit
 - llama-index
 - Chroma
+- BM25 / hybrid retrieval
 - pydantic-settings
 - aiogram
+- SQLite
 - OpenTelemetry optional
-- pytest
+- pytest dependency в `requirements.txt` для test-capable окружений
+
+## Конфигурация
+
+`app/config.py` загружает:
+
+1. `config.env` — tracked defaults;
+2. `.env` — локальные секреты и overrides.
+
+Ключевые группы настроек:
+
+| Группа | Переменные |
+|---|---|
+| API/auth | `HOME_RAG_API_KEY`, `API_KEY`, CORS/rate-limit settings |
+| LLM | `OPENAI_API_KEY`, `OPENAI_API_BASE`, `LLM_API_BASE`, `LMSTUDIO_API_BASE`, `LLM_MODEL` |
+| embeddings | `EMBED_API_BASE`, `EMBED_MODEL`, `EMBED_DIMENSIONS` |
+| local/cloud profile | `HOME_RAG_LOCAL_PROFILE`, `HOME_RAG_DATA_MODE`, `HOME_RAG_LLM_FALLBACK_*` |
+| SSR LLM | `SSR_LLM_API_BASE`, `SSR_LLM_MODEL`, `ENABLE_SSR_LLM_PROFILING`, `SSR_LLM_PROFILE_LOG_DIR` |
+| retrieval | `RAG_PROFILE`, `RETRIEVAL_MODE`, `SIMILARITY_TOP_K`, `ENABLE_RERANKER`, `RERANK_TOP_N` |
+| paths | `HOME_RAG_HOME`, `HOME_RAG_DATA_DIR`, `HOME_RAG_INDEX_DIR`, `HOME_RAG_LOG_DIR` |
+| observability | `ENABLE_OTEL_TRACING`, metrics/cost/log paths |
+
+Публичные RAG profiles: `fast`, `quality`, `graph_aware`. Retrieval modes: `vector_only`, `hybrid`, `bm25_only`, `doc_then_chunk`.
 
 ## Поддерживаемые форматы
 
-Для индексации:
+Для индексации и preview/explain:
 
 - `.txt`
 - `.md`
@@ -39,233 +67,122 @@
 - `.docx`
 - `.pdf`
 
-Для `GET /explain/file` и `GET /content/file`:
-
-- `.txt`
-- `.md`
-- `.html`
-- `.pdf`
-- `.docx` (извлечение текста через `python-docx`)
+Для `.docx` используется `python-docx`/зависимости извлечения текста, для PDF — PDF extraction stack из зависимостей.
 
 ## Хранилища и артефакты
 
-Каталоги:
-
-- `data/` — документы и `user_state.db`
-- `data/graph_generations/` — поколения PropertyGraph bundle (blue-green вместе с Chroma), см. `graph_generation_paths.py`
-- `chroma_db/` — persistent Chroma
-- `logs/` — logs, `metrics_store.jsonl`, `metrics_dashboard.db`
-- `eval_data/` — eval datasets
-- `eval_results/` — результаты eval
-
-Файлы:
-
-- `data/user_state.db` — SQLite состояния пользователя
-- `faq_memory.jsonl` — FAQ-память
-- `index_meta.json` — метаданные индекса
-- `index_registry.json` — активное поколение индекса
-
-## Конфигурация
-
-### Через `app/config.py`
-
-Основные runtime settings:
-
-- `OPENAI_API_KEY`
-- `OPENAI_API_BASE`
-- `EMBED_API_BASE`
-- `LLM_MODEL`
-- `EMBED_MODEL`
-- `EVAL_JUDGE_LLM`
-- `QUIZ_LLM_MODEL`
-- `ENABLE_ASYNC_QUALITY_JUDGE`
-- `ENABLE_REWRITE`
-- `ENABLE_CLASSIFIER`
-- `ENABLE_SELF_CORRECTION`
-- `ENABLE_FAQ_CACHE`
-- `ENABLE_METADATA_ENRICHMENT`
-- `ENABLE_DOCUMENT_SUMMARIES`
-- `ENABLE_OTEL_TRACING`
-- `OFFLINE_MODE`
-- `UI_API_BASE_URL`
-- `SHOW_TUTOR_DEV_TOOLS`
-- `METRICS_STORE_PATH`
-- `METRICS_DASHBOARD_DB_PATH`
-- `LLM_COST_LOG_DIR`
-- `FEEDBACK_PATH`
-- `HISTORY_PATH`
-- `FAQ_MEMORY_PATH`
-- `INDEX_META_PATH`
-- `INDEX_REGISTRY_PATH`
-- `INDEX_REGISTRY_LOCK_PATH`
-- `ACTIVE_INDEX_STATE_PATH`
-- `HOME_RAG_MICRO_QUIZ_OFFLINE`
-- `EVAL_MAX_WORKERS`
-- `EVAL_BASELINE_JSON`
-- `EVAL_OUTPUT_JSON`
-- `EVAL_TUTOR_BASELINE_JSON`
-- `EVAL_TUTOR_OUTPUT_JSON`
-
-Retrieval settings:
-
-- `RAG_PROFILE`
-- `RETRIEVAL_MODE`
-- `SIMILARITY_TOP_K`
-- `ENABLE_RERANKER`
-- `RERANK_TOP_N`
-- `RERANK_MODEL`
-- `DOC_TOP_K`
-- `CHUNK_SIZE`
-- `CHUNK_OVERLAP`
-- `SPLIT_STRATEGY`
-- `WINDOW_SIZE`
-
-Допустимые retrieval modes:
-
-- `vector_only`
-- `hybrid`
-- `bm25_only`
-- `doc_then_chunk`
-
-### Path and eval settings
-
-Пути observability, feedback/history, FAQ/index pointers и eval-artifacts читаются через `app/config.py` (`get_settings()`). Модули могут держать module-level `Path` snapshots для совместимости с тестами, но источник env остается `Settings`.
+| Артефакт | Назначение |
+|---|---|
+| `data/` | исходные документы и `user_state.db` |
+| `data/user_state.db` | learner state, quiz, flashcards, SRS, sync |
+| `chroma_db/` | persistent Chroma и retrieval cache data |
+| `data/graph_generations/` | graph bundles по поколениям индекса |
+| `index_registry.json` | active index generation pointer |
+| `faq_memory.jsonl` | FAQ memory |
+| `logs/` | runtime logs, metrics, cost logs, SSR profiles |
 
 ## Функциональные контуры
 
 ### Индексация
 
-`app/ingestion.py`:
+`ingest.py` вызывает `app.ingestion.build_index()`, который делегирует в ingestion loader и фазы full/partial index.
 
-1. читает документы из `data/`
-2. расширяет metadata и строит document summaries
-3. режет документы на чанки
-4. считает embeddings
-5. пишет в staging collections
-6. активирует новое поколение через `index_registry.json`
+Основные модули:
 
-### Query pipeline
+- `app/ingestion.py`
+- `app/ingestion_loader.py`
+- `app/ingestion_index_full.py`
+- `app/ingestion_index_partial.py`
+- `app/ingestion_index_nodes.py`
+- `app/ingestion_metadata.py`
+- `app/index_registry.py`
+- `app/chroma_vector_backend.py`
 
-Основной путь ответа:
+### Query/RAG
 
-1. input validation
-2. input guardrails
-3. classify
-4. condense истории, если есть `session_id`
-5. rewrite, если включен
-6. retrieval по выбранной стратегии
-7. generation
-8. output guardrails
-9. history / metrics / FAQ save / async judge
+Путь `/ask`:
 
-Ключевые модули:
+```text
+input validation
+  -> guardrails
+  -> classify/condense/rewrite
+  -> retrieval routing/profile
+  -> retrieval execution
+  -> generation
+  -> grounded answer assembly
+  -> postprocessing
+  -> session/history/metrics persistence
+```
 
-- `app/query_service.py`
-- `app/pipeline_runner.py`
-- `app/pipeline_steps.py`
-- `app/condense_step.py`
-- `app/retrieval.py`
-- `app/retrieval_strategies.py`
-- `app/hybrid_retrieval.py`
-- `app/retrieval_cache.py`
+Основные модули: `query_service`, `pipeline_runner`, `pipeline_steps`, `retrieval`, `retrieval_router`, `query_rag_execution`, `query_rag_assembly`.
 
-### Tutor и multi-turn
+### Tutor
 
-- tutor не вынесен в отдельный endpoint; он идет через `POST /ask`
-- persistent multi-turn работает через `session_id`
-- chat sessions хранятся в `app/session_store.py`
-- tutor payload и learner-profile поля нормализуются в `app/query_service.py`
+Tutor не имеет отдельного endpoint: он идёт через `/ask` с `query_mode="tutor"`. Контракты и orchestration:
 
-### Knowledge workspace
+- `app/tutor_orchestrator.py`
+- `app/tutor_pipeline_contract.py`
+- `app/tutor_learner_contract.py`
+- `app/tutor_personalization_policy.py`
+- `app/ask_goal_snapshot_merge.py`
 
-Система поддерживает:
+### Quiz, flashcards, progress
 
-- topics catalog
-- synthesis
-- learning plan
-- KB overview
-- KB search
-- KB suggestions
+- Quiz: `app/quiz_service.py`, `app/quiz_adaptive.py`, `app/routers/quiz.py`
+- Flashcards: `app/flashcard_service.py`, `app/user_state_flashcards.py`, `app/routers/flashcards.py`
+- SM-2 concept review: `app/spaced_repetition.py`, `app/routers/review.py`
+- Progress/adaptive plan: `app/learning_plan_service.py`, `app/learning_plan_adaptive.py`, `app/routers/dashboard.py`
 
-Ключевые модули:
+### Smart Study Router
 
-- `app/knowledge_service.py`
-- `app/learning_plan_service.py`
-- `app/knowledge_graph.py`
+SSR строит next-step recommendation из локальных сигналов.
 
-### Quiz, review и прогресс
+Основные модули:
 
-- scoped quiz generation и evaluation
-- spaced repetition due reviews
-- mastery dashboard
-- personalized coach plan
-- adaptive daily plan
-- personalized learner model
+- `app/smart_study_router.py`
+- `app/smart_study_recommendation.py`
+- `app/smart_study_evidence.py`
+- `app/ssr_explain_service.py`
+- `app/ssr_feedback_collection.py`
+- `app/user_state_ssr_feedback.py`
 
-Ключевые модули:
+## UI
 
-- `app/quiz_service.py`
-- `app/quiz_adaptive.py`
-- `app/spaced_repetition.py`
-- `app/analytics_service.py`
-- `app/learner_model_service.py`
-- `app/learning_plan_service.py`
+Основной entrypoint: `app/ui/main.py`.
 
-## HTTP API
+Основные разделы:
 
-Полный список маршрутов поддерживается в Swagger `/docs`.
-Основные группы:
-
-- core
-- query
-- sessions
-- knowledge
-- files
-- quiz
-- review
-- dashboard
-- sync
-- metrics
-- admin
-
-Краткая карта — в `api_reference.md`.
-
-## UI и клиенты
-
-- Streamlit — основной пользовательский интерфейс; HTTP-клиент к локальному FastAPI (`app/ui_client.py`)
-- CLI (`ask.py`) — прямой вызов `app.query_service.answer_question`, без HTTP (не через `app.api_services`)
-- Telegram (`app.telegram_handlers`) — вызовы `app.api_services` (тот же фасад, что HTTP-роутеры), без HTTP
-
-Текущие разделы UI:
-
-- Быстрый ответ
-- Чат с тьютором
-- Интерактивный Quiz
-- Knowledge Graph
-- Прогресс обучения
-- История
-- Темы
-- Метрики
-- Найти материалы
-- Объяснить файл
-- Чистый вид
+- `Главная — Mission Control`
+- `Быстрый ответ`
+- `Чат с тьютором`
+- `Интерактивный Quiz`
+- `Flashcards`
+- `Курс`
+- `Knowledge Graph`
+- `Прогресс обучения`
+- `История`
+- `Темы`
+- `Метрики`
+- `Найти материалы`
+- `Объяснить файл`
+- `Чистый вид`
 
 ## Наблюдаемость
 
 Система поддерживает:
 
-- request logging
-- history persistence
-- feedback
-- metrics / quality / cost dashboards
-- pipeline trace
-- SLO alerts
-- OTEL tracing optional
+- request logging;
+- metrics store;
+- cost logs;
+- quality/educational/mastery metrics;
+- pipeline trace;
+- optional OpenTelemetry;
+- SSR LLM profiling в `logs/ssr_llm_profiles/`.
 
 ## Ограничения
 
-- основной сценарий — локальный single-user instance
-- Streamlit и Telegram делят одно локальное состояние, а не облачный аккаунт
-- для `.docx` в explain/content нужна зависимость `python-docx`; без неё endpoint вернёт понятную ошибку
-- `OFFLINE_MODE` влияет на UX и probes, но не превращает систему в полностью локальный LLM-стек
-- часть документов в `doc/` остается roadmap или historical и не должна читаться как runtime-истина
+- Основной сценарий — локальный single-user runtime.
+- Runtime-репозиторий не содержит полный процессный backlog и screenshot-витрину.
+- `OFFLINE_MODE` и offline banners не заменяют настройку локального LLM/embedding endpoint.
+- При облачном LLM/embedding provider пользовательские данные могут уходить внешнему провайдеру.
+- `HOME_RAG_API_KEY` защищает REST endpoints только если задан.

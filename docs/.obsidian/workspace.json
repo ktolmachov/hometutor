@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "quickstart.md",
+                "file": "quickstart_demo.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "quickstart"
+              "title": "quickstart_demo"
             }
           }
         ]
@@ -182,7 +182,36 @@
   },
   "active": "3dca82099ed27268",
   "lastOpenFiles": [
+    "screenshots/final/scenario_19/perf.jsonl",
+    "screenshots/final/scenario_19/meta.json",
+    "screenshots/final/scenario_19/02_sidebar_env_context.png",
+    "screenshots/final/scenario_19/demo.gif",
+    "screenshots/final/scenario_19/03_mode_cards_confirmed.png",
+    "screenshots/final/scenario_19/01_main_view_ready.png",
+    "screenshots/final/scenario_19",
+    "screenshots/final/scenario_18/perf.jsonl",
+    "screenshots/final/scenario_18/meta.json",
+    "screenshots/final/scenario_18/03_progress_next_actions.png",
+    "screenshots/final/scenario_18/demo.gif",
+    "screenshots/final/scenario_18/04_back_to_home_rhythm.png",
+    "screenshots/final/scenario_18/02_flashcards_due_surface.png",
+    "screenshots/final/scenario_18/01_home_modes_hub.png",
+    "screenshots/final/scenario_18",
+    "screenshots/final/scenario_17/perf.jsonl",
+    "screenshots/final/scenario_17/meta.json",
+    "screenshots/final/scenario_17/demo.gif",
+    "screenshots/final/scenario_17",
+    "screenshots/final/scenario_16/perf.jsonl",
+    "screenshots/final/scenario_16/meta.json",
+    "user_guide.md",
+    "technical_specification.md",
     "quickstart_demo.md",
-    "quickstart.md"
+    "quickstart.md",
+    "conventions_reference.md",
+    "conventions_architecture.md",
+    "conventions.md",
+    "api_reference.md",
+    "architecture.md",
+    "index.md"
   ]
 }

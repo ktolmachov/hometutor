@@ -1,0 +1,4 @@
+{"scenario_id":"scenario_26","step":1,"slug":"01_home_kg_card","file":"01_home_kg_card.png","timings_ms":{"wait":509,"streamlit_ready":11,"screenshot":103,"total":623},"taken_at":"2026-06-20T18:56:50.165Z"}
+{"scenario_id":"scenario_26","step":2,"slug":"02_kg_view_open","file":"02_kg_view_open.png","timings_ms":{"wait":517,"streamlit_ready":18,"screenshot":105,"total":640},"taken_at":"2026-06-20T18:57:16.014Z"}
+{"scenario_id":"scenario_26","step":3,"slug":"03_subgraph_mastery","file":"03_subgraph_mastery.png","timings_ms":{"wait":411,"streamlit_ready":23,"screenshot":100,"total":534},"taken_at":"2026-06-20T18:57:16.583Z"}
+{"scenario_id":"scenario_26","step":4,"slug":"04_weak_node_cta","file":"04_weak_node_cta.png","timings_ms":{"wait":411,"streamlit_ready":20,"screenshot":91,"total":522},"taken_at":"2026-06-20T18:57:17.171Z"}

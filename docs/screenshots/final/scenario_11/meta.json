@@ -1,0 +1,91 @@
+{
+  "scenario_id": "scenario_11",
+  "started_at": "2026-06-20T18:54:52.960Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_flashcards_deck_ready",
+      "caption": "Колода готова к экспорту",
+      "narration": "Карточки уже сохранены и доступны для выгрузки.",
+      "file": "01_flashcards_deck_ready.png",
+      "taken_at": "2026-06-20T18:54:53.957Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 3,
+        "screenshot": 34,
+        "total": 37
+      }
+    },
+    {
+      "step": 2,
+      "slug": "02_export_button",
+      "caption": "Кнопка экспорта в Anki",
+      "narration": "Экспорт запускается из интерфейса без дополнительных шагов.",
+      "file": "02_export_button.png",
+      "taken_at": "2026-06-20T18:54:54.327Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 8,
+        "screenshot": 67,
+        "total": 75
+      }
+    },
+    {
+      "step": 3,
+      "slug": "03_export_success",
+      "caption": "Подтверждение успешного экспорта",
+      "narration": "Система сообщает, что пакет для Anki сформирован.",
+      "file": "03_export_success.png",
+      "taken_at": "2026-06-20T18:54:55.517Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 434,
+        "streamlit_ready": 15,
+        "screenshot": 78,
+        "total": 527
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-06-20T18:54:55.517Z",
+  "total_duration_ms": 2557,
+  "shot_count": 3,
+  "timings_summary": {
+    "wait": {
+      "sum": 434,
+      "avg": 145,
+      "p95": 434
+    },
+    "streamlit_ready": {
+      "sum": 26,
+      "avg": 9,
+      "p95": 15
+    },
+    "screenshot": {
+      "sum": 179,
+      "avg": 60,
+      "p95": 78
+    },
+    "total": {
+      "sum": 639,
+      "avg": 213,
+      "p95": 527
+    }
+  }
+}

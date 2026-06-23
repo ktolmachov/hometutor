@@ -1,0 +1,5 @@
+{"scenario_id":"scenario_01","step":1,"slug":"01_home_mode_selector","file":"01_home_mode_selector.png","timings_ms":{"wait":824,"streamlit_ready":12,"screenshot":173,"total":1009},"taken_at":"2026-06-20T18:54:09.920Z"}
+{"scenario_id":"scenario_01","step":2,"slug":"02_quick_answer_empty","file":"02_quick_answer_empty.png","timings_ms":{"wait":0,"streamlit_ready":10,"screenshot":76,"total":86},"taken_at":"2026-06-20T18:54:10.996Z"}
+{"scenario_id":"scenario_01","step":3,"slug":"03_quick_answer_with_sources","file":"03_quick_answer_with_sources.png","timings_ms":{"wait":0,"streamlit_ready":21,"screenshot":100,"total":121},"taken_at":"2026-06-20T18:54:11.832Z"}
+{"scenario_id":"scenario_01","step":4,"slug":"04_sources_expanded","file":"04_sources_expanded.png","timings_ms":{"wait":0,"streamlit_ready":22,"screenshot":96,"total":118},"taken_at":"2026-06-20T18:54:11.999Z"}
+{"scenario_id":"scenario_01","step":5,"slug":"05_learn_this_topic_cta","file":"05_learn_this_topic_cta.png","timings_ms":{"wait":0,"streamlit_ready":18,"screenshot":96,"total":114},"taken_at":"2026-06-20T18:54:12.175Z"}

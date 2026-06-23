@@ -1,50 +1,42 @@
 # Правила и соглашения по разработке
 
-Статус: `Live`  
-Роль: актуальные соглашения по коду и сопровождению проекта. При конфликте с историческими design/roadmap документами ориентироваться на этот файл и на код.
+Актуализировано: 2026-06-23.
 
-> **Контекст для агентов:** не подтягивать этот файл и вложенные справочники целиком в промпт. Always-on выжимка: [`.cursor/rules/conventions.mdc`](../.cursor/rules/conventions.mdc). Детали — только по задаче: модули в `app/…` и нужный фрагмент из таблицы ниже.
+Роль документа: короткий live-набор правил для runtime-репозитория `hometutor`. Подробности вынесены в [conventions_architecture.md](conventions_architecture.md) и [conventions_reference.md](conventions_reference.md).
 
 ## TL;DR
 
-- **KISS:** малые модули, явные зависимости, без лишних слоёв.
-- **Конфиг:** только `get_settings()` / `get_retrieval_settings()` из `app/config.py`.
-- **LLM / embed:** только `app/provider.py`.
-- **HTTP:** `app/routers/*` (+ `api_requests.py` / `api_models.py`); точка входа `app/api.py`.
-- **Knowledge / guardrails:** `knowledge_service.py`, `guardrails.py`.
-- **Пайплайн запроса:** `pipeline_runner.py`, `pipeline_steps.py`, контракт шага `process(QueryContext) -> QueryContext`.
-- **DB / persistence:** user-state таблицы — через `app/user_state.py` и `_with_db()`; отдельные локальные SQLite-хранилища — только через документированные store wrappers / artifacts (см. `conventions_architecture.md`).
-- **Промпты:** единственный источник `app/prompts/`.
-- **Тесты:** `tests/`; env — фикстура `settings_env` в `conftest.py`.
-- **Итерации:** scope и критерии — `doc/backlog_registry.yaml`; `doc/tasklist.md` — производный weekly view; процесс — `.cursor/rules/workflow.mdc`.
-
-## Навигация (якоря и вынесенные файлы)
-
-| Тема | Где читать |
-|------|------------|
-| Основные принципы, стиль | [§ Основные принципы](#основные-принципы), [§ Стиль кода](#стиль-кода) |
-| Конфиг, retrieval, graph, tutor, дерево `app/` | [conventions_architecture.md](conventions_architecture.md) |
-| Промпты, REST-соглашения, ошибки, агенты, тесты, doc-sync | [conventions_reference.md](conventions_reference.md) |
+- KISS: маленькие модули, явные зависимости, без лишних слоёв.
+- Конфиг: только `get_settings()` / `get_retrieval_settings()` из `app/config.py`.
+- LLM и embeddings: только через `app/provider.py`.
+- HTTP: роутеры в `app/routers/*`, сборка приложения в `app/api.py`.
+- UI: Streamlit-модули в `app/ui/*`; бизнес-логику не дублировать во view-коде.
+- Persistence: user-state через `app/user_state*.py`; не открывать SQLite напрямую из UI/роутеров.
+- Retrieval: profiles и modes проводить через существующие registry/contract modules.
+- Prompts: использовать пакет `app/prompts/`.
+- Документация: при изменении runtime-поведения обновлять `docs/`.
 
 ## Основные принципы
 
-- KISS: решения должны оставаться простыми.
-- Модульность: логика делится по небольшим, понятным модулям.
-- Явные зависимости: общая логика должна быть вынесена в отдельный модуль, а не копироваться.
-- Минимум лишних абстракций: новые слои добавляются только если они реально уменьшают дублирование или риск ошибок.
+- Простота важнее архитектурной демонстративности.
+- Новый слой добавляется только если он снижает реальную сложность или риск.
+- Доменные сервисы должны быть переиспользуемыми из FastAPI, Streamlit и Telegram.
+- Ошибки должны деградировать понятно для пользователя и диагностируемо для разработчика.
+- Runtime-документы не должны ссылаться на локальные файлы, которых нет в этом репозитории.
 
 ## Стиль кода
 
-- Следовать PEP 8.
-- Использовать говорящие имена функций и переменных.
-- Добавлять короткие комментарии только там, где логика неочевидна.
-- Предпочитать небольшие функции с одной понятной ответственностью.
+- Следовать PEP 8 и локальным паттернам.
+- Предпочитать небольшие функции с ясной ответственностью.
+- Комментарии писать только там, где они объясняют неочевидную причину.
+- Не хардкодить provider/model/path в бизнес-логике: использовать settings/provider/path helpers.
+- Не расширять публичный API без обновления [api_reference.md](api_reference.md).
 
-## Детали
+## Навигация
 
-Вся прежняя глубина (архитектурные буллеты, дерево проекта, промпты, API, ошибки, тесты, документация) перенесена без смысловых сокращений в:
-
-- [conventions_architecture.md](conventions_architecture.md)
-- [conventions_reference.md](conventions_reference.md)
-
-При изменении этих файлов имеет смысл синхронизировать [`.cursor/rules/conventions.mdc`](../.cursor/rules/conventions.mdc), чтобы подсказки агента не расходились с репозиторием.
+| Тема | Где читать |
+|---|---|
+| архитектурные границы, config, persistence, retrieval | [conventions_architecture.md](conventions_architecture.md) |
+| prompts, API, errors, testing, docs | [conventions_reference.md](conventions_reference.md) |
+| runtime architecture | [architecture.md](architecture.md) |
+| HTTP API | [api_reference.md](api_reference.md) |

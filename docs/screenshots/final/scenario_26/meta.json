@@ -1,0 +1,109 @@
+{
+  "scenario_id": "scenario_26",
+  "started_at": "2026-06-20T18:56:46.463Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_home_kg_card",
+      "caption": "Mission Control: карточка Knowledge Graph",
+      "narration": "Главный экран подсказывает открыть визуальную карту знаний.",
+      "file": "01_home_kg_card.png",
+      "taken_at": "2026-06-20T18:56:50.165Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 509,
+        "streamlit_ready": 11,
+        "screenshot": 103,
+        "total": 623
+      }
+    },
+    {
+      "step": 2,
+      "slug": "02_kg_view_open",
+      "caption": "Раздел Knowledge Graph открыт",
+      "narration": "Подграф показывает связи и уровень освоения по узлам.",
+      "file": "02_kg_view_open.png",
+      "taken_at": "2026-06-20T18:57:16.014Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 517,
+        "streamlit_ready": 18,
+        "screenshot": 105,
+        "total": 640
+      }
+    },
+    {
+      "step": 3,
+      "slug": "03_subgraph_mastery",
+      "caption": "Персональный подграф + mastery",
+      "narration": "Видно, какие концепты уже устойчивы, а какие на границе frontier.",
+      "file": "03_subgraph_mastery.png",
+      "taken_at": "2026-06-20T18:57:16.583Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 411,
+        "streamlit_ready": 23,
+        "screenshot": 100,
+        "total": 534
+      }
+    },
+    {
+      "step": 4,
+      "slug": "04_weak_node_cta",
+      "caption": "Рекомендация по слабому узлу",
+      "narration": "Система предлагает следующий шаг из топологии графа.",
+      "file": "04_weak_node_cta.png",
+      "taken_at": "2026-06-20T18:57:17.171Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 411,
+        "streamlit_ready": 20,
+        "screenshot": 91,
+        "total": 522
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-06-20T18:57:17.172Z",
+  "total_duration_ms": 30709,
+  "shot_count": 4,
+  "timings_summary": {
+    "wait": {
+      "sum": 1848,
+      "avg": 462,
+      "p95": 517
+    },
+    "streamlit_ready": {
+      "sum": 72,
+      "avg": 18,
+      "p95": 23
+    },
+    "screenshot": {
+      "sum": 399,
+      "avg": 100,
+      "p95": 105
+    },
+    "total": {
+      "sum": 2319,
+      "avg": 580,
+      "p95": 640
+    }
+  }
+}

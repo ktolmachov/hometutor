@@ -1,0 +1,3 @@
+{"scenario_id":"scenario_24","step":1,"slug":"01_pedagogy_label","file":"01_pedagogy_label.png","timings_ms":{"wait":830,"streamlit_ready":16,"screenshot":106,"total":952},"taken_at":"2026-06-20T18:56:41.054Z"}
+{"scenario_id":"scenario_24","step":2,"slug":"02_tradeoff_explanation","file":"02_tradeoff_explanation.png","timings_ms":{"wait":816,"streamlit_ready":16,"screenshot":100,"total":932},"taken_at":"2026-06-20T18:56:41.986Z"}
+{"scenario_id":"scenario_24","step":3,"slug":"03_learner_steering","file":"03_learner_steering.png","timings_ms":{"wait":815,"streamlit_ready":16,"screenshot":88,"total":919},"taken_at":"2026-06-20T18:56:42.933Z"}

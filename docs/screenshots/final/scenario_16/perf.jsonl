@@ -1,0 +1,5 @@
+{"scenario_id":"scenario_16","step":1,"slug":"01_home_tour_entry","file":"01_home_tour_entry.png","timings_ms":{"wait":0,"streamlit_ready":0,"screenshot":144,"total":144},"taken_at":"2026-06-20T18:56:04.732Z"}
+{"scenario_id":"scenario_16","step":2,"slug":"02_chapter1_practice_step","file":"02_chapter1_practice_step.png","timings_ms":{"wait":0,"streamlit_ready":0,"screenshot":106,"total":106},"taken_at":"2026-06-20T18:56:05.601Z"}
+{"scenario_id":"scenario_16","step":3,"slug":"03_chapter1_trust_step","file":"03_chapter1_trust_step.png","timings_ms":{"wait":0,"streamlit_ready":0,"screenshot":91,"total":91},"taken_at":"2026-06-20T18:56:06.569Z"}
+{"scenario_id":"scenario_16","step":4,"slug":"04_chapter2_overlay","file":"04_chapter2_overlay.png","timings_ms":{"wait":0,"streamlit_ready":0,"screenshot":109,"total":109},"taken_at":"2026-06-20T18:56:07.496Z"}
+{"scenario_id":"scenario_16","step":5,"slug":"05_resume_after_reload","file":"05_resume_after_reload.png","timings_ms":{"wait":345,"streamlit_ready":0,"screenshot":93,"total":438},"taken_at":"2026-06-20T18:56:08.773Z"}

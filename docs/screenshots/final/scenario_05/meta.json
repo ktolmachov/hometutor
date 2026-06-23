@@ -1,0 +1,109 @@
+{
+  "scenario_id": "scenario_05",
+  "started_at": "2026-06-20T18:54:27.229Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_flashcards_section",
+      "caption": "Раздел Flashcards: три подвкладки",
+      "narration": "Три зоны: что есть, что создать, что повторить.",
+      "file": "01_flashcards_section.png",
+      "taken_at": "2026-06-20T18:54:28.565Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 66,
+        "screenshot": 86,
+        "total": 152
+      }
+    },
+    {
+      "step": 2,
+      "slug": "02_create_new_upload",
+      "caption": "Создание карточек: загрузка файла",
+      "narration": "5–20 карточек из любого документа.",
+      "file": "02_create_new_upload.png",
+      "taken_at": "2026-06-20T18:54:30.608Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 13,
+        "screenshot": 85,
+        "total": 98
+      }
+    },
+    {
+      "step": 3,
+      "slug": "03_preview_generated",
+      "caption": "Preview сгенерированных карточек",
+      "narration": "LLM даёт first draft — человек проверяет.",
+      "file": "03_preview_generated.png",
+      "taken_at": "2026-06-20T18:54:32.034Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 16,
+        "screenshot": 90,
+        "total": 106
+      }
+    },
+    {
+      "step": 4,
+      "slug": "04_save_deck",
+      "caption": "Сохранение колоды",
+      "narration": "Минимум 5 валидных карточек — колода в базе.",
+      "file": "04_save_deck.png",
+      "taken_at": "2026-06-20T18:54:32.737Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 17,
+        "screenshot": 114,
+        "total": 131
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-06-20T18:54:32.737Z",
+  "total_duration_ms": 5508,
+  "shot_count": 4,
+  "timings_summary": {
+    "wait": {
+      "sum": 0,
+      "avg": 0,
+      "p95": 0
+    },
+    "streamlit_ready": {
+      "sum": 112,
+      "avg": 28,
+      "p95": 66
+    },
+    "screenshot": {
+      "sum": 375,
+      "avg": 94,
+      "p95": 114
+    },
+    "total": {
+      "sum": 487,
+      "avg": 122,
+      "p95": 152
+    }
+  }
+}

@@ -50,4 +50,10 @@ def render_offline_banner() -> None:
             "полный локальный Ollama в provider не подключён — см. app/offline_service.py."
         )
     elif stt.get("llm_reachable") is False:
-        st.error("LLM endpoint недоступен (проверка lmstudio_api_base). Проверьте сеть и ключ.")
+        bases = stt.get("llm_probe_bases") or [stt.get("lmstudio_api_base") or "—"]
+        bases_text = ", ".join(str(b) for b in bases if b)
+        st.error(
+            "Локальный LLM endpoint недоступен "
+            f"(проверены llama.cpp / LM Studio: {bases_text}). "
+            "Убедитесь, что сервер запущен и отвечает на GET /v1/models."
+        )

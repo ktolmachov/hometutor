@@ -15,10 +15,16 @@ import logging
 import time
 from typing import Any
 
+from urllib.parse import urlparse
+
 from app.config import DATA_DIR, get_settings
 from app.knowledge_graph import get_active_knowledge_graph
 from app.learner_state_scope import weak_concepts_for_kg
-from app.provider import _lmstudio_api_base
+from app.provider import (
+    _is_loopback_hostname,
+    _lmstudio_api_base,
+    normalize_openai_compatible_api_base,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,22 +38,57 @@ def offline_mode_enabled() -> bool:
     return bool(get_settings().offline_mode)
 
 
+def _local_llm_probe_bases(settings) -> list[str]:
+    """Уникальные loopback-базы для offline-probe: основной LLM, graph и SSR."""
+    cloud_norm = normalize_openai_compatible_api_base(settings.openai_api_base)
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in (
+        _lmstudio_api_base(settings),
+        (getattr(settings, "graph_llm_api_base", None) or "").strip(),
+        (getattr(settings, "ssr_llm_api_base", None) or "").strip(),
+    ):
+        base = normalize_openai_compatible_api_base(raw)
+        if not base or base in seen:
+            continue
+        if cloud_norm and base == cloud_norm:
+            continue
+        host = (urlparse(base).hostname or "").lower()
+        if not (_is_loopback_hostname(host) or host == "host.docker.internal"):
+            continue
+        seen.add(base)
+        out.append(base)
+    return out
+
+
 def probe_llm_base_reachable(*, timeout_sec: float = 2.0) -> bool:
     """
-    Грубая проверка TCP/HTTP до ``lmstudio_api_base`` (без гарантии валидного API-ключа).
-    """
-    s = get_settings()
-    base = _lmstudio_api_base(s).strip().rstrip("/")
-    if not base:
-        return False
-    try:
-        import requests
+    Проверка доступности локальных OpenAI-compatible LLM (llama.cpp, LM Studio и т.п.).
 
-        requests.get(base, timeout=timeout_sec)
-        return True
-    except Exception as e:
-        logger.debug("llm base probe failed | base=%s err=%s", base, e)
+    Перебирает ``LLM_API_BASE`` / ``LMSTUDIO_API_BASE``, ``GRAPH_LLM_API_BASE`` и
+    ``SSR_LLM_API_BASE`` (loopback). Успех, если хотя бы один endpoint отвечает на
+    ``GET /v1/models`` (см. ``llm_local_health.probe_local_llm``).
+    """
+    from app.llm_local_health import probe_local_llm
+
+    bases = _local_llm_probe_bases(get_settings())
+    if not bases:
         return False
+    for base in bases:
+        result = probe_local_llm(base, None, timeout_sec=timeout_sec)
+        if result.get("reachable"):
+            logger.debug(
+                "llm base probe ok | base=%s latency_ms=%s",
+                base,
+                result.get("latency_ms"),
+            )
+            return True
+        logger.debug(
+            "llm base probe failed | base=%s err=%s",
+            base,
+            result.get("error"),
+        )
+    return False
 
 
 def get_offline_status(*, use_cache: bool = True) -> dict[str, Any]:
@@ -71,10 +112,12 @@ def get_offline_status(*, use_cache: bool = True) -> dict[str, Any]:
     else:
         reachable = probe_llm_base_reachable()
 
+    probe_bases = _local_llm_probe_bases(s)
     out: dict[str, Any] = {
         "offline_mode": bool(s.offline_mode),
         "llm_reachable": reachable,
         "lmstudio_api_base": _lmstudio_api_base(s).strip(),
+        "llm_probe_bases": probe_bases,
         "hint": (
             "Полный локальный inference (Ollama) и отдельный «local pipeline» в коде не подключены; "
             "см. provider.py и vision.md. При недоступности API проверьте сеть и ключ."

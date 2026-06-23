@@ -125,7 +125,7 @@ def render_personalized_learner_panel(
                 st.caption("Глубина (optimal_depth)")
                 st.markdown(f"**{plm.optimal_depth or 'intermediate'}**")
             st.caption(
-                "Модель 19.5 · учитывается история этой сессии чата. Подробнее: «Мой прогресс» или doc/personalized_learner_model.md."
+                "Модель 19.5 · учитывается история этой сессии чата. Подробнее: «Мой прогресс» или docs/user_guide.md."
             )
             with st.expander("JSON профиля (отладка)", expanded=False):
                 st.json(plm.model_dump(mode="json"))

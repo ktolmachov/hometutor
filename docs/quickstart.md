@@ -1,6 +1,6 @@
 # Быстрый старт
 
-Актуализировано: 2026-06-23.
+Актуализировано: 2026-06-24.
 
 Цель этого документа: поднять `hometutor` локально, проиндексировать материалы и пройти первый учебный цикл: вопрос -> ответ с источниками -> тьютор -> quiz/flashcards -> прогресс.
 
@@ -67,7 +67,7 @@ $env:HOME_RAG_HOME = (Get-Location).Path
 |---|---|
 | исходные материалы и `user_state.db` | `data/` |
 | Chroma/BM25 индекс | `chroma_db/` |
-| active generation pointer | `index_registry.json` (в корне `HOME_RAG_HOME`, не в code-репо) |
+| active generation pointer | `index_registry.json` в `HOME_RAG_HOME` (по умолчанию корень checkout; при внешнем `HOME_RAG_HOME` — внешний runtime root) |
 | логи, метрики, SSR-профили | `logs/` |
 
 ## 4. Запуск

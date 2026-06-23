@@ -75,7 +75,7 @@ def check(db_path: Path, warn_kb: int, fail_kb: int) -> int:
             f"{_sizeof_fmt(fail_b)}.\n"
             "       Likely cause: full source document stored in chunk metadata "
             "(original_text / relationship blobs).\n"
-            "       Fix: run fresh_start.py after verifying the ingestion pipeline fix."
+            "       Fix: run scripts/fresh_start.py after verifying the ingestion pipeline fix."
         )
         return 2
 

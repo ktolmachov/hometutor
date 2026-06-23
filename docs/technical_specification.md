@@ -1,12 +1,12 @@
 # Техническая спецификация hometutor
 
-Актуализировано по runtime-коду: 2026-06-23.
+Актуализировано по runtime-коду: 2026-06-24.
 
 ## Назначение
 
 `hometutor` — локальное Python-приложение для обучения по пользовательским материалам. Система индексирует документы, отвечает на вопросы с источниками, поддерживает tutor-route, quiz, flashcards, SM-2, adaptive plan, Smart Study Router, локальный прогресс и sync.
 
-Этот репозиторий содержит runtime-продукт. Процессные документы, backlog, user stories и screenshot-витрина находятся вне этого репозитория, в `hometutor-studio`.
+Этот репозиторий содержит runtime-продукт. Runtime-документы и локальная demo-витрина находятся в `docs/`; процессные документы, backlog, user stories, сценарные манифесты и генератор demo-документа находятся вне этого репозитория, в `hometutor-studio`.
 
 ## Entry points
 
@@ -19,6 +19,12 @@
 | `scripts/local_start.ps1` | one-command localhost launcher |
 | `scripts/local_readiness.py` | readiness gate |
 | `scripts/Warmup-HomeRagRag.ps1` | retrieval warmup через API |
+| `scripts/check_chroma_health.py` | read-only health check Chroma SQLite |
+| `scripts/rebuild_knowledge_graph.py` | пересборка active generation knowledge graph |
+| `scripts/probe_graph_llm.py` | проверка graph LLM перед сменой модели |
+| `scripts/delete_all_data.py` | guarded очистка локальных runtime-артефактов |
+| `scripts/fresh_start.py` | guarded reset + optional re-ingest |
+| `scripts/audit_knowledge_graph.py` | audit полноты graph bundle |
 
 В этом runtime-репозитории нет `ask.py`, `run_eval.py`, `run_eval_compare.py` и `tests/` как локальных entrypoints/каталогов.
 
@@ -80,6 +86,7 @@
 | `index_registry.json` | active index generation pointer |
 | `faq_memory.jsonl` | FAQ memory |
 | `logs/` | runtime logs, metrics, cost logs, SSR profiles |
+| `app/ui/assets/d3.v7.min.js` | bundled D3 runtime asset for Knowledge Graph UI |
 
 ## Функциональные контуры
 
@@ -182,7 +189,7 @@ SSR строит next-step recommendation из локальных сигнало
 ## Ограничения
 
 - Основной сценарий — локальный single-user runtime.
-- Runtime-репозиторий не содержит полный процессный backlog и screenshot-витрину.
+- Runtime-репозиторий не содержит полный процессный backlog, сценарные манифесты и генератор demo-документа.
 - `OFFLINE_MODE` и offline banners не заменяют настройку локального LLM/embedding endpoint.
 - При облачном LLM/embedding provider пользовательские данные могут уходить внешнему провайдеру.
 - `HOME_RAG_API_KEY` защищает REST endpoints только если задан.

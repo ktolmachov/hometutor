@@ -28,7 +28,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Sequence
 
-_D3_PATH = Path(__file__).resolve().parents[2] / "doc" / "assets" / "d3.v7.min.js"
+_D3_PATH = Path(__file__).resolve().parent / "assets" / "d3.v7.min.js"
 
 _LEVEL_META = {
     "lesson":      {"label": "📘 Лекция",         "color": "#fbbf24"},

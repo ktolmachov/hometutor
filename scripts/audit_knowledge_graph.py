@@ -196,7 +196,7 @@ def main() -> int:
     parser.add_argument(
         "--report",
         type=Path,
-        default=ROOT / "doc" / "kg_completeness_report.md",
+        default=ROOT / "logs" / "kg_completeness_report.md",
         help="Markdown report output path.",
     )
     parser.add_argument(

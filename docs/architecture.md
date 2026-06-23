@@ -1,12 +1,12 @@
 # Архитектура hometutor
 
-Актуализировано по runtime-коду: 2026-06-23.
+Актуализировано по runtime-коду: 2026-06-24.
 
 ## Контекст
 
 `hometutor` — локальное учебное RAG-приложение. Оно читает материалы из `data/`, строит индекс, отвечает с источниками, ведёт tutor/quiz/flashcards/progress контур и предлагает следующий шаг через Smart Study Router.
 
-Этот репозиторий — runtime-продукт. Документы процесса, backlog, user stories, screenshot-витрина и длинные roadmap-артефакты не являются локальной частью `docs/`.
+Этот репозиторий — runtime-продукт. В `docs/` живут эксплуатационные runtime-документы и локальная demo-витрина `docs/screenshots/final/`. Документы процесса, backlog, user stories, сценарные манифесты, генератор demo-документа и длинные roadmap-артефакты находятся в `hometutor-studio`.
 
 ## System context
 

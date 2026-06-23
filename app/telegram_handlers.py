@@ -37,7 +37,7 @@ TELEGRAM_HELP_TEXT = (
     "одна сессия tg-* на чат (как session_id в API).\n\n"
     "Только в Streamlit: вкладки «Темы», synthesis и learning plan в полном виде, карточки источников с "
     "маршрутом retrieval и подсказками доверия, дашборды прогресса и adaptive plan в привычном UI.\n\n"
-    "Подробности: doc/user_guide.md (раздел «Telegram и Streamlit»)."
+    "Подробности: docs/user_guide.md (раздел «Telegram и Streamlit»)."
 )
 
 

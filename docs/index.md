@@ -1,6 +1,6 @@
 # Навигатор документации hometutor
 
-Актуализировано: 2026-06-23.
+Актуализировано: 2026-06-24.
 
 `hometutor` — runtime-репозиторий локального учебного RAG-приложения. Здесь живут приложение, API, UI, запуск, deployment и эксплуатационная документация. Demo screenshots сохранены в `docs/screenshots/final/`; исходные сценарные манифесты, генератор demo-документа, backlog, user stories и процессные материалы вынесены в `hometutor-studio`.
 
@@ -46,7 +46,7 @@
 - Убраны ссылки на отсутствующие `docs/scenarios/*`, `user_scenarios.md`, `user_guide_details.md`, `prompts_catalog.md`, `personalized_learner_model.md`; demo screenshots оставлены как локальные артефакты `docs/screenshots/final/*`.
 - Уточнено, что `config.env` является tracked defaults, а `.env` — локальным override.
 - Убраны упоминания несуществующих entrypoints вроде `ask.py` и `run_eval.py`.
-- `doc/`-ссылки заменены на `docs/` или помечены как материалы `hometutor-studio`.
+- Пользовательские `doc/`-ссылки заменены на `docs/`; оставшиеся `doc/*` в коде относятся к legacy/process prompt paths и требуют отдельной миграции, если эти сценарии снова станут runtime-критичными.
 - API reference синхронизирован с `app/api.py` и `app/routers/*` на дату актуализации.
 
 ## Политика документации

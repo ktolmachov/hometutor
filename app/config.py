@@ -158,7 +158,7 @@ class Settings(BaseSettings):
     # Подпапка внутри vault, куда пишутся сгенерированные конспекты.
     # Путь относительно BASE_DIR. По умолчанию: data (= DATA_DIR, конспект рядом с источником).
     obsidian_vault_subdir: str = "data"
-    # SSR / «Умный следующий шаг»: персонализация «Почему сейчас» (отдельный endpoint и модель).
+    # SSR / подсказка учебного маршрута: персонализация короткой причины (отдельный endpoint и модель).
     # По умолчанию — LM Studio (OpenAI-compatible); пустая строка SSR_LLM_API_BASE → LMSTUDIO_API_BASE.
     ssr_llm_api_base: str = Field(default="")  # empty → falls through to LMSTUDIO_API_BASE
     ssr_llm_api_key: str | None = None
@@ -360,7 +360,7 @@ class Settings(BaseSettings):
     metrics_store_path: Path = Field(default_factory=lambda: LOG_DIR / "metrics_store.jsonl")
     metrics_dashboard_db_path: Path = Field(default_factory=lambda: LOG_DIR / "metrics_dashboard.db")
     llm_cost_log_dir: Path = Field(default_factory=lambda: LOG_DIR / "cost_logs")
-    # Профили SSR («Почему сейчас»): JSONL для сравнения с основным LLM и отладки latency/tokens.
+    # Профили SSR (короткая причина): JSONL для сравнения с основным LLM и отладки latency/tokens.
     ssr_llm_profile_log_dir: Path = Field(default_factory=lambda: LOG_DIR / "ssr_llm_profiles")
     enable_ssr_llm_profiling: bool = True
     feedback_path: Path = Field(default_factory=lambda: LOG_DIR / "feedback.jsonl")

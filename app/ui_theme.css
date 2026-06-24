@@ -1046,7 +1046,7 @@ div[data-testid="stChatMessage"] .stButton > button[kind="secondary"] {
     line-height: 1.35;
 }
 
-/* Inline "Почему сейчас" — compact single line */
+/* Inline "Почему это подходит" — compact single line */
 .ssr-why-inline {
     font-size: 0.875rem !important;
     line-height: 1.55 !important;

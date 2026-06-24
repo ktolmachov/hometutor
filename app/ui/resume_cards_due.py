@@ -106,7 +106,7 @@ def _due_reason(
     weak_set: set[str] | None = None,
     quiz_miss: set[str] | None = None,
 ) -> str:
-    """US-7.4: почему сейчас — SM-2 + слабые места и ошибки квизов при наличии данных."""
+    """US-7.4: короткая причина шага — SM-2 + слабые места и ошибки квизов при наличии данных."""
     c = str(row.get("concept") or "").strip()
     weak_set = weak_set or set()
     quiz_miss = quiz_miss or set()

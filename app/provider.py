@@ -501,7 +501,7 @@ def get_ssr_llm_resolved():
 
 
 def get_ssr_llm():
-    """LLM только для SSR: персонализация «Почему сейчас» (отдельные baseURL/model)."""
+    """LLM только для SSR: персонализация короткой причины шага (отдельные baseURL/model)."""
     return get_ssr_llm_resolved()[0]
 
 

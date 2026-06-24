@@ -106,7 +106,7 @@ def smart_study_contrastive_explanation(rec: SmartStudyRecommendation) -> str:
         )
     if nav == "sm2_tutor":
         return (
-            "Важнее новых flashcards: концепты SM-2 созрели по расписанию и поддерживают долгую память."
+            "Концепты SM-2 созрели по расписанию; повторение сейчас поддержит долгую память лучше, чем новые flashcards."
         )
     if nav == "quiz_recovery_tutor":
         return (
@@ -122,7 +122,7 @@ def smart_study_contrastive_explanation(rec: SmartStudyRecommendation) -> str:
         )
     if nav == "tutor_weak_gap":
         return (
-            "Глубже, чем короткий quiz без разбора: закрываете именно пробел понимания по теме."
+            "Разбор пробела по теме даёт больше, чем короткий quiz без объяснения."
         )
     if nav == "safe_tutor_5min" and hk == "safe_default":
         return (
@@ -233,7 +233,7 @@ def _quiz_feedback_failed(status: str | None) -> bool:
 
 
 def _ru_flashcard_due_word(n: int) -> str:
-    """Склонение «N карточек» для строки «почему сейчас»."""
+    """Склонение «N карточек» для строки короткой причины шага."""
     k = int(n)
     if k % 100 in (11, 12, 13, 14):
         return "карточек"

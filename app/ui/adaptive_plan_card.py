@@ -9,7 +9,7 @@
 - LLM: ``get_ssr_llm_resolved()`` — при недоступном loopback SSR — основной ``LLM_MODEL`` (см. ``app.provider``).
 - Логи: ``logger.info("ssr_llm_explanation_fallback", ...)`` при ошибке LLM;
   стадия ``ssr_llm_explanation`` уходит в ``complete_with_resilience`` (см. cost/метрики провайдера).
-- Маршрутизация SSR не читает ответ LLM; подменяется только текст абзаца «Почему сейчас» в UI.
+- Маршрутизация SSR не читает ответ LLM; подменяется только текст короткой причины в UI.
 """
 from __future__ import annotations
 
@@ -210,7 +210,7 @@ def render_ssr_why_now_streaming(
     tutor_topic: str | None = None,
     weak_concept: str | None = None,
     primary_topic_hint: str | None = None,
-    label: str = "**Почему сейчас:**",
+    label: str = "**Почему это подходит:**",
 ) -> str:
     """Render the SSR «Why now» explanation with streaming tokens visible in real time.
 

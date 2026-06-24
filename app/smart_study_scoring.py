@@ -98,7 +98,7 @@ def _ssr_recommendation_for_kind(
             hint_kind="cards_due",
             primary_label_ru="Повторить",
             why_now_ru=(
-                f"Локальная очередь SM-2: к повтору {fc} {w} — интервал уже наступил; "
+                f"Локальная очередь SM-2: к повтору {fc} {w}. Интервал уже наступил, "
                 "короткая сессия удержит факты и снижает риск забывания."
             ),
             primary_nav="flashcards_review",
@@ -112,7 +112,7 @@ def _ssr_recommendation_for_kind(
         return SmartStudyRecommendation(
             hint_kind="sm2_due",
             primary_label_ru="Повторить концепт из очереди SM-2",
-            why_now_ru="Сейчас важно spaced repetition по концептам: очередь уже созрела и поддерживает долгосрочное удержание.",
+            why_now_ru="Очередь spaced repetition по концептам уже созрела и помогает удержать материал в долгой памяти.",
             primary_nav="sm2_tutor",
             secondaries=_stable_secondaries(primary_nav="sm2_tutor"),
             route_pedagogy_ru=_SSR_ROUTE_PEDAGOGY_RETENTION_RU,
@@ -125,7 +125,7 @@ def _ssr_recommendation_for_kind(
             hint_kind="quiz_failed",
             primary_label_ru="Разобрать слабое место",
             why_now_ru=(
-                "Сигнал последней мини-проверки: ответ не зачтён — сейчас лучше разобрать слабое место "
+                "Сигнал последней мини-проверки: ответ не зачтён. Можно спокойно разобрать слабое место "
                 "с тьютором, чтобы не закрепить неверную модель."
             ),
             primary_nav="quiz_recovery_tutor",
@@ -157,7 +157,7 @@ def _ssr_recommendation_for_kind(
         return SmartStudyRecommendation(
             hint_kind="tutor_resume",
             primary_label_ru=f"Продолжить чат по теме «{topic_t}»",
-            why_now_ru="Сейчас выгодно не терять контекст диалога: продолжите разбор там, где остановились.",
+            why_now_ru="Контекст диалога уже сохранён: можно продолжить разбор там, где остановились.",
             primary_nav="tutor_resume",
             secondaries=_stable_secondaries(primary_nav="tutor_resume"),
             ml_audit_ru=ml_audit_ru,
@@ -169,7 +169,7 @@ def _ssr_recommendation_for_kind(
             hint_kind="answer_ready",
             primary_label_ru="Учить тему",
             why_now_ru=(
-                "Локально уже есть быстрый ответ по базе — перенесите материал в учёбу темы в чате "
+                "Локально уже есть быстрый ответ по базе. Можно перенести материал в учёбу темы в чате "
                 "или проверьте понимание коротким квизом."
             ),
             primary_nav="qa_continue",
@@ -185,7 +185,7 @@ def _ssr_recommendation_for_kind(
             hint_kind="mastery_stale",
             primary_label_ru="Проверить запоминание и освежить тему",
             why_now_ru=(
-                f"Сейчас стоит вернуться к «{focus}»: закрепление снижает провалы в квизах и повторениях."
+                f"Можно вернуться к «{focus}»: короткое закрепление снижает провалы в квизах и повторениях."
             ),
             primary_nav="tutor_weak_gap",
             secondaries=_stable_secondaries(primary_nav="tutor_weak_gap"),
@@ -195,7 +195,7 @@ def _ssr_recommendation_for_kind(
         return SmartStudyRecommendation(
             hint_kind="safe_default",
             primary_label_ru="Короткая учебная сессия с тьютором",
-            why_now_ru="Нет сильных сигналов очередей — безопасный старт в диалоге задаёт тему без перегруза.",
+            why_now_ru="Нет сильных сигналов очередей. Короткий диалог задаст тему без перегруза.",
             primary_nav="safe_tutor_5min",
             secondaries=_stable_secondaries(primary_nav="safe_tutor_5min"),
             ml_audit_ru=ml_audit_ru,

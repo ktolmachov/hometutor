@@ -547,7 +547,7 @@ def render_mode_selector() -> None:
             st.caption("Текущий учебный контекст")
             if handoff_topic:
                 st.markdown(f"Тема: **{_esc_html(handoff_topic)}**")
-            st.caption(f"Почему сейчас: {tutor_reason_line_ru()}")
+            st.caption(f"Почему это подходит: {tutor_reason_line_ru()}")
             st.caption(continuity_next_step_line_ru(topic=handoff_topic))
 
     fc_due = 0

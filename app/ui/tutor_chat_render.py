@@ -309,10 +309,10 @@ def render_smart_study_trust_controls(
         defer_applied=defer_applied,
     )
     safe_pre = "".join(ch if ch.isalnum() or ch in "_-" else "_" for ch in key_prefix)[:40] or "ssr"
-    with st.expander("Краткий след решения роутера", expanded=False):
+    with st.expander("Как выбрана подсказка", expanded=False):
         st.caption(" · ".join(trace))
     if st.button(
-        "Не сейчас — запомнить мягкий альтернативный шаг",
+        "Не сейчас — предложить мягкий вариант",
         key=f"{safe_pre}_ssr_defer",
         width="stretch",
     ):

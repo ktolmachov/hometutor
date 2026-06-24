@@ -472,7 +472,7 @@ def render_tutor_chat_tab() -> None:
         _render_qa_tutor_handoff_summary_card(handoff, last_answer=last_answer_d)
         with st.container(border=True):
             st.caption("Текущий учебный контекст")
-            st.caption(f"Почему сейчас: {reason}")
+            st.caption(f"Почему это подходит: {reason}")
             st.caption(next_step)
 
     tutor_chat_controls.render_tutor_extra_controls(session_id=sid)

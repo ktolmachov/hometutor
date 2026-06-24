@@ -74,7 +74,7 @@ def render_e2e_ssr_outcome_receipt_demo(*, variant: str = "changed") -> None:
             '<p style="margin:0 0 0.35rem 0;">Локальные метрики изменились:</p>'
             f'<ul style="margin:0;padding-left:1.2rem;">{items}</ul>'
         )
-        title = "✅ Чек после шага роутера"
+        title = "✅ Чек после выбранного шага"
     st.markdown(
         f'<div class="home-dash-card" data-testid="e2e-ssr-outcome-receipt" '
         'style="margin-bottom:0.6rem;">'

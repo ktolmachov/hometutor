@@ -103,7 +103,7 @@ def render_adaptive_plan_hub(
             width='stretch',
         ):
             _card.go_tutor_with_prompt(
-                "Помоги определить лучший следующий учебный шаг на сегодня.",
+                "Помоги определить подходящий учебный шаг на сегодня.",
                 None,
                 action_label="Adaptive Plan Empty State",
             )

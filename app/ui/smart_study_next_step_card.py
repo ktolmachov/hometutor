@@ -76,18 +76,18 @@ def render_smart_study_next_step_card(
         pedagogy_html = (
             f'<p id="{pedagogy_id}" data-testid="e2e-ssr-route-pedagogy" '
             'style="opacity:0.94;font-size:0.88rem;margin:0 0 0.35rem 0;">'
-            f"<strong>Зачем этот маршрут:</strong> {safe_pedagogy}</p>"
+            f"<strong>Зачем такой маршрут:</strong> {safe_pedagogy}</p>"
         )
     safe_contrast = html_stdlib.escape(_card.smart_study_contrastive_explanation(rec_render))
     contrast_html = (
         f'<p id="{contrast_id}" data-testid="e2e-ssr-contrast" style="opacity:0.88;font-size:0.85rem;">'
-        f"<strong>Контраст с альтернативой:</strong> {safe_contrast}</p>"
+        f"<strong>Если выбрать иначе:</strong> {safe_contrast}</p>"
     )
     safe_whynot = html_stdlib.escape(_card.smart_study_why_not_others_ru(rec_render))
     whynot_html = (
         f'<div id="{whynot_id}" data-testid="e2e-ssr-why-not-others">'
         f'<p style="opacity:0.88;font-size:0.84rem;margin-top:0.2rem;">'
-        "<strong>Почему не тьютор / quiz / карточки / прогресс сейчас:</strong> "
+        "<strong>Что с другими режимами:</strong> "
         f"{safe_whynot}</p></div>"
     )
     ledger_html = ""
@@ -109,7 +109,7 @@ def render_smart_study_next_step_card(
         ledger_html = (
             f'<div id="{evidence_id}" data-testid="e2e-ssr-evidence" '
             'style="opacity:0.9;font-size:0.82rem;margin-top:0;">'
-            "<p style=\"margin:0 0 0.25rem 0;\"><strong>Локальные сигналы</strong> "
+            "<p style=\"margin:0 0 0.25rem 0;\"><strong>Локальные сигналы подсказки</strong> "
             "(это устройство и индекс; не облачный скоринг и не внешний профиль):</p>"
             f'<ul style="margin:0;padding-left:1.1rem;">{items_li}</ul></div>'
         )
@@ -121,7 +121,7 @@ def render_smart_study_next_step_card(
         f'data-router-hint="{safe_hint}">'
         f'{ladder_step_markup}'
         f'<div class="home-dash-head home-dash-head-continue">'
-        f'<h4 id="{title_id}" style="margin:0;">🧭 Умный следующий шаг</h4></div>'
+        f'<h4 id="{title_id}" style="margin:0;">🧭 С чего можно продолжить</h4></div>'
         '<div class="home-dash-body">'
     )
     if not show_primary_button:
@@ -129,7 +129,7 @@ def render_smart_study_next_step_card(
     pre_html += pedagogy_html
     st.html(pre_html)
 
-    # ── Part 2: streaming «Почему сейчас» ────────────────────────────────────
+    # ── Part 2: streaming short reason ───────────────────────────────────────
     why_now_text = render_ssr_why_now_streaming(
         rec_render,
         evidence_ledger=ledger_lines,
@@ -152,7 +152,7 @@ def render_smart_study_next_step_card(
 
     # ── Primary button ────────────────────────────────────────────────────────
     if show_primary_button:
-        btn_label = rec_render.primary_label_ru.strip() or "Главное действие умного роутера"
+        btn_label = rec_render.primary_label_ru.strip() or "Продолжить обучение"
         if st.button(
             btn_label,
             key=f"{key_prefix}_ss_primary",
@@ -169,7 +169,7 @@ def render_smart_study_next_step_card(
             )
     if rec_render.secondaries:
         st.caption(
-            "Дополнительно: быстрый ответ, чат тьютора, quiz, flashcards и прогресс — всегда рядом с подсказкой."
+            "Можно выбрать и другой режим: быстрый ответ, тьютор, quiz, flashcards и прогресс остаются рядом."
         )
 
         n_sec = len(rec_render.secondaries)

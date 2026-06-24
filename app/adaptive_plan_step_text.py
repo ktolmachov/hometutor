@@ -49,7 +49,7 @@ def build_plan_step_reason(block: dict[str, Any]) -> str:
     c_ok = None if is_placeholder_plan_concept(c_raw) else c_raw
     if bt == "review" and c_ok:
         return (
-            f"Приоритет сейчас: вернуть в активную память «{c_ok}» по расписанию spaced repetition."
+            f"Можно вернуть в активную память «{c_ok}» по расписанию spaced repetition."
         )
     if bt == "review" and not c_ok:
         return (
@@ -61,12 +61,12 @@ def build_plan_step_reason(block: dict[str, Any]) -> str:
         )
     if bt == "gap" and not c_ok:
         return (
-            "Система советует короткую практику. На старте это нормально: название темы появится, "
+            "Подойдёт короткая практика. На старте это нормально: название темы появится, "
             "когда поработаешь с материалами или спросишь тьютора."
         )
     if bt == "new" and c_ok:
         return (
-            f"Лучший следующий шаг: открыть новую тему «{c_ok}» и привязать её к уже знакомому контексту."
+            f"Можно открыть новую тему «{c_ok}» и привязать её к уже знакомому контексту."
         )
     if bt == "new" and not c_ok:
         return (

@@ -97,9 +97,9 @@ def render_ssr_quiet_mode_toggle(*, key_prefix: str) -> None:
     if chk_key not in st.session_state:
         st.session_state[chk_key] = bool(st.session_state.get(_SSR_QUIET_PREF_KEY, False))
     st.checkbox(
-        "Тихий режим карточки умного следующего шага",
+        "Тихий режим карточки с подсказкой",
         key=chk_key,
-        help="Меньше визуального шума: главное действие, «Почему сейчас» и дополнительные кнопки остаются на месте.",
+        help="Меньше визуального шума: главное действие, короткая причина и дополнительные кнопки остаются на месте.",
     )
     st.session_state[_SSR_QUIET_PREF_KEY] = bool(st.session_state.get(chk_key, False))
 
@@ -244,7 +244,7 @@ def _render_ssr_outcome_receipt_if_needed(
         st.markdown(
             f'<div class="home-dash-card" data-testid="e2e-ssr-outcome-receipt" id="{dom_pre}_outcome_ok" '
             'style="margin-bottom:0.6rem;">'
-            '<div class="home-dash-head home-dash-head-continue"><h4 style="margin:0;">✅ Чек после шага роутера</h4></div>'
+            '<div class="home-dash-head home-dash-head-continue"><h4 style="margin:0;">✅ Чек после выбранного шага</h4></div>'
             '<div class="home-dash-body"><p style="margin:0 0 0.35rem 0;">Локальные метрики изменились:</p>'
             f'<ul style="margin:0;padding-left:1.2rem;">{items_li}</ul></div></div>',
             unsafe_allow_html=True,
@@ -264,7 +264,7 @@ def _render_ssr_outcome_receipt_if_needed(
         '<div class="home-dash-head home-dash-head-continue"><h4 style="margin:0;">ℹ️ Честный чек после шага</h4></div>'
         '<div class="home-dash-body"><p style="margin:0;font-size:0.9rem;">По локальным очередям (flashcards, SM-2 по графу, '
         "верх «слабого» концепта, статус мини-quiz в резюме) измеримого сдвига пока не видно — без фальшивого «прогресса». "
-        "Ниже тот же умный следующий шаг из актуальных метрик.</p></div></div>",
+        "Ниже обновлённая подсказка по актуальным метрикам.</p></div></div>",
         unsafe_allow_html=True,
     )
     st.session_state.pop(_SSR_OUTCOME_BASELINE_KEY, None)
@@ -537,12 +537,12 @@ def render_smart_study_steering_controls(*, key_prefix: str) -> None:
         init_lab = next((lb for lb, v in label_to_val.items() if v == cur_db), labels[0])
         st.session_state[ui_key] = init_lab
     picked = st.radio(
-        "Локальный руль следующего шага (Smart Study Router)",
+        "Предпочтение для следующей подсказки",
         labels,
         key=ui_key,
         help=(
-            "Сохраняется только на этом устройстве. Очереди интервалов и провал мини-quiz остаются приоритетнее — "
-            "текст «Почему сейчас» покажет компромисс."
+            "Сохраняется только на этом устройстве. Очереди интервалов и провал мини-quiz остаются приоритетнее; "
+            "короткая причина покажет компромисс."
         ),
     )
     chosen_val = label_to_val[picked]

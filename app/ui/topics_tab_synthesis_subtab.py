@@ -130,7 +130,7 @@ def render_topics_synthesis_subtab(*, selected_topic: dict, iv: str | None) -> N
             """
             <div class="callout">
                 <div class="panel-title">Начните с темы</div>
-                <div class="panel-subtitle">Лучший путь для длинных тем, лекций и ручной сборки контекста</div>
+                <div class="panel-subtitle">Подходит для длинных тем, лекций и ручной сборки контекста</div>
                 <div><strong>1.</strong> Выберите тему слева.</div>
                 <div><strong>2.</strong> Посмотрите документы и при необходимости сузьте выборку.</div>
                 <div><strong>3.</strong> Соберите конспект по теме или по выбранным документам.</div>

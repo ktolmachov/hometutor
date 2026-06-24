@@ -45,12 +45,12 @@ def guided_primary_home_cta_ru(
 
 def guided_primary_reason_line_ru(kind: GuidedPrimaryHomeCtaKind) -> str:
     if kind in {"flashcard_due", "due_review"}:
-        return "Почему сейчас: Сейчас повторение, потому что тему важно удержать в памяти."
+        return "Почему это подходит: повторение поможет удержать тему в памяти."
     if kind == "mastery_gap":
-        return "Почему сейчас: Сейчас объяснение, чтобы выстроить ясную основу по теме."
+        return "Почему это подходит: объяснение поможет выстроить ясную основу по теме."
     if kind == "resume":
-        return "Почему сейчас: Сейчас продолжаем начатый разбор без потери контекста."
-    return "Почему сейчас: Сейчас короткий старт, чтобы быстро войти в тему."
+        return "Почему это подходит: можно продолжить начатый разбор без потери контекста."
+    return "Почему это подходит: короткий старт поможет быстро войти в тему."
 
 
 def home_continue_priority_lines_ru(
@@ -460,19 +460,19 @@ def tutor_reason_line_ru(
     """
     reasons = [str(x).strip().lower() for x in (policy_clamp_reasons or []) if str(x).strip()]
     if any("review" in r or "due" in r for r in reasons):
-        return "Сейчас повторение, потому что тему важно удержать в памяти."
+        return "повторение помогает удержать тему в памяти."
     if any("quiz" in r for r in reasons):
-        return "Сейчас мини-проверка, чтобы закрепить понимание."
+        return "мини-проверка помогает закрепить понимание."
     if any("mastery" in r or "gap" in r for r in reasons):
-        return "Сейчас объяснение, потому что сначала нужна базовая опора по теме."
+        return "объяснение даст базовую опору по теме."
     action = ""
     if isinstance(tutor_decision, dict):
         action = str((tutor_decision.get("action") or {}).get("next_action") or "").strip().lower()
     if action in {"quiz", "micro_quiz"}:
-        return "Сейчас мини-проверка, чтобы закрепить понимание."
+        return "мини-проверка помогает закрепить понимание."
     if action in {"review", "due_review"}:
-        return "Сейчас повторение, потому что тему важно удержать в памяти."
-    return "Сейчас объяснение, чтобы выстроить ясную основу по теме."
+        return "повторение помогает удержать тему в памяти."
+    return "объяснение поможет выстроить ясную основу по теме."
 
 
 def continuity_next_step_line_ru(

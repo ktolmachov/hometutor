@@ -136,7 +136,7 @@ def _ssr_why_now_for_card(
     llm: Any | None = None,
     now_monotonic: float | None = None,
 ) -> str:
-    """Текст «Почему сейчас»: LLM при успехе, иначе шаблон ``rec.why_now_ru`` (см. кэш/таймаут)."""
+    """Короткая причина шага: LLM при успехе, иначе шаблон ``rec.why_now_ru`` (см. кэш/таймаут)."""
     ctx = _build_ssr_llm_learning_context(
         rec,
         evidence_ledger=evidence_ledger,

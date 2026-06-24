@@ -42,7 +42,7 @@ if isinstance(_handoff, dict):
         st.caption("Текущий учебный контекст")
         if _topic:
             st.markdown(f"Тема: **{_topic}**")
-        st.caption(f"Почему сейчас: {tutor_reason_line_ru()}")
+        st.caption(f"Почему это подходит: {tutor_reason_line_ru()}")
         st.caption(continuity_next_step_line_ru(topic=_topic))
 
 _fc_due = int(st.session_state.get("flashcards_due_count") or 0)

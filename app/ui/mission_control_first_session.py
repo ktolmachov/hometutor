@@ -213,7 +213,7 @@ def render_first_session_hero(
         artifact, load_status = load_first_session_artifact_cached_for_scope(scope)
     st.session_state["first_session_cold_open_done"] = True
     if load_status == "empty":
-        st.info("Первый обзор курса готовится — пока умный следующий шаг ниже")
+        st.info("Первый обзор курса готовится — ниже есть подсказка, с чего начать")
     elif load_status == "error":
         st.warning("Не удалось прочитать сохранённый обзор курса.")
         st.caption("Показан обычный режим")

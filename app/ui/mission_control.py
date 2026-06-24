@@ -234,19 +234,19 @@ def _render_ssr_banner(rec: SmartStudyRecommendation, *, index_stats: dict | Non
             "</div>"
         )
 
-    # "Почему сейчас" — всегда видна строкой под заголовком (inline)
+    # Короткая причина всегда видна строкой под заголовком (inline)
     why_now_inline = _safe(rec.why_now_ru)
 
     # Детальные секции — скрыты в <details>, раскрываются по запросу
     whynot_section = (
         '<div class="ssr-section" data-testid="e2e-ssr-why-not-others">'
-        '<span class="ssr-chip ssr-chip--defer">↔ Другие режимы</span>'
-        f"<p><strong>Почему не тьютор / quiz / карточки / прогресс сразу:</strong> {_safe(defer_modes)}</p>"
+        '<span class="ssr-chip ssr-chip--defer">↔ Другие варианты</span>'
+        f"<p><strong>Что с другими режимами:</strong> {_safe(defer_modes)}</p>"
         "</div>"
     )
     contrast_section = (
         '<div class="ssr-section" data-testid="e2e-ssr-contrast">'
-        '<span class="ssr-chip ssr-chip--contrast">⚡ Контраст с альтернативой:</span>'
+        '<span class="ssr-chip ssr-chip--contrast">⚡ Если выбрать иначе:</span>'
         f"<p>{_safe(contrast)}</p>"
         "</div>"
     )
@@ -266,14 +266,14 @@ def _render_ssr_banner(rec: SmartStudyRecommendation, *, index_stats: dict | Non
         f'data-router-hint="{hint_attr}" role="region" aria-labelledby="{title_id}">'
         # ── Hero: всегда видимая часть ──
         f'<div class="ssr-hero">'
-        f'<div class="ssr-kicker">🧠 Smart Study Router</div>'
-        f'<h2 id="{title_id}">Умный следующий шаг</h2>'
+        f'<div class="ssr-kicker">🧭 Подсказка по учебному маршруту</div>'
+        f'<h2 id="{title_id}">С чего можно продолжить</h2>'
         f'<p class="ssr-primary-label">{primary_label}</p>'
-        f'<p class="ssr-why-inline"><span class="ssr-why-label">Почему сейчас:</span> {why_now_inline}</p>'
+        f'<p class="ssr-why-inline"><span class="ssr-why-label">Почему это подходит:</span> {why_now_inline}</p>'
         f"</div>"
         # ── Детали: раскрываются по клику (нативный <details>) ──
         f'<details class="ssr-details">'
-        f'<summary class="ssr-details-toggle">Объяснение выбора</summary>'
+        f'<summary class="ssr-details-toggle">Как выбрана подсказка</summary>'
         f'<div class="ssr-sections">'
         f"{whynot_section}{contrast_section}{pedagogy_section}{ledger_section}"
         f"</div>"
@@ -282,7 +282,7 @@ def _render_ssr_banner(rec: SmartStudyRecommendation, *, index_stats: dict | Non
     )
     st.html(banner_html)
 
-    btn_label = str(rec.primary_label_ru or "").strip() or "Главное действие умного роутера"
+    btn_label = str(rec.primary_label_ru or "").strip() or "Продолжить обучение"
     st.button(
         btn_label,
         key="mission_control_ssr_primary",
@@ -291,7 +291,7 @@ def _render_ssr_banner(rec: SmartStudyRecommendation, *, index_stats: dict | Non
         args=(rec,),
     )
     st.caption(
-        "Дополнительно: быстрый ответ, чат тьютора, quiz, flashcards и прогресс — всегда рядом с подсказкой."
+        "Можно выбрать и другой режим: быстрый ответ, тьютор, quiz, flashcards и прогресс остаются рядом."
     )
 
 

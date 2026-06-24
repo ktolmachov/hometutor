@@ -805,7 +805,7 @@ ADAPTIVE_PLAN_PROMPT = PromptTemplate(
 
 NEXT_ACTION_PROMPT = PromptTemplate(
     """
-Используя краткое описание графа знаний, определи лучший следующий шаг обучения.
+Используя краткое описание графа знаний, определи подходящий следующий шаг обучения.
 
 Текущий концепт: {current_concept}
 Изученные концепты: {learned_concepts}
@@ -823,7 +823,7 @@ SSR_LLM_EXPLANATION_PROMPT_VERSION = "1.4"
 # Combined token count remains the same as v1.3; routing contract and 150-word answer cap unchanged.
 
 SSR_LLM_EXPLANATION_SYSTEM = (
-    "Объясни в одном абзаце «Почему сейчас» в карточке Smart Study Router.\n\n"
+    "Объясни в одном абзаце, почему предложенный шаг может подойти сейчас.\n\n"
     "Правила:\n"
     "- Не меняй рекомендацию и маршрут; не предлагай других режимов.\n"
     "- Используй только факты из контекста; нет данных — не выдумывай.\n"

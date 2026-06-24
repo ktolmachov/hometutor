@@ -26,7 +26,7 @@
 | `scripts/fresh_start.py` | guarded reset + optional re-ingest |
 | `scripts/audit_knowledge_graph.py` | audit полноты graph bundle |
 
-В этом runtime-репозитории нет `ask.py`, `run_eval.py`, `run_eval_compare.py` и `tests/` как локальных entrypoints/каталогов.
+В этом runtime-репозитории нет `ask.py`, `run_eval.py`, `run_eval_compare.py` и `tests/` как локальных entrypoints/каталогов. Зависимость `pytest` присутствует в `requirements.txt` для test-capable окружений; тесты могут подключаться из внешнего каталога или добавляться локально по мере необходимости.
 
 ## Стек
 
@@ -191,5 +191,5 @@ SSR строит next-step recommendation из локальных сигнало
 - Основной сценарий — локальный single-user runtime.
 - Runtime-репозиторий не содержит полный процессный backlog, сценарные манифесты и генератор demo-документа.
 - `OFFLINE_MODE` и offline banners не заменяют настройку локального LLM/embedding endpoint.
-- При облачном LLM/embedding provider пользовательские данные могут уходить внешнему провайдеру.
+- По умолчанию `config.env` направляет embeddings через облачный endpoint (`openrouter.ai`); для local-first работы необходимо переопределить `EMBED_API_BASE` и `EMBED_MODEL` в `.env`.
 - `HOME_RAG_API_KEY` защищает REST endpoints только если задан.

@@ -139,7 +139,7 @@ Snapshot может подмешиваться в `/ask` для tutor goal field
 | Method | Path | Назначение |
 |---|---|---|
 | POST | `/quiz/generate` | сгенерировать quiz |
-| POST | `/quiz/generate/scoped` | compatibility alias, исключён из OpenAPI |
+| POST | `/quiz/generate/scoped` | compatibility alias (deprecated), исключён из OpenAPI schema; используйте `/quiz/generate` |
 | POST | `/quiz/evaluate` | оценить ответ |
 | GET | `/review/due` | due concept-level reviews |
 

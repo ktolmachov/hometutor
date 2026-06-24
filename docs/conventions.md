@@ -1,6 +1,6 @@
 # Правила и соглашения по разработке
 
-Актуализировано: 2026-06-23.
+Актуализировано: 2026-06-24.
 
 Роль документа: короткий live-набор правил для runtime-репозитория `hometutor`. Подробности вынесены в [conventions_architecture.md](conventions_architecture.md) и [conventions_reference.md](conventions_reference.md).
 

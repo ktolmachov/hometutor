@@ -1,10 +1,12 @@
 # hometutor — Docker-стек (FastAPI + Streamlit)
 #
 # Данные живут на хосте, контейнер видит их через volume mounts.
-# Путь к данным задаётся через HOME_RAG_HOME в .env (по умолчанию = ./ = корень репо).
+# Путь к данным задаётся через HOME_RAG_HOME в .env.
+# ⚠️  Без HOME_RAG_HOME fallback = D:/AI/app (НЕ корень репо).
+# Задайте HOME_RAG_HOME=. в .env для работы из checkout.
 #
 # Примеры:
-#   docker compose up --build                    # данные в ./data, ./chroma_db, ./logs
+#   HOME_RAG_HOME=. docker compose up --build    # данные в ./data, ./chroma_db, ./logs
 #   HOME_RAG_HOME=D:/AI/app docker compose up    # данные в D:\AI\app\{data,chroma_db,logs}
 #
 # С LM Studio / llama.cpp:

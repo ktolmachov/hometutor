@@ -21,17 +21,31 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-Создайте `.env` только с локальными секретами и нужными overrides:
+Создайте `.env` только с локальными секретами и нужными overrides.
+
+**Fully local (рекомендуется для приватных материалов):**
 
 ```env
-OPENAI_API_KEY=local-or-real-key
+OPENAI_API_KEY=local-no-key
+LLM_API_BASE=http://127.0.0.1:8080/v1
+LLM_MODEL=your-local-model-id
+EMBED_API_BASE=http://127.0.0.1:8080/v1
+EMBED_MODEL=your-local-embed-model-id
+```
+
+**С облачными embeddings (данные уходят провайдеру):**
+
+```env
+OPENAI_API_KEY=sk-...
 LLM_API_BASE=http://127.0.0.1:8080/v1
 LLM_MODEL=your-local-model-id
 EMBED_API_BASE=https://openrouter.ai/api/v1
 EMBED_MODEL=perplexity/pplx-embed-v1-0.6b
 ```
 
-Для fully local стека укажите локальный endpoint и для embeddings тоже. Если используете облако на реальных данных, явно осознайте privacy-риск и настройте провайдера в `.env`.
+> **Privacy:** `config.env` по умолчанию направляет embeddings через облачный endpoint (`openrouter.ai`). При индексации и каждом запросе чанки ваших документов отправляются провайдеру. Для local-first работы обязательно переопределите `EMBED_API_BASE` и `EMBED_MODEL` на локальный сервер в `.env`.
+
+Убедитесь, что `LLM_MODEL` и `EMBED_MODEL` совпадают с идентификаторами моделей, которые отдаёт ваш локальный сервер (`GET /v1/models`). Дефолтные значения в `config.env` (`qwopus3.6-35b-a3b-v1-mtp`, `perplexity/pplx-embed-v1-0.6b`) — это конкретная рабочая установка автора; на чистом клоне их необходимо заменить на ваши модели.
 
 ## 2. Проверка окружения
 
@@ -51,7 +65,7 @@ EMBED_MODEL=perplexity/pplx-embed-v1-0.6b
 
 Положите материалы в `data/` или задайте внешний корень через `HOME_RAG_HOME`.
 
-Важно: `scripts\local_start.ps1` по умолчанию выставляет `HOME_RAG_HOME=D:\AI\app`. Если хотите использовать `data/`, `chroma_db/` и `logs/` прямо в корне checkout, задайте перед запуском:
+> **Важно:** `scripts\local_start.ps1` и `docker-compose.yml` по умолчанию используют `HOME_RAG_HOME=D:\AI\app` — путь конкретной машины автора. На чистом клоне этого каталога нет, и запуск упадёт или будет работать с пустым `data/`. Задайте переменную перед запуском:
 
 ```powershell
 $env:HOME_RAG_HOME = (Get-Location).Path

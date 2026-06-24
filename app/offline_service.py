@@ -40,7 +40,9 @@ def offline_mode_enabled() -> bool:
 
 def _local_llm_probe_bases(settings) -> list[str]:
     """Уникальные loopback-базы для offline-probe: основной LLM, graph и SSR."""
-    cloud_norm = normalize_openai_compatible_api_base(settings.openai_api_base)
+    cloud_norm = normalize_openai_compatible_api_base(
+        getattr(settings, "openai_api_base", "") or ""
+    )
     seen: set[str] = set()
     out: list[str] = []
     for raw in (

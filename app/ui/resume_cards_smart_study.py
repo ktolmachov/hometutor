@@ -174,7 +174,7 @@ def compute_ssr_outcome_receipt_lines(
     a_sm = int(after.get("sm2_due") or 0)
     if b_sm != a_sm:
         measurable = True
-        lines.append(f"Очередь SM-2 по графу: было {b_sm} → стало {a_sm}.")
+        lines.append(f"Очередь повторений по графу: было {b_sm} → стало {a_sm}.")
     b_w = before.get("weak_top")
     a_w = after.get("weak_top")
     if b_w != a_w:
@@ -262,7 +262,7 @@ def _render_ssr_outcome_receipt_if_needed(
         f'<div class="home-dash-card" data-testid="e2e-ssr-outcome-receipt" id="{dom_pre}_outcome_none" '
         'style="margin-bottom:0.6rem;">'
         '<div class="home-dash-head home-dash-head-continue"><h4 style="margin:0;">ℹ️ Честный чек после шага</h4></div>'
-        '<div class="home-dash-body"><p style="margin:0;font-size:0.9rem;">По локальным очередям (flashcards, SM-2 по графу, '
+        '<div class="home-dash-body"><p style="margin:0;font-size:0.9rem;">По локальным очередям (flashcards, повторения по графу, '
         "верх «слабого» концепта, статус мини-quiz в резюме) измеримого сдвига пока не видно — без фальшивого «прогресса». "
         "Ниже обновлённая подсказка по актуальным метрикам.</p></div></div>",
         unsafe_allow_html=True,

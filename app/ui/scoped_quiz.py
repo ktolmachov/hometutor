@@ -333,11 +333,11 @@ def render_scoped_self_check_quiz(
             st.balloons()
             st.success(
                 f"🎉 LEVEL UP! **{gam.get('level_title', '')}** (ур. {gam.get('level', '')}) · "
-                f"+{xp} XP · mastery и spaced repetition обновлены."
+                f"+{xp} XP · прогресс и расписание повторений обновлены."
             )
         else:
             st.success(
-                f"Сохранено: mastery и spaced repetition обновлены · **+{xp} XP** "
+                f"Сохранено: прогресс и расписание повторений обновлены · **+{xp} XP** "
                 f"({gam.get('level_title', '')}, ур. {gam.get('level', '?')}) · streak в статистике квизов."
             )
         for _b in gam.get("new_badges") or []:

@@ -166,7 +166,7 @@ def render_deck_detail(
                 nr = card.get("next_review")
                 lv = card.get("last_review")
                 st.caption(
-                    f"SM-2: EF **{ef}** · интервал **{iv}** дн. · повторений **{reps}** · "
+                    f"Повторение: лёгкость **{ef}** · интервал **{iv}** дн. · повторений **{reps}** · "
                     f"next: `{nr or '—'}` · last: `{lv or '—'}`"
                 )
                 sc1, sc2 = st.columns([3, 1])

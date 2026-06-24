@@ -104,7 +104,7 @@ with st.container(border=True):
         )
     with r2:
         st.metric(
-            "Повторения (SM-2)",
+            "Повторения по расписанию",
             str(int(data.get("due_count") or 0)),
             help="Просроченные/созревшие повторения по концептам активного графа.",
         )
@@ -315,18 +315,18 @@ if weak:
         st.success("Тема передана. Откройте главный экран Home RAG — в боковой панели будет подсказка.")
 
 if data.get("due_reviews"):
-    st.warning(f"Пора повторить: **{data['due_count']}** концепций по spaced repetition.")
+    st.warning(f"Пора повторить: **{data['due_count']}** тем по расписанию.")
     with st.expander("Список просроченных повторений", expanded=False):
         st.dataframe(data["due_reviews"], width='stretch', hide_index=True)
 else:
-    st.info("Нет просроченных повторений (spaced repetition).")
+    st.info("Нет просроченных повторений — всё по расписанию.")
 
 topic = rec.get("topic")
 reason = rec.get("reason")
 msg = rec.get("message")
 if topic:
     reason_ru = {
-        "spaced_repetition_due": "сначала повторите по интервалу (SM-2)",
+        "spaced_repetition_due": "сначала повторите по расписанию",
         "quiz_mastery_path": "следующий шаг по уровню освоения и топологии графа",
         "reading_incomplete": "есть незавершённое чтение по теме",
     }.get(str(reason), str(reason))

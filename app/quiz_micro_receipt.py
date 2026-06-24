@@ -102,7 +102,7 @@ def build_micro_quiz_receipt_lines(
     a_sm = int(after.get("sm2_due") or 0)
     if b_sm != a_sm:
         measurable = True
-        lines.append(f"Очередь SM-2 по графу: было {b_sm} → стало {a_sm}.")
+        lines.append(f"Очередь повторений по графу: было {b_sm} → стало {a_sm}.")
 
     b_w = str(before.get("weak_top") or "").strip()
     a_w = str(after.get("weak_top") or "").strip()

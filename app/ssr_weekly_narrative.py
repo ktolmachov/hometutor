@@ -40,7 +40,7 @@ _TEMPLATE_TEXT: dict[str, str] = {
 
 _HINT_LABELS: dict[str, str] = {
     "cards_due": "карточки due",
-    "sm2_due": "SM-2 повторения",
+    "sm2_due": "повторения по расписанию",
     "quiz_failed": "разбор ошибок квиза",
     "tutor_resume": "продолжение тьютора",
     "answer_ready": "ответ на вопрос",
@@ -51,7 +51,7 @@ _HINT_LABELS: dict[str, str] = {
 
 _NAV_LABELS: dict[str, str] = {
     "flashcards_review": "карточки",
-    "sm2_tutor": "SM-2 тьютор",
+    "sm2_tutor": "тьютор по повторениям",
     "quiz_recovery_tutor": "квиз + тьютор",
     "tutor_resume": "тьютор",
     "qa_continue": "вопрос-ответ",
@@ -62,7 +62,7 @@ _NAV_LABELS: dict[str, str] = {
 
 _PLAIN_WHY: dict[str, str] = {
     "cards_due": "закрыть due по карточкам",
-    "sm2_due": "закрыть SM-2 due",
+    "sm2_due": "закрыть очередь повторений",
     "quiz_failed": "подтянуть слабые темы после квиза",
     "tutor_resume": "продолжить прерванную сессию",
     "answer_ready": "завершить ответ",

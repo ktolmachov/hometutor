@@ -109,10 +109,10 @@ CHAPTERS: list[TutorialChapter] = [
     TutorialChapter(
         id="ch3_return_tomorrow",
         title_ru="Глава 3. Возвращаюсь завтра",
-        summary_ru="Adaptive Plan → Resume → Spaced Repetition",
+        summary_ru="Adaptive Plan → Resume → Интервальные повторения",
         level="intermediate",
         estimated_minutes=4,
-        cjm_stages=["Adaptive Plan", "Resume", "Spaced Repetition"],
+        cjm_stages=["Adaptive Plan", "Resume", "Интервальные повторения"],
         steps=[
             TutorialStep(
                 id="resume_cards",

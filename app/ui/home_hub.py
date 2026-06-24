@@ -440,7 +440,7 @@ def _render_primary_mode_slot(slot: str, *, fc_due: int) -> None:
         _mode_card(
             "\U0001f0cf",
             "Flashcards",
-            "Карточки с повторением SM-2",
+            "Карточки с интервальным повторением",
             "Flashcards",
             "mode_fc",
             "Повторить",

@@ -98,7 +98,7 @@ def _ssr_recommendation_for_kind(
             hint_kind="cards_due",
             primary_label_ru="Повторить",
             why_now_ru=(
-                f"Локальная очередь SM-2: к повтору {fc} {w}. Интервал уже наступил, "
+                f"Очередь интервальных повторений: к повтору {fc} {w}. Интервал уже наступил, "
                 "короткая сессия удержит факты и снижает риск забывания."
             ),
             primary_nav="flashcards_review",
@@ -111,8 +111,8 @@ def _ssr_recommendation_for_kind(
             return None
         return SmartStudyRecommendation(
             hint_kind="sm2_due",
-            primary_label_ru="Повторить концепт из очереди SM-2",
-            why_now_ru="Очередь spaced repetition по концептам уже созрела и помогает удержать материал в долгой памяти.",
+            primary_label_ru="Повторить тему из очереди повторений",
+            why_now_ru="Очередь интервальных повторений по темам уже созрела и помогает удержать материал в долгой памяти.",
             primary_nav="sm2_tutor",
             secondaries=_stable_secondaries(primary_nav="sm2_tutor"),
             route_pedagogy_ru=_SSR_ROUTE_PEDAGOGY_RETENTION_RU,
@@ -257,7 +257,7 @@ def apply_smart_study_steering_preference(
                     primary_label_ru="Свериться с базой (мягкий вход)",
                     why_now_ru=(
                         rec.why_now_ru
-                        + " Мягкий режим: вместо немедленного SM-2 — короткая сверка с быстрым ответом; очередь концептов сохраняется."
+                        + " Мягкий режим: вместо немедленного повторения — короткая сверка с быстрым ответом; очередь тем сохраняется."
                     ),
                     secondaries=_stable_secondaries(primary_nav="qa_continue"),
                 )
@@ -268,7 +268,7 @@ def apply_smart_study_steering_preference(
                     primary_label_ru="Короткий чат (мягкий режим)",
                     why_now_ru=(
                         rec.why_now_ru
-                        + " Мягкий режим: без готового Q&A — короткий тьютор; очередь SM-2 сохраняется."
+                        + " Мягкий режим: без готового Q&A — короткий тьютор; очередь повторений сохраняется."
                     ),
                     secondaries=_stable_secondaries(primary_nav="safe_tutor_5min"),
                 )
@@ -352,14 +352,14 @@ def apply_smart_study_steering_preference(
                 changed = True
         elif hk == "answer_ready":
             expl = (
-                " Вы просили «сначала повтор»; срочной очереди SM-2/карточек сейчас нет — шаг опирается на готовый быстрый ответ."
+                " Вы просили «сначала повтор»; срочной очереди повторений и карточек сейчас нет — шаг опирается на готовый быстрый ответ."
             )
             if expl not in out.why_now_ru:
                 out = replace(out, why_now_ru=out.why_now_ru + expl)
                 changed = True
         elif hk == "safe_default":
             expl = (
-                " Вы просили «сначала повтор»; срочной очереди SM-2/карточек сейчас нет — безопасный вход в чат остаётся уместным."
+                " Вы просили «сначала повтор»; срочной очереди повторений и карточек сейчас нет — безопасный вход в чат остаётся уместным."
             )
             if expl not in out.why_now_ru:
                 out = replace(out, why_now_ru=out.why_now_ru + expl)

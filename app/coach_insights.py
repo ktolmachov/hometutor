@@ -42,7 +42,7 @@ def generate_retention_insight(plan: dict[str, Any]) -> str:
             "Несколько концептов с низким уровнем quiz: без повторения за неделю "
             "они могут «ослабнуть» в очереди — полезны короткие интервальные повторы."
         )
-    return "Повторения по SM-2 и interleaved quiz помогают удерживать материал в долгой памяти."
+    return "Интервальные повторения и чередование quiz помогают удерживать материал в долгой памяти."
 
 
 __all__ = ["generate_ai_coach_message", "generate_retention_insight"]

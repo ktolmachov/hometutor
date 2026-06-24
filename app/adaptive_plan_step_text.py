@@ -49,7 +49,7 @@ def build_plan_step_reason(block: dict[str, Any]) -> str:
     c_ok = None if is_placeholder_plan_concept(c_raw) else c_raw
     if bt == "review" and c_ok:
         return (
-            f"Можно вернуть в активную память «{c_ok}» по расписанию spaced repetition."
+            f"Можно вернуть в активную память «{c_ok}» по расписанию интервальных повторений."
         )
     if bt == "review" and not c_ok:
         return (

@@ -207,14 +207,14 @@ def render_home_continue_unified(index_stats: dict | None) -> None:
             )
         elif cta_kind == "flashcard_due":
             st.markdown(
-                f"**Flashcards (SM-2):** к повторению **{flashcard_due_n}** карточек — "
+                f"**Flashcards:** к повторению **{flashcard_due_n}** карточек — "
                 "сессия во вкладке **Flashcards**.",
                 unsafe_allow_html=True,
             )
         elif cta_kind == "due_review":
             fc = esc_html(first_due_concept or "—")
             st.markdown(
-                f"**Очередь повторений (SM-2):** **{due_n}** концепт(ов).  \n"
+                f"**Очередь повторений:** **{due_n}** тем(а).  \n"
                 f"Следующий по приоритету: **{fc}**.",
                 unsafe_allow_html=True,
             )
@@ -303,7 +303,7 @@ def render_home_continue_unified(index_stats: dict | None) -> None:
                 st.session_state["current_view"] = "Чат с тьютором"
                 c = first_due_concept or "текущий концепт"
                 st.session_state["tutor_pending_prompt"] = (
-                    f"Помоги коротко повторить концепт «{c}» (он в очереди spaced repetition)."
+                    f"Помоги коротко повторить тему «{c}» (она в очереди интервальных повторений)."
                 )
                 st.session_state["tutor_pending_session_id"] = st.session_state["tutor_session_id"]
                 st.session_state["tutor_cta_action"] = "Повторить сейчас"
@@ -484,7 +484,7 @@ def render_tutor_learning_resume_card(index_stats: dict | None) -> None:
         if preview:
             st.caption("Оркестрация (последний ответ): " + " · ".join(preview))
     st.caption(
-        f"Mastery (UI): **{esc_html(mastery)}** · Due (SM-2): **{due_n}** · "
+        f"Mastery (UI): **{esc_html(mastery)}** · К повторению: **{due_n}** · "
         f"Последний мини-quiz: **{esc_html(qstat)}**"
     )
     if due_n > 0:

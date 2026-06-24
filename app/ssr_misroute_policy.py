@@ -485,7 +485,7 @@ def build_misroute_policy_audit_ru(
     if status == "applied":
         return "Коррекция по локальным отказам: смещение tie-break (" + "; ".join(parts) + ")."
     if reason == "hard_queue":
-        return "Политика обучения: не меняет приоритет due-карт / SM-2 / quiz_failed."
+        return "Политика обучения: не меняет приоритет карточек, повторений и ошибок quiz."
     if reason in {"sparse_rejects", "no_retention", "empty_window"}:
         return "Политика обучения: rule-only — недостаточно согласованных отказов."
     if reason == "contradictory_accept":

@@ -179,13 +179,13 @@ def _render_flashcards_expert_layer(
         signals=signals,
         safe_actions=(
             "Обновить очередь или сбросить фильтр можно в блоке фильтра повторения выше.",
-            "Если хвост большой, recovery-действие разносит очередь без изменения SM-2 настроек.",
+            "Если хвост большой, recovery-действие разносит очередь без изменения настроек повторения.",
             "Переход к тьютору сохраняет карточку как пробел и открывает объяснение.",
         ),
         raw_debug_label="Текущая карточка (raw)",
         raw_debug_payload=card,
     )
-    with st.expander("Эксперт: фильтры очереди, история SM-2, аудит сессии", expanded=False):
+    with st.expander("Эксперт: фильтры очереди, история повторений, аудит сессии", expanded=False):
         _fc_ensure_expert_filter_defaults()
         c1, c2, c3 = st.columns(3)
         with c1:
@@ -210,7 +210,7 @@ def _render_flashcards_expert_layer(
         if "fc_expert_min_ef_input" not in st.session_state:
             st.session_state["fc_expert_min_ef_input"] = float(cur_settings.get("min_easiness", 2.5))
         new_floor = st.number_input(
-            "Минимальный easiness (SM-2) после оценки",
+            "Минимальный коэффициент лёгкости после оценки",
             min_value=1.3,
             max_value=5.0,
             step=0.1,

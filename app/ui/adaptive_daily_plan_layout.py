@@ -345,7 +345,7 @@ def render_adaptive_daily_plan(
                 _card._ensure_tutor_session()
                 st.session_state[PENDING_CURRENT_VIEW_KEY] = "Чат с тьютором"
                 st.session_state["tutor_pending_prompt"] = (
-                    "Покажи мои концепты в очереди spaced repetition и с чего начать повторение."
+                    "Покажи мои темы в очереди повторений и с чего начать."
                 )
                 st.session_state["tutor_pending_session_id"] = st.session_state.get("tutor_session_id")
                 st.session_state["tutor_cta_action"] = "Due reviews"

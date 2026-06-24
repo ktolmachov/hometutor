@@ -327,7 +327,7 @@ class AdaptiveDailyPlan:
             return f"Сильный настрой. Цель XP на сегодня ~{xp}: закрепи повторения и gap'ы."
         if es == "bored":
             return "Чередуем темы и transfer-вопросы — больше разнообразия."
-        return "Хороший день, чтобы двигаться по графу и spaced repetition."
+        return "Хороший день, чтобы продвинуться по темам и закрепить повторения."
 
     def _save_plan(self, plan: dict[str, Any]) -> None:
         from app.user_state import get_kv, set_kv

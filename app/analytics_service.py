@@ -142,7 +142,7 @@ def get_advanced_analytics() -> dict[str, Any]:
             f"Добавьте 1–2 interleaved quiz в неделю по этим концептам."
         )
     else:
-        rec = "Слабых концептов ниже порога нет — поддерживайте стрик и spaced repetition."
+        rec = "Слабых концептов ниже порога нет — поддерживайте стрик и интервальные повторения."
 
     return {
         "heatmap": heatmap,

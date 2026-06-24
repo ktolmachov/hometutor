@@ -143,7 +143,7 @@ def apply_smart_study_primary_navigation(
         st.session_state[PENDING_CURRENT_VIEW_KEY] = "Чат с тьютором"
         c = wc or tt or "текущий концепт"
         st.session_state["tutor_pending_prompt"] = (
-            f"Помоги коротко повторить концепт «{c}» (он в очереди spaced repetition)."
+            f"Помоги коротко повторить тему «{c}» (она в очереди интервальных повторений)."
         )
         st.session_state["tutor_pending_session_id"] = st.session_state.get("tutor_session_id")
         st.session_state["tutor_cta_action"] = "smart_study_sm2"

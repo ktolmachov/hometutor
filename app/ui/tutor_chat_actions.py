@@ -60,7 +60,7 @@ def handle_tutor_cta_click(action: str, session_id: str, msg_idx: int) -> None:
         return
     if act == "Пора повторить":
         st.session_state["tutor_pending_prompt"] = (
-            "Какие концепты из spaced repetition сейчас наиболее приоритетны и как их быстро повторить?"
+            "Какие темы из очереди повторений сейчас наиболее приоритетны и как их быстро повторить?"
         )
         st.session_state["tutor_pending_session_id"] = session_id
         st.rerun()

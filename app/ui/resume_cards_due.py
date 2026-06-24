@@ -129,13 +129,13 @@ def render_due_reviews_card() -> None:
     st.markdown('<div class="home-dash-body">', unsafe_allow_html=True)
     if n == 0:
         st.success("На сейчас всё повторено — отличная работа.")
-        st.caption("Новые повторения появятся по расписанию spaced repetition (SM-2).")
+        st.caption("Новые повторения появятся по расписанию интервальных повторений.")
         st.markdown("</div></div>", unsafe_allow_html=True)
         return
 
     st.caption(
-        f"В очереди spaced repetition: **{n}** концепций (SM-2, по `next_review`). "
-        f"Ниже — топ до **7** по приоритету очереди (US-7.1)."
+        f"В очереди интервальных повторений: **{n}** тем (по дате следующего повторения). "
+        f"Ниже — топ до **7** по приоритету."
     )
     gap_days = days_since_previous_session_start()
     # US-7.2: Soft recovery for overdue users
@@ -207,7 +207,7 @@ def render_due_reviews_card() -> None:
                     st.session_state["tutor_session_id"] = str(uuid.uuid4())
                 st.session_state["current_view"] = "Чат с тьютором"
                 st.session_state["tutor_pending_prompt"] = (
-                    f"Помоги коротко повторить концепт «{c}» (он в очереди spaced repetition)."
+                    f"Помоги коротко повторить тему «{c}» (она в очереди интервальных повторений)."
                 )
                 st.session_state["tutor_pending_session_id"] = st.session_state["tutor_session_id"]
                 st.session_state["tutor_cta_action"] = "Повторить сейчас"
@@ -241,7 +241,7 @@ def render_due_flashcards_card() -> None:
 
     if n == 0:
         st.success("Все flashcards повторены — отлично!")
-        st.caption("Новые карточки появятся по расписанию SM-2.")
+        st.caption("Новые карточки появятся по расписанию повторений.")
     else:
         st.markdown(
             f"<p>К повторению: <strong>{n} flashcard{'ов' if n > 4 else 'и' if n > 1 else 'а'}</strong></p>",

@@ -47,10 +47,10 @@ def build_smart_study_evidence_items(
 
     if sm2 > 0:
         items.append(
-            EvidenceItem("sm2_due", "Очередь концептов SM-2 (локально)", f"{sm2} к повтору", True)
+            EvidenceItem("sm2_due", "Очередь повторений по темам (локально)", f"{sm2} к повтору", True)
         )
     else:
-        items.append(EvidenceItem("sm2_due", "Очередь концептов SM-2 (локально)", "нет срочных (0)", False))
+        items.append(EvidenceItem("sm2_due", "Очередь повторений по темам (локально)", "нет срочных (0)", False))
 
     qs = str(quiz_feedback_status or "").strip()
     if qs:

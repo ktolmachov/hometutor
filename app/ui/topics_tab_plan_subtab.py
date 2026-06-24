@@ -61,7 +61,7 @@ def render_topics_plan_subtab(
             f"В текущей выборке: {len(selected_documents)} документ(ов). Кнопка `План по выборке` использует только их."
         )
     plan_user_progress = st.checkbox(
-        "Учитывать прогресс (чтение, quiz, spaced repetition)",
+        "Учитывать прогресс (чтение, quiz, интервальные повторения)",
         value=False,
         key=f"plan_user_progress_{selected_topic['topic_id']}",
         help="Добавляет персонализированный порядок шагов в промпт и возвращает поле dynamic_plan в ответе API.",

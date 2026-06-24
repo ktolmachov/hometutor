@@ -44,7 +44,7 @@ def render_tutor_chat_intro() -> None:
     _kg = get_active_knowledge_graph()
     _sr = due_reviews_summary_for_kg(_kg, preview_limit=7)
     if _sr.get("count"):
-        _title = f"Пора повторить (spaced repetition): {_sr['count']} концепций"
+        _title = f"Пора повторить: {_sr['count']} тем по расписанию"
         _overflow = str(_sr.get("overflow_caption") or "").strip()
         if _overflow:
             _title = f"{_title} · {_overflow}"

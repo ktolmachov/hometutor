@@ -366,7 +366,7 @@ def _render_quiz_expert_layer(
         safe_actions=(
             "Экспорт в Anki CSV/APKG не меняет прогресс.",
             "Сохранение quiz обновляет граф только после явного завершения.",
-            "Создание flashcards превращает вопросы в колоду для SM-2 повторения.",
+            "Создание flashcards превращает вопросы в колоду для интервального повторения.",
             "Результат уже сохранён в историю." if saved else "Результат ещё не сохранён в историю.",
         ),
         raw_debug_label="Quiz JSON + параметры генерации (redacted)",
@@ -637,7 +637,7 @@ def _render_interactive_quiz_tab() -> None:
             "🃏 Создать flashcards из этих вопросов",
             key="quiz_to_flashcards_btn",
             width='stretch',
-            help="Вопросы станут front, ответы + объяснения — back. Карточки сохраняются для повторения по SM-2.",
+            help="Вопросы станут front, ответы + объяснения — back. Карточки сохраняются для интервального повторения.",
         ):
             _save_quiz_as_flashcards(quiz, questions)
 

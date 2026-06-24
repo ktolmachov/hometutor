@@ -228,7 +228,7 @@ def generate_scoped_quiz(
             "num_questions": len(questions),
             "questions": questions,
             "motivation": motivation,
-            "motivation_detail": f"Оценка по прогрессу: **{pct}%** · streak и spaced repetition обновятся после «Завершить».",
+            "motivation_detail": f"Оценка по прогрессу: **{pct}%** · streak и расписание повторений обновятся после «Завершить».",
             "subgraph": subgraph,
             "adaptive_level": adaptive_level,
             "mastery_estimate_percent": pct,

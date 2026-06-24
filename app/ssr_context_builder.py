@@ -9,7 +9,7 @@ import re
 from typing import Any
 
 _LEDGER_FC_RE = re.compile(r"Очередь flashcards \(локально\):\s*(\d+)")
-_LEDGER_SM2_RE = re.compile(r"Очередь концептов SM-2 \(локально\):\s*(\d+)")
+_LEDGER_SM2_RE = re.compile(r"Очередь повторений по темам \(локально\):\s*(\d+)")
 
 
 def _parse_ssr_ledger_queue_counts(lines: list[str] | None) -> tuple[int, int]:

@@ -54,7 +54,7 @@ else:
 
 fc = data.get("forgetting_curve") or []
 if fc:
-    st.subheader("Кривая удержания (эвристика по SM-2)")
+    st.subheader("Кривая удержания (по интервалам повторений)")
     fig_c = go.Figure()
     fig_c.add_trace(
         go.Scatter(

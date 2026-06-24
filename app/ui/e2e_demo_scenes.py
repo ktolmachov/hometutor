@@ -64,7 +64,7 @@ def render_e2e_ssr_outcome_receipt_demo(*, variant: str = "changed") -> None:
     else:
         lines = [
             "К повторению: было 12 → стало 8",
-            "SM-2 due по графу: −2",
+            "Повторения по графу: −2",
             "Слабый концепт отработан в tutor/quiz",
         ]
         items = "".join(

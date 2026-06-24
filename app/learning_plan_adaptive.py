@@ -119,7 +119,7 @@ def get_recommended_next_step_after_micro_quiz(
         return {
             "next_action": "Пора повторить",
             "next_action_reason": (
-                f"В очереди spaced repetition: **{due_total}** концепций к повторению."
+                f"В очереди интервальных повторений: **{due_total}** тем к повторению."
             ),
             "suggested_ctas": ["Пора повторить", "Проверь меня", "Следующий шаг", "Дай пример"],
             "new_mastery_estimate": _estimate_ui_mastery_after_micro_quiz(ml, ok),

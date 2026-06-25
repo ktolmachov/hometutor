@@ -19,6 +19,24 @@ logger = logging.getLogger(__name__)
 _scheduler = None
 
 
+def _safe_due_flashcards() -> int:
+    try:
+        from app.user_state import count_due_flashcards
+
+        return int(count_due_flashcards())
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def _safe_due_reviews() -> int:
+    try:
+        from app.spaced_repetition import count_due_reviews
+
+        return int(count_due_reviews())
+    except Exception:  # noqa: BLE001
+        return 0
+
+
 def start_notifications(bot: "Bot") -> None:
     global _scheduler
     s = get_settings()
@@ -44,14 +62,39 @@ def start_notifications(bot: "Bot") -> None:
         from app.learning_plan_service import plan_service
 
         try:
+            parts: list[str] = []
+
             plan = plan_service.generate_personalized_plan(user_progress=True)
             dp = plan.get("daily_plan") or []
             if dp:
                 d0 = dp[0]
-                line = str(d0.get("concept") or d0.get("topic") or "").strip() or "см. план в UI"
-            else:
-                line = "откройте веб-приложение для персонального плана"
-            await bot.send_message(chat_id, f"Сегодня: {line}")
+                topic = str(d0.get("concept") or d0.get("topic") or "").strip()
+                if topic:
+                    parts.append(f"Сегодня: {topic}")
+
+            due_cards = _safe_due_flashcards()
+            due_concepts = _safe_due_reviews()
+            if due_cards > 0 or due_concepts > 0:
+                from app.flashcard_service import estimate_flashcard_due_clear_minutes
+
+                effort = estimate_flashcard_due_clear_minutes(due_cards) if due_cards > 0 else 0
+                pieces: list[str] = []
+                if due_cards > 0:
+                    pieces.append(f"{due_cards} карточек")
+                if due_concepts > 0:
+                    pieces.append(f"{due_concepts} концептов")
+                line = "К повторению: " + ", ".join(pieces)
+                if effort > 0:
+                    line += f" · около {effort} мин"
+                parts.append(line)
+
+            if not parts:
+                parts.append("Откройте приложение для персонального плана")
+
+            ui_url = s.streamlit_ui_url.rstrip("/")
+            parts.append(ui_url)
+
+            await bot.send_message(chat_id, "\n".join(parts))
         except Exception as e:
             logger.warning("daily_reminder failed: %s", e)
 

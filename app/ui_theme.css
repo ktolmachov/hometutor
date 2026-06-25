@@ -1438,10 +1438,35 @@ div[data-testid="stButton"] > button:focus-visible {
 }
 
 .fc-card-tags {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.75rem;
-    color: var(--muted);
     margin-top: 1rem;
+    width: 100%;
+}
+
+.fc-tag-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    justify-content: center;
+}
+
+.fc-tag-chip {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--accent);
+    background: rgba(185, 86, 49, 0.10);
+    border: 1px solid rgba(185, 86, 49, 0.22);
+    border-radius: 999px;
+    padding: 2px 10px;
+    white-space: nowrap;
+}
+
+.fc-tag-source {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-top: 0.55rem;
+    text-align: center;
+    word-break: break-word;
 }
 
 .fc-review-summary {

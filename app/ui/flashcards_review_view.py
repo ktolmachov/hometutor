@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import logging
 from typing import Any, Callable
@@ -18,11 +19,13 @@ from app.flashcard_handoff import (
 from app.flashcard_handoff_timing import log_handoff_answer_ready, record_handoff_click
 from app.flashcard_service import (
     build_flashcards_session_audit_export,
+    estimate_flashcard_due_clear_minutes,
     filter_due_cards_expert,
     get_flashcard_expert_settings,
     get_flashcard_rating_history,
     set_flashcard_expert_settings,
 )
+from app.flashcards_tag_display import escape_multiline, render_card_tags_html
 from app.models import Message
 from app.session_store import session_store
 
@@ -516,18 +519,19 @@ def render_review(
         scope_signature=scope_signature,
     )
 
-    st.progress(
-        review_progress_ratio(idx, total),
-        text=f"Карточка {idx + 1} из {total} · Осталось: {total - idx - 1}",
-    )
+    remaining = total - idx - 1
+    progress_text = f"Карточка {idx + 1} из {total} · Осталось: {remaining}"
+    if remaining > 0:
+        eta_min = estimate_flashcard_due_clear_minutes(remaining)
+        progress_text += f" · ~{eta_min} мин"
+    st.progress(review_progress_ratio(idx, total), text=progress_text)
 
-    deck_name = card.get("deck_name", "")
-    tags = card.get("tags") or ""
-    tags_html = f'<div class="fc-card-tags">{tags}</div>' if tags else ""
+    deck_name = html.escape(str(card.get("deck_name", "")))
+    tags_html = render_card_tags_html(card.get("tags"))
     st.markdown(
         f'<div class="flashcard flashcard-front">'
         f'<div class="fc-card-label">Вопрос · {deck_name}</div>'
-        f'<div class="fc-card-text">{card["front"]}</div>'
+        f'<div class="fc-card-text">{escape_multiline(card["front"])}</div>'
         f"{tags_html}"
         f"</div>",
         unsafe_allow_html=True,
@@ -537,7 +541,7 @@ def render_review(
         st.markdown(
             f'<div class="flashcard flashcard-back">'
             f'<div class="fc-card-label">Ответ</div>'
-            f'<div class="fc-card-text">{card["back"]}</div>'
+            f'<div class="fc-card-text">{escape_multiline(card["back"])}</div>'
             f"</div>",
             unsafe_allow_html=True,
         )

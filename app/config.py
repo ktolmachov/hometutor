@@ -429,6 +429,7 @@ class Settings(BaseSettings):
     telegram_bot_token: str | None = None
     telegram_daily_reminder_chat_id: str | None = None
     telegram_daily_reminder_hour: int = Field(default=9, ge=0, le=23)
+    streamlit_ui_url: str = "http://127.0.0.1:8501"
 
     # Офлайн / автономность: явный флаг UX; полный локальный LLM — задача provider.py (см. offline_service)
     offline_mode: bool = False

@@ -117,6 +117,38 @@ def _flashcards_due_count() -> int | None:
         return None
 
 
+_COLD_USER_TILE_IDS: Final[frozenset[str]] = frozenset({
+    "quick_question",
+    "tutor",
+    "quiz",
+})
+
+
+def _is_cold_user(due_count: int | None) -> bool:
+    """True when the learner has no meaningful activity yet.
+
+    A cold user sees a focused Mission Control: Quick Answer as the primary
+    entry, plus Tutor and Quiz.  Everything else appears after first activity.
+    """
+    if due_count and due_count > 0:
+        return False
+    try:
+        from app.history_service import get_history
+
+        if get_history(limit=1)["total"] > 0:
+            return False
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from app.user_state_flashcards import list_flashcard_decks
+
+        if list_flashcard_decks():
+            return False
+    except Exception:  # noqa: BLE001
+        pass
+    return True
+
+
 def _course_options_from_index_stats(index_stats: dict | None) -> tuple[CourseOption, ...]:
     if not isinstance(index_stats, dict):
         return ()
@@ -333,19 +365,34 @@ def _render_tile(tile: MissionTile, *, recommended_tile: str, due_count: int | N
         st.button("×", key="mission_tile_course_deactivate", help="Деактивировать курс", on_click=_course_deactivate_dialog)
 
 
-def _render_tile_grid(*, rec: SmartStudyRecommendation, due_count: int | None) -> None:
-    tiles = _tile_definitions(due_count=due_count)
+def _render_tile_grid(
+    *,
+    rec: SmartStudyRecommendation,
+    due_count: int | None,
+    cold_user: bool = False,
+) -> None:
+    all_tiles = _tile_definitions(due_count=due_count)
     recommended_tile = HINT_TO_TILE.get(str(rec.hint_kind), "tutor")
-    st.markdown('<div class="hero-grid hero-grid--4-3">', unsafe_allow_html=True)
-    row1 = st.columns(4, gap="medium")
-    for col, tile in zip(row1, tiles[:4], strict=True):
-        with col:
-            _render_tile(tile, recommended_tile=recommended_tile, due_count=due_count)
-    row2 = st.columns(3, gap="medium")
-    for col, tile in zip(row2, tiles[4:], strict=True):
-        with col:
-            _render_tile(tile, recommended_tile=recommended_tile, due_count=due_count)
-    st.markdown("</div>", unsafe_allow_html=True)
+    if cold_user:
+        tiles = tuple(t for t in all_tiles if t.tile_id in _COLD_USER_TILE_IDS)
+        recommended_tile = "quick_question"
+        st.markdown('<div class="hero-grid hero-grid--3">', unsafe_allow_html=True)
+        cols = st.columns(len(tiles), gap="medium")
+        for col, tile in zip(cols, tiles):
+            with col:
+                _render_tile(tile, recommended_tile=recommended_tile, due_count=due_count)
+        st.markdown("</div>", unsafe_allow_html=True)
+    else:
+        st.markdown('<div class="hero-grid hero-grid--4-3">', unsafe_allow_html=True)
+        row1 = st.columns(4, gap="medium")
+        for col, tile in zip(row1, all_tiles[:4], strict=True):
+            with col:
+                _render_tile(tile, recommended_tile=recommended_tile, due_count=due_count)
+        row2 = st.columns(3, gap="medium")
+        for col, tile in zip(row2, all_tiles[4:], strict=True):
+            with col:
+                _render_tile(tile, recommended_tile=recommended_tile, due_count=due_count)
+        st.markdown("</div>", unsafe_allow_html=True)
 
 
 @st.dialog("Выбери курс")
@@ -630,15 +677,18 @@ def render_mission_control(index_stats: dict | None = None) -> None:
     )
     rec = _build_recommendation(index_stats)
     due_count = _flashcards_due_count()
+    cold = _is_cold_user(due_count)
     render_first_session_hero(
         index_stats,
         navigate_to_question=_prefill_and_navigate_to_quick_answer,
     )
     _apply_e2e_delight_completion()
     render_delight_progress_rail(st.session_state.get("delight_loop_completed_steps"))
-    _render_ssr_banner(rec, index_stats=index_stats)
-    _render_tile_grid(rec=rec, due_count=due_count)
-    render_kg_mission_card()
+    if not cold:
+        _render_ssr_banner(rec, index_stats=index_stats)
+    _render_tile_grid(rec=rec, due_count=due_count, cold_user=cold)
+    if not cold:
+        render_kg_mission_card()
 
 
 def assert_hint_mapping_complete() -> None:

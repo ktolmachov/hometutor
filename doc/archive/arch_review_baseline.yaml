@@ -1,0 +1,168 @@
+last_review:
+  date: 2026-06-25
+  code_sha: e385cf58d8e6f7003dfeb4605059b8a609f71e26
+  docs_sha: e385cf58d8e6f7003dfeb4605059b8a609f71e26
+  note: "first incremental run; baseline did not previously exist"
+  report_files:
+    - arch_review_2026-06-25.md
+
+findings:
+  - id: AR-2026-06-25-001
+    phase: 1
+    severity: warning
+    files: ["app/llm_local_circuit.py:48-50"]
+    first_seen: 2026-06-25
+    last_seen: 2026-06-25
+    status: new
+    evidence_cmd: 'rg -n "getenv\(\"LLM_LOCAL_CB" app/llm_local_circuit.py'
+    expected_evidence: "3 matches (LLM_LOCAL_CB_FAILURES/RESET_SEC/WINDOW_SEC)"
+    regression_guard: "scripts/check_config_access.py + docs/conventions_architecture.md §Конфигурация"
+    owner: null
+    target_epoch: null
+
+  - id: AR-2026-06-25-002
+    phase: 1
+    severity: warning
+    files: ["app/flashcard_service.py:120"]
+    first_seen: 2026-06-25
+    last_seen: 2026-06-25
+    status: new
+    evidence_cmd: 'rg -n "os.getenv" app/flashcard_service.py'
+    expected_evidence: "match on L120 (HOME_RAG_E2E_OFFLINE)"
+    regression_guard: "scripts/check_config_access.py"
+    owner: null
+    target_epoch: null
+
+  - id: AR-2026-06-25-003
+    phase: 2
+    severity: warning
+    files:
+      - app/log_masking_policy.py
+      - app/smart_konspekt.py
+      - app/router_eval.py
+      - app/eval_uplift.py
+      - app/eval_ragas_backend.py
+      - app/eval_retrieval_comparison.py
+      - app/ssr_pregeneration.py
+      - app/ssr_weekly_planner.py
+      - app/ssr_graph_routing.py
+      - app/ssr_llm_profile_summary.py
+      - app/session_analytics_parser.py
+      - app/adversarial_test_runner.py
+      - app/answer_parser.py
+      - app/tutor_context_parser.py
+      - app/prompt_smoke_checks.py
+      - app/langfuse_dataset.py
+      - app/index_backup.py
+    first_seen: 2026-06-25
+    last_seen: 2026-06-25
+    status: new
+    evidence_cmd: 'rg -l "\bsmart_konspekt\b" app tests scripts main.py ingest.py telegram_bot.py --type py'
+    expected_evidence: "only app/smart_konspekt.py (self) — no external referrer"
+    regression_guard: "scripts/check_dead_modules.py (import-graph orphan detector)"
+    owner: null
+    target_epoch: null
+
+  - id: AR-2026-06-25-004
+    phase: 4
+    severity: warning
+    files: ["app/log_masking_policy.py", "app/logging_config.py", "app/middleware.py"]
+    first_seen: 2026-06-25
+    last_seen: 2026-06-25
+    status: new
+    evidence_cmd: 'rg -ln "log_masking_policy" --type py'
+    expected_evidence: "no matches outside app/log_masking_policy.py (masking never applied)"
+    regression_guard: "tests/test_logging_invariants.py::test_sink_payload_is_masked"
+    owner: null
+    target_epoch: null
+
+  - id: AR-2026-06-25-005
+    phase: 2
+    severity: warning
+    files: ["app/ (23 files >600 lines)"]
+    first_seen: 2026-06-25
+    last_seen: 2026-06-25
+    status: new
+    evidence_cmd: "python -c \"import pathlib;print(sum(1 for p in pathlib.Path('app').rglob('*.py') if len(p.read_text(encoding='utf-8',errors='ignore').splitlines())>600))\""
+    expected_evidence: "23"
+    regression_guard: "scripts/arch_regression_guards.py (size budget, fail if count grows)"
+    owner: null
+    target_epoch: null
+
+  - id: AR-2026-06-25-006
+    phase: 2
+    severity: warning
+    files: ["app/ui/flashcards_review_view.py:262", "app/ui/tutor_chat_session.py:302", "app/user_state_db.py:307"]
+    first_seen: 2026-06-25
+    last_seen: 2026-06-25
+    status: new
+    evidence_cmd: "ast scan: functions >80 lines"
+    expected_evidence: "137 (peak render_review=440)"
+    regression_guard: "scripts/arch_regression_guards.py (long-function budget)"
+    owner: null
+    target_epoch: null
+
+  - id: AR-2026-06-25-007
+    phase: 5
+    severity: warning
+    files: ["app/ingestion_sections.py:6", "app/obsidian_export.py:28", "app/smart_konspekt.py:15", "requirements.txt"]
+    first_seen: 2026-06-25
+    last_seen: 2026-06-25
+    status: new
+    evidence_cmd: 'rg -in "pyyaml" requirements.txt'
+    expected_evidence: "no match (pyyaml imported but undeclared)"
+    regression_guard: "scripts/check_requirements_imports.py"
+    owner: null
+    target_epoch: null
+
+  - id: AR-2026-06-25-008
+    phase: 2
+    severity: warning
+    files: ["tests/"]
+    first_seen: 2026-06-25
+    last_seen: 2026-06-25
+    status: new
+    evidence_cmd: 'rg -l "pipeline_runner|tutor_orchestrator|guardrails" tests/'
+    expected_evidence: "no matches (critical paths untested)"
+    regression_guard: "tests/test_pipeline_invariants.py + tests/test_guardrails_invariants.py"
+    owner: null
+    target_epoch: null
+
+  - id: AR-2026-06-25-009
+    phase: 3
+    severity: info
+    files: ["docs/"]
+    first_seen: 2026-06-25
+    last_seen: 2026-06-25
+    status: new
+    evidence_cmd: 'find docs -iname "*adr*"'
+    expected_evidence: "(none)"
+    regression_guard: null
+    owner: null
+    target_epoch: null
+
+  - id: AR-2026-06-25-010
+    phase: 4
+    severity: info
+    files: ["app/ask_cli.py:75-76"]
+    first_seen: 2026-06-25
+    last_seen: 2026-06-25
+    status: new
+    evidence_cmd: 'rg -nU "except Exception:\s*\n\s*pass" app/ask_cli.py'
+    expected_evidence: "match on L75-76"
+    regression_guard: null
+    owner: null
+    target_epoch: null
+
+  - id: AR-2026-06-25-011
+    phase: 5
+    severity: info
+    files: ["app/routers/core.py:8", "app/token_utils.py:10", "app/explain_service.py:83", "app/ssr_semantic_cache.py:43"]
+    first_seen: 2026-06-25
+    last_seen: 2026-06-25
+    status: new
+    evidence_cmd: 'rg -i "^openai|tiktoken|python-docx" requirements.txt'
+    expected_evidence: "no direct match"
+    regression_guard: "scripts/check_requirements_imports.py"
+    owner: null
+    target_epoch: null

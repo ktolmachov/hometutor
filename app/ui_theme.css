@@ -1472,6 +1472,57 @@ div[data-testid="stButton"] > button:focus-visible {
     word-break: break-word;
 }
 
+/* Rating row — projected-interval caption + semantic colour-coded buttons */
+.fc-rate-eta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.05rem;
+    margin: 0 0 0.4rem;
+    line-height: 1.2;
+    text-align: center;
+}
+
+.fc-rate-eta-meaning {
+    font-size: 0.7rem;
+    color: var(--muted);
+}
+
+.fc-rate-eta-days {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--fc-eta-color, var(--accent));
+}
+
+.st-key-fc_rate_again button,
+.st-key-fc_rate_hard button,
+.st-key-fc_rate_good button,
+.st-key-fc_rate_easy button {
+    color: #fff !important;
+    font-weight: 700 !important;
+    border: none !important;
+    box-shadow: 0 6px 16px rgba(49, 29, 15, 0.16) !important;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+
+.st-key-fc_rate_again button:hover,
+.st-key-fc_rate_hard button:hover,
+.st-key-fc_rate_good button:hover,
+.st-key-fc_rate_easy button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 22px rgba(49, 29, 15, 0.22) !important;
+}
+
+.st-key-fc_rate_again button { background: #c0392b !important; }
+.st-key-fc_rate_again button:hover { background: #a93226 !important; }
+.st-key-fc_rate_hard button { background: #d68910 !important; }
+.st-key-fc_rate_hard button:hover { background: #b9770e !important; }
+.st-key-fc_rate_good button { background: #1e8449 !important; }
+.st-key-fc_rate_good button:hover { background: #196f3d !important; }
+.st-key-fc_rate_easy button { background: #1a5276 !important; }
+.st-key-fc_rate_easy button:hover { background: #154360 !important; }
+
 .fc-review-summary {
     border-radius: 20px;
     padding: 2rem;

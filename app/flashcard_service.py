@@ -17,7 +17,6 @@ from app.logging_config import log_event
 from app.request_cache import consume_llm_cache_hit, reset_llm_cache_hit_flag
 from app.prompts import FLASHCARD_GENERATION_PROMPT, FLASHCARD_JSON_REPAIR_PROMPT
 from app.quiz_service import get_quiz_llm_for_generation
-from app.spaced_repetition import apply_sm2
 from app.user_state import (
     add_flashcard,
     count_due_flashcards,
@@ -678,33 +677,68 @@ def build_flashcards_session_audit_export(
     }
 
 
+def _flashcard_review_floor_ef() -> float | None:
+    """Optional ease-factor floor from local expert settings (1.3..5.0), else None."""
+    settings = get_flashcard_expert_settings()
+    if "min_easiness" not in settings:
+        return None
+    try:
+        floor_ef = float(settings["min_easiness"])
+    except (TypeError, ValueError):
+        return None
+    return floor_ef if 1.3 <= floor_ef <= 5.0 else None
+
+
+def preview_flashcard_review_intervals(card: dict[str, Any]) -> dict[str, int]:
+    """Projected next interval (days) per rating for the review buttons.
+
+    Uses the same scheduler and settings as :func:`review_flashcard`, so the
+    number shown on a button equals what pressing it will schedule.
+    """
+    from app.config import get_settings
+    from app.flashcards_scheduling import RATING_TO_QUALITY, compute_flashcard_schedule
+
+    max_interval = getattr(get_settings(), "sr_max_interval_days", 3650)
+    floor = _flashcard_review_floor_ef()
+    easiness = float(card.get("easiness") or 2.5)
+    interval_days = int(card.get("interval_days") or 0)
+    repetitions = int(card.get("repetitions") or 0)
+    out: dict[str, int] = {}
+    for rating, quality in RATING_TO_QUALITY.items():
+        sched = compute_flashcard_schedule(
+            easiness,
+            interval_days,
+            repetitions,
+            quality,
+            max_interval_days=max_interval,
+            min_easiness=floor,
+        )
+        out[rating] = int(sched["interval_days"])
+    return out
+
+
 def review_flashcard(card_id: int, quality: int) -> dict[str, Any]:
-    """Apply SM-2 to a single card and persist. Returns updated state."""
+    """Apply the flashcard scheduler to a single card and persist. Returns updated state."""
+    from app.config import get_settings
+    from app.flashcards_scheduling import compute_flashcard_schedule
+
     card = get_flashcard_by_id(card_id)
     if not card:
         return {"error": f"card {card_id} not found"}
 
     q = max(0, min(5, int(quality)))
-    new_ef, new_interval, new_reps = apply_sm2(
+    max_interval = getattr(get_settings(), "sr_max_interval_days", 3650)
+    sched = compute_flashcard_schedule(
         card["easiness"],
         card["interval_days"] if card["interval_days"] > 0 else 1,
         card["repetitions"],
         q,
+        max_interval_days=max_interval,
+        min_easiness=_flashcard_review_floor_ef(),
     )
-
-    from app.config import get_settings
-
-    max_interval = getattr(get_settings(), "sr_max_interval_days", 3650)
-    new_interval = min(new_interval, max_interval)
-
-    settings = get_flashcard_expert_settings()
-    if "min_easiness" in settings:
-        try:
-            floor_ef = float(settings["min_easiness"])
-            if 1.3 <= floor_ef <= 5.0:
-                new_ef = max(new_ef, floor_ef)
-        except (TypeError, ValueError):
-            pass
+    new_ef = sched["easiness"]
+    new_interval = sched["interval_days"]
+    new_reps = sched["repetitions"]
 
     last_review = _utc_now_iso()
     next_review = (
@@ -855,6 +889,7 @@ __all__ = [
     "save_deck",
     "cards_from_scoped_quiz_items",
     "review_flashcard",
+    "preview_flashcard_review_intervals",
     "defer_overdue_flashcards_for_recovery",
     "get_flashcard_recovery_schedule",
     "undo_overdue_flashcards_recovery",

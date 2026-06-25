@@ -23,8 +23,10 @@ from app.flashcard_service import (
     filter_due_cards_expert,
     get_flashcard_expert_settings,
     get_flashcard_rating_history,
+    preview_flashcard_review_intervals,
     set_flashcard_expert_settings,
 )
+from app.flashcards_scheduling import format_interval_ru
 from app.flashcards_tag_display import escape_multiline, render_card_tags_html
 from app.models import Message
 from app.session_store import session_store
@@ -58,6 +60,15 @@ RATING_BUTTONS = [
     ("🟢 Хорошо", "good", 4, "#1e8449"),
     ("⭐ Легко", "easy", 5, "#1a5276"),
 ]
+
+# Self-assessment meaning shown above each rating button — the recall judgement
+# the learner is making, which the bare label ("Трудно") does not convey.
+RATING_MEANINGS = {
+    "again": "не вспомнил",
+    "hard": "с трудом",
+    "good": "вспомнил",
+    "easy": "сразу",
+}
 
 _EXPERT_FILTER_DEFAULTS = {
     "fc_expert_iv_min": 0,
@@ -545,10 +556,19 @@ def render_review(
             f"</div>",
             unsafe_allow_html=True,
         )
+        interval_preview = preview_flashcard_review_intervals(card)
         cols = st.columns(4)
-        for col, (label, q_label, quality, _color) in zip(cols, RATING_BUTTONS):
+        for col, (label, q_label, quality, color) in zip(cols, RATING_BUTTONS):
             with col:
-                if st.button(label, key=f"rate_{q_label}_{idx}", width='stretch'):
+                eta = format_interval_ru(int(interval_preview.get(q_label, 1)))
+                st.markdown(
+                    f'<div class="fc-rate-eta" style="--fc-eta-color:{color}">'
+                    f'<span class="fc-rate-eta-meaning">{RATING_MEANINGS[q_label]}</span>'
+                    f'<span class="fc-rate-eta-days">→ {html.escape(eta)}</span>'
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+                if st.button(label, key=f"fc_rate_{q_label}", width='stretch'):
                     try:
                         result = api_call(
                             "POST",

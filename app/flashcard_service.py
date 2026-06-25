@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -117,10 +116,6 @@ def _parse_flashcard_json(raw: str) -> list[dict[str, str]]:
 
 
 def _e2e_offline_flashcards_enabled() -> bool:
-    env_value = str(os.getenv("HOME_RAG_E2E_OFFLINE", "")).strip().lower()
-    if env_value in {"1", "true", "yes", "on"}:
-        return True
-    from app.config import get_settings
     return get_settings().home_rag_e2e_offline
 
 

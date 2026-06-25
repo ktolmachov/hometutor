@@ -9,6 +9,7 @@ from logging.handlers import RotatingFileHandler
 from typing import Any
 
 from app.config import LOG_DIR, PROJECT_ROOT_PATH, get_settings
+from app.log_masking_policy import MaskingSink, redact_for_sink, redact_sink_payload
 
 _request_id_var: ContextVar[str | None] = ContextVar("request_id", default=None)
 
@@ -66,6 +67,7 @@ class StructuredFormatter(logging.Formatter):
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)
 
+        payload = redact_sink_payload(MaskingSink.STRUCTURED_LOG, payload)
         return json.dumps(payload, ensure_ascii=False)
 
 
@@ -73,6 +75,18 @@ class RequestContextFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         if not hasattr(record, "request_id"):
             record.request_id = _request_id_var.get()
+        return True
+
+
+class StructuredLogMaskingFilter(logging.Filter):
+    """Apply sink redaction before records reach structured handlers."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.msg = redact_for_sink(MaskingSink.STRUCTURED_LOG, "message", record.getMessage())
+        record.args = ()
+        extra_fields = getattr(record, "extra_fields", None)
+        if isinstance(extra_fields, dict):
+            record.extra_fields = redact_sink_payload(MaskingSink.STRUCTURED_LOG, extra_fields)
         return True
 
 
@@ -132,6 +146,7 @@ def setup_logging() -> logging.Logger:
 
     formatter = StructuredFormatter()
     request_filter = RequestContextFilter()
+    masking_filter = StructuredLogMaskingFilter()
 
     if _use_rotating_file_handler():
         file_handler = RotatingFileHandler(
@@ -143,10 +158,12 @@ def setup_logging() -> logging.Logger:
     else:
         file_handler = logging.FileHandler(log_dir / "app.log", encoding="utf-8")
     file_handler.setFormatter(formatter)
+    file_handler.addFilter(masking_filter)
     file_handler.addFilter(request_filter)
 
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
+    console_handler.addFilter(masking_filter)
     console_handler.addFilter(request_filter)
 
     logger.addHandler(file_handler)

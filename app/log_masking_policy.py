@@ -34,7 +34,7 @@ class MaskingSink(str, Enum):
 
 SINK_MASKED_FIELDS: dict[str, frozenset[str]] = {
     MaskingSink.STRUCTURED_LOG.value: frozenset(
-        {"message", "question", "answer", "prompt", "error", "detail", "body", "text"}
+        {"message", "question", "answer", "prompt", "error", "detail", "body", "text", "exception"}
     ),
     MaskingSink.OTEL_TRACE.value: frozenset(
         {"input", "output", "question", "prompt", "metadata", "attributes", "detail"}

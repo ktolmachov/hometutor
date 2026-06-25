@@ -8,7 +8,8 @@
 - В приложении использовать `get_settings()` и `get_retrieval_settings()`.
 - `config.env` содержит tracked defaults; `.env` содержит локальные secrets/overrides.
 - Новый env-параметр добавляется как поле `Settings` или `RetrievalSettings`, затем используется через settings object.
-- Raw `os.environ` допустим только в diagnostic-only коде или bootstrap-скриптах.
+- Raw `os.getenv` / `os.environ` в `app/*.py` запрещены вне `app/config.py` и diagnostic-only кода; guard:
+  `scripts/check_config_access.py` (AR-2026-06-25-001, AR-2026-06-25-002).
 
 ## LLM и embeddings
 

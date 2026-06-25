@@ -480,6 +480,21 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("HOME_RAG_LLM_LOCAL_HARD_TIMEOUT_SEC"),
         description="Жёсткий read-timeout для локального primary chat клиента при local_strict/balanced (если уже на локале).",
     )
+    llm_local_cb_failures: int = Field(
+        default=3,
+        ge=1,
+        validation_alias=AliasChoices("LLM_LOCAL_CB_FAILURES"),
+    )
+    llm_local_cb_reset_sec: float = Field(
+        default=60.0,
+        gt=0.0,
+        validation_alias=AliasChoices("LLM_LOCAL_CB_RESET_SEC"),
+    )
+    llm_local_cb_window_sec: float = Field(
+        default=30.0,
+        gt=0.0,
+        validation_alias=AliasChoices("LLM_LOCAL_CB_WINDOW_SEC"),
+    )
 
     # Streamlit UI: базовый URL HTTP API (тот же хост/порт, что и `uvicorn app.api:app`)
     ui_api_base_url: str = "http://127.0.0.1:8000"

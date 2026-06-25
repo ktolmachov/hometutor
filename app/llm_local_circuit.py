@@ -14,40 +14,18 @@ UI hot path.
 from __future__ import annotations
 
 import logging
-import os
 import time
 from dataclasses import dataclass, field
 
+from app.config import get_settings
 from app.logging_config import log_event
 
 logger = logging.getLogger(__name__)
 
 
-def _env_int(name: str, default: int) -> int:
-    raw = os.getenv(name)
-    if not raw:
-        return default
-    try:
-        value = int(raw)
-    except ValueError:
-        return default
-    return value if value > 0 else default
-
-
-def _env_float(name: str, default: float) -> float:
-    raw = os.getenv(name)
-    if not raw:
-        return default
-    try:
-        value = float(raw)
-    except ValueError:
-        return default
-    return value if value > 0 else default
-
-
-DEFAULT_FAILURE_THRESHOLD = _env_int("LLM_LOCAL_CB_FAILURES", 3)
-DEFAULT_RESET_AFTER_SEC = _env_float("LLM_LOCAL_CB_RESET_SEC", 60.0)
-DEFAULT_FAILURE_WINDOW_SEC = _env_float("LLM_LOCAL_CB_WINDOW_SEC", 30.0)
+DEFAULT_FAILURE_THRESHOLD = 3
+DEFAULT_RESET_AFTER_SEC = 60.0
+DEFAULT_FAILURE_WINDOW_SEC = 30.0
 
 
 @dataclass
@@ -78,7 +56,7 @@ def _trim(state: _EndpointState, *, now: float, window: float) -> None:
 def is_open(
     base_url: str | None,
     *,
-    reset_after_sec: float = DEFAULT_RESET_AFTER_SEC,
+    reset_after_sec: float | None = None,
     now: float | None = None,
 ) -> bool:
     """Whether new calls to this endpoint should be skipped."""
@@ -89,7 +67,8 @@ def is_open(
     if state is None or state.opened_at is None:
         return False
     current = _now() if now is None else now
-    if current - state.opened_at >= reset_after_sec:
+    reset_after = get_settings().llm_local_cb_reset_sec if reset_after_sec is None else reset_after_sec
+    if current - state.opened_at >= reset_after:
         # Auto half-open: clear opened_at and allow one real attempt; on success
         # callers will reset, on failure the circuit re-opens immediately.
         state.opened_at = None
@@ -109,8 +88,8 @@ def record_failure(
     base_url: str | None,
     *,
     error_type: str | None = None,
-    failure_threshold: int = DEFAULT_FAILURE_THRESHOLD,
-    failure_window_sec: float = DEFAULT_FAILURE_WINDOW_SEC,
+    failure_threshold: int | None = None,
+    failure_window_sec: float | None = None,
     now: float | None = None,
 ) -> bool:
     """Record a failed call. Returns ``True`` if the circuit just transitioned to open."""
@@ -118,11 +97,14 @@ def record_failure(
     if not key:
         return False
     current = _now() if now is None else now
+    settings = get_settings()
+    threshold = settings.llm_local_cb_failures if failure_threshold is None else failure_threshold
+    window_sec = settings.llm_local_cb_window_sec if failure_window_sec is None else failure_window_sec
     state = _STATE_BY_BASE.setdefault(key, _EndpointState())
     state.last_error_type = error_type or state.last_error_type
-    _trim(state, now=current, window=failure_window_sec)
+    _trim(state, now=current, window=window_sec)
     state.failures.append(current)
-    if state.opened_at is None and len(state.failures) >= failure_threshold:
+    if state.opened_at is None and len(state.failures) >= threshold:
         state.opened_at = current
         log_event(
             logger,
@@ -131,7 +113,7 @@ def record_failure(
             base_url=base_url,
             error_type=error_type,
             failures=len(state.failures),
-            window_sec=failure_window_sec,
+            window_sec=window_sec,
         )
         return True
     return False

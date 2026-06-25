@@ -9,7 +9,7 @@ from typing import Any
 
 from dotenv import dotenv_values
 
-from app.config import BASE_DIR
+from app.config import BASE_DIR, DEFAULT_EMBED_API_BASE, DEFAULT_EMBED_MODEL
 from app.logging_config import setup_logging
 
 logger = setup_logging()
@@ -19,9 +19,7 @@ def _resolve_embed_api_base(settings: Any) -> str:
     s = settings
     resolved = getattr(s, "embed_api_base_resolved", None)
     if resolved is None:
-        resolved = getattr(s, "embed_api_base", None) or getattr(
-            s, "openai_api_base", "https://openrouter.ai/api/v1"
-        )
+        resolved = getattr(s, "embed_api_base", None) or DEFAULT_EMBED_API_BASE
     from app.provider import normalize_openai_compatible_api_base
 
     return normalize_openai_compatible_api_base(str(resolved))
@@ -38,7 +36,7 @@ def _ingest_env_settings_dict(settings: Any, retrieval_settings: Any = None) -> 
     ) or "sentence_window"
     return {
         "EMBED_API_BASE": _resolve_embed_api_base(s),
-        "EMBED_MODEL": getattr(s, "embed_model", "text-embedding-qwen3-embedding-0.6b"),
+        "EMBED_MODEL": getattr(s, "embed_model", DEFAULT_EMBED_MODEL),
         "EMBED_DIMENSIONS": getattr(s, "embed_dimensions", 1024),
         "EMBED_BATCH_SIZE": getattr(s, "embed_batch_size", 32),
         "EMBED_REQUEST_TIMEOUT": getattr(s, "embed_request_timeout", 60),

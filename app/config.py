@@ -18,6 +18,8 @@ load_dotenv(BASE_DIR / ".env", override=True)  # machine secrets override defaul
 
 _CLOUD_MODEL_PREFIXES = ("gpt-4o", "gpt-4", "claude", "gemini")
 _REMOTE_PROVIDER_PREFIXES = ("openai/", "google/", "anthropic/", "deepseek/", "meta-llama/")
+DEFAULT_EMBED_API_BASE = "http://127.0.0.1:1234/v1"
+DEFAULT_EMBED_MODEL = "text-embedding-qwen3-embedding-0.6b"
 
 
 def is_cloud_model(model_name: str) -> bool:
@@ -87,7 +89,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("LMSTUDIO_API_BASE", "LLM_API_BASE"),
     )
     openai_api_base: str = "https://openrouter.ai/api/v1"
-    embed_api_base: str | None = "http://127.0.0.1:1234/v1"
+    embed_api_base: str | None = DEFAULT_EMBED_API_BASE
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -97,7 +99,7 @@ class Settings(BaseSettings):
 
     llm_model: str = "gpt-4o-mini"
     llamaindex_metadata_fallback_model: str = "gpt-4o-mini"
-    embed_model: str = "text-embedding-qwen3-embedding-0.6b"
+    embed_model: str = DEFAULT_EMBED_MODEL
     embed_dimensions: int = Field(default=1024, ge=0, le=65536)
     eval_judge_llm: str | None = None
     enable_async_quality_judge: bool = False
@@ -576,7 +578,7 @@ class Settings(BaseSettings):
 
     @property
     def embed_api_base_resolved(self) -> str:
-        return self.embed_api_base or self.openai_api_base
+        return (self.embed_api_base or "").strip() or DEFAULT_EMBED_API_BASE
 
 
 class RetrievalSettings(BaseSettings):

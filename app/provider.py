@@ -661,7 +661,7 @@ def get_graph_llm():
 def _make_embed_model(s) -> OpenAIEmbedding:
     dimensions = int(getattr(s, "embed_dimensions", 0) or 0)
     # Keep `model` llama-index/OpenAI enum-safe; `model_name` is the real
-    # provider model id sent to OpenRouter, including custom ids.
+    # provider model id sent to the configured embeddings endpoint.
     return OpenAIEmbedding(
         model="text-embedding-3-small",
         model_name=s.embed_model,

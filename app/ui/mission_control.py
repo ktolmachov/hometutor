@@ -124,12 +124,35 @@ _COLD_USER_TILE_IDS: Final[frozenset[str]] = frozenset({
 })
 
 
-def _is_cold_user(due_count: int | None) -> bool:
+def _has_indexed_materials(index_stats: dict | None) -> bool:
+    """True when the knowledge base already has indexed content to study.
+
+    Indexing materials is itself meaningful intent: such a user needs the full
+    Mission Control (Темы / Курс / Flashcards / Адаптивный план), not the
+    cold-start 3-tile view. Tolerant of the several shapes ``index_stats`` takes.
+    """
+    if not isinstance(index_stats, dict):
+        return False
+    if str(index_stats.get("status") or "") == "ok":
+        return True
+    try:
+        if int(index_stats.get("nodes_count") or 0) > 0:
+            return True
+    except (TypeError, ValueError):
+        pass
+    return any(str(f).strip() for f in index_stats.get("files") or [])
+
+
+def _is_cold_user(due_count: int | None, index_stats: dict | None = None) -> bool:
     """True when the learner has no meaningful activity yet.
 
     A cold user sees a focused Mission Control: Quick Answer as the primary
     entry, plus Tutor and Quiz.  Everything else appears after first activity.
+    An already-indexed knowledge base counts as activity — otherwise a fresh
+    user with a ready base loses every entry point into their materials.
     """
+    if _has_indexed_materials(index_stats):
+        return False
     if due_count and due_count > 0:
         return False
     try:
@@ -677,7 +700,7 @@ def render_mission_control(index_stats: dict | None = None) -> None:
     )
     rec = _build_recommendation(index_stats)
     due_count = _flashcards_due_count()
-    cold = _is_cold_user(due_count)
+    cold = _is_cold_user(due_count, index_stats)
     render_first_session_hero(
         index_stats,
         navigate_to_question=_prefill_and_navigate_to_quick_answer,

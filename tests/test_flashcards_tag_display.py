@@ -3,7 +3,7 @@
 from app.flashcards_tag_display import (
     escape_multiline,
     render_card_tags_html,
-    source_label,
+    source_display,
     split_card_tags,
 )
 
@@ -35,13 +35,30 @@ def test_split_handles_empty_and_none() -> None:
     assert split_card_tags("   ,, ") == ([], [])
 
 
-def test_source_label_strips_path_to_filename() -> None:
+def test_source_display_strips_path_to_filename() -> None:
     _, system = split_card_tags(SCREENSHOT_TAGS)
-    assert source_label(system) == "урок_3_автономность_память_стейт_и_контроль_поведения.md"
-    assert source_label(["source:plain.md"]) == "plain.md"
-    assert source_label(["source:C:\\notes\\deck.md"]) == "deck.md"
-    assert source_label(["course:x"]) is None
-    assert source_label(["source:"]) is None
+    assert source_display(system) == ("📄", "урок_3_автономность_память_стейт_и_контроль_поведения.md")
+    assert source_display(["source:plain.md"]) == ("📄", "plain.md")
+    assert source_display(["source:C:\\notes\\deck.md"]) == ("📄", "deck.md")
+    assert source_display(["course:x"]) is None
+    assert source_display(["source:"]) is None
+
+
+def test_source_display_handles_pseudo_sources() -> None:
+    # Quiz-derived cards carry source:scoped-quiz — not a file, show a label.
+    assert source_display(["source:scoped-quiz"]) == ("🧩", "Из Quiz")
+    # e2e fixture pseudo-source is internal and hidden entirely.
+    assert source_display(["source:e2e-offline"]) is None
+    # An opaque non-file token must not masquerade as a file.
+    assert source_display(["source:opaque-token"]) is None
+
+
+def test_render_scoped_quiz_card_shows_quiz_label_not_file() -> None:
+    out = render_card_tags_html("llm, source:scoped-quiz")
+    assert ">llm<" in out
+    assert "Из Quiz" in out
+    assert "📄" not in out
+    assert "scoped-quiz" not in out
 
 
 def test_render_shows_human_chips_and_source_but_not_scope_ids() -> None:

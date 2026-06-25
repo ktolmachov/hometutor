@@ -1457,7 +1457,10 @@ div[data-testid="stButton"] > button:focus-visible {
     border: 1px solid rgba(185, 86, 49, 0.22);
     border-radius: 999px;
     padding: 2px 10px;
-    white-space: nowrap;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .fc-tag-source {

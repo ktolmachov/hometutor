@@ -21,6 +21,15 @@ import html
 # Tag namespaces that are plumbing for the review queue, not learner content.
 SYSTEM_TAG_PREFIXES = ("course:", "folder:", "source:", "deck:")
 
+# ``source:`` values that are not files. Cards built from a quiz carry
+# ``source:scoped-quiz`` (see app.flashcard_service.cards_from_scoped_quiz_items);
+# e2e fixtures carry ``source:e2e-offline``. Map them to a friendly label, or to
+# ``None`` to hide entirely. Everything else is treated as a real file path.
+_PSEUDO_SOURCE_LABELS: dict[str, str | None] = {
+    "scoped-quiz": "Из Quiz",
+    "e2e-offline": None,
+}
+
 
 def split_card_tags(raw: str | None) -> tuple[list[str], list[str]]:
     """Split a comma-separated tag string into ``(human_tags, system_tags)``.
@@ -46,19 +55,31 @@ def split_card_tags(raw: str | None) -> tuple[list[str], list[str]]:
     return human, system
 
 
-def source_label(system_tags: list[str]) -> str | None:
-    """Human-readable source filename from a ``source:`` tag, if any.
+def source_display(system_tags: list[str]) -> tuple[str, str] | None:
+    """``(icon, label)`` for the card-face source line, or ``None`` to show nothing.
 
-    ``source:ии агенты/урок_3_…_поведения.md`` → ``урок_3_…_поведения.md``. Returns
-    ``None`` when no usable ``source:`` tag is present.
+    * Real file paths → ``("📄", "<filename>")``
+      (``source:ии агенты/урок_3_…_поведения.md`` → ``урок_3_…_поведения.md``).
+    * Known pseudo-sources → a friendly non-file label
+      (``source:scoped-quiz`` → ``("🧩", "Из Quiz")``).
+    * Opaque tokens that are neither a path nor a known pseudo-source are hidden,
+      so internal identifiers never masquerade as a file.
     """
     for tag in system_tags:
-        if tag.lower().startswith("source:"):
-            raw = tag.split(":", 1)[1].strip()
-            if not raw:
-                return None
-            tail = raw.replace("\\", "/").rsplit("/", 1)[-1].strip()
-            return tail or raw
+        if not tag.lower().startswith("source:"):
+            continue
+        raw = tag.split(":", 1)[1].strip()
+        if not raw:
+            return None
+        key = raw.lower()
+        if key in _PSEUDO_SOURCE_LABELS:
+            label = _PSEUDO_SOURCE_LABELS[key]
+            return ("🧩", label) if label else None
+        looks_like_file = "." in raw or "/" in raw or "\\" in raw
+        if not looks_like_file:
+            return None
+        tail = raw.replace("\\", "/").rsplit("/", 1)[-1].strip()
+        return ("📄", tail or raw)
     return None
 
 
@@ -85,8 +106,11 @@ def render_card_tags_html(raw: str | None) -> str:
         f'<span class="fc-tag-chip">{html.escape(tag)}</span>' for tag in human
     )
     chips_html = f'<div class="fc-tag-chips">{chips}</div>' if chips else ""
-    src = source_label(system)
-    src_html = f'<div class="fc-tag-source">📄 {html.escape(src)}</div>' if src else ""
+    src = source_display(system)
+    src_html = ""
+    if src is not None:
+        icon, label = src
+        src_html = f'<div class="fc-tag-source">{html.escape(icon)} {html.escape(label)}</div>'
     if not chips_html and not src_html:
         return ""
     return f'<div class="fc-card-tags">{chips_html}{src_html}</div>'

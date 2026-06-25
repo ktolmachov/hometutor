@@ -17,8 +17,8 @@ python -m venv .venv
 OPENAI_API_KEY=local-or-real-key
 LLM_API_BASE=http://127.0.0.1:8080/v1
 LLM_MODEL=your-local-model-id
-EMBED_API_BASE=http://127.0.0.1:8080/v1
-EMBED_MODEL=your-embedding-model-id
+EMBED_API_BASE=http://127.0.0.1:1234/v1
+EMBED_MODEL=text-embedding-qwen3-embedding-0.6b
 ```
 
 Проверка окружения:

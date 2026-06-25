@@ -191,5 +191,5 @@ SSR строит next-step recommendation из локальных сигнало
 - Основной сценарий — локальный single-user runtime.
 - Runtime-репозиторий не содержит полный процессный backlog, сценарные манифесты и генератор demo-документа.
 - `OFFLINE_MODE` и offline banners не заменяют настройку локального LLM/embedding endpoint.
-- По умолчанию `config.env` направляет embeddings через облачный endpoint (`openrouter.ai`); для local-first работы необходимо переопределить `EMBED_API_BASE` и `EMBED_MODEL` в `.env`.
+- По умолчанию `config.env` направляет embeddings на локальный loopback endpoint; облачный embedding provider должен быть явным `.env` override.
 - `HOME_RAG_API_KEY` защищает REST endpoints только если задан.

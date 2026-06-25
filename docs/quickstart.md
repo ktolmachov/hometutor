@@ -29,8 +29,8 @@ python -m venv .venv
 OPENAI_API_KEY=local-no-key
 LLM_API_BASE=http://127.0.0.1:8080/v1
 LLM_MODEL=your-local-model-id
-EMBED_API_BASE=http://127.0.0.1:8080/v1
-EMBED_MODEL=your-local-embed-model-id
+EMBED_API_BASE=http://127.0.0.1:1234/v1
+EMBED_MODEL=text-embedding-qwen3-embedding-0.6b
 ```
 
 **С облачными embeddings (данные уходят провайдеру):**
@@ -43,9 +43,9 @@ EMBED_API_BASE=https://openrouter.ai/api/v1
 EMBED_MODEL=perplexity/pplx-embed-v1-0.6b
 ```
 
-> **Privacy:** `config.env` по умолчанию направляет embeddings через облачный endpoint (`openrouter.ai`). При индексации и каждом запросе чанки ваших документов отправляются провайдеру. Для local-first работы обязательно переопределите `EMBED_API_BASE` и `EMBED_MODEL` на локальный сервер в `.env`.
+> **Privacy:** `config.env` по умолчанию направляет embeddings на локальный loopback endpoint (`127.0.0.1:1234/v1`). Если вы выбираете облачный embedding provider, задайте `EMBED_API_BASE` и `EMBED_MODEL` явно в `.env` и считайте это opt-in: при индексации и запросах чанки документов отправляются провайдеру.
 
-Убедитесь, что `LLM_MODEL` и `EMBED_MODEL` совпадают с идентификаторами моделей, которые отдаёт ваш локальный сервер (`GET /v1/models`). Дефолтные значения в `config.env` (`qwopus3.6-35b-a3b-v1-mtp`, `perplexity/pplx-embed-v1-0.6b`) — это конкретная рабочая установка автора; на чистом клоне их необходимо заменить на ваши модели.
+Убедитесь, что `LLM_MODEL` и `EMBED_MODEL` совпадают с идентификаторами моделей, которые отдаёт ваш локальный сервер (`GET /v1/models`). Дефолтные значения в `config.env` (`qwopus3.6-35b-a3b-v1-mtp`, `text-embedding-qwen3-embedding-0.6b`) — это локальная рабочая установка; на чистом клоне их можно заменить на модели, которые реально загружены у вас.
 
 ## 2. Проверка окружения
 

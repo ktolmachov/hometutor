@@ -87,7 +87,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("LMSTUDIO_API_BASE", "LLM_API_BASE"),
     )
     openai_api_base: str = "https://openrouter.ai/api/v1"
-    embed_api_base: str | None = None
+    embed_api_base: str | None = "http://127.0.0.1:1234/v1"
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -97,7 +97,7 @@ class Settings(BaseSettings):
 
     llm_model: str = "gpt-4o-mini"
     llamaindex_metadata_fallback_model: str = "gpt-4o-mini"
-    embed_model: str = "perplexity/pplx-embed-v1-0.6b"
+    embed_model: str = "text-embedding-qwen3-embedding-0.6b"
     embed_dimensions: int = Field(default=1024, ge=0, le=65536)
     eval_judge_llm: str | None = None
     enable_async_quality_judge: bool = False

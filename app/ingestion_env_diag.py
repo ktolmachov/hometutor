@@ -38,7 +38,7 @@ def _ingest_env_settings_dict(settings: Any, retrieval_settings: Any = None) -> 
     ) or "sentence_window"
     return {
         "EMBED_API_BASE": _resolve_embed_api_base(s),
-        "EMBED_MODEL": getattr(s, "embed_model", "perplexity/pplx-embed-v1-0.6b"),
+        "EMBED_MODEL": getattr(s, "embed_model", "text-embedding-qwen3-embedding-0.6b"),
         "EMBED_DIMENSIONS": getattr(s, "embed_dimensions", 1024),
         "EMBED_BATCH_SIZE": getattr(s, "embed_batch_size", 32),
         "EMBED_REQUEST_TIMEOUT": getattr(s, "embed_request_timeout", 60),
@@ -246,7 +246,7 @@ def _validate_embed_model_available(embed_model: object, settings: Any) -> None:
             f"EMBED_DIMENSIONS={expected_dimensions or 'provider-default'}, "
             f"EMBED_BATCH_SIZE={batch_size!r}, "
             f"embed_env_sources={_embed_env_sources()!r}. "
-            "Check .env, clear any shell-level EMBED_* overrides, and keep OpenRouter ingest batch size conservative."
+            "Check .env, clear any shell-level EMBED_* overrides, and keep cloud ingest batch size conservative if you opted into a remote provider."
         ) from exc
 
     actual_dimensions = len(embedding)

@@ -22,7 +22,9 @@ def _resolve_embed_api_base(settings: Any) -> str:
         resolved = getattr(s, "embed_api_base", None) or getattr(
             s, "openai_api_base", "https://openrouter.ai/api/v1"
         )
-    return str(resolved)
+    from app.provider import normalize_openai_compatible_api_base
+
+    return normalize_openai_compatible_api_base(str(resolved))
 
 
 def _ingest_env_settings_dict(settings: Any, retrieval_settings: Any = None) -> dict[str, object]:
@@ -223,7 +225,7 @@ def _validate_embed_model_available(embed_model: object, settings: Any) -> None:
 
     expected_dimensions = int(getattr(settings, "embed_dimensions", 0) or 0)
     configured_model = str(getattr(settings, "embed_model", "") or "")
-    api_base = str(getattr(settings, "embed_api_base_resolved", "") or "")
+    api_base = _resolve_embed_api_base(settings)
     batch_size = max(1, int(getattr(settings, "embed_batch_size", 1) or 1))
     sample_text = "ping " * 300
     get_text_embedding_batch = getattr(embed_model, "get_text_embedding_batch", None)

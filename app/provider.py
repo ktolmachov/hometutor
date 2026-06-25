@@ -246,6 +246,17 @@ def _embed_client_kwargs(settings) -> dict:
     }
 
 
+def _embed_api_base(settings) -> str:
+    """OpenAI-compatible base URL for embeddings.
+
+    LM Studio exposes embeddings at ``/v1/embeddings``. Keep bare loopback
+    values like ``http://127.0.0.1:1234`` valid by normalizing them the same way
+    as chat/model endpoints.
+    """
+    raw = str(getattr(settings, "embed_api_base_resolved", "") or "").strip()
+    return normalize_openai_compatible_api_base(raw)
+
+
 def _llm_client_kwargs(settings) -> dict:
     """OpenAI-совместимый клиент: retries SDK + явные connect/read таймауты (18 Core)."""
     return {
@@ -656,7 +667,7 @@ def _make_embed_model(s) -> OpenAIEmbedding:
         model_name=s.embed_model,
         dimensions=dimensions or None,
         api_key=s.openai_api_key,
-        api_base=s.embed_api_base_resolved,
+        api_base=_embed_api_base(s),
         embed_batch_size=s.embed_batch_size,
         num_workers=s.embed_num_workers,
         async_http_client=httpx.AsyncClient(timeout=_embed_http_timeout(s)),

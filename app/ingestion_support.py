@@ -278,6 +278,12 @@ def run_first_session_precompute_tail(
 ) -> None:
     """Non-fatal ingest tail: precompute First Session Artifact per course candidate."""
     log = logger or logging.getLogger(__name__)
+    from app.config import get_settings
+
+    if not bool(getattr(get_settings(), "enable_first_session_precompute", False)):
+        log.info("first_session_precompute_skip | reason=disabled")
+        return
+
     fn = retrieve_fn or _noop_retrieve_fn
     try:
         candidates = list_course_candidates(docs_root=docs_root)

@@ -272,6 +272,10 @@ class Settings(BaseSettings):
     enable_partial_reindex: bool = True
     # После активации новой generation (reindex/reset): очистить faq_memory.jsonl (FAQ может ссылаться на старые чанки)
     clear_faq_on_index_activation: bool = False
+    # Optional ingest tail: precompute first-session artifacts after index activation.
+    # Disabled by default because it can trigger several slow local LLM calls after
+    # the vector index is already successfully built.
+    enable_first_session_precompute: bool = False
     # Итерация 16 tail: FAQ-хранилище в Chroma (отдельная коллекция в chroma_db), не линейный скан JSONL
     faq_memory_collection_name: str = "home_rag_faq"
     # При сохранении: если ближайший сосед в FAQ ≥ порога — не добавлять дубликат (косинусная близость)

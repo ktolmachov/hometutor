@@ -592,6 +592,89 @@ def get_flashcard_rating_history(card_id: int, *, limit: int = 10) -> list[dict[
     return rows
 
 
+def pop_flashcard_rating_history(card_id: int) -> dict[str, Any] | None:
+    """Remove and return the most recent local rating-history entry for a card."""
+    key = str(int(card_id))
+    data = _load_rating_kv()
+    bucket = list(data.get(key) or [])
+    if not bucket:
+        return None
+    last = bucket.pop()
+    if bucket:
+        data[key] = bucket
+    else:
+        data.pop(key, None)
+    _save_rating_kv(data)
+    return last
+
+
+def build_flashcard_review_undo_snapshot(card: dict[str, Any]) -> dict[str, Any]:
+    """Pre-rating SR snapshot from a queue card, for a one-step review undo.
+
+    Captures exactly the fields :func:`app.user_state.update_flashcard_sr` writes,
+    so undo restores the card to the state it had before the rating.
+    """
+    return {
+        "card_id": int(card["id"]),
+        "easiness": float(card.get("easiness") or 2.5),
+        "interval_days": int(card.get("interval_days") or 0),
+        "repetitions": int(card.get("repetitions") or 0),
+        "next_review": card.get("next_review"),
+        "last_review": card.get("last_review"),
+    }
+
+
+def undo_flashcard_review(
+    card_id: int,
+    *,
+    easiness: float,
+    interval_days: int,
+    repetitions: int,
+    next_review: str | None,
+    last_review: str | None,
+) -> dict[str, Any]:
+    """Restore a card's SR state after a mistaken review (one-step undo).
+
+    Reverses the scheduling change and best-effort reverses the analytics
+    side-effects (weekly counter, local rating history). The review-log row is
+    left in place as an immutable audit trail.
+    """
+    card = get_flashcard_by_id(card_id)
+    if not card:
+        return {"error": f"card {card_id} not found"}
+
+    update_flashcard_sr(
+        card_id,
+        float(easiness),
+        int(interval_days),
+        int(repetitions),
+        next_review,
+        last_review,
+    )
+
+    try:
+        from app.user_state import increment_weekly_progress
+
+        increment_weekly_progress("reviews", -1)
+    except Exception as exc:  # noqa: BLE001 - analytics reversal is best-effort.
+        logger.debug("undo increment_weekly_progress(reviews) failed: %s", exc)
+
+    try:
+        pop_flashcard_rating_history(card_id)
+    except Exception as exc:  # noqa: BLE001 - local history reversal is best-effort.
+        logger.debug("undo rating history pop failed: %s", exc)
+
+    return {
+        "restored": True,
+        "card_id": card_id,
+        "easiness": float(easiness),
+        "interval_days": int(interval_days),
+        "repetitions": int(repetitions),
+        "next_review": next_review,
+        "last_review": last_review,
+    }
+
+
 def get_flashcard_expert_settings() -> dict[str, Any]:
     raw = get_kv(_FLASHCARD_EXPERT_SETTINGS_KV_KEY)
     if not raw:
@@ -890,6 +973,8 @@ __all__ = [
     "cards_from_scoped_quiz_items",
     "review_flashcard",
     "preview_flashcard_review_intervals",
+    "build_flashcard_review_undo_snapshot",
+    "undo_flashcard_review",
     "defer_overdue_flashcards_for_recovery",
     "get_flashcard_recovery_schedule",
     "undo_overdue_flashcards_recovery",

@@ -187,6 +187,7 @@ def _reset_review_session_state(state: Any) -> None:
     state["flashcards_review_session_error"] = None
     state["flashcards_review_session_loaded_at"] = None
     state["flashcards_review_session_next_review_min"] = None
+    state.pop("flashcards_review_last_action", None)
     state.pop(FLASHCARDS_REVIEW_RECEIPT_BASELINE_KEY, None)
 
 

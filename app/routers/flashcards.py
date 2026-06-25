@@ -30,6 +30,7 @@ from app.flashcard_service import (
     review_flashcard,
     save_deck,
     update_flashcard,
+    undo_flashcard_review,
     undo_overdue_flashcards_recovery,
 )
 from app.guardrails import InputGuardrailError
@@ -106,6 +107,17 @@ class FlashcardReviewRequest(BaseModel):
         default=None,
         description="again | hard | good | easy (переопределяет quality)",
     )
+
+
+class FlashcardReviewUndoRequest(BaseModel):
+    """Pre-rating SR snapshot for a one-step review undo."""
+
+    card_id: int
+    easiness: float
+    interval_days: int = Field(ge=0)
+    repetitions: int = Field(ge=0)
+    next_review: str | None = None
+    last_review: str | None = None
 
 
 class FlashcardUpdateRequest(BaseModel):
@@ -422,6 +434,28 @@ def flashcards_review(body: FlashcardReviewRequest) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 - flashcards API boundary records service/store failures as controlled HTTP errors.
         record_api_error(endpoint="/flashcards/review", exc=exc, status_code=500)
         raise HTTPException(status_code=500, detail="Failed to process review")
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+
+@router.post("/flashcards/review/undo")
+def flashcards_review_undo(body: FlashcardReviewUndoRequest) -> dict[str, Any]:
+    """Restore a card's SR state after a mistaken review (one-step undo)."""
+    if get_settings().home_rag_e2e_offline:
+        return {"restored": True, "card_id": body.card_id}
+    try:
+        result = undo_flashcard_review(
+            body.card_id,
+            easiness=body.easiness,
+            interval_days=body.interval_days,
+            repetitions=body.repetitions,
+            next_review=body.next_review,
+            last_review=body.last_review,
+        )
+    except Exception as exc:  # noqa: BLE001 - API boundary records controlled store failures.
+        record_api_error(endpoint="/flashcards/review/undo", exc=exc, status_code=500)
+        raise HTTPException(status_code=500, detail="Failed to undo review")
     if "error" in result:
         raise HTTPException(status_code=404, detail=result["error"])
     return result

@@ -9,6 +9,7 @@ import logging
 from typing import Any, Callable
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from app.flashcard_handoff import (
     FLASHCARD_HANDOFF_ENTRYPOINT,
@@ -18,6 +19,7 @@ from app.flashcard_handoff import (
 )
 from app.flashcard_handoff_timing import log_handoff_answer_ready, record_handoff_click
 from app.flashcard_service import (
+    build_flashcard_review_undo_snapshot,
     build_flashcards_session_audit_export,
     estimate_flashcard_due_clear_minutes,
     filter_due_cards_expert,
@@ -26,6 +28,7 @@ from app.flashcard_service import (
     preview_flashcard_review_intervals,
     set_flashcard_expert_settings,
 )
+from app.flashcards_review_keyboard import build_review_keyboard_js
 from app.flashcards_scheduling import format_interval_ru
 from app.flashcards_tag_display import escape_multiline, render_card_tags_html
 from app.models import Message
@@ -79,6 +82,41 @@ _EXPERT_FILTER_DEFAULTS = {
 }
 
 _REVIEW_SCOPE_RESET_PENDING_KEY = "flashcards_review_scope_reset_pending"
+_FC_LAST_ACTION_KEY = "flashcards_review_last_action"
+
+
+def _maybe_render_undo_last_rating(api_call: Callable[..., Any]) -> None:
+    """One-step undo for the previous rating: restore SR state and step back."""
+    last = st.session_state.get(_FC_LAST_ACTION_KEY)
+    if not isinstance(last, dict):
+        return
+    button_label = str(last.get("button_label") or last.get("q_label") or "оценку")
+    eta = str(last.get("eta") or "")
+    eta_suffix = f" → {eta}" if eta else ""
+    if st.button(
+        f"↩ Отменить прошлую оценку: {button_label}{eta_suffix}",
+        key="fc_undo_last_rating",
+        width="stretch",
+    ):
+        snapshot = last.get("snapshot") or {}
+        try:
+            api_call("POST", "/flashcards/review/undo", json=snapshot)
+        except Exception as exc:  # noqa: BLE001 - UI displays API failure.
+            st.error(f"Не удалось отменить оценку: {exc}")
+            return
+        q_label = str(last.get("q_label") or "")
+        stats = st.session_state.get("flashcards_review_stats", {})
+        if stats.get(q_label, 0) > 0:
+            stats[q_label] -= 1
+            st.session_state["flashcards_review_stats"] = stats
+        audit = st.session_state.get("flashcards_review_session_audit")
+        if isinstance(audit, list) and audit:
+            audit.pop()
+        st.session_state["flashcards_review_index"] = int(last.get("idx") or 0)
+        st.session_state["flashcards_card_flipped"] = True
+        st.session_state.pop(_FC_LAST_ACTION_KEY, None)
+        invalidate_flashcards_due_counts_only()
+        st.rerun()
 
 
 def apply_pending_review_scope_reset(
@@ -402,6 +440,7 @@ def render_review(
                 st.session_state["flashcards_review_index"] = 0
                 st.session_state["flashcards_card_flipped"] = False
                 st.session_state["flashcards_review_stats"] = {"again": 0, "hard": 0, "good": 0, "easy": 0}
+                st.session_state.pop(_FC_LAST_ACTION_KEY, None)
                 st.session_state["flashcards_review_session_next_review_min"] = None
                 st.session_state["flashcards_review_session_status"] = "loaded"
                 st.session_state["flashcards_review_session_error"] = None
@@ -487,6 +526,7 @@ def render_review(
             card=None,
             scope_signature=scope_signature,
         )
+        _maybe_render_undo_last_rating(api_call)
         if show_receipt:
             baseline = st.session_state.get(FLASHCARDS_REVIEW_RECEIPT_BASELINE_KEY)
             if _fc_receipt_baseline_valid(baseline, scope_signature):
@@ -536,6 +576,8 @@ def render_review(
         eta_min = estimate_flashcard_due_clear_minutes(remaining)
         progress_text += f" · ~{eta_min} мин"
     st.progress(review_progress_ratio(idx, total), text=progress_text)
+
+    _maybe_render_undo_last_rating(api_call)
 
     deck_name = html.escape(str(card.get("deck_name", "")))
     tags_html = render_card_tags_html(card.get("tags"))
@@ -592,11 +634,20 @@ def render_review(
                         stats = st.session_state.get("flashcards_review_stats", {})
                         stats[q_label] = stats.get(q_label, 0) + 1
                         st.session_state["flashcards_review_stats"] = stats
+                        st.session_state[_FC_LAST_ACTION_KEY] = {
+                            "card_id": int(card["id"]),
+                            "idx": idx,
+                            "q_label": q_label,
+                            "button_label": label,
+                            "eta": eta,
+                            "snapshot": build_flashcard_review_undo_snapshot(card),
+                        }
                         st.session_state["flashcards_review_index"] = idx + 1
                         st.session_state["flashcards_card_flipped"] = False
                         invalidate_flashcards_due_counts_only()
                         st.rerun()
-        if st.button(flashcard_gap_to_tutor_cta_ru(), key=f"fc_gap_to_tutor_{idx}", width='stretch', type="secondary"):
+        st.caption("⌨ Пробел — Хорошо · 1–4 — оценки · E — объясни")
+        if st.button(flashcard_gap_to_tutor_cta_ru(), key="fc_gap_to_tutor", width='stretch', type="secondary"):
             try:
                 result = api_call(
                     "POST",
@@ -685,9 +736,10 @@ def render_review(
                 invalidate_flashcards_due_counts_only()
                 st.rerun()
     else:
-        if st.button("👁 Показать ответ", width='stretch', type="primary", key=f"flip_{idx}"):
+        if st.button("👁 Показать ответ", width='stretch', type="primary", key="fc_flip"):
             st.session_state["flashcards_card_flipped"] = True
             st.rerun()
+        st.caption("⌨ Пробел или Enter — показать ответ")
 
     interval = card.get("interval_days", 0)
     reps = card.get("repetitions", 0)
@@ -700,3 +752,8 @@ def render_review(
     else:
         hint = f"🟢 Интервал: {interval} дней"
     st.caption(hint)
+
+    # Keyboard shortcuts: same-origin iframe attaches a keydown listener to the
+    # parent document and clicks the stable-keyed action buttons (fc_flip /
+    # fc_rate_* / fc_gap_to_tutor). Re-rendered each rerun with the flip state.
+    components.html(build_review_keyboard_js(flipped), height=0)

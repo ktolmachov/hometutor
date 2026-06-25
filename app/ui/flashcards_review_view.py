@@ -297,6 +297,313 @@ def _render_flashcards_expert_layer(
         )
 
 
+def _render_review_completion(
+    *,
+    api_call: Callable[..., Any],
+    deck_label: str,
+    selected_tags: list[str],
+    recovery_count: int,
+    idx: int,
+    total: int,
+    scope_signature: str,
+    review_summary_html: Callable[[dict[str, Any], int, str | None], str],
+    reset_review_session_state: Callable[[Any], None],
+) -> None:
+    from app.ui.flashcards_ui import (
+        _fc_receipt_baseline_valid,
+        _fc_review_completion_receipt_visible,
+    )
+
+    stats = st.session_state.get("flashcards_review_stats", {})
+    nr_min = st.session_state.get("flashcards_review_session_next_review_min")
+    nr_val = nr_min if isinstance(nr_min, str) else None
+    show_receipt = _fc_review_completion_receipt_visible(idx=idx, total=total, stats=stats)
+    _render_flashcards_expert_layer(
+        deck_label=deck_label,
+        selected_tags=selected_tags,
+        recovery_count=recovery_count,
+        idx=idx,
+        total=total,
+        card=None,
+        scope_signature=scope_signature,
+    )
+    _maybe_render_undo_last_rating(api_call)
+    if show_receipt:
+        baseline = st.session_state.get(FLASHCARDS_REVIEW_RECEIPT_BASELINE_KEY)
+        if _fc_receipt_baseline_valid(baseline, scope_signature):
+            after = build_fc_review_metric_dict_live(scope_signature=scope_signature)
+            lines, measurable = build_fc_review_receipt_lines(baseline, after, next_review_min=nr_val)
+            receipt_html = build_fc_review_receipt_html(
+                lines,
+                measurable=measurable,
+                next_review_min=nr_val,
+            )
+            st.markdown(receipt_html, unsafe_allow_html=True)
+            if st.button(
+                "Посмотреть в Progress",
+                key="flashcards_review_progress_cta",
+                type="primary",
+                width="stretch",
+            ):
+                st.session_state[PENDING_CURRENT_VIEW_KEY] = "Прогресс обучения"
+                st.session_state[PROGRESS_FOCUS_SECTION_KEY] = PROGRESS_FOCUS_STREAK_WEEKLY
+                st.rerun()
+        st.markdown(review_summary_html(stats, total, nr_val), unsafe_allow_html=True)
+    if st.button("🔁 Начать снова", width='stretch', type="secondary"):
+        reset_review_session_state(st.session_state)
+        st.rerun()
+
+
+def _record_review_rating(
+    *,
+    card: dict[str, Any],
+    idx: int,
+    q_label: str,
+    button_label: str,
+    quality: int,
+    eta: str,
+    result: Any,
+    merge_session_min_next_review: Callable[[Any, str | None], None],
+) -> None:
+    merge_session_min_next_review(
+        st.session_state,
+        result.get("next_review") if isinstance(result, dict) else None,
+    )
+    _fc_audit_log({"card_id": int(card["id"]), "label": q_label, "quality": quality})
+    stats = st.session_state.get("flashcards_review_stats", {})
+    stats[q_label] = stats.get(q_label, 0) + 1
+    st.session_state["flashcards_review_stats"] = stats
+    st.session_state[_FC_LAST_ACTION_KEY] = {
+        "card_id": int(card["id"]),
+        "idx": idx,
+        "q_label": q_label,
+        "button_label": button_label,
+        "eta": eta,
+        "snapshot": build_flashcard_review_undo_snapshot(card),
+    }
+    st.session_state["flashcards_review_index"] = idx + 1
+    st.session_state["flashcards_card_flipped"] = False
+    invalidate_flashcards_due_counts_only()
+    st.rerun()
+
+
+def _render_review_rating_buttons(
+    *,
+    api_call: Callable[..., Any],
+    card: dict[str, Any],
+    idx: int,
+    merge_session_min_next_review: Callable[[Any, str | None], None],
+) -> None:
+    interval_preview = preview_flashcard_review_intervals(card)
+    cols = st.columns(4)
+    for col, (label, q_label, quality, color) in zip(cols, RATING_BUTTONS):
+        with col:
+            eta = format_interval_ru(int(interval_preview.get(q_label, 1)))
+            st.markdown(
+                f'<div class="fc-rate-eta" style="--fc-eta-color:{color}">'
+                f'<span class="fc-rate-eta-meaning">{RATING_MEANINGS[q_label]}</span>'
+                f'<span class="fc-rate-eta-days">→ {html.escape(eta)}</span>'
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+            if st.button(label, key=f"fc_rate_{q_label}", width='stretch'):
+                try:
+                    result = api_call(
+                        "POST",
+                        "/flashcards/review",
+                        json={"card_id": card["id"], "quality": quality},
+                    )
+                except Exception as e:  # noqa: BLE001 - UI displays API failure.
+                    st.error(f"Не удалось сохранить оценку: {e}")
+                else:
+                    _record_review_rating(
+                        card=card,
+                        idx=idx,
+                        q_label=q_label,
+                        button_label=label,
+                        quality=quality,
+                        eta=eta,
+                        result=result,
+                        merge_session_min_next_review=merge_session_min_next_review,
+                    )
+
+
+def _seed_tutor_handoff_session(card: dict[str, Any]) -> None:
+    import uuid as _uuid
+
+    _sid = st.session_state.get("tutor_session_id") or str(_uuid.uuid4())
+    st.session_state["tutor_session_id"] = _sid
+    record_handoff_click(
+        st.session_state,
+        card_id=int(card["id"]),
+        topic=str(card.get("topic") or card.get("deck_name") or "карточки"),
+    )
+    _seed = build_flashcard_handoff_seed(card)
+    _history = session_store.get(_sid)
+    _history.extend(
+        [
+            Message(role="user", content=str(_seed["user_content"])),
+            Message(
+                role="assistant",
+                content=str(_seed["assistant_content"]),
+                metadata=dict(_seed["assistant_metadata"]),
+            ),
+        ]
+    )
+    session_store.save(
+        _sid,
+        _history,
+        merge_metadata={
+            "last_entrypoint": "flashcard_handoff_seed",
+            "last_flashcard_id": int(card["id"]),
+        },
+    )
+    _stored_history = session_store.get(_sid)
+    st.session_state["tutor_handoff_check_self_pending"] = True
+    st.session_state["tutor_handoff_quiz_msg_idx"] = max(0, len(_stored_history) - 1)
+
+
+def _complete_tutor_handoff_navigation(card: dict[str, Any]) -> None:
+    for key, value in build_flashcard_tutor_handoff_state(card).items():
+        st.session_state[key] = value
+    _seed_tutor_handoff_session(card)
+    st.session_state["tutor_last_nba"] = {
+        "concept": str(card.get("topic") or card.get("deck_name") or ""),
+        "reason": "Карточка отмечена как непонятная; следующий шаг — короткая проверка.",
+        "action": "Проверь меня",
+        "route": "targeted_reinforcement",
+    }
+    st.session_state.pop("tutor_pending_prompt", None)
+    st.session_state.pop("tutor_pending_session_id", None)
+    log_handoff_answer_ready(
+        st.session_state,
+        api_debug={
+            "engine_build_ms": 0.0,
+            "retrieval_ms": 0.0,
+            "llm_ms": 0.0,
+            "rag_ms": 0.0,
+            "post_processing_ms": 0.0,
+            "total_answer_ms": 0.0,
+            "cache_hit": True,
+        },
+    )
+    clear_flashcard_handoff_session_fields(st.session_state)
+    st.session_state["_request_navigate_to_tutor"] = True
+    invalidate_flashcards_due_counts_only()
+    st.rerun()
+
+
+def _render_flashcard_tutor_handoff_button(
+    *,
+    api_call: Callable[..., Any],
+    card: dict[str, Any],
+    idx: int,
+    merge_session_min_next_review: Callable[[Any, str | None], None],
+) -> None:
+    if not st.button(flashcard_gap_to_tutor_cta_ru(), key="fc_gap_to_tutor", width='stretch', type="secondary"):
+        return
+    try:
+        result = api_call(
+            "POST",
+            "/flashcards/review",
+            json={"card_id": card["id"], "quality": 1},
+        )
+    except Exception as e:  # noqa: BLE001 - UI displays API failure.
+        st.error(f"Не удалось сохранить оценку перед переходом: {e}")
+        return
+    merge_session_min_next_review(
+        st.session_state,
+        result.get("next_review") if isinstance(result, dict) else None,
+    )
+    _fc_audit_log({"card_id": int(card["id"]), "label": "tutor_handoff", "quality": 1})
+    stats = st.session_state.get("flashcards_review_stats", {})
+    stats["again"] = stats.get("again", 0) + 1
+    st.session_state["flashcards_review_stats"] = stats
+    st.session_state["flashcards_review_index"] = idx + 1
+    st.session_state["flashcards_card_flipped"] = False
+    _complete_tutor_handoff_navigation(card)
+
+
+def _render_active_review_card(
+    *,
+    api_call: Callable[..., Any],
+    card: dict[str, Any],
+    idx: int,
+    total: int,
+    deck_label: str,
+    selected_tags: list[str],
+    recovery_count: int,
+    scope_signature: str,
+    review_progress_ratio: Callable[[int, int], float],
+    merge_session_min_next_review: Callable[[Any, str | None], None],
+) -> None:
+    flipped: bool = st.session_state.get("flashcards_card_flipped", False)
+    _render_flashcards_expert_layer(
+        deck_label=deck_label,
+        selected_tags=selected_tags,
+        recovery_count=recovery_count,
+        idx=idx,
+        total=total,
+        card=card,
+        scope_signature=scope_signature,
+    )
+
+    remaining = total - idx - 1
+    progress_text = f"Карточка {idx + 1} из {total} · Осталось: {remaining}"
+    if remaining > 0:
+        progress_text += f" · ~{estimate_flashcard_due_clear_minutes(remaining)} мин"
+    st.progress(review_progress_ratio(idx, total), text=progress_text)
+    _maybe_render_undo_last_rating(api_call)
+
+    deck_name = html.escape(str(card.get("deck_name", "")))
+    tags_html = render_card_tags_html(card.get("tags"))
+    st.markdown(
+        f'<div class="flashcard flashcard-front">'
+        f'<div class="fc-card-label">Вопрос · {deck_name}</div>'
+        f'<div class="fc-card-text">{escape_multiline(card["front"])}</div>'
+        f"{tags_html}</div>",
+        unsafe_allow_html=True,
+    )
+    if flipped:
+        st.markdown(
+            f'<div class="flashcard flashcard-back">'
+            f'<div class="fc-card-label">Ответ</div>'
+            f'<div class="fc-card-text">{escape_multiline(card["back"])}</div></div>',
+            unsafe_allow_html=True,
+        )
+        _render_review_rating_buttons(
+            api_call=api_call,
+            card=card,
+            idx=idx,
+            merge_session_min_next_review=merge_session_min_next_review,
+        )
+        st.caption("⌨ Пробел — Хорошо · 1–4 — оценки · E — объясни")
+        _render_flashcard_tutor_handoff_button(
+            api_call=api_call,
+            card=card,
+            idx=idx,
+            merge_session_min_next_review=merge_session_min_next_review,
+        )
+    else:
+        if st.button("👁 Показать ответ", width='stretch', type="primary", key="fc_flip"):
+            st.session_state["flashcards_card_flipped"] = True
+            st.rerun()
+        st.caption("⌨ Пробел или Enter — показать ответ")
+
+    interval = card.get("interval_days", 0)
+    reps = card.get("repetitions", 0)
+    if reps == 0:
+        hint = "🆕 Новая карточка"
+    elif interval <= 1:
+        hint = "🔴 Интервал: 1 день"
+    elif interval <= 7:
+        hint = f"🟡 Интервал: {interval} дней"
+    else:
+        hint = f"🟢 Интервал: {interval} дней"
+    st.caption(hint)
+    components.html(build_review_keyboard_js(flipped), height=0)
+
+
 def render_review(
     *,
     api_call: Callable[..., Any],
@@ -508,252 +815,29 @@ def render_review(
         return
 
     if idx >= total:
-        from app.ui.flashcards_ui import (
-            _fc_receipt_baseline_valid,
-            _fc_review_completion_receipt_visible,
-        )
-
-        stats = st.session_state.get("flashcards_review_stats", {})
-        nr_min = st.session_state.get("flashcards_review_session_next_review_min")
-        nr_val = nr_min if isinstance(nr_min, str) else None
-        show_receipt = _fc_review_completion_receipt_visible(idx=idx, total=total, stats=stats)
-        _render_flashcards_expert_layer(
+        _render_review_completion(
+            api_call=api_call,
             deck_label=deck_label,
             selected_tags=selected_tags,
             recovery_count=recovery_count,
             idx=idx,
             total=total,
-            card=None,
             scope_signature=scope_signature,
+            review_summary_html=review_summary_html,
+            reset_review_session_state=reset_review_session_state,
         )
-        _maybe_render_undo_last_rating(api_call)
-        if show_receipt:
-            baseline = st.session_state.get(FLASHCARDS_REVIEW_RECEIPT_BASELINE_KEY)
-            if _fc_receipt_baseline_valid(baseline, scope_signature):
-                after = build_fc_review_metric_dict_live(scope_signature=scope_signature)
-                lines, measurable = build_fc_review_receipt_lines(
-                    baseline,
-                    after,
-                    next_review_min=nr_val,
-                )
-                receipt_html = build_fc_review_receipt_html(
-                    lines,
-                    measurable=measurable,
-                    next_review_min=nr_val,
-                )
-                st.markdown(receipt_html, unsafe_allow_html=True)
-                if st.button(
-                    "Посмотреть в Progress",
-                    key="flashcards_review_progress_cta",
-                    type="primary",
-                    width="stretch",
-                ):
-                    st.session_state[PENDING_CURRENT_VIEW_KEY] = "Прогресс обучения"
-                    st.session_state[PROGRESS_FOCUS_SECTION_KEY] = PROGRESS_FOCUS_STREAK_WEEKLY
-                    st.rerun()
-            st.markdown(review_summary_html(stats, total, nr_val), unsafe_allow_html=True)
-        if st.button("🔁 Начать снова", width='stretch', type="secondary"):
-            reset_review_session_state(st.session_state)
-            st.rerun()
         return
 
     card = queue[idx]
-    flipped: bool = st.session_state.get("flashcards_card_flipped", False)
-
-    _render_flashcards_expert_layer(
+    _render_active_review_card(
+        api_call=api_call,
+        card=card,
+        idx=idx,
+        total=total,
         deck_label=deck_label,
         selected_tags=selected_tags,
         recovery_count=recovery_count,
-        idx=idx,
-        total=total,
-        card=card,
         scope_signature=scope_signature,
+        review_progress_ratio=review_progress_ratio,
+        merge_session_min_next_review=merge_session_min_next_review,
     )
-
-    remaining = total - idx - 1
-    progress_text = f"Карточка {idx + 1} из {total} · Осталось: {remaining}"
-    if remaining > 0:
-        eta_min = estimate_flashcard_due_clear_minutes(remaining)
-        progress_text += f" · ~{eta_min} мин"
-    st.progress(review_progress_ratio(idx, total), text=progress_text)
-
-    _maybe_render_undo_last_rating(api_call)
-
-    deck_name = html.escape(str(card.get("deck_name", "")))
-    tags_html = render_card_tags_html(card.get("tags"))
-    st.markdown(
-        f'<div class="flashcard flashcard-front">'
-        f'<div class="fc-card-label">Вопрос · {deck_name}</div>'
-        f'<div class="fc-card-text">{escape_multiline(card["front"])}</div>'
-        f"{tags_html}"
-        f"</div>",
-        unsafe_allow_html=True,
-    )
-
-    if flipped:
-        st.markdown(
-            f'<div class="flashcard flashcard-back">'
-            f'<div class="fc-card-label">Ответ</div>'
-            f'<div class="fc-card-text">{escape_multiline(card["back"])}</div>'
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-        interval_preview = preview_flashcard_review_intervals(card)
-        cols = st.columns(4)
-        for col, (label, q_label, quality, color) in zip(cols, RATING_BUTTONS):
-            with col:
-                eta = format_interval_ru(int(interval_preview.get(q_label, 1)))
-                st.markdown(
-                    f'<div class="fc-rate-eta" style="--fc-eta-color:{color}">'
-                    f'<span class="fc-rate-eta-meaning">{RATING_MEANINGS[q_label]}</span>'
-                    f'<span class="fc-rate-eta-days">→ {html.escape(eta)}</span>'
-                    f"</div>",
-                    unsafe_allow_html=True,
-                )
-                if st.button(label, key=f"fc_rate_{q_label}", width='stretch'):
-                    try:
-                        result = api_call(
-                            "POST",
-                            "/flashcards/review",
-                            json={"card_id": card["id"], "quality": quality},
-                        )
-                    except Exception as e:  # noqa: BLE001 - UI displays API failure.
-                        st.error(f"Не удалось сохранить оценку: {e}")
-                    else:
-                        merge_session_min_next_review(
-                            st.session_state,
-                            result.get("next_review") if isinstance(result, dict) else None,
-                        )
-                        _fc_audit_log(
-                            {
-                                "card_id": int(card["id"]),
-                                "label": q_label,
-                                "quality": quality,
-                            }
-                        )
-                        stats = st.session_state.get("flashcards_review_stats", {})
-                        stats[q_label] = stats.get(q_label, 0) + 1
-                        st.session_state["flashcards_review_stats"] = stats
-                        st.session_state[_FC_LAST_ACTION_KEY] = {
-                            "card_id": int(card["id"]),
-                            "idx": idx,
-                            "q_label": q_label,
-                            "button_label": label,
-                            "eta": eta,
-                            "snapshot": build_flashcard_review_undo_snapshot(card),
-                        }
-                        st.session_state["flashcards_review_index"] = idx + 1
-                        st.session_state["flashcards_card_flipped"] = False
-                        invalidate_flashcards_due_counts_only()
-                        st.rerun()
-        st.caption("⌨ Пробел — Хорошо · 1–4 — оценки · E — объясни")
-        if st.button(flashcard_gap_to_tutor_cta_ru(), key="fc_gap_to_tutor", width='stretch', type="secondary"):
-            try:
-                result = api_call(
-                    "POST",
-                    "/flashcards/review",
-                    json={"card_id": card["id"], "quality": 1},
-                )
-            except Exception as e:  # noqa: BLE001 - UI displays API failure.
-                st.error(f"Не удалось сохранить оценку перед переходом: {e}")
-            else:
-                merge_session_min_next_review(
-                    st.session_state,
-                    result.get("next_review") if isinstance(result, dict) else None,
-                )
-                _fc_audit_log(
-                    {
-                        "card_id": int(card["id"]),
-                        "label": "tutor_handoff",
-                        "quality": 1,
-                    }
-                )
-                stats = st.session_state.get("flashcards_review_stats", {})
-                stats["again"] = stats.get("again", 0) + 1
-                st.session_state["flashcards_review_stats"] = stats
-                st.session_state["flashcards_review_index"] = idx + 1
-                st.session_state["flashcards_card_flipped"] = False
-                # Apply handoff state. Assign current_view via deferred flag to avoid conflict
-                # with the selectbox widget in main.py (which cannot be modified after instantiation).
-                for key, value in build_flashcard_tutor_handoff_state(card).items():
-                    st.session_state[key] = value
-                # Seed Tutor with the exact failed card. This makes the first answer
-                # instant and keeps expensive RAG for follow-up questions.
-                import uuid as _uuid
-                _sid = st.session_state.get("tutor_session_id") or str(_uuid.uuid4())
-                st.session_state["tutor_session_id"] = _sid
-                record_handoff_click(
-                    st.session_state,
-                    card_id=int(card["id"]),
-                    topic=str(card.get("topic") or card.get("deck_name") or "карточки"),
-                )
-                _seed = build_flashcard_handoff_seed(card)
-                _history = session_store.get(_sid)
-                _history.extend(
-                    [
-                        Message(role="user", content=str(_seed["user_content"])),
-                        Message(
-                            role="assistant",
-                            content=str(_seed["assistant_content"]),
-                            metadata=dict(_seed["assistant_metadata"]),
-                        ),
-                    ]
-                )
-                session_store.save(
-                    _sid,
-                    _history,
-                    merge_metadata={
-                        "last_entrypoint": "flashcard_handoff_seed",
-                        "last_flashcard_id": int(card["id"]),
-                    },
-                )
-                _stored_history = session_store.get(_sid)
-                _assistant_idx = max(0, len(_stored_history) - 1)
-                st.session_state["tutor_handoff_check_self_pending"] = True
-                st.session_state["tutor_handoff_quiz_msg_idx"] = _assistant_idx
-                st.session_state["tutor_last_nba"] = {
-                    "concept": str(_seed.get("topic") or ""),
-                    "reason": "Карточка отмечена как непонятная; следующий шаг — короткая проверка.",
-                    "action": "Проверь меня",
-                    "route": "targeted_reinforcement",
-                }
-                st.session_state.pop("tutor_pending_prompt", None)
-                st.session_state.pop("tutor_pending_session_id", None)
-                log_handoff_answer_ready(
-                    st.session_state,
-                    api_debug={
-                        "engine_build_ms": 0.0,
-                        "retrieval_ms": 0.0,
-                        "llm_ms": 0.0,
-                        "rag_ms": 0.0,
-                        "post_processing_ms": 0.0,
-                        "total_answer_ms": 0.0,
-                        "cache_hit": True,
-                    },
-                )
-                clear_flashcard_handoff_session_fields(st.session_state)
-                st.session_state["_request_navigate_to_tutor"] = True
-                invalidate_flashcards_due_counts_only()
-                st.rerun()
-    else:
-        if st.button("👁 Показать ответ", width='stretch', type="primary", key="fc_flip"):
-            st.session_state["flashcards_card_flipped"] = True
-            st.rerun()
-        st.caption("⌨ Пробел или Enter — показать ответ")
-
-    interval = card.get("interval_days", 0)
-    reps = card.get("repetitions", 0)
-    if reps == 0:
-        hint = "🆕 Новая карточка"
-    elif interval <= 1:
-        hint = "🔴 Интервал: 1 день"
-    elif interval <= 7:
-        hint = f"🟡 Интервал: {interval} дней"
-    else:
-        hint = f"🟢 Интервал: {interval} дней"
-    st.caption(hint)
-
-    # Keyboard shortcuts: same-origin iframe attaches a keydown listener to the
-    # parent document and clicks the stable-keyed action buttons (fc_flip /
-    # fc_rate_* / fc_gap_to_tutor). Re-rendered each rerun with the flip state.
-    components.html(build_review_keyboard_js(flipped), height=0)

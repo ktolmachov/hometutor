@@ -14,6 +14,7 @@ GUARDS = (
     "scripts.check_config_access",
     "scripts.check_dead_modules",
     "scripts.check_requirements_imports",
+    "scripts.check_size_budget",
 )
 
 

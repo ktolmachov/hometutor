@@ -17,6 +17,8 @@ load_dotenv(BASE_DIR / "config.env")   # non-secret defaults (tracked in git)
 load_dotenv(BASE_DIR / ".env", override=True)  # machine secrets override defaults
 
 _CLOUD_MODEL_PREFIXES = ("gpt-4o", "gpt-4", "claude", "gemini")
+# Dev-only placeholder JWT secret; guard_insecure_jwt_secret() запрещает его при AUTH_ENABLED=true.
+_DEV_INSECURE_JWT_SECRET = "dev-insecure-change-me"
 _REMOTE_PROVIDER_PREFIXES = ("openai/", "google/", "anthropic/", "deepseek/", "meta-llama/")
 DEFAULT_EMBED_API_BASE = "http://127.0.0.1:1234/v1"
 DEFAULT_EMBED_MODEL = "text-embedding-qwen3-embedding-0.6b"
@@ -314,7 +316,7 @@ class Settings(BaseSettings):
         description="Мягкий продуктовый бюджет контекста на один пользовательский запрос (документация/наблюдаемость; не жёсткий guard).",
     )
     rag_context_token_budget: int = Field(
-        default=10_000,
+        default=8_000,
         ge=0,
         le=100_000,
         description="Жёсткий бюджет retrieved-фрагментов перед LLM synthesis; 0 отключает обрезку.",
@@ -512,7 +514,7 @@ class Settings(BaseSettings):
     # в single-user режиме без токена. AUTH_ENABLED=true включает /auth/* и login-гейт UI.
     auth_enabled: bool = Field(default=False, validation_alias=AliasChoices("AUTH_ENABLED"))
     jwt_secret: str = Field(
-        default="dev-insecure-change-me",
+        default=_DEV_INSECURE_JWT_SECRET,
         validation_alias=AliasChoices("JWT_SECRET"),
         description="Секрет подписи JWT. На проде задавать через .env/Space Secrets, не дефолт.",
     )
@@ -626,6 +628,17 @@ class Settings(BaseSettings):
                 "would send private documents to a cloud provider. "
                 "Set HOME_RAG_LLM_CLOUD_CONSENT=true to acknowledge this, "
                 "or use HOME_RAG_LOCAL_PROFILE=balanced/local_strict for local-first mode."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def guard_insecure_jwt_secret(self) -> "Settings":
+        """Fail fast if auth is enabled with the unchanged dev JWT secret (forgeable tokens)."""
+        if self.auth_enabled and self.jwt_secret == _DEV_INSECURE_JWT_SECRET:
+            raise ValueError(
+                "AUTH_ENABLED=true требует реального JWT_SECRET — обнаружен dev-дефолт "
+                f"'{_DEV_INSECURE_JWT_SECRET}'. Задайте JWT_SECRET через .env / Space Secrets "
+                "(например: python -c \"import secrets; print(secrets.token_urlsafe(32))\")."
             )
         return self
 

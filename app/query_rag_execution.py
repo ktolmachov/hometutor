@@ -255,11 +255,15 @@ def execute_rag_query(
             }
             context_budget_traces: list[dict[str, Any]] = []
             with graph_expansion_trace_scope() as graph_trace, retrieval_context_budget_trace_scope() as budget_trace:
-                response = engine.query(effective_question)
-                if graph_trace.get("graph_expansion") is not None:
-                    ctx.trace["graph_expansion"] = graph_trace["graph_expansion"]
+                try:
+                    response = engine.query(effective_question)
+                finally:
+                    if graph_trace.get("graph_expansion") is not None:
+                        ctx.trace["graph_expansion"] = graph_trace["graph_expansion"]
+                    if budget_trace:
+                        context_budget_traces.append(dict(budget_trace))
                 if budget_trace:
-                    context_budget_traces.append(dict(budget_trace))
+                    ctx.trace["retrieval_context_budget"] = context_budget_traces[-1]
             query_execute_ms = (time.perf_counter() - query_started) * 1000
 
             settings = get_settings()
@@ -279,13 +283,16 @@ def execute_rag_query(
                         graph_expansion_trace_scope() as graph_trace_2,
                         retrieval_context_budget_trace_scope() as budget_trace_2,
                     ):
-                        response2 = engine.query(alternate_query)
-                        if graph_trace_2.get("graph_expansion") is not None:
-                            ctx.trace["graph_expansion"] = graph_trace_2[
-                                "graph_expansion"
-                            ]
-                        if budget_trace_2:
-                            context_budget_traces.append(dict(budget_trace_2))
+                        try:
+                            response2 = engine.query(alternate_query)
+                        finally:
+                            if graph_trace_2.get("graph_expansion") is not None:
+                                ctx.trace["graph_expansion"] = graph_trace_2[
+                                    "graph_expansion"
+                                ]
+                            if budget_trace_2:
+                                context_budget_traces.append(dict(budget_trace_2))
+                                ctx.trace["retrieval_context_budget"] = context_budget_traces[-1]
                     query_execute_ms += (time.perf_counter() - q2_started) * 1000
                     retrieval_sc["attempts"] = 2
                     retrieval_sc["retried"] = True

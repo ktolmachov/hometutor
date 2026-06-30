@@ -34,3 +34,16 @@ def test_context_budget_can_truncate_single_large_node() -> None:
     assert len(kept[0].node.get_content()) < len("retrieval context " * 500)
     assert trace["truncated_nodes"] == 1
     assert trace["kept_context_tokens_estimate"] <= 40
+
+
+def test_context_budget_counts_llm_metadata() -> None:
+    node = _node("short body")
+    node.node.metadata["window"] = "metadata context " * 300
+    pp = ContextTokenBudgetPostprocessor(max_context_tokens=80, model="gpt-4o-mini")
+
+    with retrieval_context_budget_trace_scope() as trace:
+        kept = pp.postprocess_nodes([node])
+
+    assert len(kept) <= 1
+    assert trace["original_context_tokens_estimate"] > 80
+    assert trace["kept_context_tokens_estimate"] <= 80

@@ -130,6 +130,18 @@ def test_state_path_falls_back_to_base_without_user_context(tmp_path, monkeypatc
     assert user_state_db._resolve_state_db_path() == str(tmp_path / "user_state.db")
 
 
+def test_auth_enabled_with_default_jwt_secret_fails_fast(monkeypatch):
+    """P1.2: AUTH_ENABLED=true + дефолтный JWT_SECRET — fail-fast, а не подделываемые токены."""
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.delenv("JWT_SECRET", raising=False)
+    config.reset_settings_cache()
+    try:
+        with pytest.raises(ValueError, match="JWT_SECRET"):
+            config.get_settings()
+    finally:
+        config.reset_settings_cache()
+
+
 def test_auth_scope_is_noop_when_auth_disabled(monkeypatch):
     """Регресс: AUTH_ENABLED=false (default) — auth_scope не требует токен, contextvar не меняется."""
     monkeypatch.setenv("AUTH_ENABLED", "false")

@@ -161,6 +161,25 @@ def revoke_session(session_id: str) -> None:
     _with_db(_do, write=True)
 
 
+def is_session_revoked(session_id: str) -> bool:
+    """True только если сессия найдена И помечена revoked.
+
+    Неизвестный session_id (например, БД пересоздана) трактуется как НЕ отозванный —
+    подделать валидную подпись JWT без знания jwt_secret всё равно невозможно,
+    так что это не открывает новую дыру, а сохраняет fail-open для устаревших токенов.
+    """
+    if not session_id:
+        return False
+
+    def _do(conn: sqlite3.Connection) -> bool:
+        row = conn.execute(
+            "SELECT revoked FROM auth_sessions WHERE id = ?", (session_id,)
+        ).fetchone()
+        return bool(row and row["revoked"])
+
+    return _with_db(_do)
+
+
 def log_event(user_id: str | None, event: str, created_at: str, ip: str | None = None) -> None:
     def _do(conn: sqlite3.Connection) -> None:
         conn.execute(

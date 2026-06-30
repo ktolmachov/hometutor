@@ -29,12 +29,12 @@ def retrieval_context_budget_trace_scope() -> Iterator[dict[str, Any]]:
         _TRACE_CONTEXT.reset(token)
 
 
-def _node_text(node: NodeWithScore) -> str:
+def _node_text(node: NodeWithScore, *, metadata_mode: MetadataMode = MetadataMode.LLM) -> str:
     inner = getattr(node, "node", None)
     if inner is None:
         return ""
     try:
-        return str(inner.get_content(metadata_mode=MetadataMode.NONE) or "")
+        return str(inner.get_content(metadata_mode=metadata_mode) or "")
     except Exception:  # noqa: BLE001 - node implementations vary across LlamaIndex stores.
         return str(getattr(inner, "text", "") or "")
 
@@ -45,24 +45,32 @@ def _set_node_text(node: NodeWithScore, text: str) -> None:
         inner.set_content(text)
 
 
-def _trim_to_token_budget(text: str, *, budget: int, model: str) -> str:
-    if budget <= 0 or not text:
-        return ""
-    if estimate_tokens(text, model=model) <= budget:
-        return text
+def _trim_node_to_token_budget(node: NodeWithScore, *, budget: int, model: str) -> int:
+    """Trim node text until the actual LLM-facing content fits the budget."""
+    if budget <= 0:
+        return 0
+    if estimate_tokens(_node_text(node), model=model) <= budget:
+        return estimate_tokens(_node_text(node), model=model)
 
+    raw_text = _node_text(node, metadata_mode=MetadataMode.NONE)
     lo = 0
-    hi = len(text)
+    hi = len(raw_text)
     best = ""
+    best_tokens = 0
     while lo <= hi:
         mid = (lo + hi) // 2
-        candidate = text[:mid].rstrip()
-        if estimate_tokens(candidate, model=model) <= budget:
+        candidate = raw_text[:mid].rstrip()
+        _set_node_text(node, candidate)
+        candidate_tokens = estimate_tokens(_node_text(node), model=model)
+        if candidate_tokens <= budget:
             best = candidate
+            best_tokens = candidate_tokens
             lo = mid + 1
         else:
             hi = mid - 1
-    return best.rstrip()
+
+    _set_node_text(node, best)
+    return best_tokens
 
 
 class ContextTokenBudgetPostprocessor(BaseNodePostprocessor):
@@ -111,11 +119,11 @@ class ContextTokenBudgetPostprocessor(BaseNodePostprocessor):
                 used_tokens += node_tokens
                 continue
 
-            trimmed = _trim_to_token_budget(text, budget=remaining, model=self.model)
-            if trimmed:
-                _set_node_text(node, trimmed)
+            trimmed_tokens = _trim_node_to_token_budget(node, budget=remaining, model=self.model)
+            trimmed = _node_text(node, metadata_mode=MetadataMode.NONE)
+            if trimmed and trimmed_tokens > 0:
                 kept.append(node)
-                used_tokens += estimate_tokens(trimmed, model=self.model)
+                used_tokens += trimmed_tokens
                 truncated_nodes += 1
 
         trace = _TRACE_CONTEXT.get()

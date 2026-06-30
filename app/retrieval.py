@@ -308,6 +308,7 @@ def build_query_engine(
         get_settings().enable_tutor_pedagogical_orchestrator,
         get_settings().enable_graph_augmented_retrieval,
         get_settings().graph_augment_max_extra_docs,
+        get_settings().rag_context_token_budget,
         is_flashcard_handoff(options),
     )
 

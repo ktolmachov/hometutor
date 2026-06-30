@@ -49,6 +49,13 @@ async def auth_scope(
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
 
+    jti = payload.get("jti", "")
+    if jti and auth_db.is_session_revoked(jti):
+        raise HTTPException(status_code=401, detail="Token has been revoked")
+
+    user = dict(user)
+    user["_jti"] = jti
+
     token_ref = set_current_user_id(user["id"])
     try:
         yield user

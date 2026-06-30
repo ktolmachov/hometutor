@@ -34,6 +34,7 @@ from app.retrieval_cache import (
     get_query_engine_cache_result,
     set_cached_query_engine,
 )
+from app.retrieval_context_budget import append_context_budget_postprocessor
 from app.retrieval_router import resolve_retrieval_routing
 
 logger = setup_logging()
@@ -377,6 +378,7 @@ def build_query_engine(
         use_composite_graph_gating=use_gating_ctx,
     )
     postprocessors = append_lost_in_middle_reorder_postprocessor(postprocessors)
+    postprocessors = append_context_budget_postprocessor(postprocessors)
 
     retrieval_mode = execution_plan.retrieval_mode
 

@@ -313,6 +313,12 @@ class Settings(BaseSettings):
         le=50_000_000,
         description="Мягкий продуктовый бюджет контекста на один пользовательский запрос (документация/наблюдаемость; не жёсткий guard).",
     )
+    rag_context_token_budget: int = Field(
+        default=10_000,
+        ge=0,
+        le=100_000,
+        description="Жёсткий бюджет retrieved-фрагментов перед LLM synthesis; 0 отключает обрезку.",
+    )
 
     collection_name: str = "home_rag"
     cors_origins: str = "http://127.0.0.1:8501,http://localhost:8501"

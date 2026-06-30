@@ -15,6 +15,7 @@ from app.models import QueryContext, QueryOptions
 from app.otel_tracing import get_tracer
 from app.langfuse_trace_export import apply_langfuse_query_span_attributes
 from app.prompts import TWO_STAGE_EXTRACTIVE_INTRO
+from app.retrieval_context_budget import retrieval_context_budget_trace_scope
 from app.usage_cost import (
     begin_llm_generation_token_accumulation,
     consume_llm_generation_call_ms,
@@ -252,10 +253,13 @@ def execute_rag_query(
                 "retried": False,
                 "weak_context": False,
             }
-            with graph_expansion_trace_scope() as graph_trace:
+            context_budget_traces: list[dict[str, Any]] = []
+            with graph_expansion_trace_scope() as graph_trace, retrieval_context_budget_trace_scope() as budget_trace:
                 response = engine.query(effective_question)
                 if graph_trace.get("graph_expansion") is not None:
                     ctx.trace["graph_expansion"] = graph_trace["graph_expansion"]
+                if budget_trace:
+                    context_budget_traces.append(dict(budget_trace))
             query_execute_ms = (time.perf_counter() - query_started) * 1000
 
             settings = get_settings()
@@ -271,12 +275,17 @@ def execute_rag_query(
                 alternate_query = retrieval_alternate_query(ctx, effective_question)
                 if max_score is not None and max_score < threshold and alternate_query:
                     q2_started = time.perf_counter()
-                    with graph_expansion_trace_scope() as graph_trace_2:
+                    with (
+                        graph_expansion_trace_scope() as graph_trace_2,
+                        retrieval_context_budget_trace_scope() as budget_trace_2,
+                    ):
                         response2 = engine.query(alternate_query)
                         if graph_trace_2.get("graph_expansion") is not None:
                             ctx.trace["graph_expansion"] = graph_trace_2[
                                 "graph_expansion"
                             ]
+                        if budget_trace_2:
+                            context_budget_traces.append(dict(budget_trace_2))
                     query_execute_ms += (time.perf_counter() - q2_started) * 1000
                     retrieval_sc["attempts"] = 2
                     retrieval_sc["retried"] = True
@@ -298,6 +307,10 @@ def execute_rag_query(
                 retrieval_sc["final_max_score"] = final_score
                 if final_score is None or final_score < threshold:
                     retrieval_sc["weak_context"] = True
+            if context_budget_traces:
+                ctx.trace["retrieval_context_budget"] = context_budget_traces[-1]
+                if len(context_budget_traces) > 1:
+                    ctx.trace["retrieval_context_budget_attempts"] = context_budget_traces
             ctx.trace["retrieval_self_correction"] = retrieval_sc
             ctx.trace["answer_path"] = {
                 "mode": "full_rag",

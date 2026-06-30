@@ -25,13 +25,16 @@ def test_context_budget_keeps_nodes_under_budget() -> None:
 
 def test_context_budget_can_truncate_single_large_node() -> None:
     nodes = [_node("retrieval context " * 500)]
+    original_text = nodes[0].node.get_content()
     pp = ContextTokenBudgetPostprocessor(max_context_tokens=40, model="gpt-4o-mini")
 
     with retrieval_context_budget_trace_scope() as trace:
         kept = pp.postprocess_nodes(nodes)
 
     assert len(kept) == 1
-    assert len(kept[0].node.get_content()) < len("retrieval context " * 500)
+    assert kept[0] is not nodes[0]
+    assert len(kept[0].node.get_content()) < len(original_text)
+    assert nodes[0].node.get_content() == original_text
     assert trace["truncated_nodes"] == 1
     assert trace["kept_context_tokens_estimate"] <= 40
 

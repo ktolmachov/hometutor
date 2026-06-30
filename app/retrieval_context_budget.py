@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextvars
+import copy
 from contextlib import contextmanager
 from typing import Any, Iterator
 
@@ -43,6 +44,14 @@ def _set_node_text(node: NodeWithScore, text: str) -> None:
     inner = getattr(node, "node", None)
     if inner is not None and getattr(inner, "set_content", None):
         inner.set_content(text)
+
+
+def _copy_node_with_score(node: NodeWithScore) -> NodeWithScore:
+    if getattr(node, "model_copy", None):
+        return node.model_copy(deep=True)
+    if getattr(node, "copy", None):
+        return node.copy(deep=True)
+    return copy.deepcopy(node)
 
 
 def _trim_node_to_token_budget(node: NodeWithScore, *, budget: int, model: str) -> int:
@@ -119,10 +128,11 @@ class ContextTokenBudgetPostprocessor(BaseNodePostprocessor):
                 used_tokens += node_tokens
                 continue
 
-            trimmed_tokens = _trim_node_to_token_budget(node, budget=remaining, model=self.model)
-            trimmed = _node_text(node, metadata_mode=MetadataMode.NONE)
+            trimmed_node = _copy_node_with_score(node)
+            trimmed_tokens = _trim_node_to_token_budget(trimmed_node, budget=remaining, model=self.model)
+            trimmed = _node_text(trimmed_node, metadata_mode=MetadataMode.NONE)
             if trimmed and trimmed_tokens > 0:
-                kept.append(node)
+                kept.append(trimmed_node)
                 used_tokens += trimmed_tokens
                 truncated_nodes += 1
 

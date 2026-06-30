@@ -5,6 +5,25 @@
 > Защита идёт по двум репозиториям вместе: **`hometutor`** (runtime, этот репо) и
 > **`hometutor-studio`** (процесс, backlog, user stories, промпты).
 
+## Статус реализации (на 2026-06-30)
+
+| Поток | Статус | Примечание |
+|---|---|---|
+| A — аутентификация | ✅ реализовано, проверено | JWT+bcrypt, per-user state isolation, prod-guard секрета, revoked-сессии, интеграционные тесты на реальном `app.api.app` |
+| E — Яндекс.Метрика | ✅ реализовано | opt-in через `YANDEX_METRIKA_ID`, идемпотентная инъекция |
+| B — CI/CD | ⚠️ код готов, **не подтверждено на GitHub** | `.github/workflows/ci.yml`/`deploy.yml` существуют, локально `pytest`+`ruff` зелёные; ни разу не прогонялись на реальном GitHub Actions раннере — риск таймаута из-за тяжёлого `requirements.txt` (torch/docling/chromadb) |
+| C — деплой | ⚠️ только конфиг | HF Docker SDK заголовок в `README.md` готов, `deploy.yml` ждёт секреты `HF_TOKEN`/`HF_USERNAME`; живой Space не создан, демо-URL не существует |
+| D — документация | ✅ реализовано | README, `docs/AI_DEVELOPMENT.md`, `architecture.md`/`api_reference.md`/`technical_specification.md` синхронизированы с кодом |
+
+Побочные находки в процессе реализации (исправлены): дефолт `rag_context_token_budget` был
+включён (8000) при первой реализации opt-in фичи — переведён в `0` (выключено); постпроцессор
+мутировал закэшированные ноды при обрезке — исправлено на `model_copy(deep=True)`; порядок
+постпроцессоров (budget vs lost-in-middle) был неверным — исправлен и защищён regression-тестом
+(`tests/test_retrieval_context_budget.py`).
+
+История коммитов: решено не переписывать опубликованные в `origin/main` коммиты `1`–`35`
+(включая безымянные). Начиная с `33243ff` используется Conventional Commits для новых коммитов.
+
 ## 0. Контекст и инвариантные ограничения
 
 Стек (НЕ менять): Python 3.11, FastAPI (`app/api.py`, `main.py`), Streamlit UI (`app/ui/main.py`),

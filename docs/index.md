@@ -1,6 +1,6 @@
 # Навигатор документации hometutor
 
-Актуализировано: 2026-06-24.
+Актуализировано: 2026-06-30.
 
 `hometutor` — runtime-репозиторий локального учебного RAG-приложения. Здесь живут приложение, API, UI, запуск, deployment и эксплуатационная документация. Demo screenshots сохранены в `docs/screenshots/final/`; исходные сценарные манифесты, генератор demo-документа, backlog, user stories и процессные материалы вынесены в `hometutor-studio`.
 
@@ -38,12 +38,19 @@
 | конфигурация | `app/config.py`, `config.env`, `.env` |
 | LLM/embeddings | `app/provider.py` |
 | Streamlit UI | `app/ui/main.py`, `app/ui/*` |
-| user state | `app/user_state*.py`, `data/user_state.db` |
+| user state | `app/user_state*.py`, `data/user_state.db` (или `data/users/<user_id>/user_state.db` при `AUTH_ENABLED=true`) |
 | flashcards | `app/flashcard_service.py`, `app/routers/flashcards.py` |
 | Smart Study Router | `app/smart_study_*.py`, `app/ssr_*.py` |
+| аутентификация | `app/auth_*.py`, `app/routers/auth.py`, `app/api_auth.py::auth_scope`, `data/auth.db` |
+| CI/CD | `.github/workflows/ci.yml`, `.github/workflows/deploy.yml` |
 
 ## Что было исправлено при актуализации
 
+- 2026-06-30: синхронизация после добавления опциональной аутентификации (JWT + bcrypt,
+  per-user state isolation), CI/CD (`.github/workflows/`), Яндекс.Метрики и opt-in
+  `RAG_CONTEXT_TOKEN_BUDGET`. Обновлены `api_reference.md`, `architecture.md`,
+  `technical_specification.md`. Снято ложное утверждение об отсутствии `tests/` —
+  каталог существует и используется в CI (`pytest`).
 - Убраны ссылки на отсутствующие `docs/scenarios/*`, `user_scenarios.md`, `user_guide_details.md`, `prompts_catalog.md`, `personalized_learner_model.md`; demo screenshots оставлены как локальные артефакты `docs/screenshots/final/*`.
 - Уточнено, что `config.env` является tracked defaults, а `.env` — локальным override.
 - Убраны упоминания несуществующих entrypoints вроде `ask.py` и `run_eval.py`.

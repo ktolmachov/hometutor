@@ -1,6 +1,6 @@
 # HTTP API
 
-Актуализировано по `app/api.py` и `app/routers/*`: 2026-06-24.
+Актуализировано по `app/api.py` и `app/routers/*`: 2026-06-30.
 
 Живая схема API доступна после запуска сервера:
 
@@ -12,10 +12,20 @@
 
 ## Auth и общие правила
 
-- `GET /`, `GET /health`, `GET /health/deep`, `GET /learner/state/health`, `GET /ui/bootstrap`, `GET /tutor/example` и `POST /ssr/explain` подключены без `require_api_key`.
-- Остальные роутеры подключены с `require_api_key`.
-- Если `HOME_RAG_API_KEY` или `API_KEY` не заданы, защищённые endpoints работают без ключа в dev/demo режиме.
-- Если ключ задан, передавайте `X-API-Key: <value>`.
+Два независимых, совместно действующих механизма защиты (`app/api.py::_protected_dependencies`):
+
+- **`X-API-Key`** (`require_api_key`, `app/api_auth.py`) — статический ключ для service-to-service
+  вызовов. No-op, если `HOME_RAG_API_KEY`/`API_KEY` не заданы.
+- **JWT Bearer** (`auth_scope`, `app/api_auth.py`) — per-user identity. No-op, если
+  `AUTH_ENABLED=false` (значение по умолчанию — single-user режим без логина). Если
+  `AUTH_ENABLED=true`, защищённые роутеры требуют `Authorization: Bearer <access_token>`,
+  полученный через `/auth/login` или `/auth/register`. Токен ставит per-request `user_id` в
+  contextvar (`app/auth_context.py`), который изолирует `data/user_state.db` по пользователю
+  (`data/users/<user_id>/user_state.db`) — см. [architecture.md](architecture.md#аутентификация).
+
+- `GET /`, `GET /health`, `GET /health/deep`, `GET /learner/state/health`, `GET /ui/bootstrap`, `GET /tutor/example`, `POST /ssr/explain` и `POST /auth/register`/`POST /auth/login` подключены без защиты (публичные).
+- `GET /auth/me` и `POST /auth/logout` защищены только `auth_scope` (не `require_api_key`).
+- Остальные роутеры подключены с `require_api_key` **и** `auth_scope`.
 - Middleware добавляет `X-Request-ID`; `/ask` также отдаёт request id в debug payload.
 
 Типовые ошибки:
@@ -23,10 +33,10 @@
 | Код | Когда |
 |---|---|
 | `400` | input validation, guardrails, неверный пользовательский payload |
-| `401` | отсутствует или неверен `X-API-Key` при настроенном ключе |
+| `401` | отсутствует/неверен `X-API-Key`; отсутствует/неверен/просрочен/отозван Bearer JWT (при `AUTH_ENABLED=true`); неверный email/пароль на `/auth/login` |
 | `404` | файл, сессия, deck или другой ресурс не найден |
-| `409` | reindex уже идёт |
-| `422` | output guardrails / request validation |
+| `409` | reindex уже идёт; email уже зарегистрирован на `/auth/register` |
+| `422` | output guardrails / request validation; слабый пароль или невалидный email на `/auth/register` |
 | `503` | пустой индекс, reindex in progress, недоступный runtime dependency |
 
 ## Карта роутеров
@@ -34,6 +44,7 @@
 | Тег | Модуль | Пути |
 |---|---|---|
 | `core` | `app/routers/core.py` | `/`, `/health`, `/health/deep`, `/learner/state/health`, `/ui/bootstrap`, `/tutor/example` |
+| `auth` | `app/routers/auth.py` | `/auth/register`, `/auth/login`, `/auth/me`, `/auth/logout` |
 | `ssr` | `app/routers/ssr.py` | `/ssr/explain` |
 | `query` | `app/routers/query.py` | `/ask` |
 | `sessions` | `app/routers/sessions.py` | `/sessions`, `/sessions/{session_id}`, `/sessions/{session_id}/metadata` |
@@ -98,6 +109,18 @@
 - `debug`
 
 В `debug` могут быть timings, usage/cost, retrieval trace, routing, guardrails, pipeline trace и request id.
+
+## Auth
+
+Активно только при `AUTH_ENABLED=true` (см. [architecture.md](architecture.md#аутентификация)).
+При выключенном флаге роутер подключён, но UI на него не полагается (single-user режим).
+
+| Method | Path | Auth | Назначение |
+|---|---|---|---|
+| POST | `/auth/register` | публичный | регистрация (email + пароль ≥8 символов), возвращает `access_token` |
+| POST | `/auth/login` | публичный | вход, возвращает `access_token` |
+| GET | `/auth/me` | Bearer JWT | данные текущего пользователя |
+| POST | `/auth/logout` | Bearer JWT | серверный отзыв текущей сессии (`jti` помечается `revoked`) |
 
 ## SSR
 

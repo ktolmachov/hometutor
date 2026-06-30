@@ -1,6 +1,6 @@
 # Архитектура hometutor
 
-Актуализировано по runtime-коду: 2026-06-24.
+Актуализировано по runtime-коду: 2026-06-30.
 
 ## Контекст
 
@@ -71,6 +71,7 @@ flowchart LR
 Роутеры:
 
 - `core`
+- `auth`
 - `ssr`
 - `query`
 - `sessions`
@@ -88,6 +89,40 @@ flowchart LR
 - `debug_session_tape`
 
 Подробная карта: [api_reference.md](api_reference.md).
+
+## Аутентификация
+
+Опционально, через флаг `AUTH_ENABLED` (default `false`). Выключенный флаг сохраняет исходное
+single-user поведение без изменений — это инвариант, на котором держится обратная совместимость
+всех существующих тестов и protected-роутеров.
+
+Модули:
+
+- `app/auth_context.py` — `contextvars`-контекст текущего `user_id`; единственная точка,
+  через которую identity попадает в state-слой. Не зависит от config/db (нет циклов импорта).
+- `app/auth_db.py` — глобальная SQLite (`data/auth.db`): `users` ← `auth_sessions` ←
+  `auth_audit_log` (FK on delete cascade/set null). Реестр пользователей, выданных JWT-сессий
+  (для серверного отзыва) и audit-лог регистраций/входов/выходов.
+- `app/auth_service.py` — bcrypt-хэширование паролей, выпуск/декод JWT access-токенов.
+- `app/auth_models.py` — pydantic-модели запросов/ответов (`EmailStr`, `min_length` для пароля).
+- `app/routers/auth.py` — HTTP-слой (`/auth/register|login|me|logout`).
+- `app/api_auth.py::auth_scope` — FastAPI dependency: при `AUTH_ENABLED=true` требует валидный
+  Bearer JWT, проверяет `auth_db.is_session_revoked(jti)`, ставит `user_id` в `auth_context` на
+  время запроса. Подключена ко всем protected-роутерам наравне с `require_api_key`.
+- `app/ui/auth_gate.py` — Streamlit login-гейт (формы вход/регистрация), прокидывает токен в
+  `app/ui_client.py::_auth_headers` (`Authorization: Bearer ...`) и ставит `auth_context` на
+  каждый rerun (`apply_ui_auth_context`).
+
+Per-user изоляция state без переписывания схемы: `app/user_state_db.py::_resolve_state_db_path`
+читает текущий `user_id` из `auth_context` и резолвит путь к state-файлу как
+`data/users/<user_id>/user_state.db` вместо общего `data/user_state.db`. Кэши schema/pragma в
+`user_state_db.py` ключуются по пути файла, поэтому каждый пользовательский файл получает схему
+автоматически при первом обращении.
+
+Важный нюанс реализации: `contextvars` не наследуются новым OS-потоком. Tutor chat запускает
+`query_service` в worker-потоке (`app/ui/tutor_chat_session.py`) — там контекст явно
+прокидывается через `contextvars.copy_context().run(...)`, иначе worker-поток терял бы
+`user_id` и писал в общий fallback-путь.
 
 ## Query pipeline
 
@@ -109,6 +144,14 @@ flowchart LR
 ```
 
 Публичный профиль `/ask.profile` резолвится в bounded retrieval settings. Raw retrieval mode остаётся config/debug/admin surface.
+
+Postprocessor chain в `build_query_engine` (`app/retrieval.py`): graph expansion → context
+token budget (`app/retrieval_context_budget.py`, opt-in через `RAG_CONTEXT_TOKEN_BUDGET`,
+`0` = выключено по умолчанию) → lost-in-middle reorder. Бюджет обязан идти **до** reorder —
+иначе он режет relevance-ranked хвост, который reorder только что туда расставил как
+высокорелевантный (см. `tests/test_retrieval_context_budget.py`, regression guard на порядок
+вызовов). При обрезке постпроцессор режет глубокую копию ноды (`model_copy(deep=True)`), не
+мутируя оригинал из retrieval/query-engine кэша.
 
 ## Tutor loop
 
@@ -186,12 +229,14 @@ AI/ML компоненты подключаются как gated enrichment/rera
 | Store | Владелец | Назначение |
 |---|---|---|
 | `data/` | пользователь/runtime | исходные материалы |
-| `data/user_state.db` | `app/user_state*.py` | learner state, cards, SRS, quiz, sync |
+| `data/user_state.db` | `app/user_state*.py` | learner state, cards, SRS, quiz, sync (single-user / `AUTH_ENABLED=false`) |
+| `data/users/<user_id>/user_state.db` | `app/user_state_db.py` | per-user state, изоляция при `AUTH_ENABLED=true` |
+| `data/auth.db` | `app/auth_db.py` | глобальный реестр пользователей, JWT-сессии, audit-лог |
 | `chroma_db/` | Chroma backend | vector index |
 | `index_registry.json` | `app/index_registry.py` | active generation pointer |
 | `data/graph_generations/` | graph bundle modules | graph artifacts |
 | `logs/` | logging/metrics/profiling | runtime logs and profiles |
-| `faq_memory.jsonl` | FAQ memory | FAQ cache/memory |
+| `faq_memory.jsonl` | FAQ memory | FAQ cache/memory (миграция в Chroma; `app/faq_memory.py` отключает embedding-вызовы временным circuit breaker'ом при недоступном loopback embedding endpoint) |
 
 ## Configuration boundaries
 
@@ -208,7 +253,26 @@ Supported local paths:
 - Python venv: `main.py` + `streamlit run app/ui/main.py`.
 - Launcher: `scripts/local_start.ps1`.
 - Docker: `docker-compose.yml`, plus LM Studio/llama.cpp overlays.
-- HF Spaces demo path: `deploy/hf-spaces/`.
+
+Public demo:
+
+- HF Spaces, **Docker SDK** (`deploy/hf-spaces/`, root `README.md` YAML header: `sdk: docker`,
+  `app_port: 8501`). Streamlit SDK не используется, потому что оно не запускает фоновый FastAPI
+  процесс, от которого зависит UI; `deploy/docker/docker_entrypoint.sh` поднимает оба процесса
+  (uvicorn на `127.0.0.1:8000` внутренний, Streamlit на `0.0.0.0:8501` публичный) и при пустом
+  `data/`/`chroma_db/` подкладывает demo-корпус (`deploy/hf-spaces/bootstrap_demo_paths.sh`).
+- Контейнерный FS на HF эфемерный: `data/auth.db` и per-user `user_state.db` не персистентны
+  между рестартами Space — задокументированное ограничение демо, не баг.
+
+CI/CD (`.github/workflows/`):
+
+- `ci.yml` — `ruff check` + `pytest` на каждый push/PR в `main`.
+- `deploy.yml` — после успешного CI пушит в HF Space (`git push --force space HEAD:main`);
+  без секретов `HF_TOKEN`/`HF_USERNAME` молча скипает (`exit 0`), не падает.
+
+Аналитика: `app/ui/analytics.py::inject_yandex_metrika()` идемпотентно патчит served
+`index.html` Streamlit тегом Яндекс.Метрики, если задан `YANDEX_METRIKA_ID`; без него — no-op
+(чистая локалка).
 
 ## Architecture rules
 

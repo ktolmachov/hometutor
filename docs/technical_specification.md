@@ -1,6 +1,6 @@
 # Техническая спецификация hometutor
 
-Актуализировано по runtime-коду: 2026-06-24.
+Актуализировано по runtime-коду: 2026-06-30.
 
 ## Назначение
 
@@ -25,8 +25,10 @@
 | `scripts/delete_all_data.py` | guarded очистка локальных runtime-артефактов |
 | `scripts/fresh_start.py` | guarded reset + optional re-ingest |
 | `scripts/audit_knowledge_graph.py` | audit полноты graph bundle |
+| `.github/workflows/ci.yml` | CI: `ruff check` + `pytest` на push/PR в `main` |
+| `.github/workflows/deploy.yml` | автодеплой в HF Space после успешного CI |
 
-В этом runtime-репозитории нет `ask.py`, `run_eval.py`, `run_eval_compare.py` и `tests/` как локальных entrypoints/каталогов. Зависимость `pytest` присутствует в `requirements.txt` для test-capable окружений; тесты могут подключаться из внешнего каталога или добавляться локально по мере необходимости.
+В этом runtime-репозитории нет `ask.py`, `run_eval.py`, `run_eval_compare.py` как локальных entrypoints. `tests/` — рабочий каталог тестов (`pytest`), прогоняется локально и в CI; запуск: `.\.venv\Scripts\python.exe -m pytest tests\ -q`.
 
 ## Стек
 
@@ -38,8 +40,9 @@
 - pydantic-settings
 - aiogram
 - SQLite
+- JWT (`PyJWT`) + `bcrypt` — опциональная аутентификация (`AUTH_ENABLED`)
 - OpenTelemetry optional
-- pytest dependency в `requirements.txt` для test-capable окружений
+- pytest + ruff — тесты и линт, используются локально и в `.github/workflows/ci.yml`
 
 ## Конфигурация
 
@@ -52,7 +55,9 @@
 
 | Группа | Переменные |
 |---|---|
-| API/auth | `HOME_RAG_API_KEY`, `API_KEY`, CORS/rate-limit settings |
+| API key | `HOME_RAG_API_KEY`, `API_KEY`, CORS/rate-limit settings |
+| Аутентификация | `AUTH_ENABLED`, `JWT_SECRET`, `JWT_ALGORITHM`, `JWT_ACCESS_TTL_MIN`, `AUTH_DB`, `BCRYPT_ROUNDS` |
+| Аналитика | `YANDEX_METRIKA_ID` |
 | LLM | `OPENAI_API_KEY`, `OPENAI_API_BASE`, `LLM_API_BASE`, `LMSTUDIO_API_BASE`, `LLM_MODEL` |
 | embeddings | `EMBED_API_BASE`, `EMBED_MODEL`, `EMBED_DIMENSIONS` |
 | local/cloud profile | `HOME_RAG_LOCAL_PROFILE`, `HOME_RAG_DATA_MODE`, `HOME_RAG_LLM_FALLBACK_*` |
@@ -123,6 +128,10 @@ input validation
 
 Основные модули: `query_service`, `pipeline_runner`, `pipeline_steps`, `retrieval`, `retrieval_router`, `query_rag_execution`, `query_rag_assembly`.
 
+Postprocessing включает opt-in `app/retrieval_context_budget.py` (`RAG_CONTEXT_TOKEN_BUDGET`,
+`0` = выключено по умолчанию) — жёсткий бюджет токенов retrieved-контекста перед synthesis,
+применяется до lost-in-middle reorder.
+
 ### Tutor
 
 Tutor не имеет отдельного endpoint: он идёт через `/ask` с `query_mode="tutor"`. Контракты и orchestration:
@@ -152,6 +161,18 @@ SSR строит next-step recommendation из локальных сигнало
 - `app/ssr_explain_service.py`
 - `app/ssr_feedback_collection.py`
 - `app/user_state_ssr_feedback.py`
+
+### Аутентификация
+
+Опционально (`AUTH_ENABLED`, default `false`); подробное описание — [architecture.md](architecture.md#аутентификация).
+
+- `app/auth_context.py` — contextvar текущего `user_id`.
+- `app/auth_db.py` — глобальная `data/auth.db` (`users`, `auth_sessions`, `auth_audit_log`).
+- `app/auth_service.py` — bcrypt, JWT issue/decode.
+- `app/auth_models.py`, `app/routers/auth.py` — HTTP-слой (`/auth/*`).
+- `app/api_auth.py::auth_scope` — FastAPI dependency на protected-роутерах.
+- `app/ui/auth_gate.py` — Streamlit login-гейт.
+- `app/user_state_db.py::_resolve_state_db_path` — per-user изоляция `user_state.db`.
 
 ## UI
 
@@ -188,8 +209,12 @@ SSR строит next-step recommendation из локальных сигнало
 
 ## Ограничения
 
-- Основной сценарий — локальный single-user runtime.
+- Основной сценарий — локальный single-user runtime; multi-user доступен опционально через
+  `AUTH_ENABLED=true` (JWT + bcrypt, per-user изоляция `user_state.db`).
 - Runtime-репозиторий не содержит полный процессный backlog, сценарные манифесты и генератор demo-документа.
 - `OFFLINE_MODE` и offline banners не заменяют настройку локального LLM/embedding endpoint.
 - По умолчанию `config.env` направляет embeddings на локальный loopback endpoint; облачный embedding provider должен быть явным `.env` override.
-- `HOME_RAG_API_KEY` защищает REST endpoints только если задан.
+- `HOME_RAG_API_KEY` защищает REST endpoints только если задан; `AUTH_ENABLED=true` требует
+  реального `JWT_SECRET` (fail-fast guard — дефолтный dev-секрет отклоняется на старте).
+- HF Spaces demo-деплой работает на эфемерном FS контейнера: аккаунты и прогресс не персистентны
+  между перезапусками Space.

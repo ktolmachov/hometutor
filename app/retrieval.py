@@ -378,8 +378,8 @@ def build_query_engine(
         effective_graph_augmented=eff_ga,
         use_composite_graph_gating=use_gating_ctx,
     )
-    postprocessors = append_lost_in_middle_reorder_postprocessor(postprocessors)
     postprocessors = append_context_budget_postprocessor(postprocessors)
+    postprocessors = append_lost_in_middle_reorder_postprocessor(postprocessors)
 
     retrieval_mode = execution_plan.retrieval_mode
 

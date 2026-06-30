@@ -10,6 +10,10 @@ def test_embedding_defaults_are_local_first() -> None:
     assert Settings().embed_api_base_resolved == DEFAULT_EMBED_API_BASE
 
 
+def test_rag_context_budget_is_opt_in_by_default() -> None:
+    assert Settings().rag_context_token_budget == 0
+
+
 def test_empty_embed_api_base_does_not_fall_back_to_openai_api_base() -> None:
     settings = Settings(
         embed_api_base="",

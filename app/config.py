@@ -328,10 +328,10 @@ class Settings(BaseSettings):
         description="Мягкий продуктовый бюджет контекста на один пользовательский запрос (документация/наблюдаемость; не жёсткий guard).",
     )
     rag_context_token_budget: int = Field(
-        default=8_000,
+        default=0,
         ge=0,
         le=100_000,
-        description="Жёсткий бюджет retrieved-фрагментов перед LLM synthesis; 0 отключает обрезку.",
+        description="Opt-in budget for retrieved fragments before LLM synthesis; 0 disables trimming.",
     )
 
     collection_name: str = "home_rag"

@@ -1,5 +1,8 @@
+import inspect
+
 from llama_index.core.schema import NodeWithScore, TextNode
 
+from app import retrieval
 from app.retrieval_context_budget import (
     ContextTokenBudgetPostprocessor,
     retrieval_context_budget_trace_scope,
@@ -50,3 +53,16 @@ def test_context_budget_counts_llm_metadata() -> None:
     assert len(kept) <= 1
     assert trace["original_context_tokens_estimate"] > 80
     assert trace["kept_context_tokens_estimate"] <= 80
+
+
+def test_context_budget_runs_before_lost_in_middle_reorder_in_build_query_engine() -> None:
+    """Regression guard: budget must trim relevance-ranked nodes *before* lost-in-middle
+    reorders them, otherwise the budget cuts the tail that reorder just placed there as
+    high-relevance (see docs/compliance_upgrade_plan.md audit notes)."""
+    source = inspect.getsource(retrieval.build_query_engine)
+    budget_pos = source.index("append_context_budget_postprocessor(")
+    reorder_pos = source.index("append_lost_in_middle_reorder_postprocessor(")
+    assert budget_pos < reorder_pos, (
+        "append_context_budget_postprocessor must be called before "
+        "append_lost_in_middle_reorder_postprocessor in build_query_engine"
+    )

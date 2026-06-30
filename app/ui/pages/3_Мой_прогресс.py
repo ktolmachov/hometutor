@@ -29,9 +29,11 @@ from app.ui.continuity_bridge import (
     load_qa_tutor_handoff_context,
     tutor_reason_line_ru,
 )
+from app.ui.auth_gate import require_ui_auth_or_stop
 from app.visualization_service import dashboard, vis_service
 
 st.set_page_config(page_title="Мой прогресс", layout="wide")
+require_ui_auth_or_stop()
 
 st.title("Мой прогресс")
 

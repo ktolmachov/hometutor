@@ -13,8 +13,10 @@ import streamlit as st
 
 from app.analytics_service import get_advanced_analytics
 from app.ui.adaptive_plan_widgets import render_adaptive_daily_plan_section
+from app.ui.auth_gate import require_ui_auth_or_stop
 
 st.set_page_config(page_title="Аналитика", layout="wide")
+require_ui_auth_or_stop()
 
 st.title("Аналитика")
 

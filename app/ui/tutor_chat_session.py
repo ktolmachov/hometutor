@@ -322,11 +322,17 @@ def render_tutor_chat_tab() -> None:
 
         # Start background thread on first call (question provided, no future yet)
         if question is not None and _FUTURE_KEY not in st.session_state:
+            import contextvars
+
             hw = tutor_prompts.infer_homework_level_from_message(question)
             opts = _tutor_query_options(session_id, homework_mode=bool(hw), assistance_level=hw)
             validated_q = guardrails.validate_question(question)
             executor = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="tutor_llm")
-            future = executor.submit(query_service.answer_question, validated_q, opts)
+            # contextvars (auth_context.current_user_id) не наследуются новым OS-потоком —
+            # явно пробрасываем текущий Context, иначе worker-поток теряет user_id и пишет
+            # в общий user_state.db вместо per-user изоляции (см. app/auth_context.py).
+            ctx = contextvars.copy_context()
+            future = executor.submit(ctx.run, query_service.answer_question, validated_q, opts)
             st.session_state[_FUTURE_KEY] = future
             st.session_state[_EXEC_KEY] = executor
 

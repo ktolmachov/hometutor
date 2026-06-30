@@ -13,7 +13,10 @@ from pathlib import Path
 
 import streamlit as st
 
+from app.ui.auth_gate import require_ui_auth_or_stop
+
 st.set_page_config(page_title="SSR Feedback Insights", layout="wide")
+require_ui_auth_or_stop()
 st.title("✨ SSR Explanation Quality — Real-Time Feedback")
 
 

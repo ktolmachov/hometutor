@@ -43,6 +43,9 @@ dependencies = [
     "pandas==2.2.3",
     "numpy==2.4.3",
     "qrcode[pil]==8.2",
+    "PyJWT==2.10.1",
+    "bcrypt==4.3.0",
+    "email-validator==2.2.0",
 ]
 
 [project.optional-dependencies]
@@ -78,3 +81,30 @@ ask = "app.ask_cli:main"
 
 [tool.setuptools.packages.find]
 include = ["app*"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+exclude = [".venv", "data", "chroma_db", "demo_chroma_db", "logs"]
+
+[tool.ruff.lint]
+select = ["E", "F"]
+# Стартовая конфигурация CI-линта (Workstream B, docs/compliance_upgrade_plan.md).
+# Игнорируемые ниже категории — существующие в репозитории намеренные паттерны
+# (ре-экспорт через `from x import *` в app/api_models.py и app/user_state.py,
+# sys.path.insert перед app.* импортами в Streamlit pages) либо некритичный стиль,
+# чистка которого не входит в объём данного плана. Новый код в эти паттерны не добавлять.
+ignore = [
+    "E402",  # module-level import not at top (намеренный sys.path.insert перед импортами)
+    "F401",  # unused-import (намеренные ре-экспорты __all__)
+    "F403",  # star-import (намеренный паттерн ре-экспорта)
+    "F405",  # may-be-undefined из-за star-import
+    "F821",  # undefined-name (false positive от star-import)
+    "F541",  # f-string без плейсхолдеров
+    "F841",  # unused-variable
+    "E741",  # ambiguous variable name
+    "E701",
+    "E702",
+    "E401",  # multiple-imports-on-one-line
+    "E501",  # line-too-long (много существующих длинных строк с RU-комментариями; не в scope плана)
+]

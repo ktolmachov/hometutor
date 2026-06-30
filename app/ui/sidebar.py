@@ -7,6 +7,8 @@ import uuid
 import streamlit as st
 
 from app import user_state
+from app.config import get_settings
+from app.ui.auth_gate import render_account_status_sidebar
 from app.ui.constants import _SIDEBAR_FILTER_FOLDER_ALL, _SIDEBAR_FILTER_TOPIC_ALL
 from app.ui.continuity_bridge import (
     expert_controls_expander_label_ru,
@@ -336,6 +338,9 @@ def _render_mission_control_sidebar_sections(index_stats: dict | None) -> None:
 
 def render_sidebar(index_stats: dict | None):
     with st.sidebar:
+        if get_settings().auth_enabled:
+            render_account_status_sidebar()
+            st.markdown("---")
         st.subheader("📊 Live метрики")
         evlog = st.session_state.get("ui_event_log") or []
         if evlog:

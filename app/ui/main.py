@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 from app import user_state
 from app.config import get_settings
 from app.otel_tracing import init_otel_if_enabled
+from app.ui.analytics import inject_yandex_metrika
+from app.ui.auth_gate import require_ui_auth_or_stop
 from app.session_tape import ensure_session_started
 from app.ui.config_env_banner import render_config_env_banner as _render_config_env_banner
 from app.ui.offline_banner import render_offline_banner as _render_offline_banner
@@ -74,11 +76,13 @@ from app.ui.fragments import (
 # ---------------------------------------------------------------------------
 
 st.set_page_config(page_title="Home RAG Tutor", page_icon="🎓", layout="wide")
+inject_yandex_metrika()
 init_otel_if_enabled()
 _inject_styles()
 _render_offline_banner()
 _render_config_env_banner()
 _init_state()
+require_ui_auth_or_stop()
 _touch_streamlit_session()
 _hydrate_tutor_mastery_from_db()
 _hydrate_tutor_goal_snapshot_once()

@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, TypeVar
 
+from app.auth_context import get_current_user_id
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -282,13 +283,27 @@ def _apply_connection_pragmas(conn: sqlite3.Connection, db_path: str) -> None:
         _DB_PRAGMA_APPLIED.add(db_path)
 
 
-def _connect() -> sqlite3.Connection:
+def _resolve_state_db_path() -> str:
+    """Путь к state-БД: базовый файл, либо per-user поддиректория при активном auth-контексте.
+
+    uid=None (auth выключен / фоновые задачи / тесты без логина) → старый путь, без изменений
+    поведения. uid задан → `<base_dir>/users/<uid>/<base_name>`, физическая изоляция прогресса
+    между пользователями без переписывания схемы таблиц (см. docs/compliance_upgrade_plan.md §A3).
+    """
     raw = (get_settings().user_state_db or "").strip() or str(
         Path(__file__).resolve().parent.parent / "data" / "user_state.db"
     )
-    path = Path(raw)
+    base = Path(raw)
+    uid = (get_current_user_id() or "").strip()
+    if uid and re.fullmatch(r"[A-Za-z0-9_-]{1,128}", uid):
+        return str(base.parent / "users" / uid / base.name)
+    return str(base)
+
+
+def _connect() -> sqlite3.Connection:
+    db_path = _resolve_state_db_path()
+    path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    db_path = str(path)
     conn = sqlite3.connect(db_path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     _apply_connection_pragmas(conn, db_path)

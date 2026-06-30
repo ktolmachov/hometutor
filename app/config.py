@@ -501,6 +501,37 @@ class Settings(BaseSettings):
     # Streamlit «Чат с тьютором»: сырой шаблон QUIZ_PROMPT и кнопка превью (только для разработки)
     show_tutor_dev_tools: bool = False
 
+    # ── Аутентификация (JWT + bcrypt) ──────────────────────────────────────
+    # Выключено по умолчанию: текущие protected-эндпойнты и тесты продолжают работать
+    # в single-user режиме без токена. AUTH_ENABLED=true включает /auth/* и login-гейт UI.
+    auth_enabled: bool = Field(default=False, validation_alias=AliasChoices("AUTH_ENABLED"))
+    jwt_secret: str = Field(
+        default="dev-insecure-change-me",
+        validation_alias=AliasChoices("JWT_SECRET"),
+        description="Секрет подписи JWT. На проде задавать через .env/Space Secrets, не дефолт.",
+    )
+    jwt_algorithm: str = Field(default="HS256", validation_alias=AliasChoices("JWT_ALGORITHM"))
+    jwt_access_ttl_min: int = Field(
+        default=60 * 24 * 7,
+        ge=5,
+        le=60 * 24 * 30,
+        validation_alias=AliasChoices("JWT_ACCESS_TTL_MIN"),
+        description="Срок жизни access-токена в минутах (по умолчанию 7 дней).",
+    )
+    # Глобальная БД пользователей (НЕ per-user; per-user изоляция — только user_state_db).
+    auth_db: str = Field(
+        default_factory=lambda: str(DATA_DIR / "auth.db"),
+        validation_alias=AliasChoices("AUTH_DB"),
+    )
+    bcrypt_rounds: int = Field(default=12, ge=4, le=15, validation_alias=AliasChoices("BCRYPT_ROUNDS"))
+
+    # ── Аналитика (Яндекс.Метрика, P2) ─────────────────────────────────────
+    yandex_metrika_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("YANDEX_METRIKA_ID"),
+        description="Идентификатор счётчика Яндекс.Метрики; пусто = не инжектить тег (локалка чистая).",
+    )
+
     @field_validator(
         "query_engine_cache_size",
         "query_engine_ttl_sec",

@@ -42,3 +42,6 @@ qrcode[pil]==8.2
 pymupdf==1.27.2.3  # optional - scripts/export_slide_assets.py (рендер слайдов PDF в PNG), can be omitted in headless deployments
 opentelemetry-exporter-otlp-proto-http==1.40.0
 apscheduler  # optional - telegram daily reminders
+PyJWT==2.10.1  # auth: access tokens (app/auth_service.py)
+bcrypt==4.3.0  # auth: password hashing (app/auth_service.py)
+email-validator==2.2.0  # auth: pydantic EmailStr validation (app/auth_models.py)

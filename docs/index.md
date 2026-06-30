@@ -28,6 +28,7 @@
 | [conventions.md](conventions.md) | короткие инженерные правила |
 | [conventions_architecture.md](conventions_architecture.md) | архитектурные соглашения по слоям |
 | [conventions_reference.md](conventions_reference.md) | справочник по API, ошибкам, тестам и документации |
+| [AI_DEVELOPMENT.md](AI_DEVELOPMENT.md) | как ИИ использовался на этапах планирования/дизайна/разработки/деплоя, примеры промптов |
 
 ## Источники истины
 

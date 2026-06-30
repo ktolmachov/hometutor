@@ -11,12 +11,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 import app.api_services as services
-from app.api_auth import require_api_key
+from app.api_auth import auth_scope, require_api_key
 from app.api_helpers import cors_headers_list, cors_methods_list, cors_origins_list
 from app.guardrails import InputGuardrailError, OutputGuardrailError
 from app.config import PROJECT_ROOT_PATH, get_settings
 from app.middleware import ErrorHandlingMiddleware, LoggingMiddleware, RateLimitMiddleware
 from app.routers.admin import router as admin_router
+from app.routers.auth import router as auth_router
 from app.routers.ssr import router as ssr_router
 from app.routers.debug_session_tape import router as debug_session_tape_router
 from app.routers.dashboard import router as dashboard_router
@@ -271,7 +272,10 @@ app.add_middleware(
 
 app.include_router(core_router)
 app.include_router(ssr_router)
-_protected_dependencies = [Depends(require_api_key)]
+app.include_router(auth_router)
+# auth_scope — no-op при AUTH_ENABLED=false (default); require_api_key — no-op без HOME_RAG_API_KEY.
+# Оба условия сохраняют поведение single-user режима без изменений (см. docs/compliance_upgrade_plan.md §A8).
+_protected_dependencies = [Depends(require_api_key), Depends(auth_scope)]
 app.include_router(dashboard_router, dependencies=_protected_dependencies)
 app.include_router(sync_router, dependencies=_protected_dependencies)
 app.include_router(sessions_router, dependencies=_protected_dependencies)

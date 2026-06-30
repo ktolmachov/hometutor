@@ -31,6 +31,9 @@ def _auth_headers(extra_headers: dict[str, str] | None = None) -> dict[str, str]
     api_key = (get_settings().home_rag_api_key or "").strip()
     if api_key and "X-API-Key" not in headers:
         headers["X-API-Key"] = api_key
+    access_token = str(st.session_state.get("access_token") or "").strip()
+    if access_token and "Authorization" not in headers:
+        headers["Authorization"] = f"Bearer {access_token}"
     return headers
 
 
@@ -42,6 +45,16 @@ def fetch_json(method: str, path: str, *, timeout: int = 30, **kwargs: Any) -> A
     response = _http_session().request(method, url, timeout=timeout, **kwargs)
     response.raise_for_status()
     return response.json()
+
+
+def post_json_no_raise(path: str, json_body: dict, *, timeout: int = 15) -> requests.Response:
+    """POST без ``raise_for_status`` — для эндпойнтов, где вызывающий код сам разбирает статусы
+
+    (например /auth/login|register: 401/409/422 — это ожидаемые ответы, не транспортные ошибки).
+    """
+    base = _api_base_url()
+    url = f"{base}{path}" if path.startswith("/") else f"{base}/{path}"
+    return _http_session().post(url, json=json_body, headers=_auth_headers(), timeout=timeout)
 
 
 def post_knowledge_workflow(

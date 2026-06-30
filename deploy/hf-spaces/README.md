@@ -1,91 +1,94 @@
----
-title: ИИ-тьютор с RAG
-emoji: 🎓
-colorFrom: blue
-colorTo: purple
-sdk: streamlit
-sdk_version: "1.32.0"
-app_file: app/ui/main.py
-pinned: false
----
+# hometutor — Деплой на Hugging Face Spaces (Docker SDK)
 
-# hometutor — Деплой на Hugging Face Spaces (Демо-режим)
+Этот каталог содержит конфигурацию для развёртывания **hometutor** в публичном
+демо-режиме на **Hugging Face Spaces**, используя **Docker SDK** (не Streamlit SDK).
 
-Этот каталог содержит конфигурационные файлы для развёртывания **hometutor** в публичном демонстрационном режиме на платформе **Hugging Face Spaces**.
+> Почему Docker, а не Streamlit SDK: Streamlit-SDK Space не запускает параллельно FastAPI
+> (`app/api.py`), а Streamlit UI ходит в API по HTTP (`app/ui_client.py`). Docker-Space
+> поднимает оба процесса через [`deploy/docker/docker_entrypoint.sh`](../docker/docker_entrypoint.sh)
+> (см. корневой [`Dockerfile`](../../Dockerfile)): Streamlit публично на `8501`
+> (это `app_port` в YAML-заголовке корневого `README.md`), uvicorn внутри контейнера на `8000`
+> (Streamlit обращается к нему через `ui_api_base_url=http://127.0.0.1:8000`, наружу HF этот
+> порт не проксирует).
 
-В этом режиме приложение работает в связке: **Streamlit UI** + **облачная LLM (OpenRouter / OpenAI)** + заранее подготовленный демонстрационный корпус лекций (`demo_data/`) и скомпилированный векторный индекс (`demo_chroma_db/`).
-
----
-
-## 🎭 Плюсы и Минусы Hugging Face Spaces
-
-### 👍 Плюсы:
-1. **Полностью бесплатно (Free Tier):** Hugging Face предоставляет бесплатный CPU-инстанс (2 vCPU, 16 ГБ RAM), которого с запасом хватает для Streamlit UI.
-2. **Публичный адрес 24/7:** Вы получаете постоянную HTTPS-ссылку вида `https://huggingface.co/spaces/<username>/hometutor`.
-3. **Безопасное хранение ключей:** API-ключи провайдеров и настройки хранятся в зашифрованных секретах платформы (HF Secrets).
-4. **Простой деплой:** Обновление приложения происходит стандартной отправкой коммитов (`git push spaces main`).
-
-### 👎 Минусы:
-1. **Только облачные LLM:** Бесплатный тариф не поддерживает запуск локальных моделей (Ollama / LM Studio) из-за нехватки GPU/CPU ресурсов.
-2. **Фиксированный демонстрационный корпус:** Диск контейнера сбрасывается при перезапусках. Для стабильности используется готовая папка `demo_data/` и предрассчитанный индекс `demo_chroma_db/`.
-3. **Без FastAPI REST API:** Streamlit SDK на Hugging Face Spaces блокирует запуск параллельных фоновых процессов вроде FastAPI (`api.py`). Работает только Streamlit UI. Для работы REST API требуется VPS или Docker Space.
+В этом режиме приложение работает в связке: **Streamlit UI + FastAPI** + облачная LLM
+(OpenRouter/OpenAI-совместимый провайдер) + заранее подготовленный демо-корпус (`demo_data/`)
+и скомпилированный векторный индекс (`demo_chroma_db/`). При старте контейнера
+[`bootstrap_demo_paths.sh`](bootstrap_demo_paths.sh) копирует их в рабочие `data/`/`chroma_db/`,
+если они ещё пусты (эфемерный FS контейнера — см. ограничения ниже).
 
 ---
 
-## 🔑 Секреты и Переменные (Space Settings → Secrets)
+## 🎭 Плюсы и ограничения
 
-Для работы приложения добавьте в настройках вашего Space следующие **Secrets**:
+### 👍 Плюсы
+1. **Бесплатно (Free Tier):** CPU-инстанс (2 vCPU, 16 ГБ RAM) достаточен для Streamlit + FastAPI на облачной LLM.
+2. **Публичный адрес 24/7:** постоянная HTTPS-ссылка `https://huggingface.co/spaces/<username>/hometutor`.
+3. **Секреты:** ключи провайдеров, `JWT_SECRET`, `YANDEX_METRIKA_ID` хранятся в HF Space Secrets, не в репозитории.
+4. **Полный runtime:** в отличие от Streamlit-SDK варианта, здесь работает и REST API (`/docs`, `/health`), и аутентификация (`AUTH_ENABLED=true`).
+5. **Обновление:** обычный `git push` в HF-remote (вручную или через `.github/workflows/deploy.yml`).
 
-| Секрет | Пример значения | Назначение |
+### 👎 Ограничения
+1. **Только облачные LLM:** бесплатный тариф не запускает локальные модели (Ollama/LM Studio) — нет GPU/достаточного CPU.
+2. **Эфемерный FS:** диск контейнера сбрасывается при каждом рестарте/пересборке Space.
+   - Демо-корпус восстанавливается автоматически из `demo_data/`/`demo_chroma_db/` (см. выше).
+   - `data/auth.db` (пользователи) и per-user `data/users/<id>/user_state.db` **не персистентны** —
+     демо-аккаунты и прогресс обучения пропадают при рестарте контейнера. Для постоянного
+     хранения нужен HF Persistent Storage (платный) или внешний volume — вне объёма демо.
+
+---
+
+## 🔑 Секреты и переменные (Space Settings → Variables and secrets)
+
+| Секрет/переменная | Пример значения | Назначение |
 |---|---|---|
-| `OPENAI_API_KEY` | `sk-or-v1-abc...` | API-ключ OpenRouter или OpenAI-compatible API |
-| `OPENAI_API_BASE` | `https://openrouter.ai/api/v1` | URL-точка входа для API |
-| `LLM_MODEL` | `mistralai/mistral-7b-instruct:free` | Модель для чата тьютора и объяснений |
-| `EMBED_MODEL` | `perplexity/pplx-embed-v1-0.6b` | Модель для поиска векторов (должна совпадать с локальной при сборке) |
-| `EMBED_DIMENSIONS` | `1024` | Размерность векторов (по умолчанию `1024`) |
-| `ENABLE_METADATA_ENRICHMENT` | `false` | Отключить фоновое обогащение для экономии токенов |
-| `ENABLE_DOCUMENT_SUMMARIES` | `false` | Отключить генерацию суммаризаций в облаке |
-| `ENABLE_RERANKER` | `false` | Отключить реранкер (если не требуется тяжелый локальный BAAI) |
+| `OPENAI_API_KEY` | `sk-or-v1-abc...` | API-ключ OpenRouter/OpenAI-совместимого провайдера |
+| `OPENAI_API_BASE` | `https://openrouter.ai/api/v1` | URL провайдера |
+| `LLM_MODEL` | `mistralai/mistral-7b-instruct:free` | Модель тьютора/объяснений |
+| `EMBED_MODEL` | `perplexity/pplx-embed-v1-0.6b` | Модель эмбеддингов (должна совпадать с использованной при сборке `demo_chroma_db/`) |
+| `EMBED_DIMENSIONS` | `1024` | Размерность векторов |
+| `ENABLE_METADATA_ENRICHMENT` | `false` | Отключить фоновое обогащение (экономия токенов) |
+| `ENABLE_DOCUMENT_SUMMARIES` | `false` | Отключить облачные суммаризации |
+| `ENABLE_RERANKER` | `false` | Отключить тяжёлый локальный reranker |
+| `AUTH_ENABLED` | `true` | Включить логин/регистрацию (Workstream A) |
+| `JWT_SECRET` | `<сильный случайный секрет>` | Подпись JWT — обязательно своё значение, не дефолт из `config.env` |
+| `YANDEX_METRIKA_ID` | `<id счётчика>` | Опционально — аналитика посещений (Workstream E) |
+| `CORS_ORIGINS` | `https://<username>-hometutor.hf.space` | Добавить домен Space, если открываете API напрямую |
 
 ---
 
 ## 🏃 Пошаговая инструкция по деплою
 
-### Шаг 1: Сборка демонстрационного индекса концептов
-Перед отправкой кода соберите векторный индекс локально на вашей машине разработчика:
+### Шаг 1: Сборка демонстрационного индекса
 ```bash
-# Выполните в корне репозитория (нужны настройки .env для доступа к EMBED_MODEL)
 .\.venv\Scripts\python.exe scripts/build_demo_chroma.py
 ```
-Это прочитает файлы из `demo_data/` и соберёт готовую Chroma базу в `demo_chroma_db/`.
 
-### Шаг 2: Коммит индекса в Git
-Добавьте индекс в систему контроля версий:
+### Шаг 2: Коммит индекса
 ```bash
 git add demo_chroma_db/
 git commit -m "chore: pre-build demo database index"
 ```
 
-### Шаг 3: Создание репозитория на Hugging Face
-1. Перейдите на [Hugging Face](https://huggingface.co/) и нажмите **New Space**.
-2. Укажите имя (например, `hometutor`), выберите SDK **Streamlit** и бесплатный тариф **CPU basic**.
-3. В созданном Space перейдите во вкладку **Settings** -> **Variables and secrets** и добавьте все переменные из таблицы выше.
+### Шаг 3: Создание Space
+1. [Hugging Face](https://huggingface.co/) → **New Space**.
+2. SDK: **Docker**, тариф **CPU basic** (free).
+3. **Settings → Variables and secrets** — добавить значения из таблицы выше.
 
-### Шаг 4: Настройка локального репозитория
-Добавьте удалённый репозиторий Hugging Face в список remote вашего Git:
+### Шаг 4: Remote и отправка
 ```bash
-git remote add spaces https://huggingface.co/spaces/ВАШ_ЛОГИН_HF/hometutor
+git remote add space https://huggingface.co/spaces/ВАШ_ЛОГИН_HF/hometutor
+git push space main --force
 ```
+Корневой `README.md` уже содержит нужный YAML-заголовок (`sdk: docker`, `app_port: 8501`) —
+отдельно копировать его не нужно (в отличие от старого Streamlit-SDK варианта).
 
-### Шаг 5: Обновление README и отправка кода
-Перед отправкой скопируйте блок метаданных (строки 1–10 этого файла с разделителями `---`) в самое начало вашего корневого файла `README.md` в корне проекта (иначе Hugging Face не распознает SDK).
+### Шаг 5: Автодеплой из CI (опционально)
+`.github/workflows/deploy.yml` пушит в тот же HF remote после успешного прохождения CI на `main`,
+если в GitHub Secrets заданы `HF_TOKEN` и `HF_USERNAME`.
 
-Выполните отправку:
-```bash
-git add README.md
-git commit -m "docs: sync hf spaces meta in root README"
-git push spaces main --force
-```
-
-### Шаг 6: Запуск
-Hugging Face автоматически соберёт образ и запустит контейнер. При старте скрипт [`bootstrap_demo_paths.sh`](bootstrap_demo_paths.sh) скопирует базу в рабочие директории, и веб-интерфейс станет доступен по вашей публичной ссылке!
+### Шаг 6: Проверка
+Hugging Face соберёт образ по корневому `Dockerfile` и запустит
+[`docker_entrypoint.sh`](../docker/docker_entrypoint.sh) (bootstrap demo-данных → uvicorn → streamlit).
+Откройте публичную ссылку Space, зарегистрируйтесь (если `AUTH_ENABLED=true`) и проверьте
+`/health` через `https://<ваш-space>.hf.space` (Streamlit) — REST API доступен только внутри контейнера.

@@ -284,6 +284,18 @@ class Settings(BaseSettings):
     faq_memory_collection_name: str = "home_rag_faq"
     # При сохранении: если ближайший сосед в FAQ ≥ порога — не добавлять дубликат (косинусная близость)
     faq_dedup_min_score: float = Field(default=0.92, ge=0.0, le=1.0)
+    faq_embedding_failure_cooldown_sec: float = Field(
+        default=60.0,
+        ge=0.0,
+        le=3600.0,
+        description="How long FAQ memory skips embedding calls after an embedding endpoint failure.",
+    )
+    faq_embedding_probe_timeout_sec: float = Field(
+        default=0.25,
+        ge=0.05,
+        le=5.0,
+        description="Fast TCP probe timeout for optional FAQ embedding calls on loopback endpoints.",
+    )
 
     enable_faq_cache: bool = False
     faq_min_score: float = 0.9

@@ -8,9 +8,12 @@ from __future__ import annotations
 
 import json
 import logging
+import socket
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List
+from urllib.parse import urlparse
 
 from chromadb.errors import ChromaError, NotFoundError
 from filelock import FileLock, Timeout
@@ -18,6 +21,7 @@ from filelock import FileLock, Timeout
 from app.chroma_vector_backend import get_default_chroma_backend
 from app.config import BASE_DIR, CHROMA_DIR, get_settings
 from app.logging_config import setup_logging
+from app.provider import normalize_openai_compatible_api_base
 
 
 logger = setup_logging()
@@ -25,6 +29,7 @@ logger = setup_logging()
 FAQ_MEMORY_PATH = Path(get_settings().faq_memory_path)
 
 _migration_lock = Path(__file__).resolve().parent.parent / ".faq_chroma_migration.lock"
+_faq_embed_unavailable_until = 0.0
 
 
 def _chroma_persist_dir() -> Path:
@@ -35,6 +40,64 @@ def _get_embed_model():
     from app.provider import get_embed_model
 
     return get_embed_model()
+
+
+def _is_loopback_host(host: str) -> bool:
+    h = (host or "").strip().lower()
+    return h in {"127.0.0.1", "localhost", "::1"} or h.endswith(".local")
+
+
+def _loopback_tcp_reachable(api_base: str, *, timeout_sec: float) -> bool:
+    parsed = urlparse(api_base)
+    host = parsed.hostname or ""
+    if not host or not _is_loopback_host(host):
+        return True
+    port = parsed.port or (443 if (parsed.scheme or "http").lower() == "https" else 80)
+    try:
+        with socket.create_connection((host, port), timeout=timeout_sec):
+            return True
+    except OSError:
+        return False
+
+
+def _faq_embed_circuit_open() -> bool:
+    return time.monotonic() < _faq_embed_unavailable_until
+
+
+def _record_faq_embed_failure(reason: str, error: Exception | None = None) -> None:
+    global _faq_embed_unavailable_until
+    settings = get_settings()
+    cooldown = float(getattr(settings, "faq_embedding_failure_cooldown_sec", 60.0) or 0.0)
+    if cooldown > 0:
+        _faq_embed_unavailable_until = time.monotonic() + cooldown
+    if error is None:
+        logger.warning("FAQ embedding temporarily disabled | reason=%s | cooldown_sec=%s", reason, cooldown)
+    else:
+        logger.warning(
+            "FAQ embedding temporarily disabled | reason=%s | cooldown_sec=%s | error=%s",
+            reason,
+            cooldown,
+            error,
+        )
+
+
+def _faq_embedding_ready() -> bool:
+    if _faq_embed_circuit_open():
+        return False
+    settings = get_settings()
+    api_base = normalize_openai_compatible_api_base(str(getattr(settings, "embed_api_base_resolved", "") or ""))
+    if not api_base:
+        return True
+    timeout = float(getattr(settings, "faq_embedding_probe_timeout_sec", 0.25) or 0.25)
+    if _loopback_tcp_reachable(api_base, timeout_sec=timeout):
+        return True
+    _record_faq_embed_failure("loopback_unreachable")
+    return False
+
+
+def reset_faq_embed_circuit_for_tests() -> None:
+    global _faq_embed_unavailable_until
+    _faq_embed_unavailable_until = 0.0
 
 
 def _distance_to_score(distance: float | None) -> float:
@@ -76,6 +139,9 @@ def _migrate_jsonl_to_chroma_if_needed() -> None:
     """Однократный импорт строк из JSONL в Chroma (с блокировкой)."""
     if not FAQ_MEMORY_PATH.exists() or FAQ_MEMORY_PATH.stat().st_size == 0:
         return
+    if not _faq_embedding_ready():
+        logger.info("FAQ migration skipped: embedding endpoint unavailable")
+        return
 
     backend = get_default_chroma_backend(_chroma_persist_dir())
     client = backend.get_client()
@@ -111,6 +177,7 @@ def _migrate_jsonl_to_chroma_if_needed() -> None:
         try:
             embed_model = _get_embed_model()
         except Exception as e:  # noqa: BLE001 - embed/network stack may fail opaquely; skip migration
+            _record_faq_embed_failure("embed_model_unavailable", e)
             logger.error("FAQ migration: embed model unavailable | error=%s", e, exc_info=True)
             return
 
@@ -140,6 +207,7 @@ def _migrate_jsonl_to_chroma_if_needed() -> None:
                 try:
                     emb = embed_model.get_text_embedding(q)
                 except Exception as ex:  # noqa: BLE001 - embedding provider errors are heterogeneous
+                    _record_faq_embed_failure("migration_embed_failed", ex)
                     logger.error("FAQ migration: skip line (embed failed) | error=%s", ex, exc_info=True)
                     continue
             a = str(record.get("answer") or "")
@@ -175,12 +243,16 @@ def _migrate_jsonl_to_chroma_if_needed() -> None:
 
 def save_interaction(question: str, answer: str, sources: List[Dict[str, Any]]) -> None:
     """Сохранить вопрос/ответ/источники в FAQ (Chroma), с дедупликацией."""
+    if not _faq_embedding_ready():
+        logger.info("FAQ save skipped: embedding endpoint unavailable")
+        return
     _migrate_jsonl_to_chroma_if_needed()
 
     try:
         embed_model = _get_embed_model()
         embedding = embed_model.get_text_embedding(question)
     except Exception as e:  # noqa: BLE001 - embed stack may fail opaquely; skip save
+        _record_faq_embed_failure("save_embed_failed", e)
         logger.error("FAQ: failed to embed question, skipping save | error=%s", e, exc_info=True)
         return
 
@@ -229,12 +301,16 @@ def find_similar_questions(
     min_score: float = 0.7,
 ) -> List[Dict[str, Any]]:
     """Найти похожие вопросы по эмбеддингам (Chroma)."""
+    if not _faq_embedding_ready():
+        logger.info("FAQ search skipped: embedding endpoint unavailable")
+        return []
     _migrate_jsonl_to_chroma_if_needed()
 
     try:
         embed_model = _get_embed_model()
         query_embedding = embed_model.get_text_embedding(question)
     except Exception as e:  # noqa: BLE001 - embed stack may fail opaquely; empty results
+        _record_faq_embed_failure("search_embed_failed", e)
         logger.error("FAQ: failed to embed query, skipping search | error=%s", e, exc_info=True)
         return []
 

@@ -23,6 +23,17 @@ router = APIRouter(tags=["query"])
 logger = setup_logging()
 
 
+def _save_faq_interaction_background(question: str, answer: str, sources: list[dict]) -> None:
+    try:
+        services.faq_memory.save_interaction(
+            question=question,
+            answer=answer,
+            sources=sources,
+        )
+    except Exception as save_error:  # noqa: BLE001 - FAQ cache persistence is best-effort enrichment.
+        logger.warning("Failed to save FAQ interaction: %s", save_error)
+
+
 def _load_e2e_payload(name: str) -> dict:
     pkg = Path(__file__).resolve().parents[1] / "offline_payloads" / name
     if not pkg.exists():
@@ -131,14 +142,12 @@ def ask(
         )
 
         if (not offline_mode) and not (query_options.session_id or "").strip():
-            try:
-                services.faq_memory.save_interaction(
-                    question=validated_question,
-                    answer=result.get("answer", ""),
-                    sources=result.get("sources") or [],
-                )
-            except Exception as save_error:  # noqa: BLE001 - FAQ cache persistence is best-effort enrichment.
-                logger.warning("Failed to save FAQ interaction: %s", save_error)
+            background_tasks.add_task(
+                _save_faq_interaction_background,
+                validated_question,
+                result.get("answer", ""),
+                result.get("sources") or [],
+            )
 
         schedule_async_quality_judge_if_sampled(
             background_tasks=background_tasks,

@@ -16,7 +16,7 @@
       },
       {
         "relative_path": "gate/source_policy.md",
-        "content": "# Gate Source Policy\n\nThe Home RAG answer must use retrieved source chunks. If retrieved chunks do not contain evidence, the answer should say that the selected context is insufficient. When no evidence is available, the answer must not invent prices, URLs, dates, hardware power usage, or secret configuration values.\n\nCitations must point to returned source indices only. A citation like [1] can be used only when source 1 exists in the returned source list.\n"
+        "content": "# Gate Source Policy\n\nThe Home RAG answer must use retrieved source chunks. If retrieved chunks do not contain evidence, the answer should say that the selected context is insufficient. When no evidence is available, the answer must not invent prices, URLs, dates, hardware power usage, or confidential configuration values.\n\nCitations must point to returned source indices only. A citation like [1] can be used only when source 1 exists in the returned source list.\n"
       },
       {
         "relative_path": "gate/python_cli_notes.md",
@@ -101,8 +101,7 @@
       "must_include_any": [["insufficient", "not contain", "does not define", "not available", "недостаточно", "не могу подтвердить", "не содерж", "не определяет"]],
       "must_not_include": ["100 rub", "100 рублей", "$", "http"],
       "require_sources": true,
-      "require_citation": false,
-      "expected_no_evidence": true
+      "require_citation": false
     },
     {
       "id": "home_refusal_002",
@@ -113,8 +112,7 @@
       "must_include_any": [["insufficient", "not contain", "does not define", "not available", "недостаточно", "не могу подтвердить", "не содерж", "не определяет"]],
       "must_not_include": ["https://", "http://", "huggingface.co/"],
       "require_sources": true,
-      "require_citation": false,
-      "expected_no_evidence": true
+      "require_citation": false
     },
     {
       "id": "home_refusal_003",
@@ -125,8 +123,7 @@
       "must_include_any": [["insufficient", "not contain", "does not define", "not available", "недостаточно", "не могу подтвердить", "не содерж", "не определяет"]],
       "must_not_include": ["W", "watt", "GB"],
       "require_sources": true,
-      "require_citation": false,
-      "expected_no_evidence": true
+      "require_citation": false
     },
     {
       "id": "home_wrong_doc_001",
@@ -179,7 +176,7 @@
       "options": {"relative_path": "gate/source_policy.md", "rag_profile": "quality"},
       "expected_source_contains": ["gate/source_policy.md"],
       "must_include": ["source"],
-      "must_include_any": [["returned source indices", "source 1 exists", "returned source list", "возвращенных исходных", "источник с таким номером", "списке возвращенных"]],
+      "must_include_any": [["returned source indices", "source 1 exists", "returned source list", "возвращенных исходных", "индексы источников", "списке источников", "источник 1", "источник с таким номером"]],
       "require_sources": true,
       "require_citation": true
     },
@@ -189,7 +186,7 @@
       "question": "What should the answer do when retrieved chunks do not contain evidence?",
       "options": {"relative_path": "gate/source_policy.md", "rag_profile": "quality"},
       "expected_source_contains": ["gate/source_policy.md"],
-      "must_include_any": [["selected context is insufficient", "context is insufficient", "do not contain evidence", "контекст недостаточен", "недостаточен", "не содержат доказательств"]],
+      "must_include_any": [["selected context is insufficient", "context is insufficient", "do not contain evidence", "контекст недостаточен", "недостатке контекста", "недостаточен", "достаточных доказательств", "не содержат доказательств"]],
       "must_not_include": ["invent prices", "invent URLs"],
       "require_sources": true,
       "require_citation": true

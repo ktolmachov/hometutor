@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.section_index import IndexedSection
+from dataclasses import replace
+
+from app.section_index import IndexedSection, section_to_row
 from app.ui.living_konspekt_view import (
     WORKBENCH_SECTIONS_KEY,
+    _collect_concept_context,
     _stitch_verbatim,
     add_section_to_workbench,
     get_workbench_rows,
@@ -146,3 +149,87 @@ class TestPersistRoundtrip:
         monkeypatch.setattr(st, "session_state", {WORKBENCH_SECTIONS_KEY: [{"stale": True}]})
         apply_research_payload({"current_view": "x"})
         assert st.session_state[WORKBENCH_SECTIONS_KEY] == []
+
+
+def _row(section: IndexedSection) -> dict:
+    return section_to_row(section)
+
+
+class _FakeKnowledgeGraph:
+    """Минимальный double KnowledgeGraphReader для теста агрегации концепт-контекста."""
+
+    def __init__(self, concepts: dict[str, dict]) -> None:
+        self._concepts = concepts
+
+    def get_concepts(self) -> dict[str, dict]:
+        return dict(self._concepts)
+
+    def get_prerequisites(self, concept_id: str) -> list[str]:
+        return list(self._concepts.get(concept_id, {}).get("prerequisites") or [])
+
+
+class TestCollectConceptContext:
+    """См. Findings P2: deep-study prompt должен получать prerequisites/related_concepts
+    концепта(ов), к которым привязаны разделы корзины (см. dashboards_graph.py:152)."""
+
+    def _patch_kg(self, monkeypatch, concepts: dict[str, dict]) -> None:
+        import app.knowledge_service as knowledge_service
+
+        monkeypatch.setattr(
+            knowledge_service, "get_active_knowledge_graph", lambda: _FakeKnowledgeGraph(concepts)
+        )
+
+    def test_aggregates_prereqs_and_related_from_single_concept(self, monkeypatch):
+        self._patch_kg(
+            monkeypatch,
+            {
+                "Агенты ИИ": {
+                    "prerequisites": ["LLM основы"],
+                    "related_concepts": ["RAG"],
+                },
+            },
+        )
+        row = replace(_section(MD_A, 10), concept="Агенты ИИ")
+        prereqs, related = _collect_concept_context([_row(row)])
+        assert prereqs == ["LLM основы"]
+        assert related == ["RAG"]
+
+    def test_dedups_and_excludes_concepts_already_in_workbench(self, monkeypatch):
+        self._patch_kg(
+            monkeypatch,
+            {
+                "A": {"prerequisites": ["B", "Общий"], "related_concepts": ["C"]},
+                "B": {"prerequisites": ["Общий"], "related_concepts": ["C"]},
+            },
+        )
+        rows = [
+            _row(replace(_section(MD_A, 10), concept="A")),
+            _row(replace(_section(MD_B, 5), concept="B")),
+        ]
+        prereqs, related = _collect_concept_context(rows)
+        # "B" — сам концепт корзины (не показываем его как "недостающий prereq"); "Общий" дедупнут.
+        assert prereqs == ["Общий"]
+        assert related == ["C"]
+
+    def test_no_concept_on_rows_returns_empty_without_touching_graph(self, monkeypatch):
+        def _boom():
+            raise AssertionError("get_active_knowledge_graph must not be called when no concept is set")
+
+        import app.knowledge_service as knowledge_service
+
+        monkeypatch.setattr(knowledge_service, "get_active_knowledge_graph", _boom)
+        prereqs, related = _collect_concept_context([_row(_section(MD_A, 10))])
+        assert prereqs == []
+        assert related == []
+
+    def test_graph_lookup_failure_degrades_to_empty_context(self, monkeypatch):
+        import app.knowledge_service as knowledge_service
+
+        def _raise():
+            raise RuntimeError("no active generation")
+
+        monkeypatch.setattr(knowledge_service, "get_active_knowledge_graph", _raise)
+        row = replace(_section(MD_A, 10), concept="Агенты ИИ")
+        prereqs, related = _collect_concept_context([_row(row)])
+        assert prereqs == []
+        assert related == []

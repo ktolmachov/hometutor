@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -140,6 +141,12 @@ def _parse_body_sections(body: str, offset_lines: int) -> list[ParsedSection]:
     return sections
 
 
+def _parse_sections_from_text(raw: str) -> list[ParsedSection]:
+    _, body = _parse_md_frontmatter(raw)
+    offset_lines = raw[: len(raw) - len(body)].count("\n")
+    return _parse_body_sections(body, offset_lines)
+
+
 def parse_sections(md_abs: Path) -> list[ParsedSection]:
     """Разобрать konspekt-md на разделы (без провенанса исходника).
 
@@ -148,30 +155,30 @@ def parse_sections(md_abs: Path) -> list[ParsedSection]:
     строки файла (важно для VS Code deep-link).
     """
     raw = md_abs.read_text(encoding="utf-8", errors="replace")
-    _, body = _parse_md_frontmatter(raw)
-    offset_lines = raw[: len(raw) - len(body)].count("\n")
-    return _parse_body_sections(body, offset_lines)
+    return _parse_sections_from_text(raw)
 
 
 # ── build_section_index: провенанс + кэш ────────────────────────────────
 _FRONTMATTER_SOURCE_RE = re.compile(r'^source:\s*"?(.*?)"?\s*$', re.MULTILINE)
 
-# Кэш по (md-path -> (сигнатура, [ParsedSection, ...])). Сигнатура — (mtime_ns, size),
-# дёшево заменяет полноценный sha256 без повторного чтения файла на каждый вызов.
-_INDEX_CACHE: dict[Path, tuple[tuple[int, int], list[ParsedSection]]] = {}
+# Кэш по (md-path -> (sha256 контента, [ParsedSection, ...])) — content-hash, а не (mtime, size):
+# восстановление/копирование файла с сохранённым timestamp и тем же размером не должно отдавать
+# устаревшие line_start/текст секции. Файл всё равно читаем один раз (для хэша), поэтому кэш
+# экономит именно повторный regex-разбор при межрендерных повторах на один md-path.
+_INDEX_CACHE: dict[Path, tuple[str, list[ParsedSection]]] = {}
 
 
-def _stat_signature(path: Path) -> tuple[int, int]:
-    st = path.stat()
-    return (st.st_mtime_ns, st.st_size)
+def _content_signature(raw: str) -> str:
+    return hashlib.sha256(raw.encode("utf-8", errors="replace")).hexdigest()
 
 
 def _cached_parse_sections(md_abs: Path) -> list[ParsedSection]:
-    signature = _stat_signature(md_abs)
+    raw = md_abs.read_text(encoding="utf-8", errors="replace")
+    signature = _content_signature(raw)
     cached = _INDEX_CACHE.get(md_abs)
     if cached is not None and cached[0] == signature:
         return cached[1]
-    parsed = parse_sections(md_abs)
+    parsed = _parse_sections_from_text(raw)
     _INDEX_CACHE[md_abs] = (signature, parsed)
     return parsed
 

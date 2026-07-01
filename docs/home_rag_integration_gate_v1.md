@@ -92,12 +92,17 @@ Still out of scope:
 ## Current Known Blocker
 
 ```text
-HOME_RAG_INTEGRATION_GATE_V1=BLOCKED_RUNTIME_IMPORT
-Cause: Windows application-control policy blocked compiled Python extensions.
+HOME_RAG_INTEGRATION_GATE_V1=BLOCKED_RUNTIME_ENDPOINT
+Cause: embedding endpoint is not accepting connections at http://127.0.0.1:1234/v1.
 
-Observed blockers:
+Resolved native blockers:
   _tiktoken: D:\AI\logs\home_rag_integration_gate_v1_2026-07-01_23-21-57.json
   rpds:      D:\AI\logs\home_rag_integration_gate_v1_2026-07-01_23-31-26.json
+
+Current endpoint blocker:
+  report: D:\AI\logs\home_rag_integration_gate_v1_2026-07-02_00-24-58.json
+  llm_probe: PASS, qwopus36-35b-a3b-mtp found at http://127.0.0.1:8080/v1/models
+  embed_probe: BLOCKED, WinError 10061 connection refused at http://127.0.0.1:1234/v1/models
 ```
 
 Diagnostics already tried:
@@ -108,6 +113,10 @@ Reinstall rpds-py/tiktoken wheels: no effect
 requests pin restored after reinstall: requests==2.33.1
 Zone.Identifier streams: absent
 Authenticode signature: NotSigned
+After App Control policy update:
+  rpds import: PASS
+  tiktoken import: PASS
+  app.query_service import: PASS
 ```
 
 Blocked native files observed after reinstall:
@@ -122,8 +131,7 @@ D:\Projects\hometutor\.venv\Lib\site-packages\tiktoken\_tiktoken.cp311-win_amd64
 
 Resolution options:
 
-1. Allowlist the active Python native-extension path or the specific blocked `.pyd` files in Windows App Control / WDAC / Smart App Control policy.
-2. Recreate the virtual environment in a trusted location and reinstall dependencies there.
-3. Run the gate in an environment where compiled Python extensions are allowed.
-4. Keep the gate-level tokenizer fallback for `_tiktoken`; it removes the tokenizer-specific blocker but cannot safely bypass unrelated native dependencies such as `rpds`.
-5. Re-run the full gate after the blocker is removed or bypassed.
+1. Start LM Studio or another OpenAI-compatible embedding server on `http://127.0.0.1:1234/v1`.
+2. Load an embedding model that appears as `text-embedding-qwen3-embedding-0.6b` in `GET /v1/models`, or run the gate with `--embed-model <actual-model-id>`.
+3. Re-run the gate with `--skip-ingest` if the existing Chroma index should be reused, or with `--reset-home` if the index should be rebuilt with the active embedding model.
+4. Keep the gate-level tokenizer fallback for `_tiktoken`; it is no longer required on the current machine state, but remains useful if App Control blocks `_tiktoken` again.

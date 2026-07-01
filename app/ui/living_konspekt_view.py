@@ -199,11 +199,49 @@ _EXTERNAL_LLM_TARGETS = (
 )
 
 
+def _collect_concept_context(rows: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
+    """Prerequisites/related_concepts для всех уникальных концептов, привязанных к разделам корзины.
+
+    Раздел получает ``concept`` только когда его добавили из графа
+    (``_render_document_section_workbench_button`` в ``dashboards_graph.py``); разделы из
+    Flashcards приходят без концепта — тогда контекст пуст, и это ожидаемо (нет графового
+    привязки, откуда брать prerequisites).
+    """
+    concept_ids = sorted({str(row.get("concept") or "").strip() for row in rows if row.get("concept")})
+    if not concept_ids:
+        return [], []
+    try:
+        from app.knowledge_service import get_active_knowledge_graph
+
+        kg = get_active_knowledge_graph()
+        all_concepts = kg.get_concepts()
+    except Exception:  # noqa: BLE001 - контекст концепта опционален для промпта
+        return [], []
+
+    prereqs: list[str] = []
+    related: list[str] = []
+    for cid in concept_ids:
+        prereqs.extend(str(p) for p in kg.get_prerequisites(cid))
+        info = all_concepts.get(cid) or {}
+        related.extend(str(r) for r in (info.get("related_concepts") or []))
+
+    exclude = set(concept_ids)
+    prereqs_dedup = list(dict.fromkeys(p for p in prereqs if p and p not in exclude))
+    related_dedup = list(dict.fromkeys(r for r in related if r and r not in exclude))
+    return prereqs_dedup, related_dedup
+
+
 def _render_deep_study_panel(rows: list[dict[str, Any]]) -> None:
     st.markdown("### 🧠 Промпт для глубокого изучения")
     topic = str(st.session_state.get("living_konspekt_title") or "Рабочий конспект")
     sections = [row_to_section(row) for row in rows]
-    prompt_text = build_deep_study_prompt(topic=topic, sections=sections)
+    prerequisites, related_concepts = _collect_concept_context(rows)
+    prompt_text = build_deep_study_prompt(
+        topic=topic,
+        sections=sections,
+        prerequisites=prerequisites,
+        related_concepts=related_concepts,
+    )
     st.code(prompt_text, language="markdown")
     prompt_cols = st.columns(len(_EXTERNAL_LLM_TARGETS))
     for col, (label, url) in zip(prompt_cols, _EXTERNAL_LLM_TARGETS):

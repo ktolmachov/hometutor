@@ -14,6 +14,7 @@ from app.section_index import (
     parse_sections,
     row_to_section,
     section_to_row,
+    _cached_parse_sections,
     _tokenize_ru_en,
 )
 
@@ -105,6 +106,36 @@ class TestParseSections:
         p.write_text("# Заголовок\n\nТело.\n", encoding="utf-8")
         sections = parse_sections(p)
         assert sections[0].line_start == 1
+
+
+class TestCachedParseSections:
+    """Кэш — по content-hash, не по (mtime, size): restore/copy с тем же timestamp+размером
+    не должен отдавать устаревшие line_start/текст (см. Findings P3)."""
+
+    def test_content_change_with_preserved_stat_invalidates_cache(self, tmp_path: Path):
+        p = tmp_path / "note.md"
+        p.write_text("# Заголовок\n\nПервый текст.\n", encoding="utf-8")
+        st_before = p.stat()
+
+        first = _cached_parse_sections(p)
+        assert first[0].text == "Первый текст."
+
+        new_content = "# Заголовок\n\nВторой текст.\n"
+        assert len(new_content) == len(p.read_text(encoding="utf-8"))  # тот же size
+        p.write_text(new_content, encoding="utf-8")
+        import os
+
+        os.utime(p, ns=(st_before.st_atime_ns, st_before.st_mtime_ns))  # тот же mtime
+
+        second = _cached_parse_sections(p)
+        assert second[0].text == "Второй текст."
+
+    def test_unchanged_content_hits_cache(self, tmp_path: Path):
+        p = tmp_path / "note.md"
+        p.write_text("# Заголовок\n\nТекст.\n", encoding="utf-8")
+        first = _cached_parse_sections(p)
+        second = _cached_parse_sections(p)
+        assert first is second
 
 
 class TestMainIdeaSection:

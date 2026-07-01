@@ -1,0 +1,204 @@
+{
+  "version": "v1",
+  "corpus": {
+    "documents": [
+      {
+        "relative_path": "gate/rag_runtime.md",
+        "content": "# Gate RAG Runtime\n\nQwopus36-35B-A3B-MTP is the accepted primary local RAG tutor runtime. Its runtime alias is qwopus36-35b-a3b-mtp. The accepted status after the expanded retrieval-backed gate is RETRIEVAL_BACKED_RAG_GATE_V1_1_PASS.\n\nThis document is about the local RAG tutor model. It is not the coding executor and it is not the reviewer model.\n"
+      },
+      {
+        "relative_path": "gate/coding_and_reviewer.md",
+        "content": "# Gate Coding And Reviewer Roles\n\nThe accepted local coding executor is qwen/qwen3-coder-next. It is used for code edits, diffs, patches, and coding-agent experiments.\n\nThe local reviewer candidate is nemotron-h-47b-reasoning-128k. Its current next gate is the evidence-based reviewer probe. The reviewer role is for critical audit work, not for fast general RAG answers.\n"
+      },
+      {
+        "relative_path": "gate/benchmark_numbers.md",
+        "content": "# Gate Benchmark Numbers\n\nThe accepted benchmark numbers are fixed for this gate:\n\n- Qwopus36 RAG average wall speed: 160.80 tok/s.\n- Qwen3 Coder Next average wall speed: 47.39 tok/s.\n- Nemotron-H-47B average wall speed: 18.60 tok/s.\n\nAverage latency values:\n\n- Qwopus36 RAG: 1085.75 ms.\n- Qwen3 Coder Next: 5066.33 ms.\n- Nemotron-H-47B: 7961.08 ms.\n\nDo not confuse wall speed with llama.cpp predicted speed. Predicted speed is a different metric.\n"
+      },
+      {
+        "relative_path": "gate/source_policy.md",
+        "content": "# Gate Source Policy\n\nThe Home RAG answer must use retrieved source chunks. If retrieved chunks do not contain evidence, the answer should say that the selected context is insufficient. When no evidence is available, the answer must not invent prices, URLs, dates, hardware power usage, or secret configuration values.\n\nCitations must point to returned source indices only. A citation like [1] can be used only when source 1 exists in the returned source list.\n"
+      },
+      {
+        "relative_path": "gate/python_cli_notes.md",
+        "content": "# Gate Python CLI Notes\n\nPython CLI tools in this project should be run from the repository root. Use the project virtual environment when available. This document intentionally does not define RAG model status, GPU electricity prices, cloud URLs, or VRAM wattage numbers.\n"
+      },
+      {
+        "relative_path": "gate/long_context_acceptance.md",
+        "content": "# Gate Long Context Acceptance\n\nThis document contains repeated operational notes so that long-context retrieval has enough surrounding text to cross chunk boundaries.\n\nOperational note A: the system keeps model registry status separate from application runtime gates.\n\nOperational note B: retrieval-backed v1 validated a small controlled project corpus.\n\nOperational note C: retrieval-backed v1.1 expanded that controlled project corpus to fifteen cases with numeric traps, citation source-id validation, wrong-chunk traps, no-evidence refusals without citations, and one long-context retrieval case.\n\nOperational note D: HomeRagIntegrationGate-v1 is the next gate after retrieval-backed v1.1. It validates the real Home RAG pipeline: documents folder, ingestion, indexing, retriever, selected chunks, Qwopus answer, source ids, citation checks, grounding checks, and refusal behavior.\n\nPadding paragraph 1: RAG systems need retrieval discipline, not only fluent answers.\n\nPadding paragraph 2: A grounded answer should stay inside retrieved evidence.\n\nPadding paragraph 3: A refusal is correct when evidence is missing.\n\nPadding paragraph 4: Source identity is part of trust.\n\nPadding paragraph 5: Numeric facts must remain exact.\n\nPadding paragraph 6: Wrong-document traps protect against plausible but false answers.\n\nPadding paragraph 7: Long-context checks help catch retrieval and ordering issues.\n"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "home_grounded_001",
+      "type": "grounded_answer",
+      "question": "Which local model is the accepted primary RAG tutor runtime?",
+      "options": {"rag_profile": "quality"},
+      "expected_source_contains": ["gate/rag_runtime.md"],
+      "must_include": ["Qwopus36", "RAG"],
+      "must_include_any": [["RETRIEVAL_BACKED_RAG_GATE_V1_1_PASS", "accepted"]],
+      "must_not_include": ["qwen/qwen3-coder-next is the RAG tutor", "nemotron is the RAG tutor"],
+      "require_sources": true,
+      "require_citation": true
+    },
+    {
+      "id": "home_grounded_002",
+      "type": "grounded_answer",
+      "question": "What is the runtime alias for the accepted RAG tutor model?",
+      "options": {"relative_path": "gate/rag_runtime.md", "rag_profile": "quality"},
+      "expected_source_contains": ["gate/rag_runtime.md"],
+      "must_include": ["qwopus36-35b-a3b-mtp"],
+      "must_not_include": ["qwen/qwen3-coder-next"],
+      "require_sources": true,
+      "require_citation": true
+    },
+    {
+      "id": "home_grounded_003",
+      "type": "grounded_answer",
+      "question": "Which model is the accepted local coding executor?",
+      "options": {"rag_profile": "quality"},
+      "expected_source_contains": ["gate/coding_and_reviewer.md"],
+      "must_include": ["qwen/qwen3-coder-next"],
+      "must_not_include": ["Qwopus36 is the coding executor", "Nemotron is the coding executor"],
+      "require_sources": true,
+      "require_citation": true
+    },
+    {
+      "id": "home_grounded_004",
+      "type": "grounded_answer",
+      "question": "What is the next gate for nemotron-h-47b-reasoning-128k?",
+      "options": {"relative_path": "gate/coding_and_reviewer.md", "rag_profile": "quality"},
+      "expected_source_contains": ["gate/coding_and_reviewer.md"],
+      "must_include": ["evidence-based reviewer probe"],
+      "must_not_include": ["HomeRagIntegrationGate-v1"],
+      "require_sources": true,
+      "require_citation": true
+    },
+    {
+      "id": "home_grounded_005",
+      "type": "grounded_answer",
+      "question": "What does HomeRagIntegrationGate-v1 validate?",
+      "options": {"relative_path": "gate/long_context_acceptance.md", "rag_profile": "quality"},
+      "expected_source_contains": ["gate/long_context_acceptance.md"],
+      "must_include": ["documents", "ingestion", "retriever"],
+      "must_include_any": [["Qwopus", "answer"], ["source ids", "citation"]],
+      "must_not_include": ["vector retrieval is already production accepted"],
+      "require_sources": true,
+      "require_citation": true
+    },
+    {
+      "id": "home_refusal_001",
+      "type": "no_evidence_refusal",
+      "question": "What is the exact GPU electricity price in rubles per hour?",
+      "options": {"relative_path": "gate/python_cli_notes.md", "rag_profile": "quality"},
+      "expected_source_contains": ["gate/python_cli_notes.md"],
+      "must_include_any": [["insufficient", "not contain", "does not define", "not available"]],
+      "must_not_include": ["100 rub", "100 рублей", "$", "http"],
+      "require_sources": true,
+      "require_citation": false,
+      "expected_no_evidence": true
+    },
+    {
+      "id": "home_refusal_002",
+      "type": "no_evidence_refusal",
+      "question": "Give the official Hugging Face download URL for Qwopus36.",
+      "options": {"relative_path": "gate/source_policy.md", "rag_profile": "quality"},
+      "expected_source_contains": ["gate/source_policy.md"],
+      "must_include_any": [["insufficient", "not contain", "does not define", "not available"]],
+      "must_not_include": ["https://", "http://", "huggingface.co/"],
+      "require_sources": true,
+      "require_citation": false,
+      "expected_no_evidence": true
+    },
+    {
+      "id": "home_refusal_003",
+      "type": "no_evidence_refusal",
+      "question": "What exact VRAM wattage was observed during the benchmark?",
+      "options": {"relative_path": "gate/source_policy.md", "rag_profile": "quality"},
+      "expected_source_contains": ["gate/source_policy.md"],
+      "must_include_any": [["insufficient", "not contain", "does not define", "not available"]],
+      "must_not_include": ["W", "watt", "GB"],
+      "require_sources": true,
+      "require_citation": false,
+      "expected_no_evidence": true
+    },
+    {
+      "id": "home_wrong_doc_001",
+      "type": "wrong_document_trap",
+      "question": "Is Qwopus36 the coding executor?",
+      "options": {"relative_path": "gate/coding_and_reviewer.md", "rag_profile": "quality"},
+      "expected_source_contains": ["gate/coding_and_reviewer.md"],
+      "must_include": ["qwen/qwen3-coder-next"],
+      "must_not_include": ["Yes", "Qwopus36 is the coding executor"],
+      "require_sources": true,
+      "require_citation": true
+    },
+    {
+      "id": "home_wrong_doc_002",
+      "type": "wrong_document_trap",
+      "question": "Is Nemotron the primary fast RAG tutor runtime?",
+      "options": {"relative_path": "gate/rag_runtime.md", "rag_profile": "quality"},
+      "expected_source_contains": ["gate/rag_runtime.md"],
+      "must_include": ["Qwopus36"],
+      "must_not_include": ["Nemotron is the primary fast RAG tutor"],
+      "require_sources": true,
+      "require_citation": true
+    },
+    {
+      "id": "home_numeric_001",
+      "type": "numeric_exactness",
+      "question": "List the average wall speeds for Qwopus36 RAG, Qwen3 Coder Next, and Nemotron-H-47B.",
+      "options": {"relative_path": "gate/benchmark_numbers.md", "rag_profile": "quality"},
+      "expected_source_contains": ["gate/benchmark_numbers.md"],
+      "must_include": ["160.80", "47.39", "18.60"],
+      "must_not_include": ["195.80 wall", "63.69 wall", "22.10 wall"],
+      "require_sources": true,
+      "require_citation": true
+    },
+    {
+      "id": "home_numeric_002",
+      "type": "numeric_exactness",
+      "question": "List the average latency values for the three benchmarked models.",
+      "options": {"relative_path": "gate/benchmark_numbers.md", "rag_profile": "quality"},
+      "expected_source_contains": ["gate/benchmark_numbers.md"],
+      "must_include": ["1085.75", "5066.33", "7961.08"],
+      "must_not_include": ["160.80 ms", "47.39 ms", "18.60 ms"],
+      "require_sources": true,
+      "require_citation": true
+    },
+    {
+      "id": "home_citation_001",
+      "type": "citation_source_id_validation",
+      "question": "What must citations point to?",
+      "options": {"relative_path": "gate/source_policy.md", "rag_profile": "quality"},
+      "expected_source_contains": ["gate/source_policy.md"],
+      "must_include": ["source"],
+      "must_include_any": [["returned source indices", "source 1 exists", "returned source list"]],
+      "require_sources": true,
+      "require_citation": true
+    },
+    {
+      "id": "home_citation_002",
+      "type": "citation_source_id_validation",
+      "question": "What should the answer do when retrieved chunks do not contain evidence?",
+      "options": {"relative_path": "gate/source_policy.md", "rag_profile": "quality"},
+      "expected_source_contains": ["gate/source_policy.md"],
+      "must_include_any": [["selected context is insufficient", "context is insufficient", "do not contain evidence"]],
+      "must_not_include": ["invent prices", "invent URLs"],
+      "require_sources": true,
+      "require_citation": true
+    },
+    {
+      "id": "home_long_context_001",
+      "type": "long_context_retrieval",
+      "question": "Summarize what retrieval-backed v1.1 added and what HomeRagIntegrationGate-v1 checks next.",
+      "options": {"relative_path": "gate/long_context_acceptance.md", "rag_profile": "quality"},
+      "expected_source_contains": ["gate/long_context_acceptance.md"],
+      "must_include": ["v1.1", "HomeRagIntegrationGate-v1"],
+      "must_include_any": [["numeric traps", "citation source-id"], ["ingestion", "indexing"], ["retriever", "selected chunks"]],
+      "must_not_include": ["production Home RAG is already fully accepted"],
+      "require_sources": true,
+      "require_citation": true
+    }
+  ]
+}

@@ -34,7 +34,6 @@ from app.prompts import (
     OBSIDIAN_EXPORT_MAP_PROMPT,
     OBSIDIAN_EXPORT_MERGE_PROMPT,
 )
-from app.provider import get_obsidian_export_llm
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +59,14 @@ def _export_settings() -> tuple[int, int, int, int]:
 
 
 def _get_llm() -> Any:
-    """Выбрать LLM для экспорта с увеличенным таймаутом."""
+    """Выбрать LLM для экспорта с увеличенным таймаутом.
+
+    Ленивый импорт: ``app.provider`` тянет весь LLM/embedding-стек (llama-index,
+    tiktoken, chromadb) — модули этого файла, не требующие LLM (пути/URI-хелперы),
+    не должны его загружать.
+    """
+    from app.provider import get_obsidian_export_llm
+
     return get_obsidian_export_llm()
 
 ProgressFn = Callable[[str, int, int], None]
@@ -150,11 +156,15 @@ def vault_rel_str(target_abs: Path) -> str:
         return target_abs.name
 
 
-def obsidian_uri(target_abs: Path) -> str:
-    """Сформировать ``obsidian://`` URI для открытия файла.
+def obsidian_uri(target_abs: Path, heading_text: str | None = None) -> str:
+    """Сформировать ``obsidian://`` URI для открытия файла (опц. на разделе).
 
     Предпочитает ``vault=<name>&file=<rel>`` (работает без регистрации пути),
     падает обратно на ``path=<abs>`` если ``OBSIDIAN_VAULT_NAME`` не задан.
+
+    :param heading_text: сырой текст заголовка (с эмодзи) — Obsidian-якорь ``#...``.
+        Это ТЕКСТ заголовка, а НЕ github-slug (Obsidian не понимает github-slug якоря).
+        При дублирующихся заголовках в документе Obsidian откроет первый одноимённый.
     """
     try:
         vault_name = get_settings().obsidian_vault_name
@@ -164,15 +174,39 @@ def obsidian_uri(target_abs: Path) -> str:
     if vault_name:
         # file= требует прямые слеши (стандарт Obsidian URI)
         rel = vault_rel_str(target_abs)  # уже содержит "/"
-        return (
+        uri = (
             "obsidian://open?vault="
             + _pct_encode(vault_name)
             + "&file="
             + _pct_encode(rel)
         )
-    # path= требует обратные слеши на Windows
-    abs_str = str(target_abs).replace("/", "\\")
-    return "obsidian://open?path=" + _pct_encode(abs_str)
+    else:
+        # path= требует обратные слеши на Windows
+        abs_str = str(target_abs).replace("/", "\\")
+        uri = "obsidian://open?path=" + _pct_encode(abs_str)
+
+    if heading_text:
+        # "#" закодирован как %23 (не сырой символ): некоторые обработчики URI обрежут
+        # всё после raw "#" как HTTP-фрагмент ещё до передачи строки в Obsidian.
+        uri += "%23" + _pct_encode(heading_text)
+    return uri
+
+
+def vscode_uri(md_abs: Path, line: int | None = None) -> str:
+    """Сформировать ``vscode://file/<abs>[:<line>]`` с корректно закодированным путём.
+
+    В отличие от «сырого» JS-варианта в ``knowledge_graph_d3.py`` (только замена
+    ``\\``→``/``), путь дополнительно percent-кодируется — иначе ломается на путях
+    с пробелами/кириллицей (например, ``ии агенты/...``).
+    """
+    from urllib.parse import quote
+
+    posix_path = str(md_abs).replace("\\", "/")
+    encoded = quote(posix_path, safe="/:")
+    uri = f"vscode://file/{encoded}"
+    if line is not None:
+        uri += f":{line}"
+    return uri
 
 
 def _pct_encode(s: str) -> str:

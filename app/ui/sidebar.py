@@ -98,6 +98,8 @@ def apply_research_payload(payload: dict) -> None:
     for tid, paths in (payload.get("topic_document_selections") or {}).items():
         if isinstance(paths, list):
             st.session_state[f"topic_docs_{tid}"] = [str(x) for x in paths]
+    workbench_sections = payload.get("workbench_sections")
+    st.session_state["workbench_sections"] = list(workbench_sections) if isinstance(workbench_sections, list) else []
 
 
 def render_reading_mode_toggle(*, key: str, help_text: str | None = None) -> None:
@@ -170,6 +172,7 @@ def render_sidebar_research_sessions(index_stats: dict | None) -> None:
                         history=list(st.session_state.get("history") or []),
                         question_draft=str(st.session_state.get("question_draft") or ""),
                         topic_document_selections=collect_topic_document_selections(),
+                        workbench_sections=list(st.session_state.get("workbench_sections") or []),
                     )
                     user_state.save_research_session(label, payload, index_version=iv or None)
                 except Exception as exc:  # noqa: BLE001 - user session save failure is UI-reportable

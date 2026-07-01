@@ -17,6 +17,7 @@ clean source filename, and HTML-escape everything for safe rendering.
 from __future__ import annotations
 
 import html
+from typing import Any
 
 # Tag namespaces that are plumbing for the review queue, not learner content.
 SYSTEM_TAG_PREFIXES = ("course:", "folder:", "source:", "deck:")
@@ -53,6 +54,30 @@ def split_card_tags(raw: str | None) -> tuple[list[str], list[str]]:
         else:
             human.append(tag)
     return human, system
+
+
+def source_path_from_card(card: dict[str, Any]) -> str:
+    """Resolve the underlying document path for a card (relative path in the corpus).
+
+    Unlike :func:`source_display`, which only surfaces a bare filename for the card
+    face, this returns the full path needed to look up the document elsewhere
+    (Obsidian/VS Code deep-links, Section Anchor Index, tutor handoff sourcing).
+    """
+    for key in ("relative_path", "source_path", "source_identifier"):
+        value = " ".join(str(card.get(key) or "").split()).strip()[:500]
+        if value and value not in {"scoped-quiz", "manual"}:
+            return value
+    deck_source_type = " ".join(str(card.get("deck_source_type") or "").split()).strip()[:80]
+    deck_source_id = " ".join(str(card.get("deck_source_id") or "").split()).strip()[:500]
+    if deck_source_type == "document" and deck_source_id:
+        return deck_source_id
+    for tag in str(card.get("tags") or "").split(","):
+        clean = tag.strip()
+        if clean.casefold().startswith("source:"):
+            value = clean.split(":", 1)[1].strip()
+            if value and value not in {"scoped-quiz", "manual"}:
+                return value
+    return ""
 
 
 def source_display(system_tags: list[str]) -> tuple[str, str] | None:

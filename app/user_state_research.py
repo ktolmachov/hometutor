@@ -20,8 +20,13 @@ def normalize_research_payload(
     history: list[Any],
     question_draft: str,
     topic_document_selections: dict[str, list[str]],
+    workbench_sections: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Build a JSON-serializable snapshot for `research_sessions` (Streamlit UI state)."""
+    """Build a JSON-serializable snapshot for `research_sessions` (Streamlit UI state).
+
+    ``workbench_sections`` — «Живой конспект» корзина (rows из ``app.section_index.section_to_row``,
+    все пути уже строки — JSON-safe как есть).
+    """
     return {
         "version": RESEARCH_PAYLOAD_VERSION,
         "current_view": current_view,
@@ -33,6 +38,7 @@ def normalize_research_payload(
         "history": history[:MAX_HISTORY_IN_SNAPSHOT] if history else [],
         "question_draft": (question_draft or "")[:5000],
         "topic_document_selections": topic_document_selections,
+        "workbench_sections": workbench_sections or [],
     }
 
 

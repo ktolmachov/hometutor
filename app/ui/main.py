@@ -56,6 +56,7 @@ from app.ui.fragments import (
     _fragment_interactive_quiz_tab,
     _fragment_knowledge_graph_tab,
     _fragment_learning_progress_tab,
+    _fragment_living_konspekt_tab,
     _fragment_metrics_tab,
     _fragment_print_view,
     _fragment_search_tab,
@@ -138,6 +139,7 @@ view_options = [
     "Курс",
     "Адаптивный план",
     "Knowledge Graph",
+    "Живой конспект",
     "Прогресс обучения",
     "История",
     "Темы",
@@ -152,6 +154,7 @@ _e2e_view_map = {
     "mission_control": HOME_VIEW,
     "kg": "Knowledge Graph",
     "knowledge_graph": "Knowledge Graph",
+    "living_konspekt": "Живой конспект",
     "qa": "Быстрый ответ",
     "quick_answer": "Быстрый ответ",
     "tutor": "Чат с тьютором",
@@ -232,6 +235,7 @@ _view_nav_labels = {
     "Найти материалы": "База знаний — Поиск по материалам",
     "Объяснить файл": "База знаний — Объяснить файл",
     "Knowledge Graph": "Ещё — Knowledge Graph",
+    "Живой конспект": "База знаний — Живой конспект",
     "История": "Ещё — История",
     "Метрики": "Ещё — Метрики",
     "Чистый вид": "Ещё — Чистый вид",
@@ -309,6 +313,8 @@ elif selected_view == "Knowledge Graph":
 
     render_e2e_demo_scene_for_view(selected_view)
     _fragment_knowledge_graph_tab()
+elif selected_view == "Живой конспект":
+    _fragment_living_konspekt_tab()
 elif selected_view == "Прогресс обучения":
     from app.ui.e2e_demo_scenes import render_e2e_demo_scene_for_view
 

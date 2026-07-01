@@ -132,6 +132,30 @@ def _collect_learned_set(concepts: dict) -> set[str]:
     return learned_set
 
 
+def _render_document_section_workbench_button(*, path: str, query_text: str, concept: str, key: str) -> None:
+    """«➕ раздел «<heading>»» под документом — секция считается server-side (не ферится из JS)."""
+    try:
+        from dataclasses import replace as _dc_replace
+
+        from app.section_index import best_section_for, build_section_index
+        from app.ui.living_konspekt_view import add_section_to_workbench
+
+        sections = build_section_index(path)
+        if not sections:
+            return
+        section = best_section_for(sections, query_text)
+    except Exception:  # noqa: BLE001 - section lookup must not break the concept panel
+        return
+    if section is None:
+        return
+    if st.button(f"➕ раздел «{section.heading_text}»", key=key, width="stretch"):
+        added = add_section_to_workbench(_dc_replace(section, concept=concept))
+        st.toast(
+            f"Добавлено в рабочий конспект: «{section.heading_text}»" if added else "Уже в рабочем конспекте",
+            icon="📚",
+        )
+
+
 def _render_concept_actions(
     sel: str,
     knowledge_graph,
@@ -250,7 +274,8 @@ def _render_concept_actions(
 
     st.markdown("**Связанные документы**")
     if related_docs:
-        for rel_path in related_docs:
+        query_text = " ".join(part for part in [sel, desc] if part)
+        for doc_idx, rel_path in enumerate(related_docs):
             doc_meta = doc_index.get(str(rel_path), {})
             title = (
                 doc_meta.get("relative_path")
@@ -275,6 +300,16 @@ def _render_concept_actions(
                 </div>
                 """,
                 unsafe_allow_html=True,
+            )
+            _render_document_section_workbench_button(
+                path=str(title),
+                query_text=" ".join(
+                    part
+                    for part in [query_text, " ".join(doc_meta.get("key_concepts") or [])]
+                    if part
+                ),
+                concept=sel,
+                key=f"kg_wb_{sel}_{doc_idx}",
             )
     else:
         st.caption("Для этой концепции пока нет привязанных документов.")

@@ -12,6 +12,7 @@ from app.llm_resilience import complete_with_resilience
 from app.logging_config import setup_logging
 from app.prompts import SYNTHESIS_PROMPT
 from app.retrieval_cache import get_base_services
+from app.section_index import IndexedSection, section_to_row
 
 logger = setup_logging()
 
@@ -253,6 +254,43 @@ def synthesize_topic(
         "sections": sections,
         "sources": sources,
         "coverage": coverage,
+    }
+
+
+def synthesize_sections(
+    *,
+    topic: str,
+    sections: list[IndexedSection],
+    services: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """LLM-синтез из ВЫБРАННЫХ секций рабочего конспекта («Живой конспект»).
+
+    В отличие от :func:`synthesize_topic`, контекст строится напрямую из
+    ``section.text`` — без повторного top-k поиска по Chroma, который бы не
+    увидел выбор пользователя (см. аудит плана «Живой конспект», п.5).
+    """
+    if not sections:
+        raise ValueError("Не выбрано ни одного раздела для синтеза")
+    services = services or get_base_services()
+
+    context_sections = [
+        f"Раздел: {section.heading_text}\n"
+        f"Источник: {section.konspekt_md_abs.name} (строки {section.line_start}-{section.line_end})\n"
+        f"{section.text}"
+        for section in sections
+    ]
+
+    llm = services["llm"]
+    prompt = SYNTHESIS_PROMPT.format(
+        context_str="\n\n".join(context_sections),
+        query_str=topic,
+    )
+    response = complete_with_resilience(llm, prompt, stage="synthesize_sections")
+
+    return {
+        "topic": topic,
+        "summary": response.text.strip(),
+        "sections": [section_to_row(section) for section in sections],
     }
 
 

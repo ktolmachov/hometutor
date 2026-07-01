@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.flashcards_tag_display import source_path_from_card as _source_path_from_card
 from app.models import PipelineOverrides, QueryOptions
 
 FLASHCARD_HANDOFF_ENTRYPOINT = "flashcard_handoff"
@@ -24,24 +25,6 @@ def _compact_text(value: Any, *, limit: int) -> str:
     if limit <= 0 or len(text) <= limit:
         return text
     return text[: max(1, limit - 1)].rstrip() + "…"
-
-
-def _source_path_from_card(card: dict[str, Any]) -> str:
-    for key in ("relative_path", "source_path", "source_identifier"):
-        value = _compact_text(card.get(key), limit=500)
-        if value and value not in {"scoped-quiz", "manual"}:
-            return value
-    deck_source_type = _compact_text(card.get("deck_source_type"), limit=80)
-    deck_source_id = _compact_text(card.get("deck_source_id"), limit=500)
-    if deck_source_type == "document" and deck_source_id:
-        return deck_source_id
-    for tag in str(card.get("tags") or "").split(","):
-        clean = tag.strip()
-        if clean.casefold().startswith("source:"):
-            value = clean.split(":", 1)[1].strip()
-            if value and value not in {"scoped-quiz", "manual"}:
-                return value
-    return ""
 
 
 def _build_seed_teaching_summary(*, front: str, back: str, topic: str, source_path: str) -> str:

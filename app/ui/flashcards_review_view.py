@@ -16,6 +16,7 @@ from app.flashcard_handoff import (
     flashcard_handoff_session_fields,
 )
 from app.flashcard_handoff_timing import log_handoff_answer_ready, record_handoff_click
+from app.flashcards_tag_display import source_path_from_card
 from app.flashcard_service import (
     build_flashcard_review_undo_snapshot,
     build_flashcards_session_audit_export,
@@ -513,6 +514,56 @@ def _render_flashcard_tutor_handoff_button(
     _complete_tutor_handoff_navigation(card)
 
 
+def _render_card_section_links(card: dict[str, Any], idx: int) -> None:
+    """«Открыть раздел» (Obsidian/VS Code) + «В рабочий конспект» под карточкой.
+
+    Деградирует тихо: pseudo-source (``scoped-quiz``/``manual``) или конспект ещё
+    не создан → ряд не рисуем, карточка остаётся как раньше.
+    """
+    source_path = source_path_from_card(card)
+    if not source_path:
+        return
+    try:
+        from app.obsidian_export import obsidian_uri, vscode_uri
+        from app.section_index import best_section_for, build_section_index
+        from app.ui.living_konspekt_view import add_section_to_workbench
+
+        sections = build_section_index(source_path)
+        if not sections:
+            return
+        query_text = " ".join(
+            part for part in [str(card.get("front") or ""), str(card.get("back") or card.get("answer") or "")] if part
+        )
+        section = best_section_for(sections, query_text)
+    except Exception:  # noqa: BLE001 - section lookup must not break card rendering
+        return
+    if section is None:
+        return
+
+    link_cols = st.columns(3)
+    with link_cols[0]:
+        st.link_button(
+            f"📄 «{section.heading_text}» · Obsidian",
+            obsidian_uri(section.konspekt_md_abs, heading_text=section.heading_text),
+            width="stretch",
+            key=f"fc_section_obs_{idx}",
+        )
+    with link_cols[1]:
+        st.link_button(
+            f"🖥 «{section.heading_text}» · VS Code",
+            vscode_uri(section.konspekt_md_abs, line=section.line_start),
+            width="stretch",
+            key=f"fc_section_vsc_{idx}",
+        )
+    with link_cols[2]:
+        if st.button("➕ В рабочий конспект", key=f"fc_section_to_workbench_{idx}", width="stretch"):
+            added = add_section_to_workbench(section)
+            st.toast(
+                f"Добавлено в рабочий конспект: «{section.heading_text}»" if added else "Уже в рабочем конспекте",
+                icon="📚",
+            )
+
+
 def _render_active_review_card(
     *,
     api_call: Callable[..., Any],
@@ -565,6 +616,8 @@ def _render_active_review_card(
     # instead of the bottom of the card (rating chips, tutor-handoff button)
     # being silently clipped and unreachable by mouse/tap.
     components.html(card_html, height=estimate_interactive_card_height(card), scrolling=True)
+
+    _render_card_section_links(card, idx)
 
     _render_review_rating_bridge(
         api_call=api_call,

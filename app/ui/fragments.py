@@ -14,6 +14,7 @@ from app.ui.data_views import (
 )
 from app.ui.flashcards_ui import _render_flashcards_tab
 from app.ui.interactive_quiz import _render_interactive_quiz_tab
+from app.ui.living_konspekt_view import render_living_konspekt_view as _render_living_konspekt_view
 from app.ui.print_view import render_print_view as _render_print_view
 from app.ui.topics_tab import render_topics_tab as _render_topics_tab
 from app.ui.tutor_chat import _render_tutor_chat_tab
@@ -38,6 +39,11 @@ def _fragment_interactive_quiz_tab() -> None:
 @st.fragment
 def _fragment_knowledge_graph_tab() -> None:
     _render_knowledge_graph_tab()
+
+
+@st.fragment
+def _fragment_living_konspekt_tab() -> None:
+    _render_living_konspekt_view()
 
 
 @st.fragment

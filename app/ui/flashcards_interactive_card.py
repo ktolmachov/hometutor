@@ -299,6 +299,8 @@ def build_interactive_card_html(
   var storageKey = 'fc_flip_' + queueNonce + '_' + cardId;
   var card3d = document.getElementById('fc3-card');
   var scene = document.getElementById('fc3-scene');
+  var frontFace = document.querySelector('.fc3-front');
+  var backFace = document.querySelector('.fc3-back');
   var locked = false;
 
   function readSessionFlip() {{
@@ -316,6 +318,14 @@ def build_interactive_card_html(
   function applyFlipClass() {{
     if (flipped) {{ card3d.classList.add('is-flipped'); }}
     else {{ card3d.classList.remove('is-flipped'); }}
+    // The face turned away from the viewer is still in normal document flow
+    // (only `backface-visibility` hides it), so its buttons/summary stay
+    // Tab-reachable — a keyboard user would land on invisible rating chips
+    // while the question face is showing. `inert` removes the hidden face
+    // from both focus and hit-testing; unsupported browsers just keep the
+    // pre-existing (imperfect) tab order, so this is a safe no-op fallback.
+    if (frontFace) {{ frontFace.inert = flipped; }}
+    if (backFace) {{ backFace.inert = !flipped; }}
   }}
   applyFlipClass();
 
@@ -387,8 +397,7 @@ def build_interactive_card_html(
   // estimate — otherwise short cards leave a large empty box below the
   // content. Measured off-DOM (hidden clone) so faces keep their normal
   // `position:absolute` sizing (needed for the flip transform) undisturbed.
-  var frontFace = document.querySelector('.fc3-front');
-  var backFace = document.querySelector('.fc3-back');
+  // (frontFace/backFace declared above, reused here.)
 
   function measureNaturalHeight(faceEl) {{
     if (!faceEl) {{ return 0; }}
@@ -436,6 +445,15 @@ def build_interactive_card_html(
     var t = e.target || {{}};
     var tag = (t.tagName || '').toLowerCase();
     if (tag === 'input' || tag === 'textarea' || t.isContentEditable) {{ return; }}
+    // This listener is also attached to `window.parent.document` (see below),
+    // so `e.target` may be a native Streamlit button/expander/link, not just
+    // something inside this iframe. Space/Enter there must reach the
+    // element's own activation (or toggle a <summary> disclosure) instead of
+    // being hijacked into a card flip/rating.
+    if (typeof t.closest === 'function' &&
+        t.closest('button, summary, a, select, [role="button"], [contenteditable="true"]')) {{
+      return;
+    }}
     if (e.metaKey || e.ctrlKey || e.altKey) {{ return; }}
     var code = e.code;
     if (!flipped) {{

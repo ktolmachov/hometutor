@@ -146,3 +146,25 @@ def test_estimate_height_grows_with_text_length_and_is_bounded() -> None:
     long_h = estimate_interactive_card_height(long_card)
     assert short_h < long_h
     assert long_h <= 900
+
+
+def test_hidden_face_is_marked_inert_so_it_leaves_tab_order() -> None:
+    # backface-visibility only hides a face *visually* — its buttons/summary
+    # stay focusable unless something removes them from the tab order.
+    # `inert` is toggled on the face turned away from the viewer, both faces
+    # start present, and the flip flag decides which one is disabled.
+    html_out = _build()
+    assert "frontFace.inert = flipped" in html_out
+    assert "backFace.inert = !flipped" in html_out
+
+
+def test_keyboard_shortcuts_skip_native_interactive_targets() -> None:
+    # This handler is also attached to window.parent.document (see the
+    # focus-crossing-iframe-boundary tests above), so e.target can be a real
+    # Streamlit button, an expander <summary>, or a link — Space/Enter there
+    # must reach that element's own activation, not hijack a card flip/rating.
+    html_out = _build()
+    assert (
+        "t.closest('button, summary, a, select, [role=\"button\"], [contenteditable=\"true\"]')"
+        in html_out
+    )

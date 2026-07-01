@@ -11,7 +11,6 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from app.flashcard_handoff import (
-    FLASHCARD_HANDOFF_ENTRYPOINT,
     build_flashcard_handoff_seed,
     clear_flashcard_handoff_session_fields,
     flashcard_handoff_session_fields,

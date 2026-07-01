@@ -27,6 +27,7 @@ from app.knowledge_text import tokenize_filtered as _tokenize_ru_en
 # ── Regex / нормализация заголовков ────────────────────────────────────
 _SLUG_STRIP_RE = re.compile(r"[^\w\s-]+", re.UNICODE)
 _SLUG_WS_RE = re.compile(r"[\s_]+")
+_CODE_FENCE_RE = re.compile(r"^(```|~~~)")
 
 _SKIP_HEADING_NORMALIZED = {"оглавление", "содержание", "toc", "table of contents"}
 _MAIN_IDEA_HEADING_NORMALIZED = {"главная мысль", "main idea", "key idea", "основная мысль"}
@@ -82,8 +83,17 @@ def _is_ranking_noise(section: ParsedSection) -> bool:
 def _parse_body_sections(body: str, offset_lines: int) -> list[ParsedSection]:
     lines = body.splitlines()
     headings: list[tuple[int, str, int]] = []  # (level, heading_text, line_idx 0-based в body)
+    in_fence = False
     for i, raw_line in enumerate(lines):
-        match = _MARKDOWN_HEADING_RE.match(raw_line.strip())
+        stripped = raw_line.strip()
+        # ``` / ~~~ code-fence: строки вида "# комментарий" внутри примера кода — не заголовки
+        # (иначе они обрезают тело содержащей секции, см. Findings — конспекты по программированию).
+        if _CODE_FENCE_RE.match(stripped):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        match = _MARKDOWN_HEADING_RE.match(stripped)
         if match:
             headings.append((len(match.group(1)), match.group(2).strip(), i))
 
@@ -222,6 +232,11 @@ def best_section_for(
 
     Скорит token-overlap с ``heading_text`` (вес выше) + ``text``, со стоп-листом RU+EN.
     Пропускает TOC/H1-титул и почти-пустые секции (если есть непустая альтернатива).
+
+    При **пустом** запросе — фолбэк на первый непустой кандидат (нет сигнала для выбора).
+    При **непустом** запросе, но нулевом overlap со всеми кандидатами — ``None`` (см. Findings):
+    случайная первая секция без реального совпадения хуже честного whole-doc фолбэка у вызывающей
+    стороны (``obs_uri``/``needs_konspekt`` в графе, whole-card в карточке).
     """
     if not sections:
         return None
@@ -248,7 +263,7 @@ def best_section_for(
             best_score = score
             best = section
 
-    return best if best is not None else candidates[0]
+    return best
 
 
 def main_idea_section(

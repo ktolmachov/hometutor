@@ -165,6 +165,9 @@ def obsidian_uri(target_abs: Path, heading_text: str | None = None) -> str:
     :param heading_text: сырой текст заголовка (с эмодзи) — Obsidian-якорь ``#...``.
         Это ТЕКСТ заголовка, а НЕ github-slug (Obsidian не понимает github-slug якоря).
         При дублирующихся заголовках в документе Obsidian откроет первый одноимённый.
+        Якорь официально документирован для ``vault=&file=``-формы; в ``path=``-фолбэке
+        (когда ``OBSIDIAN_VAULT_NAME`` не задан) переход на якорь может молча не сработать —
+        Obsidian откроет файл целиком без прыжка к разделу.
     """
     try:
         vault_name = get_settings().obsidian_vault_name

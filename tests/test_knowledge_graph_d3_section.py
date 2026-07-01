@@ -55,8 +55,8 @@ class TestDocumentSectionCache:
         monkeypatch.setattr(section_index, "build_section_index", fake_build_section_index)
 
         cache: dict[str, list] = {}
-        first = _document_section(str(MD), "агенты", index_cache=cache)
-        second = _document_section(str(MD), "другой запрос про инструменты", index_cache=cache)
+        first = _document_section(str(MD), "агентов", index_cache=cache)
+        second = _document_section(str(MD), "текст про агентов и решения", index_cache=cache)
 
         assert calls == [str(MD)]  # второй вызов взял индекс из cache, не пересчитал
         assert first is not None and first["heading_text"] == "Раздел про агентов"

@@ -117,28 +117,48 @@ def _save_living_konspekt(title: str, body_markdown: str) -> Path:
 
 
 # ── UI ────────────────────────────────────────────────────────────────────
+def _duplicate_heading_keys(rows: list[dict[str, Any]]) -> set[tuple[str, str]]:
+    """``(konspekt_md_abs, heading_text)`` с >1 разделом в корзине.
+
+    Obsidian-якорь открывает **первый** одноимённый heading в файле — при дублях он может
+    привести не туда, куда собрали раздел (см. план, «Тонкий риск — одинаковые заголовки»).
+    """
+    counts: dict[tuple[str, str], int] = {}
+    for row in rows:
+        key = (str(row.get("konspekt_md_abs") or ""), str(row.get("heading_text") or ""))
+        counts[key] = counts.get(key, 0) + 1
+    return {key for key, count in counts.items() if count > 1}
+
+
 def _render_collected_sections(rows: list[dict[str, Any]]) -> None:
     from app.obsidian_export import obsidian_uri, vscode_uri
 
     st.markdown("### Собранные разделы")
+    duplicate_keys = _duplicate_heading_keys(rows)
     for row in list(rows):
         md_abs = str(row.get("konspekt_md_abs") or "")
         line_start = row.get("line_start")
+        heading_text = str(row.get("heading_text") or "")
         with st.container(border=True):
             cols = st.columns([5, 1, 1])
             with cols[0]:
-                st.markdown(f"**{row.get('heading_text') or '—'}**")
+                st.markdown(f"**{heading_text or '—'}**")
                 st.caption(f"{Path(md_abs).name} · строки {line_start}-{row.get('line_end')}")
+                if (md_abs, heading_text) in duplicate_keys:
+                    st.caption("⚠️ Заголовок повторяется в документе — VS Code точнее для повторяющихся заголовков.")
                 st.write(str(row.get("text") or "")[:400])
             with cols[1]:
                 if md_abs:
                     st.link_button(
                         "📄 Открыть",
-                        obsidian_uri(Path(md_abs), heading_text=str(row.get("heading_text") or "")),
+                        obsidian_uri(Path(md_abs), heading_text=heading_text),
                         width="stretch",
-                        key=f"wb_open_{md_abs}_{line_start}",
                     )
-                    st.caption(vscode_uri(Path(md_abs), line=int(line_start) if line_start else None))
+                    st.link_button(
+                        "🖥 VS Code",
+                        vscode_uri(Path(md_abs), line=int(line_start) if line_start else None),
+                        width="stretch",
+                    )
             with cols[2]:
                 if st.button("🗑 Убрать", key=f"wb_remove_{md_abs}_{line_start}", width="stretch"):
                     remove_section_from_workbench(md_abs, int(line_start) if line_start else 0)
@@ -257,7 +277,10 @@ def render_living_konspekt_view() -> None:
     )
 
     rows = get_workbench_rows()
-    st.caption(f"В корзине: {len(rows)} раздел(ов)")
+    st.caption(
+        f"В корзине: {len(rows)} раздел(ов) · переживает rerun, но не перезапуск/закрытие вкладки "
+        "(для восстановления между сессиями — сохраните именованную сессию в сайдбаре)."
+    )
 
     if not rows:
         st.info(

@@ -107,6 +107,28 @@ class TestParseSections:
         sections = parse_sections(p)
         assert sections[0].line_start == 1
 
+    def test_heading_like_line_inside_code_fence_is_not_a_section_boundary(self, tmp_path: Path):
+        """Findings: '# comment' в примере кода не должен обрезать содержащую H2-секцию."""
+        p = tmp_path / "code.md"
+        p.write_text(
+            "## Пример кода\n\n"
+            "Текст до примера.\n\n"
+            "```python\n"
+            "# это комментарий, а не заголовок\n"
+            "def f():\n"
+            "    pass\n"
+            "```\n\n"
+            "Текст после примера.\n\n"
+            "## Следующий раздел\n\nТело следующего.\n",
+            encoding="utf-8",
+        )
+        sections = parse_sections(p)
+        assert [s.heading_text for s in sections] == ["Пример кода", "Следующий раздел"]
+        example = sections[0]
+        assert "# это комментарий" in example.text
+        assert "def f():" in example.text
+        assert "Текст после примера." in example.text
+
 
 class TestCachedParseSections:
     """Кэш — по content-hash, не по (mtime, size): restore/copy с тем же timestamp+размером
@@ -186,6 +208,12 @@ class TestBestSectionFor:
 
     def test_no_sections_returns_none(self):
         assert best_section_for([], "что угодно") is None
+
+    def test_zero_overlap_with_nonempty_query_returns_none(self, konspekt_path: Path):
+        """Findings: нулевой overlap не должен маскироваться под уверенный матч (candidates[0])."""
+        sections = parse_sections(konspekt_path)
+        best = best_section_for(sections, "совершенно несвязанные слова которых точно нигде нет")
+        assert best is None
 
 
 class TestTokenizeRuEn:

@@ -546,14 +546,12 @@ def _render_card_section_links(card: dict[str, Any], idx: int) -> None:
             f"📄 «{section.heading_text}» · Obsidian",
             obsidian_uri(section.konspekt_md_abs, heading_text=section.heading_text),
             width="stretch",
-            key=f"fc_section_obs_{idx}",
         )
     with link_cols[1]:
         st.link_button(
             f"🖥 «{section.heading_text}» · VS Code",
             vscode_uri(section.konspekt_md_abs, line=section.line_start),
             width="stretch",
-            key=f"fc_section_vsc_{idx}",
         )
     with link_cols[2]:
         if st.button("➕ В рабочий конспект", key=f"fc_section_to_workbench_{idx}", width="stretch"):

@@ -989,11 +989,15 @@ function _winPath(p){return (p||'').replace(/\//g,'\\');}
 function _obsidianUri(p){return 'obsidian://open?path='+encodeURIComponent(_winPath(p));}
 function _vscodeUri(p){return 'vscode://file/'+_winPath(p);}
 function _copyDocPath(p,btn){navigator.clipboard.writeText(_winPath(p)).then(()=>{const t=btn.textContent;btn.textContent='✓ Скопировано';setTimeout(()=>btn.textContent=t,1400);});}
+// heading_text приходит из произвольного md (заголовки лекций) — экранируем перед вставкой
+// в innerHTML/атрибуты (в отличие от путей/меток концептов ниже, это новый пользовательский ввод).
+function _escHtml(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function _docActions(r){
   if(!r.src_abs&&!r.md_abs)return'';
   let btns='';
   if(r.section){
-    btns+=`<a class="action-btn sec ready" href="${r.section.obs_uri}" title="Открыть раздел «${r.section.heading_text}» в Obsidian">📍 «${r.section.heading_text}»</a>`;
+    const heading=_escHtml(r.section.heading_text);
+    btns+=`<a class="action-btn sec ready" href="${r.section.obs_uri}" title="Открыть раздел «${heading}» в Obsidian">📍 «${heading}»</a>`;
     btns+=`<a class="action-btn vsc" href="${r.section.vscode_uri}" title="Открыть раздел в VS Code (строка ${r.section.line_start})">🖥 VS Code: раздел</a>`;
   } else if(r.obs_uri){
     btns+=`<a class="action-btn obs ready" href="${r.obs_uri}" title="✅ Конспект готов — открыть в Obsidian">🔮 Obsidian</a>`;

@@ -124,7 +124,10 @@ def _rating_chips_html(interval_preview: dict[str, int]) -> str:
 
 _STYLE = f"""<style>
   * {{ box-sizing: border-box; }}
-  html, body {{ margin: 0; padding: 0; background: transparent; font-family: {_MONO}; }}
+  html, body {{
+    margin: 0; padding: 0; background: transparent; font-family: {_MONO};
+    height: 100%; width: 100%;
+  }}
   .fc3-scene {{
     width: 100%; height: 100%; perspective: 1600px; cursor: pointer;
     padding: 6px;

@@ -28,7 +28,7 @@ from app.flashcard_service import (
     set_flashcard_expert_settings,
 )
 from app.flashcards_memory_signals import compute_card_memory_signals
-from app.flashcards_rating_labels import RATING_BUTTONS, RATING_MEANINGS
+from app.flashcards_rating_labels import RATING_BUTTONS
 from app.flashcards_scheduling import format_interval_ru
 from app.models import Message
 from app.session_store import session_store

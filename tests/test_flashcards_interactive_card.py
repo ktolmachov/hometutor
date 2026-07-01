@@ -148,6 +148,24 @@ def test_estimate_height_grows_with_text_length_and_is_bounded() -> None:
     assert long_h <= 900
 
 
+def test_estimate_height_grows_with_tag_count() -> None:
+    # The outer iframe box is sized once from Python, before any content is
+    # rendered — it can't shrink/grow afterwards (components.html() doesn't
+    # get the JS resize message a declared custom component would). Tag
+    # chips wrap onto their own line(s) and aren't reflected in front/back
+    # text length at all, so an under-count here means the tag row gets
+    # clipped at the iframe boundary with no scrollbar to reach it.
+    few_tags = {"front": "q", "back": "a", "tags": "algebra, formulas"}
+    many_tags = {"front": "q", "back": "a", "tags": "a, b, c, d, e, f, g, h"}
+    assert estimate_interactive_card_height(many_tags) > estimate_interactive_card_height(few_tags)
+
+
+def test_estimate_height_accounts_for_source_line() -> None:
+    no_source = {"front": "q", "back": "a", "tags": "algebra"}
+    with_source = {"front": "q", "back": "a", "tags": "algebra, source:lesson_3.md"}
+    assert estimate_interactive_card_height(with_source) > estimate_interactive_card_height(no_source)
+
+
 def test_hidden_face_is_marked_inert_so_it_leaves_tab_order() -> None:
     # backface-visibility only hides a face *visually* — its buttons/summary
     # stay focusable unless something removes them from the tab order.

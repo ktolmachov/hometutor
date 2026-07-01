@@ -556,7 +556,15 @@ def _render_active_review_card(
         initial_flipped=initial_flipped,
         session_nonce=session_nonce,
     )
-    components.html(card_html, height=estimate_interactive_card_height(card), scrolling=False)
+    # scrolling=True is a safety net, not the primary sizing mechanism: the
+    # JS resize inside the card (see flashcards_interactive_card.py) can only
+    # resize its own inner div, not this outer iframe box — components.html()
+    # renders a plain iframe that Streamlit never resizes from postMessage.
+    # If estimate_interactive_card_height() ever undershoots the real
+    # rendered content, scrolling=True means an ugly in-iframe scrollbar
+    # instead of the bottom of the card (rating chips, tutor-handoff button)
+    # being silently clipped and unreachable by mouse/tap.
+    components.html(card_html, height=estimate_interactive_card_height(card), scrolling=True)
 
     _render_review_rating_bridge(
         api_call=api_call,

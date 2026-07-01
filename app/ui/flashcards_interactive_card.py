@@ -43,16 +43,34 @@ _MIN_HEIGHT = 220
 
 
 def estimate_interactive_card_height(card: dict[str, Any]) -> int:
-    """Initial iframe height (px) for ``components.html``, before the iframe's
-    own JS measures its actual rendered content and asks Streamlit to resize
-    it (``streamlit:setFrameHeight`` in the builder's script) — this is only
-    the first-paint fallback, so it only needs to be a reasonable estimate,
-    not exact.
+    """Iframe height (px) for ``components.html``.
+
+    This is the *only* number that actually controls the visible box: the
+    iframe's own JS also measures its rendered content
+    (``measureNaturalHeight`` in the builder's script) and resizes the
+    *inner* ``.fc3-card`` div to match, but the ``streamlit:setFrameHeight``
+    postMessage it sends to ask the host to resize the outer iframe itself
+    is not received by anything — ``components.html()`` renders a plain
+    ``st.iframe``-style element (verified against the installed Streamlit's
+    frontend bundle), not a ``declare_component`` instance, and only the
+    latter listens for that message. If this estimate undershoots the real
+    rendered height, the extra content is cut off at the iframe boundary
+    with nothing to scroll it into view (mitigated by ``scrolling=True`` at
+    the call site, but that's a fallback, not a fix) — so this should stay a
+    generous over-estimate, not a tight one.
     """
     front_len = len(str(card.get("front") or ""))
     back_len = len(str(card.get("back") or ""))
-    extra = max(0, (front_len + back_len) - 200) // 3
-    return min(_MAX_HEIGHT, _BASE_HEIGHT + extra)
+    text_extra = max(0, (front_len + back_len) - 200) // 3
+
+    human_tags, system_tags = split_card_tags(card.get("tags"))
+    # Tag chips wrap onto their own lines and aren't reflected in front/back
+    # length at all — a card with many tags needs materially more height.
+    tags_extra = 28 * max(0, len(human_tags) - 2)
+    if source_display(system_tags) is not None:
+        tags_extra += 18
+
+    return min(_MAX_HEIGHT, _BASE_HEIGHT + text_extra + tags_extra)
 
 
 def _deck_badge_html(card: dict[str, Any]) -> str:
@@ -392,12 +410,24 @@ def build_interactive_card_html(
     window.setTimeout(function() {{ ring.style.strokeDashoffset = targetOffset; }}, 40);
   }}
 
-  // Shrink the card (and ask Streamlit to shrink the iframe itself) to the
-  // face's *actual* content height instead of the fixed Python-side
-  // estimate — otherwise short cards leave a large empty box below the
-  // content. Measured off-DOM (hidden clone) so faces keep their normal
-  // `position:absolute` sizing (needed for the flip transform) undisturbed.
-  // (frontFace/backFace declared above, reused here.)
+  // Shrink the *inner* card to the face's actual content height instead of
+  // the fixed Python-side estimate — otherwise short cards leave a large
+  // empty box below the content. Measured off-DOM (hidden clone) so faces
+  // keep their normal `position:absolute` sizing (needed for the flip
+  // transform) undisturbed. (frontFace/backFace declared above, reused
+  // here.)
+  //
+  // This only resizes `.fc3-card` *within* the iframe's own document — it
+  // cannot shrink the outer iframe box itself. `sendFrameHeight()` below
+  // best-effort-posts the standard custom-component resize message on the
+  // chance a future Streamlit version honours it for `components.html()`
+  // iframes too, but as of the installed frontend it does not: only a
+  // `declare_component()` instance's ComponentInstance listens for
+  // `streamlit:setFrameHeight`, and `components.html()` renders a plain
+  // `st.iframe`-style element that never wires that listener up. The outer
+  // box size is controlled purely by `estimate_interactive_card_height()`
+  // (Python side) plus `scrolling=True` at the `components.html(...)` call
+  // as a fallback for whatever that estimate undershoots.
 
   function measureNaturalHeight(faceEl) {{
     if (!faceEl) {{ return 0; }}

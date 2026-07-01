@@ -1,0 +1,137 @@
+"""Interactive 3D flip flashcard iframe builder (client-side flip + rating bridge)."""
+
+from app.flashcards_memory_signals import compute_card_memory_signals
+from app.flashcards_rating_labels import RATING_BUTTONS
+from app.flashcards_scheduling import RATING_TO_QUALITY
+from app.ui.flashcards_interactive_card import build_interactive_card_html, estimate_interactive_card_height
+
+_CARD = {
+    "id": 42,
+    "front": "front <b>&</b> question",
+    "back": "back <script>x</script> answer",
+    "deck_name": "Алгебра",
+    "deck_source_type": "course",
+    "tags": "algebra, formulas, course:abc123",
+    "easiness": 2.5,
+    "interval_days": 6,
+    "repetitions": 3,
+    "next_review": None,
+    "last_review": None,
+}
+
+_INTERVAL_PREVIEW = {"again": 1, "hard": 4, "good": 6, "easy": 9}
+_MEMORY = compute_card_memory_signals(_CARD)
+
+
+def _build(**overrides) -> str:
+    kwargs = dict(
+        card=_CARD,
+        idx=0,
+        total=5,
+        interval_preview=_INTERVAL_PREVIEW,
+        memory=_MEMORY,
+        initial_flipped=False,
+        session_nonce=1,
+    )
+    kwargs.update(overrides)
+    return build_interactive_card_html(**kwargs)
+
+
+def test_front_and_back_are_html_escaped() -> None:
+    html_out = _build()
+    assert "<b>" not in html_out
+    assert "<script>x</script>" not in html_out
+    assert "&lt;b&gt;" in html_out
+    assert "&lt;script&gt;" in html_out
+
+
+def test_bridge_selectors_present_for_all_ratings_and_handoff() -> None:
+    html_out = _build()
+    for _label, q_label, _quality, _color in RATING_BUTTONS:
+        assert f"st-key-fc_rate_{q_label}" in html_out
+    assert "st-key-fc_gap_to_tutor" in html_out
+
+
+def test_projected_intervals_shown_in_rating_chips() -> None:
+    html_out = _build()
+    # format_interval_ru(1) == "завтра", format_interval_ru(4) == "4 дня", etc.
+    assert "завтра" in html_out
+    assert "4 дня" in html_out
+    assert "6 дней" in html_out
+    assert "9 дней" in html_out
+
+
+def test_physical_key_codes_present() -> None:
+    html_out = _build()
+    for code in ("Digit1", "Numpad1", "Digit4", "Numpad4", "Space", "Enter", "NumpadEnter", "KeyE"):
+        assert code in html_out
+
+
+def test_key_handler_attached_to_local_and_parent_document() -> None:
+    html_out = _build()
+    assert "document.addEventListener('keydown', window.__fcCardKeyHandler)" in html_out
+    assert "pwin.document.addEventListener('keydown', pwin.__fcCardKeyHandler)" in html_out
+
+
+def test_dedup_removes_both_card_handler_and_legacy_parent_handler() -> None:
+    html_out = _build()
+    # New handler deduped on both documents before re-attaching.
+    assert "document.removeEventListener('keydown', window.__fcCardKeyHandler)" in html_out
+    assert "pwin.document.removeEventListener('keydown', pwin.__fcCardKeyHandler)" in html_out
+    # Legacy single-iframe keyboard module's handler is also swept from the
+    # parent document, so a stale listener from a hot-reloaded prior page
+    # can't double-fire a keystroke.
+    assert "pwin.__fcKeyHandler" in html_out
+    assert "pwin.document.removeEventListener('keydown', pwin.__fcKeyHandler)" in html_out
+
+
+def test_typing_targets_are_ignored() -> None:
+    html_out = _build()
+    assert "input" in html_out and "textarea" in html_out and "isContentEditable" in html_out
+
+
+def test_initial_flipped_reflected_in_markup() -> None:
+    flipped_html = _build(initial_flipped=True)
+    unflipped_html = _build(initial_flipped=False)
+    assert "var initialFlipped = true;" in flipped_html
+    assert "var initialFlipped = false;" in unflipped_html
+
+
+def test_session_storage_key_namespaced_by_session_nonce() -> None:
+    html_out = _build(session_nonce=7)
+    assert "'fc_flip_' + queueNonce + '_' + cardId" in html_out
+    assert "var queueNonce = 7;" in html_out
+    assert "var cardId = 42;" in html_out
+
+
+def test_ease_factor_alias_card_does_not_crash() -> None:
+    card = dict(_CARD)
+    card.pop("easiness")
+    card["ease_factor"] = 2.5
+    memory = compute_card_memory_signals(card)
+    html_out = build_interactive_card_html(
+        card=card,
+        idx=0,
+        total=5,
+        interval_preview=_INTERVAL_PREVIEW,
+        memory=memory,
+        initial_flipped=False,
+        session_nonce=1,
+    )
+    assert "fc3-scene" in html_out
+
+
+def test_rating_quality_matches_scheduling_quality_map() -> None:
+    # If these diverge, a chip would show one rating's projected interval
+    # while the bridge click sends a different `quality` to the server.
+    from_labels = {q_label: quality for _label, q_label, quality, _color in RATING_BUTTONS}
+    assert from_labels == RATING_TO_QUALITY
+
+
+def test_estimate_height_grows_with_text_length_and_is_bounded() -> None:
+    short_card = {"front": "q", "back": "a"}
+    long_card = {"front": "q" * 500, "back": "a" * 500}
+    short_h = estimate_interactive_card_height(short_card)
+    long_h = estimate_interactive_card_height(long_card)
+    assert short_h < long_h
+    assert long_h <= 900

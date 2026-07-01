@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import html
 import json
 import logging
 from typing import Any, Callable
@@ -28,14 +27,15 @@ from app.flashcard_service import (
     preview_flashcard_review_intervals,
     set_flashcard_expert_settings,
 )
-from app.flashcards_review_keyboard import build_review_keyboard_js
+from app.flashcards_memory_signals import compute_card_memory_signals
+from app.flashcards_rating_labels import RATING_BUTTONS, RATING_MEANINGS
 from app.flashcards_scheduling import format_interval_ru
-from app.flashcards_tag_display import escape_multiline, render_card_tags_html
 from app.models import Message
 from app.session_store import session_store
 
 from app.ui.continuity_bridge import flashcard_gap_to_tutor_cta_ru, flashcards_expert_controls_intro_ru
 from app.ui.expert_controls import render_expert_controls
+from app.ui.flashcards_interactive_card import build_interactive_card_html, estimate_interactive_card_height
 from app.ui.flashcards_read_cache import (
     due_count_cache_key,
     flashcards_bootstrap,
@@ -56,22 +56,6 @@ from app.ui.session_state import (
     PROGRESS_FOCUS_SECTION_KEY,
     PROGRESS_FOCUS_STREAK_WEEKLY,
 )
-
-RATING_BUTTONS = [
-    ("🔴 Снова", "again", 0, "#c0392b"),
-    ("🟡 Трудно", "hard", 3, "#d68910"),
-    ("🟢 Хорошо", "good", 4, "#1e8449"),
-    ("⭐ Легко", "easy", 5, "#1a5276"),
-]
-
-# Self-assessment meaning shown above each rating button — the recall judgement
-# the learner is making, which the bare label ("Трудно") does not convey.
-RATING_MEANINGS = {
-    "again": "не вспомнил",
-    "hard": "с трудом",
-    "good": "вспомнил",
-    "easy": "сразу",
-}
 
 _EXPERT_FILTER_DEFAULTS = {
     "fc_expert_iv_min": 0,
@@ -387,45 +371,51 @@ def _record_review_rating(
     st.rerun()
 
 
-def _render_review_rating_buttons(
+def _render_review_rating_bridge(
     *,
     api_call: Callable[..., Any],
     card: dict[str, Any],
     idx: int,
+    interval_preview: dict[str, int],
     merge_session_min_next_review: Callable[[Any, str | None], None],
 ) -> None:
-    interval_preview = preview_flashcard_review_intervals(card)
-    cols = st.columns(4)
-    for col, (label, q_label, quality, color) in zip(cols, RATING_BUTTONS):
-        with col:
-            eta = format_interval_ru(int(interval_preview.get(q_label, 1)))
-            st.markdown(
-                f'<div class="fc-rate-eta" style="--fc-eta-color:{color}">'
-                f'<span class="fc-rate-eta-meaning">{RATING_MEANINGS[q_label]}</span>'
-                f'<span class="fc-rate-eta-days">→ {html.escape(eta)}</span>'
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-            if st.button(label, key=f"fc_rate_{q_label}", width='stretch'):
-                try:
-                    result = api_call(
-                        "POST",
-                        "/flashcards/review",
-                        json={"card_id": card["id"], "quality": quality},
-                    )
-                except Exception as e:  # noqa: BLE001 - UI displays API failure.
-                    st.error(f"Не удалось сохранить оценку: {e}")
-                else:
-                    _record_review_rating(
-                        card=card,
-                        idx=idx,
-                        q_label=q_label,
-                        button_label=label,
-                        quality=quality,
-                        eta=eta,
-                        result=result,
-                        merge_session_min_next_review=merge_session_min_next_review,
-                    )
+    """Hidden native buttons the interactive card iframe clicks to score.
+
+    Rendered unconditionally (not gated on ``flipped``) because the flip is
+    now client-side inside the iframe and the server never learns about it —
+    the buttons must exist in the DOM before the learner flips the card.
+    Visually hidden off-screen via ``app/ui_theme.css`` (``.st-key-fc_rate_*``),
+    not via ``st.columns``/markdown wrapping (that visual layer now lives in
+    the iframe card face).
+    """
+    for label, q_label, quality, _color in RATING_BUTTONS:
+        eta = format_interval_ru(int(interval_preview.get(q_label, 1)))
+        if st.button(label, key=f"fc_rate_{q_label}", width='stretch'):
+            try:
+                result = api_call(
+                    "POST",
+                    "/flashcards/review",
+                    json={"card_id": card["id"], "quality": quality},
+                )
+            except Exception as e:  # noqa: BLE001 - UI displays API failure.
+                st.error(f"Не удалось сохранить оценку: {e}")
+            else:
+                _record_review_rating(
+                    card=card,
+                    idx=idx,
+                    q_label=q_label,
+                    button_label=label,
+                    quality=quality,
+                    eta=eta,
+                    result=result,
+                    merge_session_min_next_review=merge_session_min_next_review,
+                )
+    _render_flashcard_tutor_handoff_button(
+        api_call=api_call,
+        card=card,
+        idx=idx,
+        merge_session_min_next_review=merge_session_min_next_review,
+    )
 
 
 def _seed_tutor_handoff_session(card: dict[str, Any]) -> None:
@@ -537,7 +527,6 @@ def _render_active_review_card(
     review_progress_ratio: Callable[[int, int], float],
     merge_session_min_next_review: Callable[[Any, str | None], None],
 ) -> None:
-    flipped: bool = st.session_state.get("flashcards_card_flipped", False)
     _render_flashcards_expert_layer(
         deck_label=deck_label,
         selected_tags=selected_tags,
@@ -555,53 +544,28 @@ def _render_active_review_card(
     st.progress(review_progress_ratio(idx, total), text=progress_text)
     _maybe_render_undo_last_rating(api_call)
 
-    deck_name = html.escape(str(card.get("deck_name", "")))
-    tags_html = render_card_tags_html(card.get("tags"))
-    st.markdown(
-        f'<div class="flashcard flashcard-front">'
-        f'<div class="fc-card-label">Вопрос · {deck_name}</div>'
-        f'<div class="fc-card-text">{escape_multiline(card["front"])}</div>'
-        f"{tags_html}</div>",
-        unsafe_allow_html=True,
+    interval_preview = preview_flashcard_review_intervals(card)
+    memory = compute_card_memory_signals(card)
+    initial_flipped = bool(st.session_state.get("flashcards_card_flipped", False))
+    session_nonce = int(st.session_state.get("flashcards_review_queue_nonce", 0))
+    card_html = build_interactive_card_html(
+        card=card,
+        idx=idx,
+        total=total,
+        interval_preview=interval_preview,
+        memory=memory,
+        initial_flipped=initial_flipped,
+        session_nonce=session_nonce,
     )
-    if flipped:
-        st.markdown(
-            f'<div class="flashcard flashcard-back">'
-            f'<div class="fc-card-label">Ответ</div>'
-            f'<div class="fc-card-text">{escape_multiline(card["back"])}</div></div>',
-            unsafe_allow_html=True,
-        )
-        _render_review_rating_buttons(
-            api_call=api_call,
-            card=card,
-            idx=idx,
-            merge_session_min_next_review=merge_session_min_next_review,
-        )
-        st.caption("⌨ Пробел — Хорошо · 1–4 — оценки · E — объясни")
-        _render_flashcard_tutor_handoff_button(
-            api_call=api_call,
-            card=card,
-            idx=idx,
-            merge_session_min_next_review=merge_session_min_next_review,
-        )
-    else:
-        if st.button("👁 Показать ответ", width='stretch', type="primary", key="fc_flip"):
-            st.session_state["flashcards_card_flipped"] = True
-            st.rerun()
-        st.caption("⌨ Пробел или Enter — показать ответ")
+    components.html(card_html, height=estimate_interactive_card_height(card), scrolling=False)
 
-    interval = card.get("interval_days", 0)
-    reps = card.get("repetitions", 0)
-    if reps == 0:
-        hint = "🆕 Новая карточка"
-    elif interval <= 1:
-        hint = "🔴 Интервал: 1 день"
-    elif interval <= 7:
-        hint = f"🟡 Интервал: {interval} дней"
-    else:
-        hint = f"🟢 Интервал: {interval} дней"
-    st.caption(hint)
-    components.html(build_review_keyboard_js(flipped), height=0)
+    _render_review_rating_bridge(
+        api_call=api_call,
+        card=card,
+        idx=idx,
+        interval_preview=interval_preview,
+        merge_session_min_next_review=merge_session_min_next_review,
+    )
 
 
 def render_review(
@@ -746,6 +710,9 @@ def render_review(
                 _fc_sync_expert_filtered_queue()
                 st.session_state["flashcards_review_index"] = 0
                 st.session_state["flashcards_card_flipped"] = False
+                st.session_state["flashcards_review_queue_nonce"] = (
+                    int(st.session_state.get("flashcards_review_queue_nonce", 0)) + 1
+                )
                 st.session_state["flashcards_review_stats"] = {"again": 0, "hard": 0, "good": 0, "easy": 0}
                 st.session_state.pop(_FC_LAST_ACTION_KEY, None)
                 st.session_state["flashcards_review_session_next_review_min"] = None

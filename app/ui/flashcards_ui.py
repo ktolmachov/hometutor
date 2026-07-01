@@ -187,6 +187,10 @@ def _reset_review_session_state(state: Any) -> None:
     state["flashcards_review_session_error"] = None
     state["flashcards_review_session_loaded_at"] = None
     state["flashcards_review_session_next_review_min"] = None
+    # Namespaces the interactive card's sessionStorage flip flag (per-cardId
+    # key) so a stale "already flipped" flag from a previous queue load can
+    # never leak onto the same card reappearing after a fresh load.
+    state["flashcards_review_queue_nonce"] = int(state.get("flashcards_review_queue_nonce", 0)) + 1
     state.pop("flashcards_review_last_action", None)
     state.pop(FLASHCARDS_REVIEW_RECEIPT_BASELINE_KEY, None)
 

@@ -1495,6 +1495,19 @@ div[data-testid="stButton"] > button:focus-visible {
     color: var(--fc-eta-color, var(--accent));
 }
 
+/* Server-side rating/handoff bridge (E12 interactive card): these buttons are
+   clicked programmatically from the card iframe, never seen by the learner —
+   push off-screen without display:none (which would break .click()). */
+.st-key-fc_rate_again, .st-key-fc_rate_hard, .st-key-fc_rate_good,
+.st-key-fc_rate_easy, .st-key-fc_gap_to_tutor {
+    position: absolute !important;
+    left: -10000px !important;
+    top: auto !important;
+    width: 1px !important;
+    height: 1px !important;
+    overflow: hidden !important;
+}
+
 .st-key-fc_rate_again button,
 .st-key-fc_rate_hard button,
 .st-key-fc_rate_good button,

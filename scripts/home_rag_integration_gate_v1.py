@@ -29,6 +29,9 @@ from urllib.request import Request, urlopen
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 DEFAULT_CASES_PATH = ROOT / "eval_data" / "home_rag_gate" / "home_rag_cases_v1.json"
 DEFAULT_HOME = Path(os.environ.get("HOME_RAG_GATE_HOME", r"D:\AI\home_rag_gate_v1"))
 DEFAULT_REPORT_DIR = Path(os.environ.get("HOME_RAG_GATE_REPORT_DIR", r"D:\AI\logs"))
@@ -136,14 +139,17 @@ def _prepare_env(config: GateConfig) -> None:
     os.environ["EMBED_API_BASE"] = config.embed_base_url
     os.environ["EMBED_MODEL"] = config.embed_model
     os.environ["HOME_RAG_LOCAL_PROFILE"] = "local_strict"
-    os.environ["HOME_RAG_LLM_FALLBACK_ENABLED"] = "false"
+    # pydantic-settings 2.x treats "false" as truthy; use 0/1 for bool env overrides.
+    os.environ["HOME_RAG_LLM_FALLBACK_ENABLED"] = "0"
     os.environ["RAG_PROFILE"] = "quality"
     os.environ["RETRIEVAL_MODE"] = "hybrid"
-    os.environ["ENABLE_RERANKER"] = "false"
-    os.environ["RERANKER_ENABLED"] = "false"
-    os.environ["ENABLE_METADATA_ENRICHMENT"] = "false"
-    os.environ["ENABLE_DOCUMENT_SUMMARIES"] = "false"
-    os.environ["ENABLE_TWO_STAGE_ANSWER_PATH"] = "false"
+    os.environ["SIMILARITY_TOP_K"] = "5"
+    os.environ["ENABLE_RERANKER"] = "0"
+    os.environ["RERANKER_ENABLED"] = "0"
+    os.environ["ENABLE_METADATA_ENRICHMENT"] = "0"
+    os.environ["ENABLE_DOCUMENT_SUMMARIES"] = "0"
+    os.environ["ENABLE_TWO_STAGE_ANSWER_PATH"] = "0"
+    os.environ["LLM_REQUEST_CACHE_PERSIST"] = "0"
     os.environ["COLLECTION_NAME"] = "home_rag_gate_v1_chunks"
     os.environ["SUMMARY_COLLECTION_NAME"] = "home_rag_gate_v1_summaries"
 
@@ -197,6 +203,8 @@ def _bind_config_module(config: GateConfig) -> None:
     app_config.DATA_DIR = home / "data"
     app_config.CHROMA_DIR = home / "chroma_db"
     app_config.LOG_DIR = home / "logs"
+    # app.config import runs load_dotenv(..., override=True) and can clobber gate env.
+    _prepare_env(config)
     app_config.reset_settings_cache()
 
 

@@ -37,6 +37,21 @@ def _bm25_persist_dir() -> pathlib.Path:
     return CHROMA_DIR / _BM25_PERSIST_SUBDIR
 
 
+def _bm25_corpus_size(retriever: BM25Retriever) -> int:
+    scores = getattr(getattr(retriever, "bm25", None), "scores", None) or {}
+    num_docs = scores.get("num_docs")
+    if num_docs is not None:
+        return max(0, int(num_docs))
+    corpus = getattr(retriever, "corpus", None) or []
+    return len(corpus)
+
+
+def _effective_bm25_top_k(similarity_top_k: int, corpus_size: int) -> int:
+    if corpus_size < 1:
+        return max(1, int(similarity_top_k))
+    return max(1, min(int(similarity_top_k), corpus_size))
+
+
 def _load_bm25_from_disk(similarity_top_k: int) -> BM25Retriever | None:
     """Try loading a pre-built BM25Retriever from disk. Returns None on any failure."""
     persist_dir = _bm25_persist_dir()
@@ -44,10 +59,14 @@ def _load_bm25_from_disk(similarity_top_k: int) -> BM25Retriever | None:
         return None
     try:
         retriever = BM25Retriever.from_persist_dir(str(persist_dir))
-        retriever.similarity_top_k = similarity_top_k
+        corpus_size = _bm25_corpus_size(retriever)
+        effective_k = _effective_bm25_top_k(similarity_top_k, corpus_size)
+        retriever.similarity_top_k = effective_k
         logger.info(
-            "BM25Retriever loaded from disk | top_k=%s | dir=%s",
+            "BM25Retriever loaded from disk | top_k=%s | corpus=%s | effective_top_k=%s | dir=%s",
             similarity_top_k,
+            corpus_size,
+            effective_k,
             persist_dir,
         )
         return retriever
@@ -178,7 +197,7 @@ def _build_bm25_retriever(nodes: list[TextNode], similarity_top_k: int) -> BM25R
         raise ValueError("No nodes in Chroma for BM25 index")
 
     # bm25s требует k <= размера корпуса; при узком metadata-фильтре узлов может быть меньше top_k.
-    effective_k = max(1, min(int(similarity_top_k), len(nodes)))
+    effective_k = _effective_bm25_top_k(similarity_top_k, len(nodes))
 
     return BM25Retriever.from_defaults(
         nodes=nodes,

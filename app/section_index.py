@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from app.ingestion_sections import _MARKDOWN_HEADING_RE, _parse_md_frontmatter
-from app.knowledge_text import tokenize
+from app.knowledge_text import tokenize_filtered as _tokenize_ru_en
 
 # ── Regex / нормализация заголовков ────────────────────────────────────
 _SLUG_STRIP_RE = re.compile(r"[^\w\s-]+", re.UNICODE)
@@ -34,27 +34,6 @@ _MAIN_IDEA_HEADING_NORMALIZED = {"главная мысль", "main idea", "key 
 _MIN_SECTION_CHARS = 15
 _HEADING_MATCH_WEIGHT = 3.0
 _BODY_MATCH_WEIGHT = 1.0
-
-# RU+EN стоп-лист: голый tokenize() режет только по длине (>=3 символа), союзы/предлоги
-# типа "как"/"для"/"the"/"and" проходят и искажают token-overlap скоринг.
-_STOPWORDS_RU = {
-    "или", "как", "что", "это", "эта", "этот", "эти", "тот", "которая", "который",
-    "которое", "которые", "для", "при", "без", "чтобы", "если", "когда", "где", "кто",
-    "есть", "быть", "был", "была", "было", "были", "всё", "все", "весь", "вся", "только",
-    "ещё", "уже", "очень", "более", "менее", "самый", "самая", "самое", "самые", "себя",
-    "свой", "своя", "своё", "свои", "они", "она", "оно", "мы", "вы", "наш", "ваш", "их",
-    "его", "её", "там", "тут", "здесь", "туда", "сюда", "потому", "поэтому", "чем",
-    "либо", "также", "тоже", "между", "после", "через", "из-за", "про", "над", "под",
-    "перед",
-}
-_STOPWORDS_EN = {
-    "the", "and", "for", "with", "are", "was", "were", "this", "that", "these", "those",
-    "its", "from", "into", "than", "then", "but", "not", "such", "can", "will", "would",
-    "should", "could", "has", "have", "had", "does", "did", "you", "your", "our", "they",
-    "their", "he", "she", "his", "her", "when", "where", "which", "who", "whom", "what",
-    "how", "why", "about", "there", "here",
-}
-_STOPWORDS = _STOPWORDS_RU | _STOPWORDS_EN
 
 
 @dataclass(frozen=True)
@@ -90,10 +69,6 @@ def _normalize_heading(heading_text: str) -> str:
     s = heading_text.strip().lower()
     s = _SLUG_STRIP_RE.sub("", s)
     return _SLUG_WS_RE.sub(" ", s).strip()
-
-
-def _tokenize_ru_en(value: str | None) -> set[str]:
-    return {tok for tok in tokenize(value) if tok not in _STOPWORDS}
 
 
 def _is_ranking_noise(section: ParsedSection) -> bool:

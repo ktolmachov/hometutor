@@ -412,17 +412,33 @@ def _document_paths(rel_path: str) -> tuple[str | None, str | None, str | None]:
         return None, None, None
 
 
-def _document_section(path: str, query_text: str) -> Dict[str, Any] | None:
+def _document_section(
+    path: str,
+    query_text: str,
+    *,
+    index_cache: dict[str, list[Any]] | None = None,
+) -> Dict[str, Any] | None:
     """Best-matching section (heading + Obsidian/VS Code deep-links) for a related doc.
 
     ``None`` when the document has no konspekt yet or no sections were parsed —
     the caller falls back to the whole-document ``needs_konspekt``/``obs_uri`` hint.
+
+    ``index_cache`` — per-render memoization by ``path``: many concept nodes can share
+    the same related document, so :func:`build_kg_payload` threads one dict through its
+    whole loop to avoid re-resolving/re-reading/re-hashing the same md-file per concept
+    (module-level sha-cache in ``section_index`` still covers repeats *across* renders).
     """
     try:
         from app.obsidian_export import obsidian_uri, vscode_uri
         from app.section_index import best_section_for, build_section_index
 
-        sections = build_section_index(path)
+        if index_cache is not None:
+            sections = index_cache.get(path)
+            if sections is None:
+                sections = build_section_index(path)
+                index_cache[path] = sections
+        else:
+            sections = build_section_index(path)
         if not sections:
             return None
         section = best_section_for(sections, query_text)
@@ -456,6 +472,7 @@ def build_kg_payload(
     learned = {str(x).strip() for x in (learned_set or []) if str(x).strip()}
     doc_index = doc_index or {}
     decay_vector = build_decay_vector(sr_records or [])
+    section_index_cache: dict[str, list[Any]] = {}
 
     valid = {cid: data for cid, data in concepts.items() if isinstance(data, dict)}
     ids = list(valid.keys())
@@ -576,7 +593,7 @@ def build_kg_payload(
                     ]
                     if part
                 )
-                section = _document_section(path, query_text)
+                section = _document_section(path, query_text, index_cache=section_index_cache)
             related_cards.append({
                 "path": path,
                 "meta": " · ".join(p for p in [

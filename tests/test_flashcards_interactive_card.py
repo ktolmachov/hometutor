@@ -128,6 +128,17 @@ def test_rating_quality_matches_scheduling_quality_map() -> None:
     assert from_labels == RATING_TO_QUALITY
 
 
+def test_card_resizes_itself_to_content_via_streamlit_frame_height() -> None:
+    # A fixed Python-side height estimate leaves short cards with a big empty
+    # box; the iframe measures its own front/back content and asks Streamlit
+    # to shrink the frame via the standard component postMessage protocol.
+    html_out = _build()
+    assert "measureNaturalHeight" in html_out
+    assert "streamlit:setFrameHeight" in html_out
+    assert "isStreamlitMessage: true" in html_out
+    assert "card3d.style.height = contentH + 'px'" in html_out
+
+
 def test_estimate_height_grows_with_text_length_and_is_bounded() -> None:
     short_card = {"front": "q", "back": "a"}
     long_card = {"front": "q" * 500, "back": "a" * 500}

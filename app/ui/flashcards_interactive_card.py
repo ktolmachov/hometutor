@@ -37,15 +37,17 @@ _DECK_SOURCE_ICONS: dict[str, str] = {
 _RING_RADIUS = 26
 _RING_CIRCUMFERENCE = round(2 * 3.14159265358979 * _RING_RADIUS, 2)
 
-_BASE_HEIGHT = 600
+_BASE_HEIGHT = 360
 _MAX_HEIGHT = 900
+_MIN_HEIGHT = 220
 
 
 def estimate_interactive_card_height(card: dict[str, Any]) -> int:
-    """Iframe height (px) for ``components.html``, from front/back length.
-
-    Faces have internal scroll for overflow, so this only needs to be a
-    reasonable estimate, not exact.
+    """Initial iframe height (px) for ``components.html``, before the iframe's
+    own JS measures its actual rendered content and asks Streamlit to resize
+    it (``streamlit:setFrameHeight`` in the builder's script) — this is only
+    the first-paint fallback, so it only needs to be a reasonable estimate,
+    not exact.
     """
     front_len = len(str(card.get("front") or ""))
     back_len = len(str(card.get("back") or ""))
@@ -379,6 +381,49 @@ def build_interactive_card_html(
     var targetOffset = ring.getAttribute('data-offset');
     window.setTimeout(function() {{ ring.style.strokeDashoffset = targetOffset; }}, 40);
   }}
+
+  // Shrink the card (and ask Streamlit to shrink the iframe itself) to the
+  // face's *actual* content height instead of the fixed Python-side
+  // estimate — otherwise short cards leave a large empty box below the
+  // content. Measured off-DOM (hidden clone) so faces keep their normal
+  // `position:absolute` sizing (needed for the flip transform) undisturbed.
+  var frontFace = document.querySelector('.fc3-front');
+  var backFace = document.querySelector('.fc3-back');
+
+  function measureNaturalHeight(faceEl) {{
+    if (!faceEl) {{ return 0; }}
+    var clone = faceEl.cloneNode(true);
+    clone.removeAttribute('id');
+    var idEls = clone.querySelectorAll('[id]');
+    for (var i = 0; i < idEls.length; i++) {{ idEls[i].removeAttribute('id'); }}
+    clone.style.position = 'absolute';
+    clone.style.visibility = 'hidden';
+    clone.style.pointerEvents = 'none';
+    clone.style.left = '-99999px';
+    clone.style.top = '0';
+    clone.style.height = 'auto';
+    clone.style.maxHeight = 'none';
+    clone.style.transform = 'none';
+    clone.style.width = card3d.clientWidth + 'px';
+    document.body.appendChild(clone);
+    var h = clone.scrollHeight;
+    document.body.removeChild(clone);
+    return h;
+  }}
+
+  function sendFrameHeight(px) {{
+    try {{
+      window.parent.postMessage({{isStreamlitMessage: true, type: 'streamlit:setFrameHeight', height: px}}, '*');
+    }} catch (e) {{}}
+  }}
+
+  function resizeToContent() {{
+    var contentH = Math.max(measureNaturalHeight(frontFace), measureNaturalHeight(backFace));
+    contentH = Math.max({_MIN_HEIGHT}, Math.min(contentH, {_MAX_HEIGHT}));
+    card3d.style.height = contentH + 'px';
+    sendFrameHeight(contentH + 16);
+  }}
+  resizeToContent();
 
   var rateMap = {{
     'Digit1': 'again', 'Numpad1': 'again',

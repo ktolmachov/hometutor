@@ -392,7 +392,7 @@ class Settings(BaseSettings):
     feedback_path: Path = Field(default_factory=lambda: LOG_DIR / "feedback.jsonl")
     history_path: Path = Field(default_factory=lambda: LOG_DIR / "history.jsonl")
     faq_memory_path: Path = Field(default_factory=lambda: BASE_DIR / "faq_memory.jsonl")
-    index_meta_path: Path = Field(default_factory=lambda: BASE_DIR / "index_meta.json")
+    index_meta_path: Path = Field(default_factory=lambda: CHROMA_DIR.parent / "index_meta.json")
     # Реестр поколений следует HOME_RAG_HOME (вместе с data/chroma), не корню code-репо.
     index_registry_path: Path = Field(default_factory=lambda: HOME_RAG_HOME / "index_registry.json")
     index_registry_lock_path: Path = Field(

@@ -15,7 +15,7 @@ import re
 from typing import Any, Mapping
 from urllib.parse import quote_plus
 
-from app.knowledge_text import tokenize_filtered
+from app.knowledge_text import tokenize_filtered, tokenize_filtered_ordered
 
 _MD_LINK_RE = re.compile(r"\[([^\]]+)\]\((https?://[^)\s]+)\)")
 
@@ -75,17 +75,19 @@ def build_query_from_rows(
             seen_concepts.add(key)
             concepts.append(concept)
 
+    # Ordered-токенизация: порядок появления в заголовках — детерминированный тай-брейк
+    # (set-итерация нестабильна между запусками, а query виден пользователю).
     counts: dict[str, int] = {}
-    first_seen: dict[str, int] = {}
-    for i, row in enumerate(rows):
-        for token in tokenize_filtered(str(row.get("heading_text") or "")):
+    order: dict[str, int] = {}
+    for row in rows:
+        for token in tokenize_filtered_ordered(str(row.get("heading_text") or "")):
             counts[token] = counts.get(token, 0) + 1
-            first_seen.setdefault(token, i)
+            order.setdefault(token, len(order))
 
     concept_tokens = tokenize_filtered(" ".join(concepts))
     top_tokens = [
         token
-        for token in sorted(counts, key=lambda t: (-counts[t], first_seen[t]))
+        for token in sorted(counts, key=lambda t: (-counts[t], order[t]))
         if token not in concept_tokens
     ][:max_heading_terms]
 

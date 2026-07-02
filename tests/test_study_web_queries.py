@@ -74,6 +74,12 @@ class TestBuildQueryFromRows:
     def test_empty_rows_return_empty_string(self):
         assert build_query_from_rows([]) == ""
 
+    def test_tie_order_is_deterministic_and_follows_text_order(self):
+        """Токены с равной частотой идут в порядке появления в заголовках (не set-итерация)."""
+        rows = [{"concept": None, "heading_text": "Гамма альфа бета"}]
+        for _ in range(5):
+            assert build_query_from_rows(rows) == "гамма альфа бета"
+
 
 class TestHarvestLinksFromRows:
     def test_extracts_and_dedups_links_from_row_texts(self):

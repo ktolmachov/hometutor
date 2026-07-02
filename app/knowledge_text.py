@@ -62,3 +62,22 @@ STOPWORDS: set[str] = STOPWORDS_RU | STOPWORDS_EN
 def tokenize_filtered(value: str | None) -> set[str]:
     """``tokenize()`` минус RU+EN стоп-слова — для token-overlap скоринга."""
     return {tok for tok in tokenize(value) if tok not in STOPWORDS}
+
+
+def tokenize_filtered_ordered(value: str | None) -> list[str]:
+    """Как :func:`tokenize_filtered`, но список уникальных токенов В ПОРЯДКЕ ТЕКСТА.
+
+    Set непригоден там, где порядок пользователю виден (например, поисковый запрос
+    «Живого конспекта»): итерация set нестабильна между запусками (PYTHONHASHSEED).
+    """
+    if not value:
+        return []
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for item in _TOKEN_RE.findall(value):
+        token = item.lower()
+        if len(token) < 3 or token in STOPWORDS or token in seen:
+            continue
+        seen.add(token)
+        ordered.append(token)
+    return ordered

@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from app.config import DEFAULT_EMBED_API_BASE, DEFAULT_EMBED_MODEL, Settings
+from app.config import CHROMA_DIR, DEFAULT_EMBED_API_BASE, DEFAULT_EMBED_MODEL, Settings
 from app.ingestion_env_diag import _resolve_embed_api_base
 
 
@@ -12,6 +12,10 @@ def test_embedding_defaults_are_local_first() -> None:
 
 def test_rag_context_budget_is_opt_in_by_default() -> None:
     assert Settings().rag_context_token_budget == 0
+
+
+def test_index_meta_default_lives_next_to_runtime_index() -> None:
+    assert Settings().index_meta_path == CHROMA_DIR.parent / "index_meta.json"
 
 
 def test_empty_embed_api_base_does_not_fall_back_to_openai_api_base() -> None:

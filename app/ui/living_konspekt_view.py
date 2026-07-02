@@ -87,7 +87,7 @@ def _lecture_main_ideas(rows: list[dict[str, Any]]) -> list[tuple[str, str]]:
     раздела-роли ``main_idea`` (или недоступный файл) молча пропускается.
     """
     try:
-        from app.section_index import sections_by_role, _cached_parse_sections
+        from app.section_index import main_idea_section, sections_by_role, _cached_parse_sections
     except Exception:  # noqa: BLE001 - обогащение опционально
         return []
 
@@ -103,7 +103,8 @@ def _lecture_main_ideas(rows: list[dict[str, Any]]) -> list[tuple[str, str]]:
             parsed = _cached_parse_sections(Path(md))
         except OSError:
             continue
-        main_idea = sections_by_role(parsed).get("main_idea")
+        # Роль → эвристика main_idea_section (первая содержательная H2) — как в промпте.
+        main_idea = sections_by_role(parsed).get("main_idea") or main_idea_section(parsed)
         if main_idea is None or not main_idea.text.strip():
             continue
         first_paragraph = main_idea.text.strip().split("\n\n", 1)[0].strip()

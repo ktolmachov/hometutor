@@ -111,6 +111,18 @@ class TestStitchVerbatim:
         assert "> **Главная мысль исходной лекции (lecture.md):** Агент — система вокруг LLM." in stitched
         assert "Второй абзац мысли" not in stitched  # только первый абзац — это шапка, не копия
 
+    def test_main_idea_falls_back_to_first_content_h2_without_role_heading(self, tmp_path: Path):
+        """Конспект без раздела «Главная мысль» → шапка из первой содержательной H2."""
+        md = tmp_path / "no_role.md"
+        md.write_text(
+            "# Конспект\n\n## 📑 Оглавление\n- x\n\n## Первый раздел\n\nСодержательный абзац раздела.\n",
+            encoding="utf-8",
+        )
+        state: dict = {}
+        add_section_to_workbench(_section(md, 6, heading="Первый раздел", text="Содержательный абзац раздела."), state)
+        stitched = _stitch_verbatim(get_workbench_rows(state))
+        assert "> **Главная мысль исходной лекции (no_role.md):** Содержательный абзац раздела." in stitched
+
     def test_missing_konspekt_files_keep_stitching_working(self):
         state: dict = {}
         add_section_to_workbench(_section(MD_A, 10, heading="Тема A"), state)

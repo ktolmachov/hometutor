@@ -1,0 +1,204 @@
+{
+  "version": "v1",
+  "baseline": {
+    "name": "HomeRagProductBaseline-v1",
+    "baseline_model": "qwopus3.6-35b-a3b-v1-mtp",
+    "model_selection_status": "HOME_RAG_INTEGRATION_GATE_PASS",
+    "rule": "Do not change the baseline model without a separate evidence chain.",
+    "score_thresholds": {
+      "accepted": 0.85,
+      "watch": 0.7
+    }
+  },
+  "corpus": {
+    "documents": [
+      {
+        "relative_path": "product/lecture_osmosis.md",
+        "content": "# Lecture Notes: Osmosis\n\nOsmosis is the movement of water through a semipermeable membrane from a region with lower solute concentration to a region with higher solute concentration. The membrane allows water molecules through but blocks many dissolved particles.\n\nA simple example is a raisin placed in clean water. Water moves into the raisin because the inside has more dissolved substances. The raisin swells.\n\nKey terms: water movement, semipermeable membrane, solute concentration, higher concentration side.\n\nOsmosis does not require chlorophyll, sunlight, ATP production, or carbon dioxide fixation. Those ideas belong to other biology topics.\n"
+      },
+      {
+        "relative_path": "product/photosynthesis_intro.html",
+        "content": "<html><body><h1>Photosynthesis Intro</h1><p>Photosynthesis uses light energy captured by chlorophyll to help plants convert carbon dioxide and water into glucose and oxygen.</p><p>The main inputs are light, carbon dioxide, and water. The main outputs are glucose and oxygen.</p><p>This document is not about osmosis or membranes.</p></body></html>\n"
+      },
+      {
+        "relative_path": "product/python_cli_notes.txt",
+        "content": "Python CLI notes for this course:\n\nRun project scripts from the repository root. Use the project virtual environment when available. Prefer explicit paths in examples. Do not run destructive cleanup commands unless the user asked for them.\n\nThis note intentionally does not define exam dates, subscription prices, private API keys, GPU wattage, or cloud service URLs.\n"
+      },
+      {
+        "relative_path": "product/citation_policy.md",
+        "content": "# Citation Policy\n\nGrounded Home RAG answers should cite the returned source chunks. A citation marker such as [1] must refer only to a source that was actually returned in the current answer context.\n\nIf no source contains evidence, the answer should say that the selected context is insufficient. It must not invent numbers, dates, prices, URLs, names, versions, or configuration values.\n"
+      },
+      {
+        "relative_path": "product/mitochondria_quiz_source.md",
+        "content": "# Mitochondria Quiz Source\n\nMitochondria help cells convert energy from food into ATP. ATP is often described as a usable energy currency for the cell. Mitochondria have an inner membrane where many energy-conversion reactions happen.\n\nFor this baseline, quiz questions should stay inside these facts: mitochondria, food energy, ATP, usable cell energy, and inner membrane. Do not add facts about chlorophyll, photosynthesis, or plant-only processes unless they are explicitly provided by another source.\n"
+      },
+      {
+        "relative_path": "product/similar_but_wrong_topic.md",
+        "content": "# Similar But Wrong Topic\n\nChloroplasts are plant cell structures involved in photosynthesis. They contain chlorophyll and help convert light energy into chemical energy. This document is intentionally similar to the mitochondria notes but describes a different organelle.\n"
+      },
+      {
+        "relative_path": "product/long_study_plan.md",
+        "content": "# Long Study Plan\n\nThis long document gives study advice for using Home RAG with lecture materials.\n\nSection 1: First read the lecture notes and write down the main question you are trying to answer.\n\nSection 2: Ask Home RAG for a grounded explanation that cites the lecture source.\n\nSection 3: Check whether the answer stayed inside the retrieved context. If the answer adds a date, price, version, URL, or name that was not in the source, mark it as unsupported.\n\nSection 4: Use spaced recall. After the first answer, close the document and try to explain the concept in your own words.\n\nSection 5: Generate a short quiz only from the cited material. Good distractors should be plausible but should not add unsupported facts.\n\nSection 6: For long documents, avoid mixing notes from different lectures unless the question explicitly asks for comparison.\n\nSection 7: If retrieval brings the wrong document, ask a narrower question or specify the file.\n\nSection 8: A useful tutor answer should be short enough to act on, concrete enough to study from, and honest about missing evidence.\n\nPadding note A: retrieval quality matters because a fluent answer can still be wrong.\n\nPadding note B: citation quality matters because the student needs to verify the answer.\n\nPadding note C: refusal quality matters because not every question is answerable from a small corpus.\n\nPadding note D: quiz quality matters because bad distractors teach false facts.\n\nPadding note E: long-document stability matters because a system can drift when many related topics appear nearby.\n"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "baseline_retrieval_001",
+      "type": "grounded_answer",
+      "category": "real_learning_materials",
+      "metrics": ["retrieval_quality", "answer_grounding", "citation_accuracy", "user_value"],
+      "question": "Explain osmosis in simple words using the lecture notes.",
+      "options": {"relative_path": "product/lecture_osmosis.md", "rag_profile": "quality"},
+      "expected_source_contains": ["product/lecture_osmosis.md"],
+      "must_include_any": [["water", "вода", "воды"], ["semipermeable", "полупроницаем", "membrane", "мембран"], ["higher solute", "higher concentration", "solute concentration", "большей концентрац", "концентраци"]],
+      "must_not_include": ["chlorophyll is required", "carbon dioxide fixation"],
+      "require_sources": true,
+      "require_citation": true
+    },
+    {
+      "id": "baseline_retrieval_002",
+      "type": "source_fragment_lookup",
+      "category": "real_learning_materials",
+      "metrics": ["retrieval_quality", "answer_grounding", "citation_accuracy"],
+      "question": "Which source explains why a raisin swells in clean water?",
+      "options": {"rag_profile": "quality"},
+      "expected_source_contains": ["product/lecture_osmosis.md"],
+      "must_include_any": [["raisin", "изюм"], ["water moves into", "swells", "набух", "вода проника"]],
+      "must_not_include": ["photosynthesis_intro.html"],
+      "require_sources": true,
+      "require_citation": true
+    },
+    {
+      "id": "baseline_html_001",
+      "type": "html_grounded_answer",
+      "category": "real_learning_materials",
+      "metrics": ["retrieval_quality", "answer_grounding", "citation_accuracy", "user_value"],
+      "question": "Summarize the inputs and outputs of photosynthesis from the HTML note.",
+      "options": {"relative_path": "product/photosynthesis_intro.html", "rag_profile": "quality"},
+      "expected_source_contains": ["product/photosynthesis_intro.html"],
+      "must_include_any": [["carbon dioxide", "углекисл"], ["water", "вода"], ["glucose", "глюкоз"], ["oxygen", "кислород"], ["light", "свет", "chlorophyll", "хлорофилл"]],
+      "must_not_include": ["osmosis requires sunlight"],
+      "require_sources": true,
+      "require_citation": true
+    },
+    {
+      "id": "baseline_wrong_doc_001",
+      "type": "wrong_document_trap",
+      "category": "long_doc_stability",
+      "metrics": ["retrieval_quality", "answer_grounding", "refusal_precision", "user_value"],
+      "question": "According to the osmosis lecture, does osmosis require chlorophyll?",
+      "options": {"relative_path": "product/lecture_osmosis.md", "rag_profile": "quality"},
+      "expected_source_contains": ["product/lecture_osmosis.md"],
+      "must_include_any": [["does not require", "не требует", "not require"], ["chlorophyll", "хлорофилл"]],
+      "must_not_include": ["yes", "requires chlorophyll"],
+      "require_sources": true,
+      "require_citation": true
+    },
+    {
+      "id": "baseline_long_doc_001",
+      "type": "long_document_behavior",
+      "category": "long_doc_stability",
+      "metrics": ["retrieval_quality", "answer_grounding", "citation_accuracy", "long_doc_stability", "user_value"],
+      "question": "List three study recommendations from the long study plan.",
+      "options": {"relative_path": "product/long_study_plan.md", "rag_profile": "quality"},
+      "expected_source_contains": ["product/long_study_plan.md"],
+      "must_include_any": [["spaced recall", "интерваль", "повтор"], ["quiz", "тест"], ["cited", "citation", "цитир", "источник"], ["own words", "своими словами"]],
+      "must_not_include": ["buy a subscription", "official exam date"],
+      "require_sources": true,
+      "require_citation": true
+    },
+    {
+      "id": "baseline_long_doc_002",
+      "type": "long_document_behavior",
+      "category": "long_doc_stability",
+      "metrics": ["retrieval_quality", "answer_grounding", "citation_accuracy", "long_doc_stability"],
+      "question": "What should the student avoid when working with long documents?",
+      "options": {"relative_path": "product/long_study_plan.md", "rag_profile": "quality"},
+      "expected_source_contains": ["product/long_study_plan.md"],
+      "must_include_any": [["avoid mixing", "не смешивать", "mixing notes", "избегать смешивания"], ["different lectures", "разных лекций", "разных лекц"]],
+      "must_not_include": ["always merge all documents"],
+      "require_sources": true,
+      "require_citation": true
+    },
+    {
+      "id": "baseline_refusal_001",
+      "type": "honest_refusal",
+      "category": "honest_refusal",
+      "metrics": ["retrieval_quality", "refusal_precision"],
+      "question": "What is the exact exam date for this course?",
+      "options": {"relative_path": "product/python_cli_notes.txt", "rag_profile": "quality"},
+      "expected_source_contains": ["product/python_cli_notes.txt"],
+      "must_include_any": [["insufficient", "not contain", "does not define", "not available", "недостаточно", "не содерж", "не определяет"]],
+      "must_not_include": ["2026-", "2027-", "January", "February", "March", "April", "May", "June", "July"],
+      "require_sources": true,
+      "require_citation": false
+    },
+    {
+      "id": "baseline_refusal_002",
+      "type": "honest_refusal",
+      "category": "honest_refusal",
+      "metrics": ["retrieval_quality", "refusal_precision"],
+      "question": "What private API key should I use for the local stack?",
+      "options": {"relative_path": "product/citation_policy.md", "rag_profile": "quality"},
+      "expected_source_contains": ["product/citation_policy.md"],
+      "must_include_any": [["insufficient", "not contain", "not available", "недостаточно", "не содерж"]],
+      "must_not_include": ["sk-", "api_key=", "OPENAI_API_KEY="],
+      "require_sources": true,
+      "require_citation": false
+    },
+    {
+      "id": "baseline_quiz_001",
+      "type": "quiz_generation",
+      "category": "quiz_generation",
+      "metrics": ["retrieval_quality", "quiz_validity", "citation_accuracy", "user_value"],
+      "question": "Create three short quiz questions from the mitochondria source. Include the correct answer for each.",
+      "options": {"relative_path": "product/mitochondria_quiz_source.md", "rag_profile": "quality", "study_mode": true},
+      "expected_source_contains": ["product/mitochondria_quiz_source.md"],
+      "must_include_any": [["ATP", "АТФ"], ["mitochondria", "митохондр"], ["answer", "ответ", "какую функцию", "что такое"]],
+      "must_not_include": ["chlorophyll", "photosynthesis", "carbon dioxide"],
+      "require_sources": true,
+      "require_citation": true
+    },
+    {
+      "id": "baseline_quiz_002",
+      "type": "quiz_generation",
+      "category": "quiz_generation",
+      "metrics": ["retrieval_quality", "quiz_validity", "citation_accuracy"],
+      "question": "Generate one multiple-choice question about ATP from the mitochondria notes. Keep all options inside the source facts.",
+      "options": {"relative_path": "product/mitochondria_quiz_source.md", "rag_profile": "quality", "study_mode": true},
+      "expected_source_contains": ["product/mitochondria_quiz_source.md"],
+      "must_include_any": [["ATP", "АТФ"], ["food energy", "usable energy", "energy currency", "энерг"], ["A", "B", "C", "вариант"]],
+      "must_not_include": ["chlorophyll", "plant-only", "sunlight"],
+      "require_sources": true,
+      "require_citation": true
+    },
+    {
+      "id": "baseline_citation_001",
+      "type": "citation_discipline",
+      "category": "citation_discipline",
+      "metrics": ["retrieval_quality", "answer_grounding", "citation_accuracy"],
+      "question": "What must citation markers point to?",
+      "options": {"relative_path": "product/citation_policy.md", "rag_profile": "quality"},
+      "expected_source_contains": ["product/citation_policy.md"],
+      "must_include_any": [["returned source", "returned source chunks", "source that was actually returned", "фактически возвращ", "исходные фрагменты"], ["[1]", "citation marker", "маркер"]],
+      "must_not_include": ["any web page", "unreturned source"],
+      "require_sources": true,
+      "require_citation": true
+    },
+    {
+      "id": "baseline_user_value_001",
+      "type": "tutor_explanation",
+      "category": "user_value",
+      "metrics": ["retrieval_quality", "answer_grounding", "citation_accuracy", "user_value"],
+      "question": "Explain osmosis to a beginner in two or three practical sentences.",
+      "options": {"relative_path": "product/lecture_osmosis.md", "rag_profile": "quality", "study_mode": true},
+      "expected_source_contains": ["product/lecture_osmosis.md"],
+      "must_include_any": [["water", "вода", "воды"], ["membrane", "мембран"], ["raisin", "изюм", "example", "пример"]],
+      "must_not_include": ["ATP", "chloroplast", "carbon dioxide"],
+      "require_sources": true,
+      "require_citation": true,
+      "user_value_min_chars": 80
+    }
+  ]
+}

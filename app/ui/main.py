@@ -22,6 +22,8 @@ from app.ui.analytics import inject_yandex_metrika
 from app.ui.auth_gate import require_ui_auth_or_stop
 from app.session_tape import ensure_session_started
 from app.ui.config_env_banner import render_config_env_banner as _render_config_env_banner
+from app.ui.constants import ALL_VIEWS
+from app.ui.navigation_visibility import hidden_nav_views_for_level, visible_nav_views_for_level
 from app.ui.offline_banner import render_offline_banner as _render_offline_banner
 from app.ui.quick_answer import render_quick_answer_tab as _render_quick_answer_tab
 from app.ui.adaptive_plan_card import render_adaptive_daily_plan, render_adaptive_plan_hub
@@ -46,6 +48,7 @@ from app.ui.study_scope import deactivate_scope as _deactivate_scope
 from app.ui.study_scope import get_active_scope as _get_active_scope
 from app.ui.llm_local_banner import render_latency_budget_banner, render_llm_local_banner
 from app.ui_client import load_index_stats, load_ui_bootstrap
+from app.ui_preferences import get_overrides, get_ui_level
 
 # --- Extracted module imports ---
 from app.ui.home_hub import _render_onboarding
@@ -130,25 +133,6 @@ if _settings_cockpit.home_rag_e2e_offline:
         if _e2e_tour_step.isdigit():
             st.session_state["tutorial_step_index"] = max(0, int(_e2e_tour_step))
 _render_tutorial_overlay()
-view_options = [
-    HOME_VIEW,
-    "Быстрый ответ",
-    "Чат с тьютором",
-    "Интерактивный Quiz",
-    "Flashcards",
-    "Курс",
-    "Адаптивный план",
-    "Knowledge Graph",
-    "Живой конспект",
-    "Прогресс обучения",
-    "История",
-    "Темы",
-    "Метрики",
-    "Найти материалы",
-    "Объяснить файл",
-    "Чистый вид",
-]
-
 _e2e_view_map = {
     "home": HOME_VIEW,
     "mission_control": HOME_VIEW,
@@ -240,12 +224,12 @@ _view_nav_labels = {
     "Метрики": "Ещё — Метрики",
     "Чистый вид": "Ещё — Чистый вид",
 }
-if st.session_state["current_view"] not in view_options:
-    st.session_state["current_view"] = view_options[0]
+if st.session_state["current_view"] not in ALL_VIEWS:
+    st.session_state["current_view"] = ALL_VIEWS[0]
 
 # Deep-link раздела: применяем после верхнего UI (hero/mode), чтобы e2e не перебивался колбэками того же run.
 _e2e_target_view = _e2e_view_map.get(_qp_first_str("e2e_view").lower())
-if _e2e_target_view in view_options:
+if _e2e_target_view in ALL_VIEWS:
     st.session_state["current_view"] = _e2e_target_view
 
 # Flashcard → Tutor handoff navigation (deferred from flashcards_review_view to avoid widget key conflict)
@@ -258,17 +242,38 @@ if isinstance(_pending_nav_view, str):
     _pending_mapped = _e2e_view_map.get(_pending_nav_view.strip().lower())
     if _pending_mapped:
         _pending_nav_view = _pending_mapped
-if _pending_nav_view in view_options:
+if _pending_nav_view in ALL_VIEWS:
     st.session_state["current_view"] = _pending_nav_view
+
+_ui_level = get_ui_level()
+_ui_overrides = get_overrides()
+_hidden_nav_views = hidden_nav_views_for_level(_ui_level, _ui_overrides)
+visible_nav_views = visible_nav_views_for_level(
+    _ui_level,
+    _ui_overrides,
+    current_view=st.session_state.get("current_view"),
+)
 
 st.markdown('<div data-testid="e2e-view-switcher"></div>', unsafe_allow_html=True)
 selected_view = st.selectbox(
     "Раздел",
-    view_options,
+    visible_nav_views,
     format_func=lambda v: _view_nav_labels.get(v, v),
     key="current_view",
     label_visibility="collapsed",
 )
+if _hidden_nav_views:
+    with st.expander("Ещё разделы", expanded=False):
+        for _view in ALL_VIEWS:
+            if _view not in _hidden_nav_views:
+                continue
+            if st.button(_view_nav_labels.get(_view, _view), key=f"hidden_nav_{_view}", width="stretch"):
+                st.session_state[PENDING_CURRENT_VIEW_KEY] = _view
+                st.rerun()
+        if st.button("Настроить интерфейс", key="hidden_nav_control_panel", width="stretch"):
+            from app.ui.control_panel import render_control_panel_dialog
+
+            render_control_panel_dialog()
 _session_tape_id = str(st.session_state.get("_session_tape_id") or "").strip()
 if _session_tape_id and get_settings().session_tape_full_events_enabled:
     ensure_session_started(

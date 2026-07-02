@@ -8,6 +8,7 @@ import streamlit as st
 
 from app import user_state
 from app.config import get_settings
+from app.ui_preferences import feature_visible_by_id, get_overrides, get_ui_level, feature_visible
 from app.ui.auth_gate import render_account_status_sidebar
 from app.ui.constants import _SIDEBAR_FILTER_FOLDER_ALL, _SIDEBAR_FILTER_TOPIC_ALL
 from app.ui.continuity_bridge import (
@@ -30,6 +31,15 @@ _RESTORE_PREVIEW_KEYS: dict[str, tuple[str, ...]] = {
     "cards": ("flashcards",),
     "reviews": ("spaced_repetition",),
 }
+
+
+def _view_visible(target_view: str) -> bool:
+    from app.ui.feature_registry import feature_for_view
+
+    spec = feature_for_view(target_view)
+    if spec is None:
+        return True
+    return feature_visible(spec, level=get_ui_level(), overrides=get_overrides())
 
 
 def _restore_preview_entity_rows(preview: dict) -> dict[str, int]:
@@ -335,6 +345,8 @@ def _render_mission_control_sidebar_sections(index_stats: dict | None) -> None:
 
         render_rotator_panel()
         for label, target_view, icon in MORE_TOOLS:
+            if not _view_visible(target_view):
+                continue
             if st.button(f"{icon} {label}", key=f"sidebar_tool_{target_view}", width="stretch"):
                 _navigate_to(target_view)
 
@@ -360,7 +372,7 @@ def render_sidebar(index_stats: dict | None):
             nxt = plan_service.get_smart_resume()
             st.session_state["current_topic"] = nxt
             st.toast(f"Следующий шаг: {nxt}")
-        if st.button("Аналитика", width='stretch', key="sidebar_nav_analytics"):
+        if feature_visible_by_id("page:analytics") and st.button("Аналитика", width='stretch', key="sidebar_nav_analytics"):
             st.switch_page("pages/4_Аналитика.py")
         _cw = st.session_state.pop("coach_weak_spot_topic", None)
         if _cw:
@@ -405,9 +417,10 @@ def render_sidebar(index_stats: dict | None):
                 _deactivate_scope()
                 st.rerun()
             st.markdown("---")
-        with st.expander(sync_transfer_sidebar_expander_label_ru(), expanded=False):
-            st.caption(sync_transfer_sidebar_intro_caption_ru())
-            _render_sidebar_backup_restore_panel()
+        if feature_visible_by_id("sidebar:sync_backup"):
+            with st.expander(sync_transfer_sidebar_expander_label_ru(), expanded=False):
+                st.caption(sync_transfer_sidebar_intro_caption_ru())
+                _render_sidebar_backup_restore_panel()
         _render_mission_control_sidebar_sections(index_stats)
         st.markdown("---")
         render_panel_header("Индекс", "Быстрый статус базы знаний")
@@ -419,7 +432,7 @@ def render_sidebar(index_stats: dict | None):
             _iv = index_stats.get("index_version")
             _gid = index_stats.get("generation_id")
             _ract = index_stats.get("registry_activated_at")
-            if _iv is not None or _gid or _ract:
+            if (_iv is not None or _gid or _ract) and feature_visible_by_id("panel:index_freshness"):
                 with st.expander("Актуальность индекса (freshness)", expanded=False):
                     if _iv is not None:
                         st.markdown(f"**Версия реестра:** `v{int(_iv)}`")
@@ -438,55 +451,58 @@ def render_sidebar(index_stats: dict | None):
         relative_path = ""
         topic_quick = _SIDEBAR_FILTER_TOPIC_ALL
         folder_quick = _SIDEBAR_FILTER_FOLDER_ALL
-        with st.expander(expert_controls_expander_label_ru(), expanded=False):
-            st.caption(expert_controls_sidebar_blurb_ru())
-            with st.expander("Голос", expanded=False):
-                from app.voice_service import VoiceService, voice_dependencies_available
+        if feature_visible_by_id("sidebar:expert_filters"):
+            with st.expander(expert_controls_expander_label_ru(), expanded=False):
+                st.caption(expert_controls_sidebar_blurb_ru())
+                if feature_visible_by_id("panel:voice"):
+                    with st.expander("Голос", expanded=False):
+                        from app.voice_service import VoiceService, voice_dependencies_available
 
-                deps = voice_dependencies_available()
-                st.caption(
-                    f"SpeechRecognition: {'да' if deps['speech_recognition'] else 'нет'} · "
-                    f"pyttsx3: {'да' if deps['pyttsx3'] else 'нет'} · "
-                    f"PyAudio: {'да' if deps['pyaudio'] else 'нет'}"
-                )
-                av = st.audio_input("Запись вопроса (предпочтительно WAV)", key="sidebar_voice_audio")
-                if av is not None and st.button("Распознать запись", key="sidebar_voice_transcribe"):
-                    vo = VoiceService()
-                    st.session_state["voice_transcript"] = vo.transcribe_audio_bytes(av.getvalue())
-                if st.button("Слушать микрофон (локально)", key="sidebar_voice_mic"):
-                    vo = VoiceService()
-                    st.session_state["voice_transcript"] = vo.listen_microphone_once()
-                vt = st.session_state.get("voice_transcript")
-                if vt:
-                    st.info(vt)
-                if vt and st.button("Озвучить последний текст", key="sidebar_voice_speak"):
-                    VoiceService().speak(str(vt))
-            st.markdown("---")
-            with st.expander("Область поиска для Q&A", expanded=False):
-                folder = st.text_input("Последняя папка")
-                folder_rel = st.text_input("Относительный путь папки")
-                file_name = st.text_input("Имя файла")
-                relative_path = st.text_input("Относительный путь файла")
-            topics_catalog = load_topics_catalog()
-            topic_choices = [_SIDEBAR_FILTER_TOPIC_ALL]
-            if topics_catalog and topics_catalog.get("topics"):
-                for t in topics_catalog["topics"]:
-                    name = (t.get("topic_name") or "").strip()
-                    if name:
-                        topic_choices.append(name)
-            folder_quick_choices = [_SIDEBAR_FILTER_FOLDER_ALL]
-            for fr in (index_stats or {}).get("folder_rel_options") or []:
-                s = str(fr).strip()
-                if s:
-                    folder_quick_choices.append(s)
-            st.caption(sidebar_fast_filters_caption_ru())
-            topic_quick = st.selectbox("Тема", topic_choices, key="qa_sidebar_topic")
-            folder_quick = st.selectbox("Папка (folder_rel)", folder_quick_choices, key="qa_sidebar_folder_rel")
-            with st.expander("Файлы в индексе", expanded=False):
-                for item in (index_stats or {}).get("files", []):
-                    st.text(item)
+                        deps = voice_dependencies_available()
+                        st.caption(
+                            f"SpeechRecognition: {'да' if deps['speech_recognition'] else 'нет'} · "
+                            f"pyttsx3: {'да' if deps['pyttsx3'] else 'нет'} · "
+                            f"PyAudio: {'да' if deps['pyaudio'] else 'нет'}"
+                        )
+                        av = st.audio_input("Запись вопроса (предпочтительно WAV)", key="sidebar_voice_audio")
+                        if av is not None and st.button("Распознать запись", key="sidebar_voice_transcribe"):
+                            vo = VoiceService()
+                            st.session_state["voice_transcript"] = vo.transcribe_audio_bytes(av.getvalue())
+                        if st.button("Слушать микрофон (локально)", key="sidebar_voice_mic"):
+                            vo = VoiceService()
+                            st.session_state["voice_transcript"] = vo.listen_microphone_once()
+                        vt = st.session_state.get("voice_transcript")
+                        if vt:
+                            st.info(vt)
+                        if vt and st.button("Озвучить последний текст", key="sidebar_voice_speak"):
+                            VoiceService().speak(str(vt))
+                    st.markdown("---")
+                with st.expander("Область поиска для Q&A", expanded=False):
+                    folder = st.text_input("Последняя папка")
+                    folder_rel = st.text_input("Относительный путь папки")
+                    file_name = st.text_input("Имя файла")
+                    relative_path = st.text_input("Относительный путь файла")
+                topics_catalog = load_topics_catalog()
+                topic_choices = [_SIDEBAR_FILTER_TOPIC_ALL]
+                if topics_catalog and topics_catalog.get("topics"):
+                    for t in topics_catalog["topics"]:
+                        name = (t.get("topic_name") or "").strip()
+                        if name:
+                            topic_choices.append(name)
+                folder_quick_choices = [_SIDEBAR_FILTER_FOLDER_ALL]
+                for fr in (index_stats or {}).get("folder_rel_options") or []:
+                    s = str(fr).strip()
+                    if s:
+                        folder_quick_choices.append(s)
+                st.caption(sidebar_fast_filters_caption_ru())
+                topic_quick = st.selectbox("Тема", topic_choices, key="qa_sidebar_topic")
+                folder_quick = st.selectbox("Папка (folder_rel)", folder_quick_choices, key="qa_sidebar_folder_rel")
+                with st.expander("Файлы в индексе", expanded=False):
+                    for item in (index_stats or {}).get("files", []):
+                        st.text(item)
         render_sidebar_notes_panel()
-        render_sidebar_research_sessions(index_stats)
+        if feature_visible_by_id("sidebar:research_sessions"):
+            render_sidebar_research_sessions(index_stats)
         st.markdown("---")
         render_panel_header("Сессия", "Что уже исследовали в этом окне")
         render_reading_mode_toggle(
@@ -497,6 +513,10 @@ def render_sidebar(index_stats: dict | None):
             key="focus_view",
             help_text=sidebar_focus_view_help_ru(),
         )
+        if st.button("⚙️ Настроить интерфейс", key="sidebar_control_panel", width="stretch"):
+            from app.ui.control_panel import render_control_panel_dialog
+
+            render_control_panel_dialog()
         if st.session_state["history"]:
             for entry in st.session_state["history"][:8]:
                 preview = (entry.get("question") or "")[:58]

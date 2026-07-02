@@ -9,6 +9,7 @@ import streamlit as st
 
 from app.ui.continuity_bridge import expert_controls_expander_label_ru
 from app.ui.widgets import render_chip_row, render_metric_card
+from app.ui_preferences import feature_visible_by_id
 
 
 MetricRow = Sequence[tuple[str, str, str]]
@@ -44,6 +45,8 @@ def render_expert_controls(
     expanded: bool = False,
 ) -> None:
     """Render the common collapsed expert layer used by core learning flows."""
+    if not feature_visible_by_id("panel:expert_controls"):
+        return
     with st.expander(expert_controls_expander_label_ru(), expanded=expanded):
         st.caption(intro)
         render_expert_metric_row(metrics)

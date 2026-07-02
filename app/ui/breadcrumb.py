@@ -3,9 +3,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from app.ui.constants import HOME_VIEW
 from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
-
-HOME_VIEW = "Mission Control"
 
 
 def _go_home() -> None:

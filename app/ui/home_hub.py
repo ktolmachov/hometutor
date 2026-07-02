@@ -60,6 +60,7 @@ def _fetch_mastery_dashboard(_singleton: str = "v1") -> dict[str, Any]:
 def _render_onboarding() -> None:
     """Первый запуск: цель, время, стиль balanced; KV onboarding_v1_done."""
     from app.ui_events import track_event
+    from app.ui_preferences import LEVEL_ALL, set_ui_level
     from app.user_state import set_kv, set_preferred_style
 
     st.markdown(
@@ -79,6 +80,11 @@ def _render_onboarding() -> None:
         ],
     )
     duration = st.slider("Сколько времени готов потратить (минут)?", 15, 60, 25, step=5)
+    ui_mode_label = st.radio(
+        "Какой интерфейс показать?",
+        ["Начинаю с нуля", "Учусь регулярно", "Показать всё"],
+        index=1,
+    )
     launch_tour = st.checkbox("Запустить интерактивный тур", value=True)
     st.caption(
         "Маршрут по умолчанию: объяснение → две мини-проверки → повторение (ориентир 15–30 мин)."
@@ -96,6 +102,12 @@ def _render_onboarding() -> None:
         st.session_state["estimated_minutes"] = int(duration)
         st.session_state["onboarding_goal_label"] = goal_label
         set_preferred_style("balanced")
+        ui_level_map = {
+            "Начинаю с нуля": "1",
+            "Учусь регулярно": "2",
+            "Показать всё": LEVEL_ALL,
+        }
+        set_ui_level(ui_level_map[ui_mode_label])
         set_kv("onboarding_v1_done", "1")
         st.session_state["current_view"] = "Чат с тьютором"
         if launch_tour:

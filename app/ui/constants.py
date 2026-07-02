@@ -1,5 +1,26 @@
 """Константы Streamlit UI (без зависимостей от streamlit)."""
 
+HOME_VIEW = "Mission Control"
+
+ALL_VIEWS = [
+    HOME_VIEW,
+    "Быстрый ответ",
+    "Чат с тьютором",
+    "Интерактивный Quiz",
+    "Flashcards",
+    "Курс",
+    "Адаптивный план",
+    "Knowledge Graph",
+    "Живой конспект",
+    "Прогресс обучения",
+    "История",
+    "Темы",
+    "Метрики",
+    "Найти материалы",
+    "Объяснить файл",
+    "Чистый вид",
+]
+
 MAX_HISTORY = 20
 TEXT_PREVIEW_EXTENSIONS = (".txt", ".md", ".html", ".pdf", ".docx")
 SUGGESTED_QUESTIONS = [

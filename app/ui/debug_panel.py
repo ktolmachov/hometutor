@@ -14,6 +14,7 @@ from app.ui.helpers import (
     retrieval_route_demotion_badge,
 )
 from app.ui.widgets import render_chip_row, render_metric_card
+from app.ui_preferences import feature_visible_by_id
 
 
 def graph_expansion_rows_for_ui(ge: dict[str, Any] | None) -> list[tuple[str, str]]:
@@ -118,6 +119,8 @@ def confidence_reason_labels(reasons: list[str]) -> list[str]:
 
 def render_debug_summary(debug: dict[str, Any]) -> None:
     if not debug:
+        return
+    if not feature_visible_by_id("panel:debug_summary", context_ok=True):
         return
     routing_rows = retrieval_route_debug_rows(debug)
     routing_map = {label: value for label, value in routing_rows}

@@ -30,6 +30,7 @@ from app.ui.mission_control_first_session import (
     render_first_session_hero,
 )
 from app.ui.study_scope import activate_scope, deactivate_scope, get_active_scope
+from app.ui_preferences import feature_visible, get_overrides, get_ui_level
 
 
 HINT_TO_TILE: Final[dict[str, str]] = {
@@ -388,6 +389,18 @@ def _render_tile(tile: MissionTile, *, recommended_tile: str, due_count: int | N
         st.button("×", key="mission_tile_course_deactivate", help="Деактивировать курс", on_click=_course_deactivate_dialog)
 
 
+def tile_feature_visible(tile_id: str, *, level: str | None = None, overrides: dict[str, bool] | None = None) -> bool:
+    from app.ui.feature_registry import TILE_FEATURE_IDS, feature_by_id
+
+    feature_id = TILE_FEATURE_IDS.get(tile_id)
+    if not feature_id:
+        return True
+    spec = feature_by_id(feature_id)
+    if spec is None:
+        return True
+    return feature_visible(spec, level=level or get_ui_level(), overrides=overrides if overrides is not None else get_overrides())
+
+
 def _render_tile_grid(
     *,
     rec: SmartStudyRecommendation,
@@ -396,8 +409,14 @@ def _render_tile_grid(
 ) -> None:
     all_tiles = _tile_definitions(due_count=due_count)
     recommended_tile = HINT_TO_TILE.get(str(rec.hint_kind), "tutor")
+    level = get_ui_level()
+    overrides = get_overrides()
     if cold_user:
         tiles = tuple(t for t in all_tiles if t.tile_id in _COLD_USER_TILE_IDS)
+        tiles = tuple(t for t in tiles if tile_feature_visible(t.tile_id, level=level, overrides=overrides))
+        if not tiles:
+            st.caption("Все плитки этого уровня скрыты точными настройками интерфейса.")
+            return
         recommended_tile = "quick_question"
         st.markdown('<div class="hero-grid hero-grid--3">', unsafe_allow_html=True)
         cols = st.columns(len(tiles), gap="medium")
@@ -406,13 +425,17 @@ def _render_tile_grid(
                 _render_tile(tile, recommended_tile=recommended_tile, due_count=due_count)
         st.markdown("</div>", unsafe_allow_html=True)
     else:
+        tiles = tuple(t for t in all_tiles if tile_feature_visible(t.tile_id, level=level, overrides=overrides))
+        if not tiles:
+            st.caption("Все плитки скрыты точными настройками интерфейса.")
+            return
         st.markdown('<div class="hero-grid hero-grid--4-3">', unsafe_allow_html=True)
         row1 = st.columns(4, gap="medium")
-        for col, tile in zip(row1, all_tiles[:4], strict=True):
+        for col, tile in zip(row1, tiles[:4]):
             with col:
                 _render_tile(tile, recommended_tile=recommended_tile, due_count=due_count)
         row2 = st.columns(3, gap="medium")
-        for col, tile in zip(row2, all_tiles[4:], strict=True):
+        for col, tile in zip(row2, tiles[4:]):
             with col:
                 _render_tile(tile, recommended_tile=recommended_tile, due_count=due_count)
         st.markdown("</div>", unsafe_allow_html=True)
@@ -620,6 +643,11 @@ def _build_kg_mini_svg(concepts: dict, mastery_vector: dict) -> str:
 
 def render_kg_mission_card() -> None:
     """Compact Knowledge Graph teaser card for Mission Control."""
+    from app.ui.feature_registry import feature_by_id
+
+    spec = feature_by_id("view:knowledge_graph")
+    if spec and not feature_visible(spec, level=get_ui_level(), overrides=get_overrides()):
+        return
     try:
         from app.knowledge_service import knowledge_graph, get_mastery_vector
         concepts = knowledge_graph.get_concepts()
@@ -710,6 +738,10 @@ def render_mission_control(index_stats: dict | None = None) -> None:
     if not cold:
         _render_ssr_banner(rec, index_stats=index_stats)
     _render_tile_grid(rec=rec, due_count=due_count, cold_user=cold)
+    if st.button("⚙️ Настроить интерфейс", key="mission_control_configure_ui"):
+        from app.ui.control_panel import render_control_panel_dialog
+
+        render_control_panel_dialog()
     if not cold:
         render_kg_mission_card()
 

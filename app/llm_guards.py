@@ -22,6 +22,8 @@ BLOCKED_MODELS = {
 
 HARD_TOKEN_LIMIT = 20_000
 SOFT_TOKEN_LIMIT = 12_000
+# Room for system/user prompt, query text, and LlamaIndex synthesis wrappers.
+RAG_CONTEXT_PROMPT_RESERVE_TOKENS = 5_500
 ERROR_FINGERPRINT_TTL_SECONDS = 600
 
 _ERROR_FINGERPRINTS: dict[str, float] = {}
@@ -54,6 +56,18 @@ def check_model_allowed(model: str) -> None:
         msg = f"Blocked model '{model}' not allowed. Use grok-4.1-fast-thinking instead."
         logger.error("MODEL_BLOCKED", extra={"model": model})
         raise BlockedModelError(msg)
+
+
+def resolve_rag_context_token_budget(explicit_budget: int) -> int:
+    """Resolve retrieved-context budget.
+
+    ``rag_context_token_budget=0`` (default) auto-fits context under ``HARD_TOKEN_LIMIT``.
+    Positive values override the auto budget.
+    """
+    value = int(explicit_budget or 0)
+    if value > 0:
+        return value
+    return max(0, HARD_TOKEN_LIMIT - RAG_CONTEXT_PROMPT_RESERVE_TOKENS)
 
 
 def check_input_tokens(input_tokens: int) -> None:

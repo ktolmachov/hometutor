@@ -10,6 +10,7 @@ from typing import Any, Optional
 
 from app.config import get_settings
 from app.flashcard_handoff import handoff_llm_with_output_cap, is_flashcard_handoff
+from app.llm_guards import resolve_rag_context_token_budget
 from app.provider import llm_source_metadata
 from app.retrieval_strategies import (
     DocThenChunkRetriever,
@@ -308,7 +309,7 @@ def build_query_engine(
         get_settings().enable_tutor_pedagogical_orchestrator,
         get_settings().enable_graph_augmented_retrieval,
         get_settings().graph_augment_max_extra_docs,
-        get_settings().rag_context_token_budget,
+        resolve_rag_context_token_budget(get_settings().rag_context_token_budget),
         is_flashcard_handoff(options),
     )
 

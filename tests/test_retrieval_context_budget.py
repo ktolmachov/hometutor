@@ -3,8 +3,10 @@ import inspect
 from llama_index.core.schema import NodeWithScore, TextNode
 
 from app import retrieval
+from app.llm_guards import HARD_TOKEN_LIMIT, RAG_CONTEXT_PROMPT_RESERVE_TOKENS, resolve_rag_context_token_budget
 from app.retrieval_context_budget import (
     ContextTokenBudgetPostprocessor,
+    append_context_budget_postprocessor,
     retrieval_context_budget_trace_scope,
 )
 
@@ -53,6 +55,15 @@ def test_context_budget_counts_llm_metadata() -> None:
     assert len(kept) <= 1
     assert trace["original_context_tokens_estimate"] > 80
     assert trace["kept_context_tokens_estimate"] <= 80
+
+
+def test_append_context_budget_postprocessor_uses_auto_budget_by_default() -> None:
+    postprocessors = append_context_budget_postprocessor([])
+    assert len(postprocessors) == 1
+    pp = postprocessors[0]
+    assert isinstance(pp, ContextTokenBudgetPostprocessor)
+    assert pp.max_context_tokens == resolve_rag_context_token_budget(0)
+    assert pp.max_context_tokens == HARD_TOKEN_LIMIT - RAG_CONTEXT_PROMPT_RESERVE_TOKENS
 
 
 def test_context_budget_runs_before_lost_in_middle_reorder_in_build_query_engine() -> None:

@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from app.config import CHROMA_DIR, DEFAULT_EMBED_API_BASE, DEFAULT_EMBED_MODEL, Settings
+from app.llm_guards import HARD_TOKEN_LIMIT, RAG_CONTEXT_PROMPT_RESERVE_TOKENS, resolve_rag_context_token_budget
 from app.ingestion_env_diag import _resolve_embed_api_base
 
 
@@ -10,8 +11,10 @@ def test_embedding_defaults_are_local_first() -> None:
     assert Settings().embed_api_base_resolved == DEFAULT_EMBED_API_BASE
 
 
-def test_rag_context_budget_is_opt_in_by_default() -> None:
+def test_rag_context_budget_auto_when_unset() -> None:
     assert Settings().rag_context_token_budget == 0
+    assert resolve_rag_context_token_budget(0) == HARD_TOKEN_LIMIT - RAG_CONTEXT_PROMPT_RESERVE_TOKENS
+    assert resolve_rag_context_token_budget(8000) == 8000
 
 
 def test_index_meta_default_lives_next_to_runtime_index() -> None:

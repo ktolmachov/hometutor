@@ -331,7 +331,10 @@ class Settings(BaseSettings):
         default=0,
         ge=0,
         le=100_000,
-        description="Opt-in budget for retrieved fragments before LLM synthesis; 0 disables trimming.",
+        description=(
+            "Token budget for retrieved fragments before LLM synthesis. "
+            "0 = auto (HARD_TOKEN_LIMIT minus prompt reserve); positive overrides."
+        ),
     )
 
     collection_name: str = "home_rag"

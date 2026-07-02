@@ -11,6 +11,7 @@ from llama_index.core.bridge.pydantic import Field
 from llama_index.core.postprocessor.types import BaseNodePostprocessor
 from llama_index.core.schema import MetadataMode, NodeWithScore, QueryBundle
 
+from app.llm_guards import resolve_rag_context_token_budget
 from app.token_utils import estimate_tokens
 
 _TRACE_CONTEXT: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
@@ -159,7 +160,9 @@ def append_context_budget_postprocessor(postprocessors: list) -> list:
     from app.config import get_settings
 
     settings = get_settings()
-    budget = int(getattr(settings, "rag_context_token_budget", 0) or 0)
+    budget = resolve_rag_context_token_budget(
+        int(getattr(settings, "rag_context_token_budget", 0) or 0)
+    )
     if budget <= 0:
         return postprocessors
     pp = list(postprocessors)

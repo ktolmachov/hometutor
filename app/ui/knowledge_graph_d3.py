@@ -412,16 +412,19 @@ def _document_paths(rel_path: str) -> tuple[str | None, str | None, str | None]:
         return None, None, None
 
 
-def _document_section(
+def _document_sections(
     path: str,
     query_text: str,
     *,
     index_cache: dict[str, list[Any]] | None = None,
-) -> Dict[str, Any] | None:
-    """Best-matching section (heading + Obsidian/VS Code deep-links) for a related doc.
+    top_k: int = 3,
+) -> List[Dict[str, Any]]:
+    """Top-``top_k`` matching sections (heading + Obsidian/VS Code deep-links) for a related doc.
 
-    ``None`` when the document has no konspekt yet or no sections were parsed —
-    the caller falls back to the whole-document ``needs_konspekt``/``obs_uri`` hint.
+    Концепт часто разобран в нескольких местах конспекта (тема, антипаттерны, термины) —
+    показываем до трёх. Empty list when the document has no konspekt yet, no sections were
+    parsed or nothing overlaps the query — the caller falls back to the whole-document
+    ``needs_konspekt``/``obs_uri`` hint.
 
     ``index_cache`` — per-render memoization by ``path``: many concept nodes can share
     the same related document, so :func:`build_kg_payload` threads one dict through its
@@ -430,7 +433,7 @@ def _document_section(
     """
     try:
         from app.obsidian_export import obsidian_uri, vscode_uri
-        from app.section_index import best_section_for, build_section_index
+        from app.section_index import build_section_index, top_sections_for
 
         if index_cache is not None:
             sections = index_cache.get(path)
@@ -440,18 +443,18 @@ def _document_section(
         else:
             sections = build_section_index(path)
         if not sections:
-            return None
-        section = best_section_for(sections, query_text)
-        if section is None:
-            return None
-        return {
-            "heading_text": section.heading_text,
-            "line_start": section.line_start,
-            "obs_uri": obsidian_uri(section.konspekt_md_abs, heading_text=section.heading_text),
-            "vscode_uri": vscode_uri(section.konspekt_md_abs, line=section.line_start),
-        }
+            return []
+        return [
+            {
+                "heading_text": section.heading_text,
+                "line_start": section.line_start,
+                "obs_uri": obsidian_uri(section.konspekt_md_abs, heading_text=section.heading_text),
+                "vscode_uri": vscode_uri(section.konspekt_md_abs, line=section.line_start),
+            }
+            for section in top_sections_for(sections, query_text, k=top_k)
+        ]
     except Exception:  # noqa: BLE001  # pragma: no cover - section lookup must not break graph rendering.
-        return None
+        return []
 
 
 # ── Main payload builder ─────────────────────────────────────────────
@@ -583,7 +586,7 @@ def build_kg_payload(
             meta = doc_index.get(str(rp), {}) if isinstance(doc_index, Mapping) else {}
             path = meta.get("relative_path") or meta.get("file_name") or str(rp)
             src_abs, md_abs, obs_uri = _document_paths(path)
-            section = None
+            sections: List[Dict[str, Any]] = []
             if md_abs:
                 query_text = " ".join(
                     part for part in [
@@ -593,7 +596,7 @@ def build_kg_payload(
                     ]
                     if part
                 )
-                section = _document_section(path, query_text, index_cache=section_index_cache)
+                sections = _document_sections(path, query_text, index_cache=section_index_cache)
             related_cards.append({
                 "path": path,
                 "meta": " · ".join(p for p in [
@@ -605,7 +608,7 @@ def build_kg_payload(
                 "md_abs": md_abs,
                 "obs_uri": obs_uri,
                 "is_txt": bool(src_abs and src_abs.lower().endswith(".txt")),
-                "section": section,
+                "sections": sections,
                 "needs_konspekt": bool(src_abs and not md_abs),
             })
 
@@ -995,10 +998,14 @@ function _escHtml(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').r
 function _docActions(r){
   if(!r.src_abs&&!r.md_abs)return'';
   let btns='';
-  if(r.section){
-    const heading=_escHtml(r.section.heading_text);
-    btns+=`<a class="action-btn sec ready" href="${r.section.obs_uri}" title="Открыть раздел «${heading}» в Obsidian">📍 «${heading}»</a>`;
-    btns+=`<a class="action-btn vsc" href="${r.section.vscode_uri}" title="Открыть раздел в VS Code (строка ${r.section.line_start})">🖥 VS Code: раздел</a>`;
+  if(r.sections&&r.sections.length){
+    // URI генерируются percent-encoded на сервере; _escHtml — defense-in-depth для атрибутов.
+    r.sections.forEach(s=>{
+      const heading=_escHtml(s.heading_text);
+      btns+=`<a class="action-btn sec ready" href="${_escHtml(s.obs_uri)}" title="Открыть раздел «${heading}» в Obsidian">📍 «${heading}»</a>`;
+    });
+    const best=r.sections[0];
+    btns+=`<a class="action-btn vsc" href="${_escHtml(best.vscode_uri)}" title="Открыть лучший раздел в VS Code (строка ${best.line_start})">🖥 VS Code: раздел</a>`;
   } else if(r.obs_uri){
     btns+=`<a class="action-btn obs ready" href="${r.obs_uri}" title="✅ Конспект готов — открыть в Obsidian">🔮 Obsidian</a>`;
   } else if(r.needs_konspekt){
@@ -1006,7 +1013,7 @@ function _docActions(r){
   } else if(r.src_abs){
     btns+=`<a class="action-btn obs" href="${_obsidianUri(r.src_abs)}" title="Откроется исходник (конспект не создан)">🔮 Obsidian</a>`;
   }
-  if(r.src_abs&&!r.section)btns+=`<a class="action-btn vsc" href="${_vscodeUri(r.src_abs)}" title="Открыть исходник в VS Code">🖥 VS Code</a>`;
+  if(r.src_abs&&!(r.sections&&r.sections.length))btns+=`<a class="action-btn vsc" href="${_vscodeUri(r.src_abs)}" title="Открыть исходник в VS Code">🖥 VS Code</a>`;
   if(r.src_abs)btns+=`<span class="action-btn cpy" data-copy="${(r.src_abs||'').replace(/"/g,'&quot;')}" title="Скопировать путь">📋 Путь</span>`;
   return `<div class="acts">${btns}</div>`;
 }

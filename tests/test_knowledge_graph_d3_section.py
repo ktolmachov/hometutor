@@ -1,9 +1,12 @@
-"""Tests for app.ui.knowledge_graph_d3._document_section (per-render section-index cache).
+"""Tests for app.ui.knowledge_graph_d3._document_sections (top-k + per-render cache).
 
 Plan (crispy-popping-alpaca.md, Компонент 2): "build_section_index строится один раз на
 md-path за render — build_kg_payload мемоизирует индекс по path". Related documents are
 often shared by many concept nodes, so without this cache the same md-file gets re-resolved/
 re-read/re-hashed once per concept in a single graph render.
+
+v3: payload carries up to 3 sections per document (концепт часто разобран в нескольких
+местах конспекта), so the helper returns a list instead of a single best section.
 """
 
 from __future__ import annotations
@@ -13,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from app.section_index import IndexedSection
-from app.ui.knowledge_graph_d3 import _document_section
+from app.ui.knowledge_graph_d3 import _document_sections
 
 MD = Path("D:/vault/lecture.md")
 
@@ -29,7 +32,27 @@ def _fake_sections() -> list[IndexedSection]:
             text="Текст про агентов ИИ.",
             source_abs=Path("D:/corpus/lecture.txt"),
             konspekt_md_abs=MD,
-        )
+        ),
+        IndexedSection(
+            heading_text="Антипаттерны агентов",
+            slug="antipatterny-agentov",
+            level=2,
+            line_start=11,
+            line_end=20,
+            text="Ошибки и риски при построении агентов без ограничителей.",
+            source_abs=Path("D:/corpus/lecture.txt"),
+            konspekt_md_abs=MD,
+        ),
+        IndexedSection(
+            heading_text="Совсем другая тема",
+            slug="sovsem-drugaya-tema",
+            level=2,
+            line_start=21,
+            line_end=30,
+            text="Никакого пересечения со словами запроса здесь нет вообще.",
+            source_abs=Path("D:/corpus/lecture.txt"),
+            konspekt_md_abs=MD,
+        ),
     ]
 
 
@@ -42,7 +65,7 @@ def _stub_uri_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(obsidian_export, "vscode_uri", lambda md, line=None: "vscode://stub")
 
 
-class TestDocumentSectionCache:
+class TestDocumentSectionsCache:
     def test_shared_index_cache_calls_build_section_index_once_per_path(self, monkeypatch: pytest.MonkeyPatch):
         calls: list[str] = []
 
@@ -55,12 +78,12 @@ class TestDocumentSectionCache:
         monkeypatch.setattr(section_index, "build_section_index", fake_build_section_index)
 
         cache: dict[str, list] = {}
-        first = _document_section(str(MD), "агентов", index_cache=cache)
-        second = _document_section(str(MD), "текст про агентов и решения", index_cache=cache)
+        first = _document_sections(str(MD), "агентов", index_cache=cache)
+        second = _document_sections(str(MD), "текст про агентов и решения", index_cache=cache)
 
         assert calls == [str(MD)]  # второй вызов взял индекс из cache, не пересчитал
-        assert first is not None and first["heading_text"] == "Раздел про агентов"
-        assert second is not None and second["heading_text"] == "Раздел про агентов"
+        assert first and first[0]["heading_text"] == "Раздел про агентов"
+        assert second and second[0]["heading_text"] == "Раздел про агентов"
 
     def test_without_cache_each_call_rebuilds(self, monkeypatch: pytest.MonkeyPatch):
         calls: list[str] = []
@@ -73,12 +96,12 @@ class TestDocumentSectionCache:
 
         monkeypatch.setattr(section_index, "build_section_index", fake_build_section_index)
 
-        _document_section(str(MD), "агенты")
-        _document_section(str(MD), "агенты")
+        _document_sections(str(MD), "агенты")
+        _document_sections(str(MD), "агенты")
 
         assert calls == [str(MD), str(MD)]
 
-    def test_empty_index_is_cached_as_none_result(self, monkeypatch: pytest.MonkeyPatch):
+    def test_empty_index_is_cached_as_empty_result(self, monkeypatch: pytest.MonkeyPatch):
         calls: list[str] = []
 
         def fake_build_section_index(path: str) -> list[IndexedSection]:
@@ -90,8 +113,35 @@ class TestDocumentSectionCache:
         monkeypatch.setattr(section_index, "build_section_index", fake_build_section_index)
 
         cache: dict[str, list] = {}
-        first = _document_section(str(MD), "агенты", index_cache=cache)
-        second = _document_section(str(MD), "агенты", index_cache=cache)
+        first = _document_sections(str(MD), "агенты", index_cache=cache)
+        second = _document_sections(str(MD), "агенты", index_cache=cache)
 
-        assert first is None and second is None
+        assert first == [] and second == []
         assert calls == [str(MD)]
+
+
+class TestDocumentSectionsTopK:
+    def test_returns_only_overlapping_sections_in_score_order(self, monkeypatch: pytest.MonkeyPatch):
+        import app.section_index as section_index
+
+        monkeypatch.setattr(section_index, "build_section_index", lambda path: _fake_sections())
+
+        result = _document_sections(str(MD), "агентов риски ограничителей")
+
+        headings = [item["heading_text"] for item in result]
+        # «Совсем другая тема» не пересекается с запросом — её нет; порядок по скору.
+        assert "Совсем другая тема" not in headings
+        assert headings[0] == "Антипаттерны агентов"  # 3 совпадения против 1
+        assert "Раздел про агентов" in headings
+
+    def test_each_entry_carries_deep_links(self, monkeypatch: pytest.MonkeyPatch):
+        import app.section_index as section_index
+
+        monkeypatch.setattr(section_index, "build_section_index", lambda path: _fake_sections())
+
+        result = _document_sections(str(MD), "агентов")
+        assert result
+        for item in result:
+            assert item["obs_uri"] == "obsidian://stub"
+            assert item["vscode_uri"] == "vscode://stub"
+            assert isinstance(item["line_start"], int)

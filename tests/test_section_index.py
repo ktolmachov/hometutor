@@ -10,10 +10,12 @@ import pytest
 from app.section_index import (
     IndexedSection,
     best_section_for,
+    heading_repeats_in_document,
     main_idea_section,
     parse_sections,
     row_to_section,
     section_to_row,
+    top_sections_for,
     _cached_parse_sections,
     _tokenize_ru_en,
 )
@@ -214,6 +216,131 @@ class TestBestSectionFor:
         sections = parse_sections(konspekt_path)
         best = best_section_for(sections, "совершенно несвязанные слова которых точно нигде нет")
         assert best is None
+
+
+# Формат урока_1: обзорный H2 «Ключевые темы» с интро + точные H3-подтемы.
+# Полное тело родителя включает тела всех детей — без own_text-скоринга родитель
+# набирал score >= любого ребёнка и deep-link вёл в пол-документа.
+LECTURE_LIKE_MD = """# Конспект
+
+## 🎯 Главная мысль
+
+Агент — это система вокруг модели, а не разовый вызов.
+
+## 📌 Ключевые темы
+
+Краткое интро раздела о темах лекции.
+
+### 🔹 ReAct: думать и действовать по шагу
+
+ReAct выбирает следующий шаг после каждого наблюдения, подход хорош для исследования.
+
+### 🔹 Plan-Execute: сначала план
+
+Планировщик строит план, исполнитель идёт по шагам, при ошибке нужен replan.
+
+## ⚠️ Ошибки и антипаттерны
+
+ReAct без ограничителей превращается в бесконечный цикл и расход бюджета.
+"""
+
+
+@pytest.fixture
+def lecture_like_path(tmp_path: Path) -> Path:
+    p = tmp_path / "lecture_like.md"
+    p.write_text(LECTURE_LIKE_MD, encoding="utf-8")
+    return p
+
+
+class TestOwnText:
+    def test_parent_own_text_is_intro_without_children_bodies(self, lecture_like_path: Path):
+        sections = parse_sections(lecture_like_path)
+        parent = _by_heading(sections, "📌 Ключевые темы")
+        assert parent.own_text == "Краткое интро раздела о темах лекции."
+        assert "ReAct" not in parent.own_text
+        # Полное тело (для сшивки/синтеза) по-прежнему включает детей.
+        assert "ReAct выбирает следующий шаг" in parent.text
+
+    def test_leaf_own_text_equals_full_text(self, lecture_like_path: Path):
+        sections = parse_sections(lecture_like_path)
+        leaf = _by_heading(sections, "🔹 ReAct: думать и действовать по шагу")
+        assert leaf.own_text == leaf.text
+
+    def test_section_row_roundtrip_preserves_own_text(self, lecture_like_path: Path, tmp_path: Path):
+        parsed = _by_heading(parse_sections(lecture_like_path), "📌 Ключевые темы")
+        section = IndexedSection(
+            heading_text=parsed.heading_text,
+            slug=parsed.slug,
+            level=parsed.level,
+            line_start=parsed.line_start,
+            line_end=parsed.line_end,
+            text=parsed.text,
+            own_text=parsed.own_text,
+            source_abs=tmp_path / "lecture.txt",
+            konspekt_md_abs=lecture_like_path,
+        )
+        restored = row_to_section(section_to_row(section))
+        assert restored.own_text == parsed.own_text
+
+    def test_legacy_row_without_own_text_falls_back_to_empty(self):
+        restored = row_to_section({"heading_text": "x", "text": "тело", "level": 2, "line_start": 1, "line_end": 2})
+        assert restored.own_text == ""
+
+
+class TestParentChildPrecision:
+    def test_query_about_subtopic_returns_h3_not_parent_h2(self, lecture_like_path: Path):
+        """Золотой кейс урока_1: «ReAct» должен вести в точный H3, а не в «Ключевые темы»."""
+        sections = parse_sections(lecture_like_path)
+        best = best_section_for(sections, "ReAct исследование следующий шаг наблюдения")
+        assert best is not None
+        assert best.heading_text == "🔹 ReAct: думать и действовать по шагу"
+
+    def test_deeper_level_wins_score_tie(self, tmp_path: Path):
+        """При равном скоре лист точнее обзорного родителя."""
+        p = tmp_path / "tie.md"
+        p.write_text(
+            "## Обзор ReAct\n\nИнтро обзора без ключевого слова тут.\n\n"
+            "### Детали ReAct\n\nПодробности детали здесь совсем про другое.\n",
+            encoding="utf-8",
+        )
+        sections = parse_sections(p)
+        ranked = top_sections_for(sections, "ReAct", k=2)
+        # Оба матчат только заголовком (score 3 = 3) — глубже уровень, выше место.
+        assert [s.heading_text for s in ranked] == ["Детали ReAct", "Обзор ReAct"]
+
+
+class TestTopSectionsFor:
+    def test_returns_only_overlapping_sections_in_score_order(self, lecture_like_path: Path):
+        sections = parse_sections(lecture_like_path)
+        ranked = top_sections_for(sections, "ReAct ограничителей бюджета цикл бесконечный", k=3)
+        headings = [s.heading_text for s in ranked]
+        # «Ошибки»: 5 совпадений тела (react/ограничителей/цикл/бюджета/бесконечный) = 5;
+        # H3 ReAct: заголовок (3) + тело (1) = 4 — вторым.
+        assert headings[0] == "⚠️ Ошибки и антипаттерны"
+        assert "🔹 ReAct: думать и действовать по шагу" in headings
+        assert "🎯 Главная мысль" not in headings  # нулевой overlap — не показываем
+
+    def test_k_limits_result_count(self, lecture_like_path: Path):
+        sections = parse_sections(lecture_like_path)
+        assert len(top_sections_for(sections, "ReAct план шаг", k=1)) == 1
+
+    def test_empty_query_returns_empty(self, lecture_like_path: Path):
+        sections = parse_sections(lecture_like_path)
+        assert top_sections_for(sections, "") == []
+
+    def test_empty_sections_returns_empty(self):
+        assert top_sections_for([], "что-то") == []
+
+
+class TestHeadingRepeatsInDocument:
+    def test_true_for_duplicated_heading(self, konspekt_path: Path):
+        assert heading_repeats_in_document(konspekt_path, "🔹 Тема первая") is True
+
+    def test_false_for_unique_heading(self, konspekt_path: Path):
+        assert heading_repeats_in_document(konspekt_path, "🎯 Главная мысль") is False
+
+    def test_false_for_missing_file(self, tmp_path: Path):
+        assert heading_repeats_in_document(tmp_path / "nope.md", "Заголовок") is False
 
 
 class TestTokenizeRuEn:

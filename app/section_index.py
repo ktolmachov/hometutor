@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -47,6 +47,11 @@ class ParsedSection:
     line_start: int  # 1-indexed в konspekt_md_abs → VS Code
     line_end: int
     text: str  # дословное тело раздела ИЗ КОНСПЕКТА (не из оригинала)
+    # Текст ДО первого дочернего заголовка (интро секции). Скоринг идёт по own_text:
+    # полный text родителя включает тела всех детей, поэтому родитель («📌 Ключевые темы»)
+    # набирал скор ≥ любого своего H3 и deep-link вёл в пол-документа вместо точной подтемы.
+    # kw_only: наследник IndexedSection добавляет обязательные позиционные поля.
+    own_text: str = field(default="", kw_only=True)
 
 
 @dataclass(frozen=True)
@@ -107,6 +112,11 @@ def _parse_body_sections(body: str, offset_lines: int) -> list[ParsedSection]:
                 boundary = next_line_idx
                 break
         text = "\n".join(lines[line_idx + 1 : boundary]).strip()
+        # own_text = интро до ПЕРВОГО заголовка любого уровня (дочернего) внутри секции.
+        own_boundary = boundary
+        if idx + 1 < len(headings) and headings[idx + 1][2] < boundary:
+            own_boundary = headings[idx + 1][2]
+        own_text = text if own_boundary == boundary else "\n".join(lines[line_idx + 1 : own_boundary]).strip()
 
         slug_base = _github_slug(heading_text)
         dup_count = seen_slugs.get(slug_base, 0)
@@ -121,6 +131,7 @@ def _parse_body_sections(body: str, offset_lines: int) -> list[ParsedSection]:
                 line_start=offset_lines + line_idx + 1,
                 line_end=offset_lines + boundary,
                 text=text,
+                own_text=own_text,
             )
         )
     return sections
@@ -216,6 +227,7 @@ def build_section_index(rel_or_abs: str | Path) -> list[IndexedSection]:
             line_start=p.line_start,
             line_end=p.line_end,
             text=p.text,
+            own_text=p.own_text,
             source_abs=source_abs,
             konspekt_md_abs=md_abs,
         )
@@ -224,13 +236,67 @@ def build_section_index(rel_or_abs: str | Path) -> list[IndexedSection]:
 
 
 # ── Скоринг / выбор раздела ──────────────────────────────────────────────
+def _ranking_candidates(
+    sections: list[ParsedSection] | list[IndexedSection],
+) -> list[ParsedSection] | list[IndexedSection]:
+    candidates = [s for s in sections if not _is_ranking_noise(s)] or list(sections)
+    non_trivial = [s for s in candidates if len(s.text.strip()) >= _MIN_SECTION_CHARS]
+    return non_trivial if non_trivial else candidates
+
+
+def _ranked_by_overlap(
+    candidates: list[ParsedSection] | list[IndexedSection],
+    query_tokens: set[str],
+) -> list[tuple[ParsedSection | IndexedSection, float]]:
+    """``[(section, score), ...]`` по убыванию, только ``score > 0``.
+
+    Тело скорится по ``own_text`` (интро секции, без тел детей) — иначе обзорный
+    родитель всегда набирает ≥ любого своего подраздела и «съедает» точный H3.
+    При равном скоре предпочитаем более глубокий уровень (лист точнее обзора),
+    затем порядок в документе.
+    """
+    scored: list[tuple[ParsedSection | IndexedSection, float]] = []
+    for section in candidates:
+        heading_tokens = _tokenize_ru_en(section.heading_text)
+        body_tokens = _tokenize_ru_en(section.own_text or section.text)
+        score = (
+            len(query_tokens & heading_tokens) * _HEADING_MATCH_WEIGHT
+            + len(query_tokens & body_tokens) * _BODY_MATCH_WEIGHT
+        )
+        if score > 0:
+            scored.append((section, score))
+    scored.sort(key=lambda pair: (-pair[1], -pair[0].level, pair[0].line_start))
+    return scored
+
+
+def top_sections_for(
+    sections: list[ParsedSection] | list[IndexedSection],
+    query_text: str,
+    *,
+    k: int = 3,
+) -> list[ParsedSection] | list[IndexedSection]:
+    """До ``k`` самых релевантных разделов для ``query_text`` (score > 0, по убыванию).
+
+    Концепт часто разобран в нескольких местах конспекта (тема, антипаттерны, термины) —
+    одна «лучшая» секция теряет остальные. Пустой запрос → ``[]`` (нет сигнала для ранга).
+    """
+    if not sections or k <= 0:
+        return []
+    query_tokens = _tokenize_ru_en(query_text)
+    if not query_tokens:
+        return []
+    ranked = _ranked_by_overlap(_ranking_candidates(sections), query_tokens)
+    return [section for section, _score in ranked[:k]]
+
+
 def best_section_for(
     sections: list[ParsedSection] | list[IndexedSection],
     query_text: str,
 ) -> ParsedSection | IndexedSection | None:
     """Найти наиболее релевантный раздел для ``query_text`` (весь контекст — одна строка).
 
-    Скорит token-overlap с ``heading_text`` (вес выше) + ``text``, со стоп-листом RU+EN.
+    Скорит token-overlap с ``heading_text`` (вес выше) + ``own_text`` (интро секции,
+    не полное тело — см. :func:`_ranked_by_overlap`), со стоп-листом RU+EN.
     Пропускает TOC/H1-титул и почти-пустые секции (если есть непустая альтернатива).
 
     При **пустом** запросе — фолбэк на первый непустой кандидат (нет сигнала для выбора).
@@ -240,30 +306,85 @@ def best_section_for(
     """
     if not sections:
         return None
-
-    candidates = [s for s in sections if not _is_ranking_noise(s)] or list(sections)
-    non_trivial = [s for s in candidates if len(s.text.strip()) >= _MIN_SECTION_CHARS]
-    if non_trivial:
-        candidates = non_trivial
-
+    candidates = _ranking_candidates(sections)
     query_tokens = _tokenize_ru_en(query_text)
     if not query_tokens:
         return candidates[0]
+    ranked = _ranked_by_overlap(candidates, query_tokens)
+    return ranked[0][0] if ranked else None
 
-    best: ParsedSection | IndexedSection | None = None
-    best_score = 0.0
-    for section in candidates:
-        heading_tokens = _tokenize_ru_en(section.heading_text)
-        body_tokens = _tokenize_ru_en(section.text)
-        score = (
-            len(query_tokens & heading_tokens) * _HEADING_MATCH_WEIGHT
-            + len(query_tokens & body_tokens) * _BODY_MATCH_WEIGHT
-        )
-        if score > best_score:
-            best_score = score
-            best = section
 
-    return best
+# ── Роли разделов (опциональное обогащение) ─────────────────────────────
+# Локальный шаблон конспекта (prompts/_impl.py) гарантирует только main_idea/terms/summary;
+# богатые роли (pitfalls, check_questions, external_links, cheatsheet) есть у конспектов из
+# внешнего pipeline (hometutor-studio). Поэтому роль — выводимая функция заголовка с честной
+# деградацией (None), а НЕ поле контракта: row/payload не раздуваем.
+_ROLE_BY_NORMALIZED_HEADING: dict[str, str] = {
+    **{h: "main_idea" for h in _MAIN_IDEA_HEADING_NORMALIZED},
+    "итоги и выводы": "summary",
+    "итоги": "summary",
+    "выводы": "summary",
+    "summary": "summary",
+    "conclusions": "summary",
+    "важные термины и концепции": "terms",
+    "термины": "terms",
+    "глоссарий": "terms",
+    "glossary": "terms",
+    "key terms": "terms",
+    "ошибки риски и антипаттерны": "pitfalls",
+    "ошибки и антипаттерны": "pitfalls",
+    "ошибки и риски": "pitfalls",
+    "антипаттерны": "pitfalls",
+    "pitfalls": "pitfalls",
+    "antipatterns": "pitfalls",
+    "common mistakes": "pitfalls",
+    "контрольные вопросы": "check_questions",
+    "вопросы для самопроверки": "check_questions",
+    "check questions": "check_questions",
+    "review questions": "check_questions",
+    "self-check questions": "check_questions",
+    "дополнительные материалы для глубокого изучения": "external_links",
+    "дополнительные материалы": "external_links",
+    "полезные ссылки": "external_links",
+    "further reading": "external_links",
+    "additional materials": "external_links",
+    "resources": "external_links",
+    "мини-шпаргалка": "cheatsheet",
+    "шпаргалка": "cheatsheet",
+    "cheat sheet": "cheatsheet",
+    "cheatsheet": "cheatsheet",
+}
+
+
+def section_role(section: ParsedSection) -> str | None:
+    """Роль раздела по нормализованному заголовку (эмодзи/пунктуация уже срезаны) или ``None``."""
+    return _ROLE_BY_NORMALIZED_HEADING.get(_normalize_heading(section.heading_text))
+
+
+def sections_by_role(
+    sections: list[ParsedSection] | list[IndexedSection],
+) -> dict[str, ParsedSection | IndexedSection]:
+    """``{role: первая секция этой роли}`` — вход для deep-study промпта и сшивки."""
+    out: dict[str, ParsedSection | IndexedSection] = {}
+    for section in sections:
+        role = section_role(section)
+        if role is not None and role not in out:
+            out[role] = section
+    return out
+
+
+def heading_repeats_in_document(md_abs: Path, heading_text: str) -> bool:
+    """``True``, если заголовок встречается в документе более одного раза.
+
+    Obsidian-якорь открывает **первый** одноимённый heading — при дублях UI честно
+    подписывает «VS Code точнее». Смотрим весь документ (не только собранные rows):
+    дубль опасен, даже когда в корзине лежит лишь одна из копий.
+    """
+    try:
+        sections = _cached_parse_sections(md_abs)
+    except OSError:
+        return False
+    return sum(1 for s in sections if s.heading_text == heading_text) > 1
 
 
 def main_idea_section(
@@ -291,6 +412,7 @@ def section_to_row(section: IndexedSection) -> dict[str, Any]:
         "line_start": section.line_start,
         "line_end": section.line_end,
         "text": section.text,
+        "own_text": section.own_text,
         "concept": section.concept,
     }
 
@@ -304,6 +426,8 @@ def row_to_section(row: Mapping[str, Any]) -> IndexedSection:
         line_start=int(row.get("line_start") or 0),
         line_end=int(row.get("line_end") or 0),
         text=str(row.get("text") or ""),
+        # Ряды, сохранённые до появления own_text, отдают "" — скоринг падает на text.
+        own_text=str(row.get("own_text") or ""),
         source_abs=Path(str(row.get("source_abs") or "")),
         konspekt_md_abs=Path(str(row.get("konspekt_md_abs") or "")),
         concept=row.get("concept"),

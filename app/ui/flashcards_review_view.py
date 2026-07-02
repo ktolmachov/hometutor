@@ -540,6 +540,10 @@ def _render_card_section_links(card: dict[str, Any], idx: int) -> None:
     if section is None:
         return
 
+    # Obsidian-якорь откроет ПЕРВЫЙ одноимённый heading — при дублях честно подсказываем.
+    if sum(1 for s in sections if s.heading_text == section.heading_text) > 1:
+        st.caption("⚠️ Заголовок повторяется в документе — VS Code точнее для повторяющихся заголовков.")
+
     link_cols = st.columns(3)
     with link_cols[0]:
         st.link_button(

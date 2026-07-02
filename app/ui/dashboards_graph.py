@@ -132,28 +132,69 @@ def _collect_learned_set(concepts: dict) -> set[str]:
     return learned_set
 
 
-def _render_document_section_workbench_button(*, path: str, query_text: str, concept: str, key: str) -> None:
-    """«➕ раздел «<heading>»» под документом — секция считается server-side (не ферится из JS)."""
+def _render_document_section_workbench_buttons(*, path: str, query_text: str, concept: str, key: str) -> None:
+    """До 3 кнопок «➕ раздел «<heading>»» под документом — секции считаются server-side.
+
+    Концепт часто разобран в нескольких местах конспекта (тема, антипаттерны, термины) —
+    одна «лучшая» секция теряла остальные.
+    """
     try:
         from dataclasses import replace as _dc_replace
 
-        from app.section_index import best_section_for, build_section_index
+        from app.section_index import build_section_index, top_sections_for
         from app.ui.living_konspekt_view import add_section_to_workbench
 
         sections = build_section_index(path)
         if not sections:
             return
-        section = best_section_for(sections, query_text)
+        top_sections = top_sections_for(sections, query_text, k=3)
     except Exception:  # noqa: BLE001 - section lookup must not break the concept panel
         return
-    if section is None:
-        return
-    if st.button(f"➕ раздел «{section.heading_text}»", key=key, width="stretch"):
-        added = add_section_to_workbench(_dc_replace(section, concept=concept))
-        st.toast(
-            f"Добавлено в рабочий конспект: «{section.heading_text}»" if added else "Уже в рабочем конспекте",
-            icon="📚",
+    for i, section in enumerate(top_sections):
+        if st.button(f"➕ раздел «{section.heading_text}»", key=f"{key}_{i}", width="stretch"):
+            added = add_section_to_workbench(_dc_replace(section, concept=concept))
+            st.toast(
+                f"Добавлено в рабочий конспект: «{section.heading_text}»" if added else "Уже в рабочем конспекте",
+                icon="📚",
+            )
+
+
+def _collect_concept_sections_to_workbench(
+    *,
+    concept: str,
+    related_docs: list,
+    doc_index: dict,
+    base_query: str,
+    state=None,
+) -> tuple[int, int]:
+    """Лучшая секция каждого related-документа → корзина. Возвращает (добавлено, уже было).
+
+    ``state`` — DI для юнит-тестов (см. ``add_section_to_workbench``); в UI — session_state.
+    """
+    from dataclasses import replace as _dc_replace
+
+    from app.section_index import best_section_for, build_section_index
+    from app.ui.living_konspekt_view import add_section_to_workbench
+
+    added = duplicates = 0
+    for rel_path in related_docs:
+        meta = doc_index.get(str(rel_path), {}) if isinstance(doc_index, dict) else {}
+        path = meta.get("relative_path") or meta.get("file_name") or str(rel_path)
+        query = " ".join(
+            part for part in [base_query, " ".join(meta.get("key_concepts") or [])] if part
         )
+        try:
+            sections = build_section_index(str(path))
+            section = best_section_for(sections, query) if sections else None
+        except Exception:  # noqa: BLE001 - один документ без конспекта не должен срывать сбор
+            continue
+        if section is None:
+            continue
+        if add_section_to_workbench(_dc_replace(section, concept=concept), state):
+            added += 1
+        else:
+            duplicates += 1
+    return added, duplicates
 
 
 def _render_concept_actions(
@@ -275,6 +316,35 @@ def _render_concept_actions(
     st.markdown("**Связанные документы**")
     if related_docs:
         query_text = " ".join(part for part in [sel, desc] if part)
+
+        # ── «Живой конспект»: собрать всё по концепту + статус корзины ──
+        wb_cols = st.columns([3, 2])
+        with wb_cols[0]:
+            if st.button("➕ Собрать всё по концепту", key=f"kg_wb_all_{sel}", width="stretch"):
+                added, duplicates = _collect_concept_sections_to_workbench(
+                    concept=sel,
+                    related_docs=list(related_docs),
+                    doc_index=doc_index,
+                    base_query=query_text,
+                )
+                if added or duplicates:
+                    st.toast(
+                        f"В рабочий конспект: +{added}" + (f" (уже было: {duplicates})" if duplicates else ""),
+                        icon="📚",
+                    )
+                else:
+                    st.toast("Подходящих разделов не нашлось — возможно, конспекты ещё не созданы.", icon="ℹ️")
+        with wb_cols[1]:
+            try:
+                from app.ui.living_konspekt_view import get_workbench_rows
+
+                wb_count = len(get_workbench_rows())
+            except Exception:  # noqa: BLE001 - счётчик корзины не должен ломать панель
+                wb_count = 0
+            if st.button(f"📚 Живой конспект ({wb_count})", key=f"kg_wb_open_{sel}", width="stretch"):
+                st.session_state["current_view"] = "Живой конспект"
+                st.rerun()
+
         for doc_idx, rel_path in enumerate(related_docs):
             doc_meta = doc_index.get(str(rel_path), {})
             title = (
@@ -301,7 +371,7 @@ def _render_concept_actions(
                 """,
                 unsafe_allow_html=True,
             )
-            _render_document_section_workbench_button(
+            _render_document_section_workbench_buttons(
                 path=str(title),
                 query_text=" ".join(
                     part

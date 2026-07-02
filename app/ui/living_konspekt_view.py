@@ -130,6 +130,22 @@ def _duplicate_heading_keys(rows: list[dict[str, Any]]) -> set[tuple[str, str]]:
     return {key for key, count in counts.items() if count > 1}
 
 
+def _heading_ambiguous(md_abs: str, heading_text: str) -> bool:
+    """Дубль заголовка в самом ДОКУМЕНТЕ (не только среди собранных rows).
+
+    Дубль опасен, даже когда в корзине лежит лишь одна из копий — якорь всё равно
+    откроет первый одноимённый heading файла.
+    """
+    if not md_abs or not heading_text:
+        return False
+    try:
+        from app.section_index import heading_repeats_in_document
+
+        return heading_repeats_in_document(Path(md_abs), heading_text)
+    except Exception:  # noqa: BLE001 - подпись о дублях не должна ломать рендер корзины
+        return False
+
+
 def _render_collected_sections(rows: list[dict[str, Any]]) -> None:
     from app.obsidian_export import obsidian_uri, vscode_uri
 
@@ -144,7 +160,7 @@ def _render_collected_sections(rows: list[dict[str, Any]]) -> None:
             with cols[0]:
                 st.markdown(f"**{heading_text or '—'}**")
                 st.caption(f"{Path(md_abs).name} · строки {line_start}-{row.get('line_end')}")
-                if (md_abs, heading_text) in duplicate_keys:
+                if (md_abs, heading_text) in duplicate_keys or _heading_ambiguous(md_abs, heading_text):
                     st.caption("⚠️ Заголовок повторяется в документе — VS Code точнее для повторяющихся заголовков.")
                 st.write(str(row.get("text") or "")[:400])
             with cols[1]:
@@ -223,7 +239,7 @@ def _collect_concept_context(rows: list[dict[str, Any]]) -> tuple[list[str], lis
     """Prerequisites/related_concepts для всех уникальных концептов, привязанных к разделам корзины.
 
     Раздел получает ``concept`` только когда его добавили из графа
-    (``_render_document_section_workbench_button`` в ``dashboards_graph.py``); разделы из
+    (``_render_document_section_workbench_buttons`` в ``dashboards_graph.py``); разделы из
     Flashcards приходят без концепта — тогда контекст пуст, и это ожидаемо (нет графового
     привязки, откуда брать prerequisites).
     """

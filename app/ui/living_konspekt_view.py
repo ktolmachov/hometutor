@@ -17,7 +17,12 @@ import streamlit as st
 
 from app.deep_study_prompt import build_deep_study_prompt
 from app.section_index import IndexedSection, row_to_section, section_to_row
-from app.study_web_queries import build_query_terms, build_web_search_links
+from app.study_web_queries import (
+    build_query_from_rows,
+    build_query_terms,
+    build_web_search_links,
+    harvest_links_from_rows,
+)
 from app.ui.helpers import format_request_error
 from app.ui.widgets import render_panel_header
 
@@ -75,15 +80,69 @@ def remove_section_from_workbench(
 
 
 # ── Сборка рабочего конспекта ────────────────────────────────────────────
+def _lecture_main_ideas(rows: list[dict[str, Any]]) -> list[tuple[str, str]]:
+    """``[(имя конспекта, первый абзац главной мысли), ...]`` по уникальным документам корзины.
+
+    «Дух лекции» едет в сам артефакт, а не только в deep-study промпт. Конспект без
+    раздела-роли ``main_idea`` (или недоступный файл) молча пропускается.
+    """
+    try:
+        from app.section_index import sections_by_role, _cached_parse_sections
+    except Exception:  # noqa: BLE001 - обогащение опционально
+        return []
+
+    md_paths: list[str] = []
+    for row in rows:
+        md = str(row.get("konspekt_md_abs") or "")
+        if md and md not in md_paths:
+            md_paths.append(md)
+
+    out: list[tuple[str, str]] = []
+    for md in md_paths:
+        try:
+            parsed = _cached_parse_sections(Path(md))
+        except OSError:
+            continue
+        main_idea = sections_by_role(parsed).get("main_idea")
+        if main_idea is None or not main_idea.text.strip():
+            continue
+        first_paragraph = main_idea.text.strip().split("\n\n", 1)[0].strip()
+        if first_paragraph:
+            out.append((Path(md).name, first_paragraph))
+    return out
+
+
 def _stitch_verbatim(rows: list[dict[str, Any]]) -> str:
-    """0-LLM склейка: заголовки-источники + якоря + дословный текст разделов."""
+    """0-LLM склейка: главная мысль лекции + заголовки-источники + якоря + дословный текст.
+
+    В конец — «## Источники» со списком ``файл:строки`` всех разделов (провенанс живёт
+    в самом сохранённом файле, а не только в session_state).
+    """
+    header_parts = [
+        f"> **Главная мысль исходной лекции ({doc_name}):** {idea}"
+        for doc_name, idea in _lecture_main_ideas(rows)
+    ]
+
     parts: list[str] = []
     for row in rows:
         heading = str(row.get("heading_text") or "Без названия")
         source_name = Path(str(row.get("konspekt_md_abs") or "")).name
         location = f"{source_name}:{row.get('line_start')}"
         parts.append(f"## {heading}\n\n*Источник: {location}*\n\n{row.get('text') or ''}")
-    return "\n\n---\n\n".join(parts)
+
+    source_lines = [
+        f"- {Path(str(row.get('konspekt_md_abs') or '')).name}:{row.get('line_start')}-{row.get('line_end')}"
+        f" — «{row.get('heading_text') or '—'}»"
+        for row in rows
+    ]
+
+    blocks: list[str] = []
+    if header_parts:
+        blocks.append("\n>\n".join(header_parts))
+    blocks.append("\n\n---\n\n".join(parts))
+    if source_lines:
+        blocks.append("## Источники\n\n" + "\n".join(source_lines))
+    return "\n\n".join(blocks)
 
 
 def _filename_slug(title: str) -> str:
@@ -214,9 +273,20 @@ def _render_build_panel(rows: list[dict[str, Any]]) -> None:
 
 def _render_web_queries_panel(rows: list[dict[str, Any]]) -> None:
     st.markdown("### 🌐 Проверить актуальность · источники")
-    heading_texts = [str(row.get("heading_text") or "") for row in rows]
-    key_concepts = [str(row.get("concept") or "") for row in rows if row.get("concept")]
-    query = build_query_terms(heading_texts=heading_texts, key_concepts=key_concepts)
+
+    # «Источник этих знаний» без сети: ссылки, которые лектор сам приложил к материалу.
+    lecture_links = harvest_links_from_rows(rows)
+    if lecture_links:
+        st.markdown("**🔗 Ссылки из лекции**")
+        for label, url in lecture_links[:8]:
+            st.markdown(f"- [{label}]({url})")
+
+    query = build_query_from_rows(rows)
+    if not query:
+        # Разделы без концепта и с пустыми заголовками — фолбэк на свалку заголовков.
+        heading_texts = [str(row.get("heading_text") or "") for row in rows]
+        key_concepts = [str(row.get("concept") or "") for row in rows if row.get("concept")]
+        query = build_query_terms(heading_texts=heading_texts, key_concepts=key_concepts)
     links = build_web_search_links(query)
     if not links:
         st.caption("Добавьте разделы, чтобы сформировать поисковый запрос.")

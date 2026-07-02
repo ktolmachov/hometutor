@@ -91,6 +91,33 @@ class TestStitchVerbatim:
         assert "Дословный текст B." in stitched
         assert "lecture-b.md:5" in stitched
 
+    def test_appends_sources_footer(self):
+        state: dict = {}
+        add_section_to_workbench(_section(MD_A, 10, heading="Тема A"), state)
+        stitched = _stitch_verbatim(get_workbench_rows(state))
+        assert "## Источники" in stitched
+        assert "lecture-a.md:10-13 — «Тема A»" in stitched
+
+    def test_prepends_lecture_main_idea_when_konspekt_exists(self, tmp_path: Path):
+        md = tmp_path / "lecture.md"
+        md.write_text(
+            "# Конспект\n\n## 🎯 Главная мысль\n\nАгент — система вокруг LLM.\n\n"
+            "Второй абзац мысли, который в шапку не идёт.\n\n## 🔹 Тема\n\nТело темы.\n",
+            encoding="utf-8",
+        )
+        state: dict = {}
+        add_section_to_workbench(_section(md, 11, heading="🔹 Тема", text="Тело темы."), state)
+        stitched = _stitch_verbatim(get_workbench_rows(state))
+        assert "> **Главная мысль исходной лекции (lecture.md):** Агент — система вокруг LLM." in stitched
+        assert "Второй абзац мысли" not in stitched  # только первый абзац — это шапка, не копия
+
+    def test_missing_konspekt_files_keep_stitching_working(self):
+        state: dict = {}
+        add_section_to_workbench(_section(MD_A, 10, heading="Тема A"), state)
+        stitched = _stitch_verbatim(get_workbench_rows(state))
+        assert "Главная мысль исходной лекции" not in stitched  # файла нет — шапки нет
+        assert "## Тема A" in stitched
+
 
 class TestPersistRoundtrip:
     def test_normalize_includes_workbench_rows(self):

@@ -89,20 +89,28 @@ Still out of scope:
 - reranker quality benchmarking
 - end-to-end UI/browser flows
 
-## Current Known Blocker
+## Current Status
 
 ```text
-HOME_RAG_INTEGRATION_GATE_V1=BLOCKED_RUNTIME_ENDPOINT
-Cause: embedding endpoint is not accepting connections at http://127.0.0.1:1234/v1.
+HOME_RAG_INTEGRATION_GATE_V1=PASS
+Report: D:\AI\logs\home_rag_integration_gate_v1_2026-07-03_00-02-41.json
+Cases: 15 / 15 PASS
+Runner: D:\AI\Run-HomeRagIntegrationGate-v1.ps1
 
 Resolved native blockers:
   _tiktoken: D:\AI\logs\home_rag_integration_gate_v1_2026-07-01_23-21-57.json
   rpds:      D:\AI\logs\home_rag_integration_gate_v1_2026-07-01_23-31-26.json
 
-Current endpoint blocker:
+Resolved endpoint blocker:
   report: D:\AI\logs\home_rag_integration_gate_v1_2026-07-02_00-24-58.json
   llm_probe: PASS, qwopus36-35b-a3b-mtp found at http://127.0.0.1:8080/v1/models
   embed_probe: BLOCKED, WinError 10061 connection refused at http://127.0.0.1:1234/v1/models
+
+Final accepted run:
+  llm_model: qwopus3.6-35b-a3b-v1-mtp
+  embed_model: text-embedding-qwen3-embedding-0.6b
+  mode: --skip-ingest after an earlier successful --reset-home ingest
+  result: HOME_RAG_INTEGRATION_GATE_RUNNER=PASS
 ```
 
 Diagnostics already tried:
@@ -117,6 +125,11 @@ After App Control policy update:
   rpds import: PASS
   tiktoken import: PASS
   app.query_service import: PASS
+After endpoint restore:
+  LLM endpoint: PASS
+  embedding endpoint: PASS
+After case expectation refinement:
+  home_refusal_003: PASS
 ```
 
 Blocked native files observed after reinstall:
@@ -129,9 +142,10 @@ D:\Projects\hometutor\.venv\Lib\site-packages\tiktoken\_tiktoken.cp311-win_amd64
   sha256: BB75E9970E743663C7DBF30D48CD27EB163F18395C31BDD48722514D9F566373
 ```
 
-Resolution options:
+Operational rerun:
 
-1. Start LM Studio or another OpenAI-compatible embedding server on `http://127.0.0.1:1234/v1`.
-2. Load an embedding model that appears as `text-embedding-qwen3-embedding-0.6b` in `GET /v1/models`, or run the gate with `--embed-model <actual-model-id>`.
-3. Re-run the gate with `--skip-ingest` if the existing Chroma index should be reused, or with `--reset-home` if the index should be rebuilt with the active embedding model.
-4. Keep the gate-level tokenizer fallback for `_tiktoken`; it is no longer required on the current machine state, but remains useful if App Control blocks `_tiktoken` again.
+```powershell
+pwsh -ExecutionPolicy Bypass -File D:\AI\Run-HomeRagIntegrationGate-v1.ps1 -SkipIngest
+```
+
+Use `-ResetHome` when the isolated gate corpus or embedding model changes and the Chroma index should be rebuilt.

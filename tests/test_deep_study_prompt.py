@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
+
 from app.deep_study_prompt import build_deep_study_prompt
-from app.section_index import ParsedSection
+from app.section_index import IndexedSection, ParsedSection, parse_sections
 
 TOC = ParsedSection(
     heading_text="📑 Оглавление",
@@ -72,3 +76,73 @@ class TestBuildDeepStudyPrompt:
         prompt = build_deep_study_prompt(topic="Агенты ИИ", sections=[])
         assert "(разделы не выбраны)" in prompt
         assert "(не найдено" in prompt
+
+    def test_roles_placeholders_when_sections_lack_provenance(self):
+        """Голые ParsedSection без konspekt_md_abs → ролям неоткуда взяться."""
+        prompt = build_deep_study_prompt(topic="Агенты ИИ", sections=[MAIN_IDEA])
+        assert prompt.count("(в конспекте нет)") == 2  # pitfalls + check_questions
+
+
+RICH_KONSPEKT_MD = """# Конспект
+
+## 🎯 Главная мысль
+
+Агент — система вокруг LLM, а не разовый вызов.
+
+## 🔹 ReAct
+
+ReAct выбирает следующий шаг после наблюдения.
+
+## ⚠️ Ошибки, риски и антипаттерны
+
+ReAct без stop-controller — бесконечный цикл и расход бюджета.
+
+## ❓ Контрольные вопросы
+
+Чем workflow отличается от агента?
+"""
+
+
+@pytest.fixture
+def rich_konspekt(tmp_path: Path) -> Path:
+    p = tmp_path / "rich.md"
+    p.write_text(RICH_KONSPEKT_MD, encoding="utf-8")
+    return p
+
+
+def _indexed(section: ParsedSection, md: Path) -> IndexedSection:
+    return IndexedSection(
+        heading_text=section.heading_text,
+        slug=section.slug,
+        level=section.level,
+        line_start=section.line_start,
+        line_end=section.line_end,
+        text=section.text,
+        own_text=section.own_text,
+        source_abs=md.with_suffix(".txt"),
+        konspekt_md_abs=md,
+    )
+
+
+class TestLectureSpirit:
+    """«Дух лекции»: роли из ПОЛНЫХ конспектов документов выбранных секций."""
+
+    def test_pitfalls_and_check_questions_pulled_from_document(self, rich_konspekt: Path):
+        react = next(s for s in parse_sections(rich_konspekt) if "ReAct" in s.heading_text)
+        prompt = build_deep_study_prompt(topic="ReAct", sections=[_indexed(react, rich_konspekt)])
+        assert "ReAct без stop-controller — бесконечный цикл и расход бюджета." in prompt
+        assert "Чем workflow отличается от агента?" in prompt
+        assert "(в конспекте нет)" not in prompt
+
+    def test_doc_level_main_idea_preferred_when_not_selected(self, rich_konspekt: Path):
+        """В корзине только подтема — главная мысль берётся из полного конспекта,
+        а не подменяется «первой содержательной H2 среди выбранных»."""
+        react = next(s for s in parse_sections(rich_konspekt) if "ReAct" in s.heading_text)
+        prompt = build_deep_study_prompt(topic="ReAct", sections=[_indexed(react, rich_konspekt)])
+        main_idea_block = prompt.split("## Главная мысль", 1)[1].split("##", 1)[0]
+        assert "Агент — система вокруг LLM, а не разовый вызов." in main_idea_block
+
+    def test_missing_document_degrades_to_placeholders(self, tmp_path: Path):
+        ghost = _indexed(MAIN_IDEA, tmp_path / "ghost.md")
+        prompt = build_deep_study_prompt(topic="Агенты ИИ", sections=[ghost])
+        assert prompt.count("(в конспекте нет)") == 2

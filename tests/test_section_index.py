@@ -14,7 +14,9 @@ from app.section_index import (
     main_idea_section,
     parse_sections,
     row_to_section,
+    section_role,
     section_to_row,
+    sections_by_role,
     top_sections_for,
     _cached_parse_sections,
     _tokenize_ru_en,
@@ -330,6 +332,67 @@ class TestTopSectionsFor:
 
     def test_empty_sections_returns_empty(self):
         assert top_sections_for([], "что-то") == []
+
+
+# Богатый шаблон (hometutor-studio, как урок_1): роли сверх локального минимума.
+RICH_KONSPEKT_MD = """# Конспект
+
+## 🎯 Главная мысль
+
+Мысль лекции.
+
+## ⚠️ Ошибки, риски и антипаттерны
+
+ReAct без stop-controller — бесконечный цикл.
+
+## ❓ Контрольные вопросы
+
+Чем workflow отличается от агента?
+
+## 🌐 Дополнительные материалы для глубокого изучения
+
+- [ReAct paper](https://arxiv.org/abs/2210.03629)
+
+## 🧾 Мини-шпаргалка
+
+Agent = LLM + tools + memory + loop.
+
+## 🏁 Итоги и выводы
+
+Выводы лекции.
+"""
+
+
+class TestSectionRole:
+    def _sections(self, tmp_path: Path):
+        p = tmp_path / "rich.md"
+        p.write_text(RICH_KONSPEKT_MD, encoding="utf-8")
+        return parse_sections(p)
+
+    def test_rich_template_headings_map_to_roles(self, tmp_path: Path):
+        roles = {s.heading_text: section_role(s) for s in self._sections(tmp_path)}
+        assert roles["🎯 Главная мысль"] == "main_idea"
+        assert roles["⚠️ Ошибки, риски и антипаттерны"] == "pitfalls"
+        assert roles["❓ Контрольные вопросы"] == "check_questions"
+        assert roles["🌐 Дополнительные материалы для глубокого изучения"] == "external_links"
+        assert roles["🧾 Мини-шпаргалка"] == "cheatsheet"
+        assert roles["🏁 Итоги и выводы"] == "summary"
+
+    def test_unknown_heading_has_no_role(self, konspekt_path: Path):
+        sections = parse_sections(konspekt_path)
+        assert section_role(_by_heading(sections, "🔹 Тема первая")) is None
+
+    def test_sections_by_role_collects_first_per_role(self, tmp_path: Path):
+        by_role = sections_by_role(self._sections(tmp_path))
+        assert by_role["pitfalls"].text == "ReAct без stop-controller — бесконечный цикл."
+        assert by_role["check_questions"].text == "Чем workflow отличается от агента?"
+
+    def test_minimal_template_degrades_to_subset(self, konspekt_path: Path):
+        """Локальный шаблон конспекта не содержит богатых ролей — их просто нет в dict."""
+        by_role = sections_by_role(parse_sections(konspekt_path))
+        assert "main_idea" in by_role and "summary" in by_role
+        assert "pitfalls" not in by_role
+        assert "check_questions" not in by_role
 
 
 class TestHeadingRepeatsInDocument:

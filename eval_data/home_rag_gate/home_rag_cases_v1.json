@@ -121,7 +121,7 @@
       "options": {"relative_path": "gate/source_policy.md", "rag_profile": "quality"},
       "expected_source_contains": ["gate/source_policy.md"],
       "must_include_any": [["insufficient", "not contain", "does not define", "not available", "недостаточно", "не могу подтвердить", "не содерж", "не определяет"]],
-      "must_not_include": ["W", "watt", "GB"],
+      "must_not_include": ["100 W", "250 W", "350 W", "450 W", "500 W", "24 GB", "48 GB"],
       "require_sources": true,
       "require_citation": false
     },

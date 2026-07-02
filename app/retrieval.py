@@ -91,6 +91,26 @@ def _faq_cache_policy(
     return True, None
 
 
+def _is_study_quiz_generation_request(question: str, options: QueryOptions) -> bool:
+    if not options.study_mode:
+        return False
+    q = (question or "").casefold()
+    return any(
+        marker in q
+        for marker in (
+            "quiz",
+            "test",
+            "self-check",
+            "multiple-choice",
+            "multiple choice",
+            "вариант",
+            "тест",
+            "квиз",
+            "вопрос",
+        )
+    )
+
+
 def _build_query_execution_plan(
     *,
     query_type: str,
@@ -205,6 +225,13 @@ def resolve_query_execution_plan(
             False if query_type == KEYWORD_QUERY else params["enable_reranker"]
         )
         prompt_key = "keyword" if query_type == KEYWORD_QUERY else "qa"
+
+    if _is_study_quiz_generation_request(question, options):
+        query_type = "qa"
+        prompt_key = "qa"
+        if effective_retrieval_mode == "bm25_only":
+            effective_retrieval_mode = str(params["retrieval_mode"])
+        effective_reranker_enabled = bool(params["enable_reranker"])
 
     tutor_mode = (options.query_mode or "").strip().lower() == "tutor"
     if options.homework_mode and (query_type == "qa" or tutor_mode):

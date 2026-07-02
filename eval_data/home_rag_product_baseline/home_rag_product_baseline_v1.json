@@ -156,7 +156,7 @@
       "options": {"relative_path": "product/mitochondria_quiz_source.md", "rag_profile": "quality", "study_mode": true},
       "expected_source_contains": ["product/mitochondria_quiz_source.md"],
       "must_include_any": [["ATP", "АТФ"], ["mitochondria", "митохондр"], ["answer", "ответ", "какую функцию", "что такое"]],
-      "must_not_include": ["chlorophyll", "photosynthesis", "carbon dioxide"],
+      "must_not_include": ["chlorophyll", "photosynthesis", "carbon dioxide", "insufficient information", "недостаточно информации", "не приведены варианты"],
       "require_sources": true,
       "require_citation": true
     },
@@ -169,7 +169,7 @@
       "options": {"relative_path": "product/mitochondria_quiz_source.md", "rag_profile": "quality", "study_mode": true},
       "expected_source_contains": ["product/mitochondria_quiz_source.md"],
       "must_include_any": [["ATP", "АТФ"], ["food energy", "usable energy", "energy currency", "энерг"], ["A", "B", "C", "вариант"]],
-      "must_not_include": ["chlorophyll", "plant-only", "sunlight"],
+      "must_not_include": ["chlorophyll", "plant-only", "sunlight", "insufficient information", "недостаточно информации", "не приведены варианты"],
       "require_sources": true,
       "require_citation": true
     },

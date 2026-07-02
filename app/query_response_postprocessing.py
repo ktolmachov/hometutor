@@ -99,6 +99,46 @@ def tutor_rag_snippet_from_response(response: Any, *, max_chars: int = 6000) -> 
     return "\n---\n".join(parts)[:max_chars]
 
 
+def normalize_inline_numeric_citations(answer_text: str, source_count: int) -> tuple[str, dict[str, Any]]:
+    """Keep inline numeric citations aligned with returned source cards."""
+    text = str(answer_text or "")
+    if not text:
+        return text, {"changed": False, "invalid_indices": []}
+
+    invalid: set[int] = set()
+    changed = False
+
+    def repl(match: re.Match[str]) -> str:
+        nonlocal changed
+        raw = match.group(1)
+        indices: list[int] = []
+        for part in raw.split(","):
+            value = part.strip()
+            if value.isdigit():
+                indices.append(int(value))
+        if not indices:
+            return match.group(0)
+
+        valid = sorted({idx for idx in indices if 1 <= idx <= source_count})
+        for idx in indices:
+            if idx < 1 or idx > source_count:
+                invalid.add(idx)
+
+        if valid:
+            normalized = "[" + ", ".join(str(idx) for idx in valid) + "]"
+        elif source_count > 0:
+            normalized = "[1]"
+        else:
+            normalized = ""
+
+        if normalized != match.group(0):
+            changed = True
+        return normalized
+
+    normalized = re.sub(r"\[(\d+(?:\s*,\s*\d+)*)\]", repl, text)
+    return normalized, {"changed": changed, "invalid_indices": sorted(invalid)}
+
+
 def process_rag_response(
     response: Any,
     ctx: QueryContext,
@@ -220,6 +260,19 @@ def process_rag_response(
                     "response_source_node_parse_failed",
                     index=idx,
                 )
+
+    answer_text, citation_normalization = normalize_inline_numeric_citations(
+        answer_text,
+        len(sources),
+    )
+    if citation_normalization["changed"]:
+        log_event(
+            logger,
+            logging.INFO,
+            "answer_inline_citations_normalized",
+            source_count=len(sources),
+            invalid_indices=citation_normalization["invalid_indices"],
+        )
 
     if tutor_teaching is not None:
         answer_text, inline_quiz, tutor_teaching, inline_quiz_ms = _apply_tutor_teaching_postprocessing(

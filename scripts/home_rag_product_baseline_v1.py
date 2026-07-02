@@ -121,11 +121,17 @@ def _bind_config_module(config: BaselineConfig) -> None:
 def _score_metric(metric: str, case: dict[str, Any], row: dict[str, Any]) -> bool:
     answer = str(row.get("answer") or "")
     user_value_min = int(case.get("user_value_min_chars") or 50)
+    refused = bool(row.get("refusal_like"))
     checks = {
         "retrieval_quality": bool(row.get("source_ok") and row.get("sources_ok")),
         "answer_grounding": bool(row.get("include_ok") and row.get("include_any_ok") and row.get("exclude_ok")),
         "citation_accuracy": bool(row.get("citation_present_ok") and row.get("citation_source_id_ok")),
-        "quiz_validity": bool(row.get("include_any_ok") and row.get("exclude_ok") and row.get("citation_source_id_ok")),
+        "quiz_validity": bool(
+            row.get("include_any_ok")
+            and row.get("exclude_ok")
+            and row.get("citation_source_id_ok")
+            and not refused
+        ),
         "long_doc_stability": bool(row.get("source_ok") and row.get("include_any_ok") and row.get("exclude_ok")),
         "refusal_precision": bool(row.get("include_any_ok") and row.get("exclude_ok") and row.get("no_evidence_no_citation_ok")),
         "user_value": bool(len(answer.strip()) >= user_value_min and row.get("include_any_ok") and row.get("exclude_ok")),
@@ -133,9 +139,27 @@ def _score_metric(metric: str, case: dict[str, Any], row: dict[str, Any]) -> boo
     return checks.get(metric, False)
 
 
+def _looks_like_refusal(answer: object) -> bool:
+    text = str(answer or "").casefold()
+    markers = (
+        "insufficient",
+        "not enough information",
+        "not contain",
+        "does not contain",
+        "not available",
+        "недостаточно информации",
+        "недостаточно данных",
+        "не содержит",
+        "не приведены",
+        "не найден",
+    )
+    return any(marker in text for marker in markers)
+
+
 def _evaluate_product_case(case: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
     row = integration_gate._evaluate_case(case, result)
     metrics = list(case.get("metrics") or [])
+    row["refusal_like"] = _looks_like_refusal(row.get("answer"))
     metric_results = {metric: _score_metric(metric, case, row) for metric in metrics}
     score = (sum(1 for ok in metric_results.values() if ok) / len(metric_results)) if metric_results else 0.0
     row["category"] = case.get("category") or case.get("type")

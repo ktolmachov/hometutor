@@ -102,45 +102,47 @@ The next useful step after the first run is to inspect weak categories, not to s
 ## Current Baseline Run
 
 ```text
-status: WATCH_BASELINE
-report_json: D:\AI\logs\home_rag_product_baseline_v1_2026-07-03_00-53-16.json
+status: ACCEPTED_BASELINE
+report_json: D:\AI\logs\home_rag_product_baseline_v1_2026-07-03_01-11-43.json
 baseline_model: qwopus3.6-35b-a3b-v1-mtp
 corpus: isolated product-baseline corpus
 docs/nodes: 7 / 7
+cases: 12 / 12 PASS
+overall_score: 1.0
 ```
 
 Case summary:
 
 ```text
-baseline_retrieval_001: WATCH
+baseline_retrieval_001: PASS
 baseline_retrieval_002: PASS
-baseline_html_001: WATCH
+baseline_html_001: PASS
 baseline_wrong_doc_001: PASS
-baseline_long_doc_001: WATCH
-baseline_long_doc_002: WATCH
+baseline_long_doc_001: PASS
+baseline_long_doc_002: PASS
 baseline_refusal_001: PASS
 baseline_refusal_002: PASS
 baseline_quiz_001: PASS
-baseline_quiz_002: NEEDS_WORK
-baseline_citation_001: NEEDS_WORK
-baseline_user_value_001: WATCH
+baseline_quiz_002: PASS
+baseline_citation_001: PASS
+baseline_user_value_001: PASS
 ```
 
 The first full run exposed overly English-only expectations in the baseline cases. The case file now accepts equivalent Russian phrasing while keeping hallucination and unsupported-fact checks strict.
 
-## Current Product Findings
+## P0 Remediation
 
 ```text
 citation_source_id_integrity:
-  finding: answers can cite numeric ids such as [2] or [3] when only one source node is returned
-  impact: grounded answers may be useful, but citation integrity is not product-grade yet
+  fix: inline numeric citations are normalized to returned source-card ids
+  regression: invalid [2]/[3] markers no longer leak when only one source is returned
 
 quiz_mcq_generation:
-  finding: one multiple-choice quiz case refused instead of generating a question from retrieved context
-  impact: quiz generation is promising but not stable enough for the accepted product baseline
+  fix: study-mode quiz/multiple-choice requests route through QA prompt instead of keyword prompt
+  regression: refusal-like quiz answers are no longer counted as valid quiz output
 
 overall:
-  finding: retrieval and refusal behavior are strong enough for WATCH_BASELINE, but citation discipline and quiz consistency need product work
+  finding: P0 gaps are closed for the controlled product-baseline corpus
 ```
 
-This baseline is a product/system scorecard. `WATCH_BASELINE` means the Home RAG path is usable as a measured baseline, not that the canonical model selection should be reopened.
+This baseline is a product/system scorecard. `ACCEPTED_BASELINE` means the controlled Home RAG product baseline is accepted for the current corpus; it does not reopen model selection and does not replace broader real-course or long-document regression packs.

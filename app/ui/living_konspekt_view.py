@@ -169,7 +169,7 @@ def _lecture_main_ideas(rows: list[dict[str, Any]]) -> list[tuple[str, str]]:
 
 
 def _stitch_verbatim(rows: list[dict[str, Any]]) -> str:
-    """0-LLM склейка: главная мысль лекции + заголовки-источники + якоря + дословный текст.
+    """Детерминированная склейка: главная мысль лекции + заголовки-источники + якоря + текст.
 
     В конец — «## Источники» со списком ``файл:строки`` всех разделов (провенанс живёт
     в самом сохранённом файле, а не только в session_state).
@@ -328,9 +328,11 @@ def _render_build_panel(rows: list[dict[str, Any]]) -> None:
 
 
 def _render_term_cards_panel(rows: list[dict[str, Any]]) -> None:
-    """0-LLM карточки из раздела «Важные термины» конспектов — переиспользует preview
-    редактор Flashcards (те же ``fc_preview_*`` session_state ключи, что заполняет
-    ``render_generate``): редактирование/удаление/сохранение — уже готовый UI, не дублируем.
+    """Карточки из сохранённых разделов «Важные термины» без нового LLM-вызова.
+
+    Переиспользует preview редактор Flashcards (те же ``fc_preview_*`` session_state
+    ключи, что заполняет ``render_generate``): редактирование/удаление/сохранение —
+    уже готовый UI, не дублируем.
     """
     from app.term_cards import term_cards_from_documents
 
@@ -343,17 +345,26 @@ def _render_term_cards_panel(rows: list[dict[str, Any]]) -> None:
             "карточки собрать не из чего."
         )
         return
+    deck_title = f"Термины — {', '.join(source_docs)}"[:120]
     st.caption(
         f"Найдено {len(cards)} терминов с определениями в {len(source_docs)} конспект(ах): "
         + ", ".join(source_docs)
-        + ". Термин = дословный текст лектора, ни один символ не сгенерирован моделью."
+        + ". Карточки собираются без нового LLM-вызова: front/back берутся из уже сохранённого конспекта."
     )
+    if len(cards) < 5:
+        st.caption(
+            f"Для сохранения колоды нужно минимум 5 карточек, сейчас найдено {len(cards)}. "
+            "Добавьте в корзину разделы из других конспектов с терминами."
+        )
+        return
     if st.button("🃏 Создать карточки из терминов", key="wb_term_cards_btn", type="primary"):
         from app.ui.flashcards_sections import FC_MAIN_SECTION_CREATE, pending_section_key
         from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
 
+        _clear_flashcards_preview_widget_state()
         st.session_state["fc_preview_cards"] = cards
-        st.session_state["fc_preview_title"] = f"Термины — {', '.join(source_docs)}"[:120]
+        st.session_state["fc_preview_title"] = deck_title
+        st.session_state["fc_deck_name"] = deck_title
         st.session_state["fc_preview_source_type"] = "living_konspekt_terms"
         st.session_state["fc_preview_source_identifier"] = ", ".join(source_docs)
         st.session_state[pending_section_key()] = FC_MAIN_SECTION_CREATE
@@ -361,6 +372,14 @@ def _render_term_cards_panel(rows: list[dict[str, Any]]) -> None:
         # инстанцированного st.selectbox в main.py на этом прогоне.
         st.session_state[PENDING_CURRENT_VIEW_KEY] = "Flashcards"
         st.rerun()
+
+
+def _clear_flashcards_preview_widget_state() -> None:
+    """Drop stale preview editor widget values before opening Flashcards create."""
+    stale_prefixes = ("prev_f_", "prev_b_", "prev_t_")
+    for key in list(st.session_state.keys()):
+        if key == "fc_deck_name" or (isinstance(key, str) and key.startswith(stale_prefixes)):
+            st.session_state.pop(key, None)
 
 
 def _render_web_queries_panel(rows: list[dict[str, Any]]) -> None:

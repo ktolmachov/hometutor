@@ -81,7 +81,7 @@ class TestRenderLivingKonspektViewSmoke:
 
 
 class TestTermCardsPanelSmoke:
-    """«🃏 Карточки из терминов лекции» — 0-LLM extraction, переиспользует preview Flashcards."""
+    """«🃏 Карточки из терминов лекции» — без нового LLM-вызова, через preview Flashcards."""
 
     def _konspekt_with_terms(self, tmp_path: Path) -> Path:
         p = tmp_path / "lecture.md"
@@ -89,6 +89,19 @@ class TestTermCardsPanelSmoke:
             "# Конспект\n\n## 🧠 Важные термины и концепции\n\n"
             "- **LLM** — большая языковая модель.\n"
             "- **Harness** — обвязка вокруг LLM.\n",
+            encoding="utf-8",
+        )
+        return p
+
+    def _konspekt_with_five_terms(self, tmp_path: Path) -> Path:
+        p = tmp_path / "lecture5.md"
+        p.write_text(
+            "# Конспект\n\n## 🧠 Важные термины и концепции\n\n"
+            "- **LLM** — большая языковая модель.\n"
+            "- **Harness** — обвязка вокруг LLM.\n"
+            "- **Agent** — система вокруг модели и инструментов.\n"
+            "- **Tool** — функция, доступная агенту.\n"
+            "- **Context** — данные, доступные модели при ответе.\n",
             encoding="utf-8",
         )
         return p
@@ -102,8 +115,19 @@ class TestTermCardsPanelSmoke:
         captions = [c.value for c in at.caption]
         assert any("карточки собрать не из чего" in c for c in captions)
 
-    def test_shows_button_when_terms_extractable(self, tmp_path: Path):
+    def test_less_than_five_terms_shows_minimum_caption_without_button(self, tmp_path: Path):
         md = self._konspekt_with_terms(tmp_path)
+        at = AppTest.from_function(_app)
+        at.session_state["workbench_sections"] = [_row(konspekt_md_abs=md)]
+        at.run()
+        assert not at.exception
+        captions = [c.value for c in at.caption]
+        assert any("минимум 5 карточек" in c for c in captions)
+        buttons = [b.label for b in at.button]
+        assert "🃏 Создать карточки из терминов" not in buttons
+
+    def test_shows_button_when_terms_extractable_and_saveable(self, tmp_path: Path):
+        md = self._konspekt_with_five_terms(tmp_path)
         at = AppTest.from_function(_app)
         at.session_state["workbench_sections"] = [_row(konspekt_md_abs=md)]
         at.run()
@@ -112,9 +136,11 @@ class TestTermCardsPanelSmoke:
         assert "🃏 Создать карточки из терминов" in buttons
 
     def test_click_populates_flashcards_preview_and_navigates(self, tmp_path: Path):
-        md = self._konspekt_with_terms(tmp_path)
+        md = self._konspekt_with_five_terms(tmp_path)
         at = AppTest.from_function(_app)
         at.session_state["workbench_sections"] = [_row(konspekt_md_abs=md)]
+        at.session_state["fc_deck_name"] = "Старое имя"
+        at.session_state["prev_f_0"] = "Старый front"
         at.run()
         at.button(key="wb_term_cards_btn").click().run()
         assert not at.exception
@@ -123,6 +149,8 @@ class TestTermCardsPanelSmoke:
         # пишет PENDING_CURRENT_VIEW_KEY — main.py применит его на следующем прогоне.
         assert at.session_state["_pending_current_view"] == "Flashcards"
         assert at.session_state["flashcards_section_pending"] == "create"
+        assert at.session_state["fc_deck_name"] == "Термины — lecture5.md"
+        assert "prev_f_0" not in at.session_state
         cards = at.session_state["fc_preview_cards"]
-        assert {"front": "LLM", "back": "большая языковая модель.", "tags": "источник:lecture.md"} in cards
-        assert len(cards) == 2
+        assert {"front": "LLM", "back": "большая языковая модель.", "tags": "источник:lecture5.md"} in cards
+        assert len(cards) == 5

@@ -1,4 +1,4 @@
-"""Tests for app.term_cards (0-LLM flashcards from konspekt «Важные термины»)."""
+"""Tests for app.term_cards (flashcards from saved konspekt «Важные термины»)."""
 
 from __future__ import annotations
 

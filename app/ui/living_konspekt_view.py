@@ -350,13 +350,16 @@ def _render_term_cards_panel(rows: list[dict[str, Any]]) -> None:
     )
     if st.button("🃏 Создать карточки из терминов", key="wb_term_cards_btn", type="primary"):
         from app.ui.flashcards_sections import FC_MAIN_SECTION_CREATE, pending_section_key
+        from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
 
         st.session_state["fc_preview_cards"] = cards
         st.session_state["fc_preview_title"] = f"Термины — {', '.join(source_docs)}"[:120]
         st.session_state["fc_preview_source_type"] = "living_konspekt_terms"
         st.session_state["fc_preview_source_identifier"] = ", ".join(source_docs)
         st.session_state[pending_section_key()] = FC_MAIN_SECTION_CREATE
-        st.session_state["current_view"] = "Flashcards"
+        # PENDING_CURRENT_VIEW_KEY, не прямая запись: current_view — ключ уже
+        # инстанцированного st.selectbox в main.py на этом прогоне.
+        st.session_state[PENDING_CURRENT_VIEW_KEY] = "Flashcards"
         st.rerun()
 
 

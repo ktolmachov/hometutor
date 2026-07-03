@@ -343,7 +343,12 @@ def _render_concept_actions(
             except Exception:  # noqa: BLE001 - счётчик корзины не должен ломать панель
                 wb_count = 0
             if st.button(f"📚 Живой конспект ({wb_count})", key=f"kg_wb_open_{sel}", width="stretch"):
-                st.session_state["current_view"] = "Живой конспект"
+                # PENDING_CURRENT_VIEW_KEY, не прямая запись: current_view — ключ уже
+                # инстанцированного st.selectbox в main.py, прямая запись после него
+                # кидает StreamlitAPIException (см. app/ui/session_state.py).
+                from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
+
+                st.session_state[PENDING_CURRENT_VIEW_KEY] = "Живой конспект"
                 st.rerun()
 
         for doc_idx, rel_path in enumerate(related_docs):

@@ -118,7 +118,10 @@ class TestTermCardsPanelSmoke:
         at.run()
         at.button(key="wb_term_cards_btn").click().run()
         assert not at.exception
-        assert at.session_state["current_view"] == "Flashcards"
+        # Отложенный переход: current_view — ключ уже инстанцированного st.selectbox в
+        # main.py, прямая запись после него кидает StreamlitAPIException, поэтому кнопка
+        # пишет PENDING_CURRENT_VIEW_KEY — main.py применит его на следующем прогоне.
+        assert at.session_state["_pending_current_view"] == "Flashcards"
         assert at.session_state["flashcards_section_pending"] == "create"
         cards = at.session_state["fc_preview_cards"]
         assert {"front": "LLM", "back": "большая языковая модель.", "tags": "источник:lecture.md"} in cards

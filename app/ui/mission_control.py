@@ -89,7 +89,16 @@ def _navigate_to(view: str, *, slot_hint: str | None = None) -> None:
 
 
 def _set_navigation_state(view: str, *, slot_hint: str | None = None) -> None:
-    st.session_state["current_view"] = view
+    """Запросить переход на ``view`` через отложенный ключ.
+
+    ``current_view`` — ключ виджета ``st.selectbox`` в ``main.py`` (инстанцируется до
+    вызова любого view-рендерера); прямая запись в него ПОСЛЕ инстанцирования кидает
+    ``StreamlitAPIException``. ``PENDING_CURRENT_VIEW_KEY`` — единственный безопасный
+    путь: main.py читает и применяет его ДО ``st.selectbox(..., key="current_view")``
+    на следующем прогоне (см. ``app/ui/session_state.py``). Безопасно и для synchronous
+    вызовов внутри тела кнопки (rerun сразу следом), и для ``on_click=`` колбэков.
+    """
+    st.session_state[PENDING_CURRENT_VIEW_KEY] = view
     st.session_state["home_breadcrumb_origin"] = HOME_VIEW
     if slot_hint:
         st.session_state["home_last_primary_mode_slot"] = slot_hint

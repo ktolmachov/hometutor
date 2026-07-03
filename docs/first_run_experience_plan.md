@@ -41,7 +41,7 @@ LLM только через `app/provider.py`; при изменении runtime
 | Пустой индекс в сайдбаре: текст «Индекс пока недоступен…» без CTA | `app/ui/sidebar.py:434` |
 | Баннер здоровья LLM покрывает **только SSR-endpoint** (payload `llm_local` из bootstrap); тексты подсказок «запустите LM Studio, загрузите модель X» уже написаны там | `app/ui/llm_local_banner.py:25` |
 | `/health/deep` не вызывается ни из одного UI-модуля | grep по `health/deep` в `app/ui` |
-| Онбординг: модальный диалог при `get_kv("onboarding_v1_done") != "1"`, спрашивает цель+время, кнопка ведёт в «Чат с тьютором», ставит KV и session-ключи `learning_goal`, `tutor_answer_depth`, `estimated_minutes`, вызывает `set_preferred_style("balanced")`, `_persist_tutor_goal_snapshot_from_session()`, `track_event("onboarding_completed", ...)` | `app/ui/home_hub.py:60–112`, показ в `app/ui/main.py:93–102` |
+| Онбординг: модальный диалог при `get_kv("onboarding_v1_done") != "1"`, спрашивает цель+время, кнопка ведёт в «Чат с тьютором», ставит KV и session-ключи `learning_goal`, `tutor_answer_depth`, `estimated_minutes`, вызывает `set_preferred_style("balanced")`, `_persist_tutor_goal_snapshot_from_session()`, `track_event("onboarding_completed", ...)` | `app/ui/home_hub.py:60–112`, показ в `app/ui/main.py:97–103` |
 | Seed-вопросы: `build_first_session_artifact()` строит 3 детерминированных вопроса по шаблонам `_DEFAULT_SEED_TEMPLATES` + retrieval trace; артефакт course-scoped, собирается на хвосте ingest | `app/services/first_session_builder.py:20,141` |
 | Рендер seed-вопросов на главной уже есть, но только при активном course scope и готовом артефакте; иначе пассивное «Первый обзор курса готовится…» | `app/ui/mission_control_first_session.py:199–227` |
 | `GET /kb/suggestions` **требует** параметр `question` — это follow-up-подсказки, для стартовых вопросов не подходит | `app/routers/knowledge.py:305` |
@@ -133,10 +133,11 @@ Mission Control рисовать в сокращённом виде):
   отрисовать только hero и выйти (не рисовать SSR/плитки по пустой базе).
 - Вынести `poll_reindex_status_for_query_tab()` в нейтральный общий poller
   (`app/ui/reindex_poll.py::poll_reindex_status()`), вызывать его и в
-  Mission Control, и в Quick Answer. Именно poller при `status == "completed"`
-  вызывает `clear_ui_api_caches()` и `st.rerun()`. До завершения фоновой
-  индексации кэши не чистить: иначе bootstrap может снова закэшировать пустой
-  индекс.
+  Mission Control, и в Quick Answer. Обновить оба существующих call-site старого
+  поллера: `app/ui/query_tab.py:12,26` и `app/ui/quick_answer.py:14,59`.
+  Именно poller при `status == "completed"` вызывает `clear_ui_api_caches()` и
+  `st.rerun()`. До завершения фоновой индексации кэши не чистить: иначе
+  bootstrap может снова закэшировать пустой индекс.
 - `app/ui/sidebar.py:434`: к тексту «Индекс пока недоступен…» добавить кнопку
   «Добавить материалы» → переход на Mission Control (`current_view = HOME_VIEW`
   через `PENDING_CURRENT_VIEW_KEY`).
@@ -406,7 +407,7 @@ W2 первым: он разграничивает «API недоступен» 
 - **Streamlit rerun и file_uploader**: после успешной обработки загрузки очищать
   виджет через смену `key` (счётчик в session_state), иначе файлы обработаются
   повторно при следующем rerun.
-- **Онбординг-диалог рисуется до `load_ui_bootstrap()`** (main.py:93–103) — внутри
+- **Онбординг-диалог рисуется до `load_ui_bootstrap()`** (main.py:97–103) — внутри
   диалога не обращаться к index_stats/topics.
 - **Windows-пути**: в `demo_sandbox` использовать `Path`, сравнение потомков —
   `Path.resolve()` + `is_relative_to` (Python 3.9+); не сравнивать строки.

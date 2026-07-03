@@ -445,6 +445,12 @@ def render_sidebar(index_stats: dict | None):
                     )
         else:
             st.info("Индекс пока недоступен. Проверьте, что база уже проиндексирована, или запустите переиндексацию.")
+            if st.button("Добавить материалы", key="sidebar_add_materials", width="stretch", type="primary"):
+                from app.ui.breadcrumb import HOME_VIEW
+                from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
+
+                st.session_state[PENDING_CURRENT_VIEW_KEY] = HOME_VIEW
+                st.rerun()
         folder = ""
         folder_rel = ""
         file_name = ""

@@ -11,7 +11,7 @@ from app.ui.continuity_bridge import (
 from app.ui.helpers import retrieval_route_summary, retrieval_route_summary_text
 from app.ui.query_tab_answer_section import render_query_answer_section
 from app.ui.query_tab_ask_panel import render_query_ask_panel
-from app.ui.query_tab_poll import poll_reindex_status_for_query_tab
+from app.ui.reindex_poll import poll_reindex_status
 from app.ui.query_tab_sidebar import render_query_status_sidebar
 from app.ui.tutor_mastery_forecast_panel import render_tutor_orchestration_snapshot_expander
 from app.ui.widgets import render_panel_header
@@ -56,7 +56,7 @@ def render_quick_answer_tab(
     topic_quick: str,
     folder_quick: str,
 ) -> None:
-    poll_reindex_status_for_query_tab()
+    poll_reindex_status()
     st.markdown('<div class="panel qa-mot3-handoff-source">', unsafe_allow_html=True)
     st.caption(qa_fast_answer_top_caption_ru())
     render_panel_header("Быстрый ответ", qa_fast_answer_panel_subtitle_ru())

@@ -17,6 +17,7 @@ from app.ingestion_content_state import (
     compute_retrieval_fingerprint,
     load_content_hash_state,
     plan_partial_reindex,
+    save_content_hash_state,
 )
 from app.ingestion_env_diag import (
     _log_ingest_settings_early,
@@ -30,6 +31,10 @@ from app.ingestion_index_nodes import (  # re-export for tests importing from in
 )
 from app.ingestion_index_partial import _build_index_partial
 from app.provider import get_embed_model
+from app.index_diff import update_snapshot_after_index
+from app.index_lifecycle import apply_index_activation_hooks
+from app.index_registry import activate_reset_generation
+from app.retrieval_cache import clear_retrieval_cache
 
 
 def _build_staging_collection_name(base_collection_name: str, started_at: float | None = None) -> str:
@@ -60,6 +65,20 @@ def _build_index_execute_reindex_attempt(
     client = prep["client"]
     build_to_staging = prep["build_to_staging"]
     stored = prep["stored"]
+
+    if file_count == 0:
+        if not reset:
+            raise ValueError("В папке data нет поддерживаемых документов")
+        _activate_empty_reset_index(
+            settings=settings,
+            chroma_dir=chroma_dir,
+            chroma_backend=chroma_backend,
+            client=client,
+            retrieval_fp=retrieval_fp,
+            file_manifest=file_manifest,
+            ingestion_run_started=ingestion_run_started,
+        )
+        return
 
     if _should_skip_reindex_attempt(
         reset=reset,
@@ -200,7 +219,7 @@ def _prepare_reindex_attempt_inputs(
     )
     file_manifest = build_file_manifest(data_dir, ing.get_doc_supported_exts())
     file_count = len(file_manifest.get("files") or {})
-    if not file_count:
+    if not file_count and not reset:
         raise ValueError("В папке data нет поддерживаемых документов")
 
     chroma_dir.mkdir(parents=True, exist_ok=True)
@@ -216,6 +235,74 @@ def _prepare_reindex_attempt_inputs(
         "build_to_staging": not reset,
         "stored": load_content_hash_state(chroma_dir),
     }
+
+
+def _activate_empty_reset_index(
+    *,
+    settings: Any,
+    chroma_dir: Path,
+    chroma_backend: Any,
+    client: Any,
+    retrieval_fp: str,
+    file_manifest: dict[str, Any],
+    ingestion_run_started: float,
+) -> None:
+    chroma_backend.delete_collection(client, settings.collection_name)
+    chroma_backend.delete_collection(client, settings.summary_collection_name)
+    chroma_backend.get_or_create_collection(client, settings.collection_name)
+    chroma_backend.get_or_create_collection(client, settings.summary_collection_name)
+    activate_reset_generation(
+        chunks_collection=settings.collection_name,
+        summaries_collection=settings.summary_collection_name,
+        embed_model=settings.embed_model,
+        documents_count=0,
+        nodes_count=0,
+        summary_documents_count=0,
+    )
+    save_content_hash_state(
+        chroma_dir,
+        embed_model=settings.embed_model,
+        retrieval_fingerprint=retrieval_fp,
+        hashes={},
+        file_manifest=file_manifest,
+        source_fragments=0,
+        nodes_count=0,
+    )
+    clear_retrieval_cache()
+    apply_index_activation_hooks(reset=True)
+    update_snapshot_after_index()
+    summary = {
+        "run_kind": "full",
+        "unique_documents": 0,
+        "source_fragments": 0,
+        "nodes_count": 0,
+        "partial_rebuilt_documents": None,
+        "partial_unchanged_documents": None,
+        "human_ru": "Индекс очищен: материалов нет",
+        "summary_line": "INGEST_SUMMARY run_kind=empty_reset unique_docs=0 source_fragments=0 nodes=0",
+    }
+    ing._ingestion_status.update(
+        {
+            "status": "completed",
+            "lifecycle_phase": "idle",
+            "total_files": 0,
+            "processed_files": 0,
+            "current_file": None,
+            "finished_at": time.time(),
+            "error": None,
+            "ingest_run_summary": summary,
+            "cost": {
+                "run_type": "empty_reset",
+                "duration_sec": round(time.perf_counter() - ingestion_run_started, 3),
+                "nodes_count": 0,
+                "source_files": 0,
+                "target_collection_name": settings.collection_name,
+                "target_summary_collection_name": settings.summary_collection_name,
+                "activation_pending": False,
+            },
+        }
+    )
+    ing._print_ingest_run_summary(summary)
 
 
 def _should_skip_reindex_attempt(
@@ -400,10 +487,18 @@ def build_index(reset: bool = False) -> None:
     data_dir = ing.DATA_DIR
     chroma_dir = ing.CHROMA_DIR
 
+    if not data_dir.exists():
+        raise FileNotFoundError(f"Папка data не найдена: {data_dir}")
+
+    empty_reset_without_model = False
+    if reset:
+        file_manifest = build_file_manifest(data_dir, ing.get_doc_supported_exts())
+        empty_reset_without_model = len(file_manifest.get("files") or {}) == 0
+
     if not settings.openai_api_key:
         # PR smoke: e2e_run_stack выставляет HOME_RAG_E2E_OFFLINE и пустой ключ — reindex не должен ронять worker
         # до обновления ing._ingestion_status (иначе /reindex/status вечно «idle» и E2E ждут таймаут).
-        if settings.home_rag_e2e_offline:
+        if settings.home_rag_e2e_offline and not empty_reset_without_model:
             ing.logger.info("build_index skipped: HOME_RAG_E2E_OFFLINE without OPENAI_API_KEY")
             ing._ingestion_status.update(
                 {
@@ -415,10 +510,8 @@ def build_index(reset: bool = False) -> None:
                 }
             )
             return
-        raise ValueError("OPENAI_API_KEY не найден в .env")
-
-    if not data_dir.exists():
-        raise FileNotFoundError(f"Папка data не найдена: {data_dir}")
+        if not empty_reset_without_model:
+            raise ValueError("OPENAI_API_KEY не найден в .env")
 
     started_at = time.time()
     ingestion_run_started = time.perf_counter()

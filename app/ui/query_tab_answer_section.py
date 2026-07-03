@@ -36,6 +36,7 @@ from app.ui.helpers import (
     llm_source_privacy_notice,
     post_feedback,
 )
+from app.ui.home_hub import render_post_first_answer_goal_prompt
 from app.ui.kb_fetch import fetch_kb_suggestions
 from app.ui.longform import render_longform_block
 from app.ui.query_tab_helpers import (
@@ -144,6 +145,7 @@ def render_query_answer_section() -> None:
             st.rerun()
         st.caption(qa_five_min_tutor_bridge_caption_ru())
         st.caption(qa_to_tutor_bridge_caption_ru())
+        render_post_first_answer_goal_prompt()
         fb = st.columns([1, 1, 4])
         with fb[0]:
             if st.button("👍 Полезно", key="feedback_helpful_yes", width="stretch"):

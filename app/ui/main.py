@@ -224,6 +224,12 @@ _view_nav_labels = {
     "Метрики": "Ещё — Метрики",
     "Чистый вид": "Ещё — Чистый вид",
 }
+BEGINNER_VIEW_LABELS_RU = {
+    HOME_VIEW: "Главная",
+    "Быстрый ответ": "Спросить по материалам",
+    "Найти материалы": "Найти в материалах",
+    "Объяснить файл": "Объяснить файл",
+}
 if st.session_state["current_view"] not in ALL_VIEWS:
     st.session_state["current_view"] = ALL_VIEWS[0]
 
@@ -247,6 +253,7 @@ if _pending_nav_view in ALL_VIEWS:
 
 _ui_level = get_ui_level()
 _ui_overrides = get_overrides()
+_nav_labels = BEGINNER_VIEW_LABELS_RU if _ui_level == "1" else _view_nav_labels
 _hidden_nav_views = hidden_nav_views_for_level(_ui_level, _ui_overrides)
 visible_nav_views = visible_nav_views_for_level(
     _ui_level,
@@ -258,7 +265,7 @@ st.markdown('<div data-testid="e2e-view-switcher"></div>', unsafe_allow_html=Tru
 selected_view = st.selectbox(
     "Раздел",
     visible_nav_views,
-    format_func=lambda v: _view_nav_labels.get(v, v),
+    format_func=lambda v: _nav_labels.get(v, _view_nav_labels.get(v, v)),
     key="current_view",
     label_visibility="collapsed",
 )
@@ -267,7 +274,7 @@ if _hidden_nav_views:
         for _view in ALL_VIEWS:
             if _view not in _hidden_nav_views:
                 continue
-            if st.button(_view_nav_labels.get(_view, _view), key=f"hidden_nav_{_view}", width="stretch"):
+            if st.button(_nav_labels.get(_view, _view_nav_labels.get(_view, _view)), key=f"hidden_nav_{_view}", width="stretch"):
                 st.session_state[PENDING_CURRENT_VIEW_KEY] = _view
                 st.rerun()
         if st.button("Настроить интерфейс", key="hidden_nav_control_panel", width="stretch"):

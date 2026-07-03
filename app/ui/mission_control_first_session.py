@@ -200,7 +200,7 @@ def render_first_session_hero(
     index_stats: dict | None,
     *,
     navigate_to_question: Callable[[str], None],
-) -> None:
+) -> bool:
     """Render the cached first-session hero for Mission Control."""
     _sync_first_session_scope_cache(index_stats)
     scope = resolve_first_session_scope_for_home(index_stats=index_stats, active_scope=get_active_scope())
@@ -212,6 +212,7 @@ def render_first_session_hero(
     with st.spinner("Загружаем первый обзор курса…"):
         artifact, load_status = load_first_session_artifact_cached_for_scope(scope)
     st.session_state["first_session_cold_open_done"] = True
+    rendered_cta = False
     if load_status == "empty":
         st.info("Первый обзор курса готовится — ниже есть подсказка, с чего начать")
     elif load_status == "error":
@@ -225,9 +226,11 @@ def render_first_session_hero(
             folder_rel=folder_rel,
             navigate_to_question=navigate_to_question,
         )
+        rendered_cta = True
     if get_settings().home_rag_e2e_offline:
         count = get_e2e_primary_chat_call_count()
         st.markdown(
             f'<span data-testid="e2e-primary-chat-call-count" aria-hidden="true">{count}</span>',
             unsafe_allow_html=True,
         )
+    return rendered_cta

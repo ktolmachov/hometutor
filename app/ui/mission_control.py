@@ -29,6 +29,10 @@ from app.ui.mission_control_first_session import (
     render_first_session_block as _render_first_session_block,
     render_first_session_hero,
 )
+from app.ui.first_run import render_demo_sandbox_banner, render_empty_index_hero
+from app.ui.preflight import render_preflight_card
+from app.ui.reindex_poll import poll_reindex_status
+from app.ui.seed_questions import render_seed_question_chips
 from app.ui.study_scope import activate_scope, deactivate_scope, get_active_scope
 from app.ui_preferences import feature_visible, get_overrides, get_ui_level
 
@@ -702,6 +706,13 @@ def render_kg_mission_card() -> None:
 
 def render_mission_control(index_stats: dict | None = None) -> None:
     """Render the single home hero with SSR and seven destination tiles."""
+    poll_reindex_status()
+    preflight_status = render_preflight_card()
+    if preflight_status == "api_down":
+        return
+    if render_empty_index_hero(index_stats):
+        return
+    render_demo_sandbox_banner(index_stats)
     settings = get_settings()
     if settings.session_tape_full_events_enabled and not st.session_state.get("_mission_loaded_emitted"):
         try:
@@ -729,10 +740,18 @@ def render_mission_control(index_stats: dict | None = None) -> None:
     rec = _build_recommendation(index_stats)
     due_count = _flashcards_due_count()
     cold = _is_cold_user(due_count, index_stats)
-    render_first_session_hero(
+    first_session_rendered = render_first_session_hero(
         index_stats,
         navigate_to_question=_prefill_and_navigate_to_quick_answer,
     )
+    if not first_session_rendered:
+        render_seed_question_chips(
+            key_prefix="mission_control",
+            navigate_to_question=_prefill_and_navigate_to_quick_answer,
+            index_stats=index_stats,
+            topics_catalog=st.session_state.get("topics_catalog"),
+            first_session_artifact=None,
+        )
     _apply_e2e_delight_completion()
     render_delight_progress_rail(st.session_state.get("delight_loop_completed_steps"))
     if not cold:

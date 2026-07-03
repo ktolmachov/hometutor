@@ -58,10 +58,11 @@ def _fetch_mastery_dashboard(_singleton: str = "v1") -> dict[str, Any]:
 
 
 def _render_onboarding() -> None:
-    """Первый запуск: цель, время, стиль balanced; KV onboarding_v1_done."""
+    """Первый запуск: короткий выбор уровня интерфейса; ценность сначала."""
     from app.ui_events import track_event
+    from app.ui.breadcrumb import HOME_VIEW
     from app.ui_preferences import LEVEL_ALL, set_ui_level
-    from app.user_state import set_kv, set_preferred_style
+    from app.user_state import set_kv
 
     st.markdown(
         "<h1 style='text-align:center;background:linear-gradient(90deg,#667eea,#764ba2);"
@@ -69,17 +70,8 @@ def _render_onboarding() -> None:
         "🎓 Home RAG Tutor</h1>",
         unsafe_allow_html=True,
     )
-    st.markdown("### Добро пожаловать! Настроим путь обучения")
-    goal_label = st.selectbox(
-        "Какая у тебя цель сегодня?",
-        [
-            "Понять новую тему",
-            "Подготовиться к экзамену",
-            "Разобрать домашнее задание",
-            "Быстро повторить слабые места",
-        ],
-    )
-    duration = st.slider("Сколько времени готов потратить (минут)?", 15, 60, 25, step=5)
+    st.markdown("### Добро пожаловать! Сначала дадим первый ответ")
+    st.caption("Цель обучения можно будет настроить после первого ответа, когда уже будет понятно, что подстраивать.")
     ui_mode_label = st.radio(
         "Какой интерфейс показать?",
         ["Начинаю с нуля", "Учусь регулярно", "Показать всё"],
@@ -89,19 +81,7 @@ def _render_onboarding() -> None:
     st.caption(
         "Маршрут по умолчанию: объяснение → две мини-проверки → повторение (ориентир 15–30 мин)."
     )
-    if st.button("Начать обучение", type="primary", width='stretch', key="onboarding_start"):
-        goal_map = {
-            "Понять новую тему": ("understand_topic", "examples"),
-            "Подготовиться к экзамену": ("exam_prep", "deep"),
-            "Разобрать домашнее задание": ("solve_homework", "examples"),
-            "Быстро повторить слабые места": ("understand_topic", "short"),
-        }
-        lg, depth = goal_map[goal_label]
-        st.session_state["learning_goal"] = lg
-        st.session_state["tutor_answer_depth"] = depth
-        st.session_state["estimated_minutes"] = int(duration)
-        st.session_state["onboarding_goal_label"] = goal_label
-        set_preferred_style("balanced")
+    if st.button("Начать", type="primary", width='stretch', key="onboarding_start"):
         ui_level_map = {
             "Начинаю с нуля": "1",
             "Учусь регулярно": "2",
@@ -109,19 +89,64 @@ def _render_onboarding() -> None:
         }
         set_ui_level(ui_level_map[ui_mode_label])
         set_kv("onboarding_v1_done", "1")
-        st.session_state["current_view"] = "Чат с тьютором"
+        st.session_state["current_view"] = HOME_VIEW
         if launch_tour:
             _start_tutorial(0)
-        if "tutor_session_id" not in st.session_state:
-            st.session_state["tutor_session_id"] = str(uuid.uuid4())
         try:
-            track_event("onboarding_completed", {"goal": goal_label, "duration_min": duration})
+            track_event("onboarding_completed", {"goal": None, "ui_level": ui_level_map[ui_mode_label]})
         except Exception as _exc:  # noqa: BLE001
             import logging  # noqa: BLE001
             logging.getLogger(__name__).debug("! caught exception: %s", _exc)
             pass
-        _persist_tutor_goal_snapshot_from_session()
         st.rerun()
+
+
+def render_post_first_answer_goal_prompt() -> None:
+    """One-shot goal prompt after the first successful Q&A answer."""
+    from app.user_state import get_kv, set_kv, set_preferred_style
+
+    if not st.session_state.get("last_answer"):
+        return
+    try:
+        if get_kv("goal_prompt_done") == "1":
+            return
+    except Exception:  # noqa: BLE001
+        return
+
+    with st.expander("🎯 Подстроить объяснения под вас? (30 секунд)", expanded=False):
+        goal_label = st.selectbox(
+            "Какая у вас цель сейчас?",
+            [
+                "Понять новую тему",
+                "Подготовиться к экзамену",
+                "Разобрать домашнее задание",
+                "Быстро повторить слабые места",
+            ],
+            key="post_first_answer_goal_label",
+        )
+        duration = st.slider("Сколько времени готовы потратить (минут)?", 15, 60, 25, step=5, key="post_first_answer_duration")
+        actions = st.columns([1, 1, 2])
+        with actions[0]:
+            if st.button("Сохранить", key="post_first_answer_goal_save", type="primary"):
+                goal_map = {
+                    "Понять новую тему": ("understand_topic", "examples"),
+                    "Подготовиться к экзамену": ("exam_prep", "deep"),
+                    "Разобрать домашнее задание": ("solve_homework", "examples"),
+                    "Быстро повторить слабые места": ("understand_topic", "short"),
+                }
+                learning_goal, depth = goal_map[goal_label]
+                st.session_state["learning_goal"] = learning_goal
+                st.session_state["tutor_answer_depth"] = depth
+                st.session_state["estimated_minutes"] = int(duration)
+                st.session_state["onboarding_goal_label"] = goal_label
+                set_preferred_style("balanced")
+                _persist_tutor_goal_snapshot_from_session()
+                set_kv("goal_prompt_done", "1")
+                st.rerun()
+        with actions[1]:
+            if st.button("Не сейчас", key="post_first_answer_goal_skip"):
+                set_kv("goal_prompt_done", "1")
+                st.rerun()
 
 
 def _render_entry_navigation() -> None:

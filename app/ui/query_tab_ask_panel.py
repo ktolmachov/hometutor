@@ -22,10 +22,17 @@ from app.ui.qa_wait_ux import (
     wait_runway_message_for_question,
 )
 from app.ui.query_tab_helpers import first_answer_examples
+from app.ui.seed_questions import render_seed_question_chips
 from app.ui.session_state import set_last_studied_document
 from app.ui.study_scope import apply_scope_folder_rel, get_active_scope
 from app.ui.widgets import render_chip_row
-from app.ui_client import clear_ui_api_caches, fetch_json, post_knowledge_workflow
+from app.ui.preflight import render_preflight_card
+from app.ui_client import fetch_json, post_knowledge_workflow
+
+
+def _set_seed_question_for_quick_answer(question: str) -> None:
+    st.session_state["question_draft"] = str(question or "").strip()
+    st.rerun()
 
 
 def render_query_ask_panel(
@@ -40,17 +47,25 @@ def render_query_ask_panel(
         '<div class="step-strip"><span class="step-item"><strong>1.</strong> Сформулируйте вопрос</span><span class="step-item"><strong>2.</strong> При необходимости ограничьте область</span><span class="step-item"><strong>3.</strong> Изучите ответ и источники</span></div>',
         unsafe_allow_html=True,
     )
-    st.markdown("#### Быстрый старт")
-    qcols = st.columns(2)
-    hero_examples = first_answer_examples(
-        SUGGESTED_QUESTIONS,
-        has_index_content=True,
-    )
-    for idx, suggestion in enumerate(hero_examples):
-        with qcols[idx % 2]:
-            if st.button(suggestion, key=f"suggest_{idx}", width="stretch", type="secondary"):
-                st.session_state["question_draft"] = suggestion
-                st.rerun()
+    render_preflight_card(quiet_ok=True)
+    empty_question_state = not st.session_state.get("last_answer") and not str(st.session_state.get("question_draft") or "").strip()
+    if empty_question_state and render_seed_question_chips(
+        key_prefix="quick_answer_empty",
+        navigate_to_question=_set_seed_question_for_quick_answer,
+    ):
+        pass
+    else:
+        st.markdown("#### Быстрый старт")
+        qcols = st.columns(2)
+        hero_examples = first_answer_examples(
+            SUGGESTED_QUESTIONS,
+            has_index_content=True,
+        )
+        for idx, suggestion in enumerate(hero_examples):
+            with qcols[idx % 2]:
+                if st.button(suggestion, key=f"suggest_{idx}", width="stretch", type="secondary"):
+                    st.session_state["question_draft"] = suggestion
+                    st.rerun()
     question = st.text_area(
         "Вопрос",
         height=170,
@@ -229,7 +244,6 @@ def render_query_ask_panel(
             response = fetch_json("POST", "/reindex", timeout=30, params={"reset": False})
             st.session_state["poll_reindex_status"] = True
             st.success(response)
-            clear_ui_api_caches()
             st.rerun()
         except Exception as e:
             st.error(f"Ошибка переиндексации: {format_request_error(e)}")

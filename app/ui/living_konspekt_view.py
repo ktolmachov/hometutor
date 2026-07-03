@@ -327,6 +327,39 @@ def _render_build_panel(rows: list[dict[str, Any]]) -> None:
             st.caption(f"Файл: `{target_path}`")
 
 
+def _render_term_cards_panel(rows: list[dict[str, Any]]) -> None:
+    """0-LLM карточки из раздела «Важные термины» конспектов — переиспользует preview
+    редактор Flashcards (те же ``fc_preview_*`` session_state ключи, что заполняет
+    ``render_generate``): редактирование/удаление/сохранение — уже готовый UI, не дублируем.
+    """
+    from app.term_cards import term_cards_from_documents
+
+    st.markdown("### 🃏 Карточки из терминов лекции (без LLM)")
+    md_paths = list(dict.fromkeys(str(row.get("konspekt_md_abs") or "") for row in rows if row.get("konspekt_md_abs")))
+    cards, source_docs = term_cards_from_documents(md_paths)
+    if not cards:
+        st.caption(
+            "В конспектах собранных разделов нет раздела «🧠 Важные термины и концепции» — "
+            "карточки собрать не из чего."
+        )
+        return
+    st.caption(
+        f"Найдено {len(cards)} терминов с определениями в {len(source_docs)} конспект(ах): "
+        + ", ".join(source_docs)
+        + ". Термин = дословный текст лектора, ни один символ не сгенерирован моделью."
+    )
+    if st.button("🃏 Создать карточки из терминов", key="wb_term_cards_btn", type="primary"):
+        from app.ui.flashcards_sections import FC_MAIN_SECTION_CREATE, pending_section_key
+
+        st.session_state["fc_preview_cards"] = cards
+        st.session_state["fc_preview_title"] = f"Термины — {', '.join(source_docs)}"[:120]
+        st.session_state["fc_preview_source_type"] = "living_konspekt_terms"
+        st.session_state["fc_preview_source_identifier"] = ", ".join(source_docs)
+        st.session_state[pending_section_key()] = FC_MAIN_SECTION_CREATE
+        st.session_state["current_view"] = "Flashcards"
+        st.rerun()
+
+
 def _render_web_queries_panel(rows: list[dict[str, Any]]) -> None:
     st.markdown("### 🌐 Проверить актуальность · источники")
 
@@ -435,6 +468,8 @@ def render_living_konspekt_view() -> None:
     _render_collected_sections(rows)
     st.divider()
     _render_build_panel(rows)
+    st.divider()
+    _render_term_cards_panel(rows)
     st.divider()
     _render_web_queries_panel(rows)
     st.divider()

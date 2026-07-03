@@ -22,7 +22,7 @@ def _app() -> None:
     render_living_konspekt_view()
 
 
-def _row(heading: str = "Тема", line_start: int = 10) -> dict:
+def _row(heading: str = "Тема", line_start: int = 10, konspekt_md_abs: Path | None = None) -> dict:
     section = IndexedSection(
         heading_text=heading,
         slug="tema",
@@ -31,7 +31,7 @@ def _row(heading: str = "Тема", line_start: int = 10) -> dict:
         line_end=line_start + 3,
         text="Текст раздела для сборки и промпта.",
         source_abs=Path("D:/corpus/lecture.txt"),
-        konspekt_md_abs=Path("D:/vault/lecture.md"),
+        konspekt_md_abs=konspekt_md_abs or Path("D:/vault/lecture.md"),
     )
     return section_to_row(section)
 
@@ -78,3 +78,48 @@ class TestRenderLivingKonspektViewSmoke:
         assert not at.exception
         captions = [c.value for c in at.caption]
         assert any("повторяющихся заголовков" in c for c in captions)
+
+
+class TestTermCardsPanelSmoke:
+    """«🃏 Карточки из терминов лекции» — 0-LLM extraction, переиспользует preview Flashcards."""
+
+    def _konspekt_with_terms(self, tmp_path: Path) -> Path:
+        p = tmp_path / "lecture.md"
+        p.write_text(
+            "# Конспект\n\n## 🧠 Важные термины и концепции\n\n"
+            "- **LLM** — большая языковая модель.\n"
+            "- **Harness** — обвязка вокруг LLM.\n",
+            encoding="utf-8",
+        )
+        return p
+
+    def test_degrades_to_caption_without_terms_role(self):
+        """Существующая фикстура на несуществующем пути — карточек нет, но панель не падает."""
+        at = AppTest.from_function(_app)
+        at.session_state["workbench_sections"] = [_row()]
+        at.run()
+        assert not at.exception
+        captions = [c.value for c in at.caption]
+        assert any("карточки собрать не из чего" in c for c in captions)
+
+    def test_shows_button_when_terms_extractable(self, tmp_path: Path):
+        md = self._konspekt_with_terms(tmp_path)
+        at = AppTest.from_function(_app)
+        at.session_state["workbench_sections"] = [_row(konspekt_md_abs=md)]
+        at.run()
+        assert not at.exception
+        buttons = [b.label for b in at.button]
+        assert "🃏 Создать карточки из терминов" in buttons
+
+    def test_click_populates_flashcards_preview_and_navigates(self, tmp_path: Path):
+        md = self._konspekt_with_terms(tmp_path)
+        at = AppTest.from_function(_app)
+        at.session_state["workbench_sections"] = [_row(konspekt_md_abs=md)]
+        at.run()
+        at.button(key="wb_term_cards_btn").click().run()
+        assert not at.exception
+        assert at.session_state["current_view"] == "Flashcards"
+        assert at.session_state["flashcards_section_pending"] == "create"
+        cards = at.session_state["fc_preview_cards"]
+        assert {"front": "LLM", "back": "большая языковая модель.", "tags": "источник:lecture.md"} in cards
+        assert len(cards) == 2

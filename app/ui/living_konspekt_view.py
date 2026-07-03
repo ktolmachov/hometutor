@@ -1,17 +1,19 @@
 """«Живой конспект» — study-поверхность над Section Anchor Index.
 
-Корзина (:data:`WORKBENCH_SECTIONS_KEY`) живёт в ``st.session_state`` — переживает
-rerun'ы, но не полный рестарт/закрытие вкладки в v1 (см. план, Компонент 3).
-Кросс-рестарт-восстановление — только через ручной snapshot существующих
-именованных research-сессий (``save_research_session``/``apply_research_payload``).
+Корзина (:data:`WORKBENCH_SECTIONS_KEY`) живёт в ``st.session_state`` и
+**автосохраняется** в локальный профиль (``app_kv``, ключ
+:data:`_WORKBENCH_KV_KEY`) при каждом изменении — переживает rerun, перезапуск
+и закрытие вкладки. Гидрация из профиля — один раз за сессию
+(:func:`ensure_workbench_hydrated`). Именованные research-сессии
+(``save_research_session``/``apply_research_payload``) остаются как снимки-варианты.
 """
 
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
 from typing import Any, MutableMapping
-
-import re
 
 import streamlit as st
 
@@ -27,6 +29,8 @@ from app.ui.helpers import format_request_error
 from app.ui.widgets import render_panel_header
 
 WORKBENCH_SECTIONS_KEY = "workbench_sections"
+_WORKBENCH_KV_KEY = "living_konspekt_workbench_json"
+_WORKBENCH_HYDRATED_KEY = "_workbench_hydrated"
 
 _SLUG_RE = re.compile(r"[^\w\-]+", re.UNICODE)
 
@@ -34,8 +38,55 @@ _SLUG_RE = re.compile(r"[^\w\-]+", re.UNICODE)
 # ── Корзина (JSON-safe rows из app.section_index) ───────────────────────
 # ``state`` — опциональный DI-параметр (по умолчанию ``st.session_state``): позволяет
 # юнит-тестировать add/dedup/remove на обычном dict без запуска Streamlit runtime.
+# Авто-персист в app_kv срабатывает ТОЛЬКО на реальном session_state (``state is None``) —
+# инжектированный dict в тестах не должен писать в user_state.db.
 def _state(state: MutableMapping[str, Any] | None) -> MutableMapping[str, Any]:
     return state if state is not None else st.session_state
+
+
+def _persist_workbench(rows: list[dict[str, Any]]) -> None:
+    """Best-effort автосохранение корзины в локальный профиль (``app_kv``)."""
+    try:
+        from app.user_state_core import set_kv
+
+        set_kv(_WORKBENCH_KV_KEY, json.dumps(rows, ensure_ascii=False))
+    except Exception:  # noqa: BLE001 - авто-персист не должен ломать работу корзины
+        pass
+
+
+def ensure_workbench_hydrated(state: MutableMapping[str, Any] | None = None) -> None:
+    """Один раз за сессию поднять корзину из локального профиля (``app_kv``).
+
+    Если в session_state корзина уже есть (rerun, restore research-сессии) —
+    профиль не читается: сессия свежее.
+    """
+    target = _state(state)
+    if target.get(_WORKBENCH_HYDRATED_KEY):
+        return
+    target[_WORKBENCH_HYDRATED_KEY] = True
+    if isinstance(target.get(WORKBENCH_SECTIONS_KEY), list):
+        return
+    try:
+        from app.user_state_core import get_kv
+
+        raw = get_kv(_WORKBENCH_KV_KEY)
+        rows = json.loads(raw) if raw else []
+    except Exception:  # noqa: BLE001 - недоступный профиль → пустая корзина, не падение
+        return
+    if isinstance(rows, list) and rows:
+        target[WORKBENCH_SECTIONS_KEY] = [row for row in rows if isinstance(row, dict)]
+
+
+def set_workbench_rows(
+    rows: list[dict[str, Any]],
+    state: MutableMapping[str, Any] | None = None,
+) -> None:
+    """Заменить корзину целиком (restore research-сессии) + авто-персист."""
+    target = _state(state)
+    target[WORKBENCH_SECTIONS_KEY] = [row for row in rows if isinstance(row, dict)]
+    target[_WORKBENCH_HYDRATED_KEY] = True
+    if state is None:
+        _persist_workbench(target[WORKBENCH_SECTIONS_KEY])
 
 
 def get_workbench_rows(state: MutableMapping[str, Any] | None = None) -> list[dict[str, Any]]:
@@ -59,6 +110,8 @@ def add_section_to_workbench(
             return False
     rows.append(section_to_row(section))
     target[WORKBENCH_SECTIONS_KEY] = rows
+    if state is None:
+        _persist_workbench(rows)
     return True
 
 
@@ -77,6 +130,8 @@ def remove_section_from_workbench(
             and row.get("line_start") == line_start
         )
     ]
+    if state is None:
+        _persist_workbench(target[WORKBENCH_SECTIONS_KEY])
 
 
 # ── Сборка рабочего конспекта ────────────────────────────────────────────
@@ -357,6 +412,7 @@ def _render_deep_study_panel(rows: list[dict[str, Any]]) -> None:
 
 
 def render_living_konspekt_view() -> None:
+    ensure_workbench_hydrated()
     render_panel_header(
         "📚 Живой конспект",
         "Собирайте разделы лекций из графа/карточек, проверяйте актуальность и готовьте промпт "
@@ -365,8 +421,8 @@ def render_living_konspekt_view() -> None:
 
     rows = get_workbench_rows()
     st.caption(
-        f"В корзине: {len(rows)} раздел(ов) · переживает rerun, но не перезапуск/закрытие вкладки "
-        "(для восстановления между сессиями — сохраните именованную сессию в сайдбаре)."
+        f"В корзине: {len(rows)} раздел(ов) · автосохраняется локально и переживает перезапуск; "
+        "именованные сессии в сайдбаре — для снимков-вариантов."
     )
 
     if not rows:

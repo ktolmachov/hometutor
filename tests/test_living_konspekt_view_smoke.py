@@ -46,6 +46,15 @@ def _no_vault_name(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+@pytest.fixture(autouse=True)
+def _isolated_kv(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Гидрация/авто-персист корзины не должны трогать реальный user_state.db."""
+    import app.user_state_core as user_state_core
+
+    monkeypatch.setattr(user_state_core, "get_kv", lambda key, default=None: default)
+    monkeypatch.setattr(user_state_core, "set_kv", lambda key, value: None)
+
+
 class TestRenderLivingKonspektViewSmoke:
     def test_empty_workbench_renders_without_exception(self):
         at = AppTest.from_function(_app)

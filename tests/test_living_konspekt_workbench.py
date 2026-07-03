@@ -12,8 +12,10 @@ from app.ui.living_konspekt_view import (
     _collect_concept_context,
     _stitch_verbatim,
     add_section_to_workbench,
+    ensure_workbench_hydrated,
     get_workbench_rows,
     remove_section_from_workbench,
+    set_workbench_rows,
 )
 from app.user_state_research import normalize_research_payload
 from app.ui.sidebar import apply_research_payload
@@ -71,11 +73,98 @@ class TestAddDedupRemove:
 
     def test_defaults_to_streamlit_session_state(self, monkeypatch):
         import streamlit as st
+        import app.user_state_core as user_state_core
 
         monkeypatch.setattr(st, "session_state", {})
+        monkeypatch.setattr(user_state_core, "set_kv", lambda key, value: None)  # без записи в user_state.db
         section = _section(MD_A, 30)
         assert add_section_to_workbench(section) is True
         assert st.session_state[WORKBENCH_SECTIONS_KEY][0]["line_start"] == 30
+
+
+class TestWorkbenchAutoPersist:
+    """Корзина автосохраняется в app_kv и гидрируется при старте сессии.
+
+    Персист гейтится ``state is None``: инжектированный dict (юнит-тесты) не пишет в БД.
+    """
+
+    def _capture_kv(self, monkeypatch):
+        import app.user_state_core as user_state_core
+
+        saved: dict = {}
+        monkeypatch.setattr(user_state_core, "set_kv", lambda key, value: saved.__setitem__(key, value))
+        return saved
+
+    def test_add_with_injected_state_does_not_persist(self, monkeypatch):
+        saved = self._capture_kv(monkeypatch)
+        add_section_to_workbench(_section(MD_A, 10), {})
+        assert saved == {}
+
+    def test_add_with_session_state_persists_json(self, monkeypatch):
+        import json
+        import streamlit as st
+
+        saved = self._capture_kv(monkeypatch)
+        monkeypatch.setattr(st, "session_state", {})
+        add_section_to_workbench(_section(MD_A, 10, heading="Тема"))
+        rows = json.loads(saved["living_konspekt_workbench_json"])
+        assert rows[0]["heading_text"] == "Тема"
+
+    def test_remove_with_session_state_persists(self, monkeypatch):
+        import json
+        import streamlit as st
+
+        saved = self._capture_kv(monkeypatch)
+        monkeypatch.setattr(st, "session_state", {})
+        add_section_to_workbench(_section(MD_A, 10))
+        remove_section_from_workbench(str(MD_A), 10)
+        assert json.loads(saved["living_konspekt_workbench_json"]) == []
+
+    def test_hydration_loads_rows_once(self, monkeypatch):
+        import app.user_state_core as user_state_core
+
+        rows_json = '[{"heading_text": "Из профиля", "line_start": 5}]'
+        calls: list[str] = []
+
+        def fake_get_kv(key, default=None):
+            calls.append(key)
+            return rows_json
+
+        monkeypatch.setattr(user_state_core, "get_kv", fake_get_kv)
+        state: dict = {}
+        ensure_workbench_hydrated(state)
+        ensure_workbench_hydrated(state)  # второй вызов — no-op по флагу
+        assert get_workbench_rows(state)[0]["heading_text"] == "Из профиля"
+        assert calls == ["living_konspekt_workbench_json"]
+
+    def test_hydration_does_not_overwrite_existing_session_rows(self, monkeypatch):
+        import app.user_state_core as user_state_core
+
+        monkeypatch.setattr(
+            user_state_core, "get_kv", lambda key, default=None: '[{"heading_text": "старое"}]'
+        )
+        state: dict = {WORKBENCH_SECTIONS_KEY: [{"heading_text": "свежее из сессии"}]}
+        ensure_workbench_hydrated(state)
+        assert get_workbench_rows(state)[0]["heading_text"] == "свежее из сессии"
+
+    def test_hydration_survives_broken_profile(self, monkeypatch):
+        import app.user_state_core as user_state_core
+
+        monkeypatch.setattr(user_state_core, "get_kv", lambda key, default=None: "не json {")
+        state: dict = {}
+        ensure_workbench_hydrated(state)
+        assert get_workbench_rows(state) == []
+
+    def test_set_workbench_rows_replaces_and_marks_hydrated(self, monkeypatch):
+        import app.user_state_core as user_state_core
+
+        monkeypatch.setattr(
+            user_state_core, "get_kv", lambda key, default=None: '[{"heading_text": "из профиля"}]'
+        )
+        state: dict = {}
+        set_workbench_rows([{"heading_text": "restore"}], state)
+        ensure_workbench_hydrated(state)  # не должен перетереть restore профилем
+        assert get_workbench_rows(state) == [{"heading_text": "restore"}]
 
 
 class TestStitchVerbatim:
@@ -176,15 +265,22 @@ class TestPersistRoundtrip:
 
     def test_apply_restores_workbench_sections_into_session_state(self, monkeypatch):
         import streamlit as st
+        import app.user_state_core as user_state_core
 
+        saved: dict = {}
+        monkeypatch.setattr(user_state_core, "set_kv", lambda key, value: saved.__setitem__(key, value))
         monkeypatch.setattr(st, "session_state", {"current_view": "x"})
         rows = [{"konspekt_md_abs": str(MD_A), "line_start": 10, "heading_text": "Тема"}]
         apply_research_payload({"workbench_sections": rows})
         assert st.session_state[WORKBENCH_SECTIONS_KEY] == rows
+        # Restore перезаписывает и локальный профиль (авто-персист).
+        assert "living_konspekt_workbench_json" in saved
 
     def test_apply_clears_workbench_when_absent_from_payload(self, monkeypatch):
         import streamlit as st
+        import app.user_state_core as user_state_core
 
+        monkeypatch.setattr(user_state_core, "set_kv", lambda key, value: None)
         monkeypatch.setattr(st, "session_state", {WORKBENCH_SECTIONS_KEY: [{"stale": True}]})
         apply_research_payload({"current_view": "x"})
         assert st.session_state[WORKBENCH_SECTIONS_KEY] == []

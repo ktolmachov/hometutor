@@ -336,8 +336,9 @@ def _render_concept_actions(
                     st.toast("Подходящих разделов не нашлось — возможно, конспекты ещё не созданы.", icon="ℹ️")
         with wb_cols[1]:
             try:
-                from app.ui.living_konspekt_view import get_workbench_rows
+                from app.ui.living_konspekt_view import ensure_workbench_hydrated, get_workbench_rows
 
+                ensure_workbench_hydrated()
                 wb_count = len(get_workbench_rows())
             except Exception:  # noqa: BLE001 - счётчик корзины не должен ломать панель
                 wb_count = 0

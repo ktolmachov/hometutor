@@ -109,7 +109,14 @@ def apply_research_payload(payload: dict) -> None:
         if isinstance(paths, list):
             st.session_state[f"topic_docs_{tid}"] = [str(x) for x in paths]
     workbench_sections = payload.get("workbench_sections")
-    st.session_state["workbench_sections"] = list(workbench_sections) if isinstance(workbench_sections, list) else []
+    restored_rows = list(workbench_sections) if isinstance(workbench_sections, list) else []
+    try:
+        # set_workbench_rows: session_state + авто-персист в app_kv (restore перезаписывает профиль).
+        from app.ui.living_konspekt_view import set_workbench_rows
+
+        set_workbench_rows(restored_rows)
+    except Exception:  # noqa: BLE001 - restore не должен падать из-за авто-персиста
+        st.session_state["workbench_sections"] = restored_rows
 
 
 def render_reading_mode_toggle(*, key: str, help_text: str | None = None) -> None:

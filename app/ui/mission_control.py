@@ -704,6 +704,77 @@ def render_kg_mission_card() -> None:
     )
 
 
+def build_living_konspekt_card_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Чистая сводка корзины «Живого конспекта» для resume-карточки (тестируется отдельно)."""
+    documents = {str(row.get("konspekt_md_abs") or "") for row in rows if row.get("konspekt_md_abs")}
+    concepts = [
+        concept
+        for concept in dict.fromkeys(str(row.get("concept") or "").strip() for row in rows)
+        if concept
+    ]
+    recent_headings = [
+        heading
+        for heading in (str(row.get("heading_text") or "").strip() for row in reversed(rows))
+        if heading
+    ][:2]
+    return {
+        "sections": len(rows),
+        "documents": len(documents),
+        "concepts": len(concepts),
+        "recent_headings": recent_headings,
+    }
+
+
+def render_living_konspekt_mission_card() -> None:
+    """Resume-карточка «Живой конспект»: продолжить сборку с того места, где остановился.
+
+    Показывается только при непустой корзине (для новых пользователей — ноль шума).
+    Корзина автосохраняется в app_kv, поэтому карточка переживает перезапуск приложения.
+    """
+    from app.ui.feature_registry import feature_by_id
+
+    spec = feature_by_id("view:living_konspekt")
+    if spec and not feature_visible(spec, level=get_ui_level(), overrides=get_overrides()):
+        return
+    try:
+        from app.ui.living_konspekt_view import ensure_workbench_hydrated, get_workbench_rows
+
+        ensure_workbench_hydrated()
+        rows = get_workbench_rows()
+    except Exception:  # noqa: BLE001 - optional card, must never crash Mission Control
+        return
+    if not rows:
+        return
+
+    stats = build_living_konspekt_card_stats(rows)
+    recent = " · ".join(html.escape(heading) for heading in stats["recent_headings"])
+    subtitle = f"Последние разделы: {recent}" if recent else "Сборка рабочего конспекта из разделов лекций"
+    st.html(
+        f'<div class="kg-mc-card" data-testid="mc-living-konspekt-card">'
+        f'<div class="kg-mc-header">'
+        f'<span class="kg-mc-icon">📚</span>'
+        f'<div class="kg-mc-titles">'
+        f'<div class="kg-mc-title">Живой конспект — сборка не закончена</div>'
+        f'<div class="kg-mc-subtitle">{subtitle}</div>'
+        f'</div></div>'
+        f'<div class="kg-mc-stats">'
+        f'<div class="kg-mc-stat"><span class="kg-mc-num">{stats["sections"]}</span>'
+        f'<span class="kg-mc-lbl">разделов</span></div>'
+        f'<div class="kg-mc-stat"><span class="kg-mc-num">{stats["documents"]}</span>'
+        f'<span class="kg-mc-lbl">лекций</span></div>'
+        f'<div class="kg-mc-stat"><span class="kg-mc-num">{stats["concepts"]}</span>'
+        f'<span class="kg-mc-lbl">концептов</span></div>'
+        f'</div></div>'
+    )
+    st.button(
+        "Продолжить сборку →",
+        key="mc_living_konspekt_open_btn",
+        width="stretch",
+        on_click=_set_navigation_state,
+        args=("Живой конспект",),
+    )
+
+
 def render_mission_control(index_stats: dict | None = None) -> None:
     """Render the single home hero with SSR and seven destination tiles."""
     poll_reindex_status()
@@ -763,6 +834,7 @@ def render_mission_control(index_stats: dict | None = None) -> None:
         render_control_panel_dialog()
     if not cold:
         render_kg_mission_card()
+        render_living_konspekt_mission_card()
 
 
 def assert_hint_mapping_complete() -> None:

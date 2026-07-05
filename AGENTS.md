@@ -76,7 +76,7 @@ CI/CD — `.github/workflows/ci.yml` (тесты), `.github/workflows/deploy.yml
 - **Write-set:** изменять только файлы из заявленного write-set задачи.
   Попутный рефакторинг соседних модулей — запрещён.
 
-- **Python для всех агентов:** для Codex, Cursor, Claude Code и других
+- **Python для всех агентов:** для Codex, Cursor, Claude Code, Kilo Code и других
   совместимых агентов для всех Python-команд в этом проекте сначала
   использовать интерпретатор `.\.venv\Scripts\python.exe` из корня репозитория.
   Если `.venv` недоступен, только тогда разрешён fallback
@@ -145,6 +145,8 @@ docs-root и не источник текущего backlog/workflow. Навиг
 | Конфигурация | `app/config.py`, `config.env` (tracked defaults), `.env` (local override) |
 | LLM / embeddings | provider-layer: `app/provider.py`, `app/provider_openai.py` |
 | Соглашения | `docs/conventions.md` |
+| Kilo Code rules | `kilo.jsonc`, `.kilo/rules/` (+ auto `AGENTS.md`) |
+| Cursor rules | `.cursor/rules/*.mdc` (+ section-only `AGENTS.md`) |
 | Backlog / процесс / team workflow | репозиторий `hometutor-studio` (не в этом репо) |
 
 При конфликте: код важнее производных markdown-файлов.

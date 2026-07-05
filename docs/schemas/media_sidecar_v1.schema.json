@@ -1,0 +1,248 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hometutor.local/schemas/media_sidecar_v1.schema.json",
+  "title": "hometutor media sidecar v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "konspekt_sha256",
+    "generated_by",
+    "media",
+    "sections"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "konspekt_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "media_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "generated_by": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "created_at"
+      ],
+      "properties": {
+        "tool": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "asr_model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "alignment_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "media": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "video"
+      ],
+      "properties": {
+        "video": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/localVideo"
+            },
+            {
+              "$ref": "#/$defs/urlVideo"
+            }
+          ]
+        }
+      }
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/section"
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{64}$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "not": {
+        "anyOf": [
+          {
+            "pattern": "^[A-Za-z]:[\\\\/]"
+          },
+          {
+            "pattern": "^[/\\\\]"
+          },
+          {
+            "pattern": "(^|[\\\\/])\\.\\.([\\\\/]|$)"
+          }
+        ]
+      }
+    },
+    "localVideo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "kind": {
+          "const": "local"
+        },
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "duration_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "codec": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        }
+      }
+    },
+    "urlVideo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "url"
+      ],
+      "properties": {
+        "kind": {
+          "const": "url"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048
+        },
+        "canonical_url": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048
+        }
+      }
+    },
+    "section": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "section_id",
+        "section_slug",
+        "heading",
+        "line_start",
+        "line_end",
+        "confidence"
+      ],
+      "properties": {
+        "section_id": {
+          "type": "string",
+          "pattern": "^sha256:[a-fA-F0-9]{64}$"
+        },
+        "section_slug": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "heading": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "line_start": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "line_end": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "t_start": {
+          "type": "number",
+          "minimum": 0
+        },
+        "t_end": {
+          "type": "number",
+          "minimum": 0
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "images": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/imageAsset"
+          },
+          "default": []
+        }
+      }
+    },
+    "imageAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "caption": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "pdf_page",
+            "video_keyframe",
+            "markdown_image",
+            "html_image",
+            "manual"
+          ]
+        },
+        "source_page": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "t_start": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

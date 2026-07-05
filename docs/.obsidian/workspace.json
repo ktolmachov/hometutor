@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "quickstart_demo.md",
+                "file": "diagrams.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "quickstart_demo"
+              "title": "diagrams"
             }
           }
         ]
@@ -182,6 +182,12 @@
   },
   "active": "3dca82099ed27268",
   "lastOpenFiles": [
+    "adr/0002-asr-dependency-strategy.md",
+    "adr/0001-multimodal-media-contract.md",
+    "adr",
+    "schemas/media_sidecar_v1.schema.json",
+    "schemas",
+    "quickstart_demo.md",
     "home_rag_integration_gate_v1.md",
     "local_models_comparison_current_v3.md",
     "local_models_comparison_current_v3.md.tmp.9052.d74ce4cf309c",
@@ -195,10 +201,6 @@
     "quickstart_demo.md.tmp.36708.4c86c7ce0866",
     "quickstart_demo.md.tmp.36708.6def8c08130d",
     "quickstart_demo.md.tmp.36708.e6197c3225ec",
-    "quickstart_demo.md.tmp.36708.520d4e3b2481",
-    "quickstart_demo.md.tmp.36708.79a82a19a0ce",
-    "quickstart_demo.md.tmp.36708.b5045e4e93cc",
-    "quickstart_demo.md",
     "technical_specification.md",
     "screenshots/final/scenario_19/02_sidebar_env_context.png",
     "screenshots/final/scenario_19/demo.gif",

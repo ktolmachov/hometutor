@@ -1,0 +1,20 @@
+---
+description: Kilo Code vs Cursor — где agent rules и как не дублировать AGENTS.md
+alwaysApply: true
+---
+
+## Agent tooling: Kilo Code vs Cursor
+
+| Что | Kilo Code (VS Code ext / CLI) | Cursor |
+|---|---|---|
+| Универсальные инструкции | `AGENTS.md` (auto) | `base-agent.mdc` → section-only read `AGENTS.md` |
+| Tool-specific rules | `.kilo/rules/*.md` + `kilo.jsonc` | `.cursor/rules/*.mdc` |
+| Процесс / token | `.kilo/rules/hometutor-agent.md` | `workflow.mdc`, `llm-request-policy.mdc` |
+| Claude overlay | `CLAUDE.md` | `CLAUDE.md` |
+
+**Приоритет:** промпт пользователя → tool rules → `AGENTS.md` → `docs/conventions*.md` → код.
+
+**Синхронизация:** общие правила (write-set, pytest prefix, git, provider/config) — в `AGENTS.md`;
+Kilo-only — `.kilo/rules/`; Cursor-only — `.cursor/rules/`. Не копировать `AGENTS.md` целиком в overlay-файлы.
+
+Подробнее для Kilo: [.kilo/rules/hometutor-agent.md](../../.kilo/rules/hometutor-agent.md).

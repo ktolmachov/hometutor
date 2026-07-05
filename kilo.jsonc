@@ -1,0 +1,5 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  // Kilo Code project instructions — see https://kilo.ai/docs/customize/custom-rules
+  "instructions": [".kilo/rules/hometutor-agent.md"]
+}

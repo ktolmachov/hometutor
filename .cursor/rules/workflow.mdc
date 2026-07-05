@@ -45,3 +45,4 @@ description: Короткие always-on правила процесса итер
 ### Token Budget
 
 Token policy: [llm-request-policy.mdc](llm-request-policy.mdc). Claude Code: [`CLAUDE.md`](../../CLAUDE.md).
+Kilo Code: [`kilo.jsonc`](../../kilo.jsonc) + [`.kilo/rules/`](../../.kilo/rules/). Cursor vs Kilo: [agent-tooling.mdc](agent-tooling.mdc).

@@ -515,14 +515,6 @@ def _render_knowledge_graph_tab() -> None:
     component_concept = str(payload.get("selected_concept") or "").strip()
     _kgc_param = str(st.query_params.get("_kgc") or "").strip()
     bridged_concept = component_concept if component_concept in node_ids else _kgc_param
-    if bridged_concept and bridged_concept in node_ids:
-        st.session_state["kg_selected_concept"] = bridged_concept
-        st.session_state["kg_action_concept"] = bridged_concept
-        # Show a subtle indicator that the graph click was picked up
-        st.toast(f"📍 Концепт из графа: **{bridged_concept}**", icon="🕸")
-        # Clear the param to avoid sticky pre-selection on refresh
-        if _kgc_param:
-            st.query_params.pop("_kgc", None)
 
     # Default to a "frontier" (ready-to-learn) concept when available.
     default_sel = next(
@@ -533,14 +525,21 @@ def _render_knowledge_graph_tab() -> None:
     if prev in node_ids:
         default_sel = prev
     if st.session_state.get("kg_action_concept") not in node_ids and default_sel in node_ids:
-        st.session_state["kg_action_concept"] = default_sel
+        st.session_state.setdefault("kg_action_concept", default_sel)
+
+    if bridged_concept and bridged_concept in node_ids:
+        st.session_state["kg_selected_concept"] = bridged_concept
+        st.session_state["kg_action_concept"] = bridged_concept
+        if _kgc_param or component_concept:
+            st.toast(f"📍 Концепт из графа: **{bridged_concept}**", icon="🕸")
+        if _kgc_param:
+            st.query_params.pop("_kgc", None)
 
     with st.expander("⚡ Действия с концептом", expanded=True):
         if node_ids:
             sel = st.selectbox(
                 "Концепт",
                 node_ids,
-                index=node_ids.index(default_sel) if default_sel in node_ids else 0,
                 key="kg_action_concept",
             )
             st.session_state["kg_selected_concept"] = sel

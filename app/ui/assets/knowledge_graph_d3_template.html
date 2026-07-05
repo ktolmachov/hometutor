@@ -548,6 +548,28 @@ document.getElementById('pclose').addEventListener('click',()=>{panel.classList.
 let current=null;
 function chipFor(id){const n=nodeMap.get(id);if(!n)return`<div class="chip" style="cursor:default"><span class="mini" style="background:#ef4444"></span><span>${id}</span><span class="mm">нет в графе</span></div>`;
   return`<div class="chip" data-id="${id}"><span class="mini" style="background:${lvlColor(n.level)}"></span><span>${n.label}</span><span class="mm">${n.mastery}%</span></div>`;}
+function _kgInSrcdoc(){try{return String(location.href||'').startsWith('about:srcdoc');}catch(_){return true;}}
+function _kgPushConceptHash(conceptId){if(_kgInSrcdoc()){return;}try{history.replaceState(null,'','#c='+encodeURIComponent(conceptId));}catch(_){}}
+function _kgClearConceptHash(){if(_kgInSrcdoc()){return;}try{history.replaceState(null,'',location.pathname+location.search);}catch(_){}}
+function _kgBridgeConceptToStreamlit(conceptId){
+  try{
+    if(window.parent&&typeof window.parent.__kgSetConcept==='function'){
+      window.parent.__kgSetConcept(conceptId);
+    }else{
+      window.parent.postMessage({type:'hometutor:kg-select',concept:conceptId},'*');
+    }
+  }catch(_){
+    try{window.parent.postMessage({type:'hometutor:kg-select',concept:conceptId},'*');}catch(_){}
+  }
+  try{
+    if(window.parent===window.top){
+      const pu=new URL(window.top.location.href);
+      pu.searchParams.set('_kgc',conceptId);
+      window.top.location.assign(pu.toString());
+      window.top.localStorage.setItem('_kgc_ts', Date.now()+'|'+conceptId);
+    }
+  }catch(_){}
+}
 function openPanel(d){
   current=d;
   const lv=LEVELS[d.level]||LEVELS.unknown;
@@ -570,23 +592,8 @@ function openPanel(d){
   pc.querySelectorAll('.chip[data-id]').forEach(el=>el.addEventListener('click',()=>{const t=simNodes.find(n=>n.id===el.dataset.id);if(t){focusNode(t);openPanel(t);}}));
   pc.querySelectorAll('.action-btn.cpy[data-copy]').forEach(el=>el.addEventListener('click',()=>_copyDocPath(el.dataset.copy,el)));
   panel.classList.add('open');highlight(d);
-  history.replaceState(null,'','#c='+encodeURIComponent(d.id));
-  // Streamlit bridge: the custom component wrapper listens for this message and
-  // returns the selected concept to Python as a component value.
-  try{
-    window.parent.postMessage({type:'hometutor:kg-select',concept:d.id},'*');
-  }catch(_){}
-  // Fallback for legacy single-iframe rendering: sync selected concept to the
-  // parent URL and force a rerun. Skip this when nested inside the component
-  // wrapper, where window.parent is the wrapper iframe, not the Streamlit app.
-  try{
-    if(window.parent===window.top){
-      const pu=new URL(window.top.location.href);
-      pu.searchParams.set('_kgc',d.id);
-      window.top.location.assign(pu.toString());
-      window.top.localStorage.setItem('_kgc_ts', Date.now()+'|'+d.id);
-    }
-  }catch(_){}
+  _kgBridgeConceptToStreamlit(d.id);
+  _kgPushConceptHash(d.id);
 }
 function focusNode(d){const s=1.6;svg.transition().duration(550).call(zoom.transform,d3.zoomIdentity.translate(W/2-d.x*s,H/2-d.y*s).scale(s));}
 
@@ -986,7 +993,7 @@ document.addEventListener('keydown',e=>{
     if(decayMode){decayMode=false;document.getElementById('decaybtn').classList.remove('on');clearDecayOverlay();}
     // KG-07: close scrubber
     if(scrubActive){scrubActive=false;scrubEl.classList.remove('show');timeBtn.classList.remove('on');stopScrubPlay();clearScrubSnapshot();}
-    history.replaceState(null,'',location.pathname+location.search);
+    _kgClearConceptHash();
   }else if(e.key==='/'&&!inq){e.preventDefault();q.focus();}
 });
 </script>

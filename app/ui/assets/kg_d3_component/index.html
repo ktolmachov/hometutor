@@ -22,8 +22,27 @@ function setFrameHeight(height){
   streamlitMessage('streamlit:setFrameHeight',{height});
 }
 function setComponentValue(value){
-  streamlitMessage('streamlit:setComponentValue',{value,dataType:'json'});
+  const v=String(value||'').trim();
+  if(!v){return;}
+  streamlitMessage('streamlit:setComponentValue',{value:v,dataType:'json'});
 }
+
+// Primary bridge: _kgc query param forces a full Streamlit rerun (works even when
+// declare_component value is swallowed by @st.fragment partial reruns).
+function syncConceptSelection(conceptId){
+  const v=String(conceptId||'').trim();
+  if(!v){return;}
+  setComponentValue(v);
+  try{
+    const top=window.top;
+    const pu=new URL(top.location.href);
+    if(pu.searchParams.get('_kgc')===v){return;}
+    pu.searchParams.set('_kgc',v);
+    top.location.assign(pu.toString());
+  }catch(_){}
+}
+
+window.__kgSetConcept=syncConceptSelection;
 
 window.addEventListener('message',event=>{
   const data=event.data||{};
@@ -36,7 +55,7 @@ window.addEventListener('message',event=>{
     return;
   }
   if(data.type==='hometutor:kg-select'&&data.concept){
-    setComponentValue(String(data.concept));
+    syncConceptSelection(String(data.concept));
   }
 });
 

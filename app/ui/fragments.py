@@ -36,8 +36,9 @@ def _fragment_interactive_quiz_tab() -> None:
     _render_interactive_quiz_tab()
 
 
-@st.fragment
 def _fragment_knowledge_graph_tab() -> None:
+    # Без @st.fragment: kg_d3 custom component + _kgc-bridge требуют полного rerun;
+    # partial fragment rerun не поднимает selected_concept до selectbox ниже графа.
     _render_knowledge_graph_tab()
 
 

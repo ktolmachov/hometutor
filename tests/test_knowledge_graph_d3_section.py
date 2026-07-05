@@ -182,8 +182,12 @@ class TestKnowledgeGraphSelectionBridge:
             }
         )
 
-        assert "type:'hometutor:kg-select',concept:d.id" in html
-        assert "pu.searchParams.set('_kgc',d.id)" in html
+        assert "_kgBridgeConceptToStreamlit" in html
+        assert "window.parent.__kgSetConcept" in html
+        assert "_kgInSrcdoc" in html
+        assert "hometutor:kg-select" in html
+        assert "concept:conceptId" in html
+        assert "pu.searchParams.set('_kgc',conceptId)" in html
         assert "window.top.location.assign(pu.toString())" in html
 
     def test_renderer_returns_selected_concept_from_component(self, monkeypatch: pytest.MonkeyPatch):

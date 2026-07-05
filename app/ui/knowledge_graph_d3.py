@@ -36,6 +36,23 @@ from app.ui.knowledge_graph_d3_analysis import (
 
 _D3_PATH = Path(__file__).resolve().parent / "assets" / "d3.v7.min.js"
 _HTML_TEMPLATE_PATH = Path(__file__).resolve().parent / "assets" / "knowledge_graph_d3_template.html"
+_MISSING_TEMPLATE_HTML = """<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<style>
+body{font-family:system-ui,sans-serif;background:#0a0a0f;color:#e8e8f0;margin:0;padding:24px;}
+.err{border:1px solid rgba(239,68,68,.45);border-radius:10px;padding:16px;background:rgba(239,68,68,.10);}
+.mut{color:#a1a1aa;font-size:13px;line-height:1.5;}
+</style>
+</head>
+<body>
+<div class="err">
+<strong>Knowledge Graph не смог загрузить HTML-шаблон.</strong>
+<p class="mut">Проверьте, что в сборку попал файл app/ui/assets/knowledge_graph_d3_template.html.</p>
+</div>
+</body>
+</html>"""
 
 _LEVEL_META = {
     "lesson":      {"label": "📘 Лекция",         "color": "#fbbf24"},
@@ -56,7 +73,10 @@ def _load_d3_source() -> str:
 
 @lru_cache(maxsize=1)
 def _load_html_template() -> str:
-    return _HTML_TEMPLATE_PATH.read_text(encoding="utf-8")
+    try:
+        return _HTML_TEMPLATE_PATH.read_text(encoding="utf-8")
+    except OSError:
+        return _MISSING_TEMPLATE_HTML
 
 
 def _norm_level(raw: Any) -> str:

@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from app.section_index import IndexedSection
-from app.ui.knowledge_graph_d3 import _document_sections
+from app.ui.knowledge_graph_d3 import _document_sections, _load_html_template
 
 MD = Path("D:/vault/lecture.md")
 
@@ -145,3 +145,21 @@ class TestDocumentSectionsTopK:
             assert item["obs_uri"] == "obsidian://stub"
             assert item["vscode_uri"] == "vscode://stub"
             assert isinstance(item["line_start"], int)
+
+
+class TestKnowledgeGraphTemplateFallback:
+    def test_missing_html_template_returns_diagnostic_page(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ):
+        import app.ui.knowledge_graph_d3 as kg_d3
+
+        _load_html_template.cache_clear()
+        monkeypatch.setattr(kg_d3, "_HTML_TEMPLATE_PATH", tmp_path / "missing.html")
+
+        html = _load_html_template()
+
+        assert "Knowledge Graph не смог загрузить HTML-шаблон" in html
+        assert "knowledge_graph_d3_template.html" in html
+        _load_html_template.cache_clear()

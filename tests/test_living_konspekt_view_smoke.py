@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import pytest
 from streamlit.testing.v1 import AppTest
 
+from app.media_sidecar import GeneratedBy, MediaSection, MediaSidecar, UrlVideoSource
 from app.section_index import IndexedSection, section_to_row
 
 
@@ -82,6 +83,83 @@ class TestRenderLivingKonspektViewSmoke:
         assert not at.exception
         captions = [c.value for c in at.caption]
         assert any("повторяющихся заголовков" in c for c in captions)
+
+
+def _media_sidecar(confidence: float = 0.82) -> MediaSidecar:
+    return MediaSidecar(
+        schema_version=1,
+        konspekt_sha256="a" * 64,
+        media_sha256=None,
+        generated_by=GeneratedBy(
+            tool="test",
+            created_at="2026-07-05T00:00:00Z",
+            asr_model="test-asr",
+            alignment_version="test-align",
+        ),
+        video=UrlVideoSource(url="https://youtu.be/abcDEF12345"),
+        sections=(
+            MediaSection(
+                section_id=f"sha256:{'b' * 64}",
+                section_slug="tema",
+                heading="Тема",
+                line_start=10,
+                line_end=13,
+                t_start=75,
+                t_end=120,
+                confidence=confidence,
+            ),
+        ),
+    )
+
+
+class TestMediaPanelSmoke:
+    def test_valid_sidecar_shows_youtube_timestamp_action(self, monkeypatch):
+        import app.ui.living_konspekt_view as view
+
+        monkeypatch.setattr(view, "load_media_sidecar_for_konspekt", lambda path: _media_sidecar())
+        monkeypatch.setattr(view, "sha256_file", lambda path: "a" * 64)
+
+        at = AppTest.from_function(_app)
+        at.session_state["workbench_sections"] = [_row()]
+        at.run()
+
+        assert not at.exception
+        assert any("Материал раздела" in str(md.value) for md in at.markdown)
+        link_buttons = at.get("link_button")
+        assert any(button.label == "Смотреть с 1:15" for button in link_buttons)
+        assert any("t=75s" in button.url for button in link_buttons)
+
+    def test_stale_sidecar_degrades_without_timestamp_action(self, monkeypatch):
+        import app.ui.living_konspekt_view as view
+
+        monkeypatch.setattr(view, "load_media_sidecar_for_konspekt", lambda path: _media_sidecar())
+        monkeypatch.setattr(view, "sha256_file", lambda path: "0" * 64)
+
+        at = AppTest.from_function(_app)
+        at.session_state["workbench_sections"] = [_row()]
+        at.run()
+
+        assert not at.exception
+        captions = [c.value for c in at.caption]
+        assert any("Таймкоды устарели" in c for c in captions)
+        link_buttons = at.get("link_button")
+        assert not any(button.label == "Смотреть с 1:15" for button in link_buttons)
+
+    def test_low_confidence_sidecar_degrades_without_timestamp_action(self, monkeypatch):
+        import app.ui.living_konspekt_view as view
+
+        monkeypatch.setattr(view, "load_media_sidecar_for_konspekt", lambda path: _media_sidecar(confidence=0.4))
+        monkeypatch.setattr(view, "sha256_file", lambda path: "a" * 64)
+
+        at = AppTest.from_function(_app)
+        at.session_state["workbench_sections"] = [_row()]
+        at.run()
+
+        assert not at.exception
+        captions = [c.value for c in at.caption]
+        assert any("confidence ниже порога" in c for c in captions)
+        link_buttons = at.get("link_button")
+        assert not any(button.label == "Смотреть с 1:15" for button in link_buttons)
 
 
 class TestMemoryPanelSmoke:

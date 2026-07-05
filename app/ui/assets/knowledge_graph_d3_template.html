@@ -571,11 +571,13 @@ function openPanel(d){
   pc.querySelectorAll('.action-btn.cpy[data-copy]').forEach(el=>el.addEventListener('click',()=>_copyDocPath(el.dataset.copy,el)));
   panel.classList.add('open');highlight(d);
   history.replaceState(null,'','#c='+encodeURIComponent(d.id));
-  // Tutor bridge: sync selected concept to parent URL so Streamlit can pick it up
+  // Streamlit bridge: sync selected concept to parent URL and force a rerun.
+  // `history.replaceState` alone updates the address bar but Streamlit won't
+  // re-execute Python, so the companion selectbox below the graph stays stale.
   try{
     const pu=new URL(window.parent.location.href);
     pu.searchParams.set('_kgc',d.id);
-    window.parent.history.replaceState(null,'',pu.toString());
+    if(window.parent.location.href!==pu.toString()) window.parent.location.assign(pu.toString());
     // Signal bridge indicator via localStorage (read by polling bridge if present)
     window.parent.localStorage.setItem('_kgc_ts', Date.now()+'|'+d.id);
   }catch(_){}

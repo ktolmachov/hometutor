@@ -228,8 +228,8 @@ AI/ML компоненты подключаются как gated enrichment/rera
 
 ## Multimodal media metadata
 
-M0a мультимодального конспекта добавляет только контракт metadata, без UI-плеера, ASR,
-VLM, `media_progress` и новых LLM-вызовов.
+M0a/M0.3 мультимодального конспекта добавляют metadata contract и осторожный render в
+«Живом конспекте», без ASR, VLM, `media_progress` и новых LLM-вызовов.
 
 Ключевые модули:
 
@@ -238,6 +238,8 @@ VLM, `media_progress` и новых LLM-вызовов.
 - `app/media_urls.py` — нормализация внешних video URL, включая YouTube `watch`,
   `youtu.be`, `embed` и timestamp-параметры;
 - `app/path_safety.py` — единая проверка persisted `DATA_DIR`-relative paths.
+- `app/ui/living_konspekt_view.py` — section media panel: URL action, локальный
+  `st.video(...)` только после path-safety, stale/low-confidence degradation.
 
 Runtime-конспект может хранить во frontmatter только data-relative указатель:
 
@@ -257,6 +259,9 @@ Persisted local media paths не могут быть абсолютными, dri
 Stale detection работает по `schema_version`, `konspekt_sha256`, `media_sha256`,
 `generated_by.asr_model` и `generated_by.alignment_version`. При mismatch потребители должны
 переходить в degraded state, а не доверять timestamp evidence.
+
+В UI timestamp action показывается только когда sidecar актуален, раздел найден и confidence
+не ниже порога. Для stale/low-confidence state остаётся обычная ссылка/предупреждение.
 
 ## Storage view
 

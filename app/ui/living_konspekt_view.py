@@ -18,6 +18,16 @@ from typing import Any, MutableMapping
 import streamlit as st
 
 from app.deep_study_prompt import build_deep_study_prompt
+from app.media_sidecar import (
+    LocalVideoSource,
+    MediaSection,
+    MediaSidecar,
+    UrlVideoSource,
+    load_media_sidecar_for_konspekt,
+    sha256_file,
+)
+from app.media_urls import normalize_video_url
+from app.path_safety import resolve_data_relative_path
 from app.section_index import IndexedSection, row_to_section, section_to_row
 from app.study_web_queries import (
     build_query_from_rows,
@@ -330,6 +340,124 @@ def _heading_ambiguous(md_abs: str, heading_text: str) -> bool:
         return False
 
 
+def _media_section_for_row(sidecar: MediaSidecar, row: dict[str, Any]) -> MediaSection | None:
+    row_slug = str(row.get("slug") or "")
+    row_heading = str(row.get("heading_text") or "")
+    row_line_start = int(row.get("line_start") or 0)
+    row_line_end = int(row.get("line_end") or 0)
+
+    for section in sidecar.sections:
+        if section.section_slug == row_slug and section.line_start == row_line_start:
+            return section
+    for section in sidecar.sections:
+        if section.heading == row_heading and section.line_start == row_line_start:
+            return section
+    for section in sidecar.sections:
+        if section.heading == row_heading and section.line_end == row_line_end:
+            return section
+    return None
+
+
+def _format_timestamp(seconds: float | int | None) -> str:
+    if seconds is None:
+        return "—"
+    total = max(0, int(seconds))
+    hours, remainder = divmod(total, 3600)
+    minutes, secs = divmod(remainder, 60)
+    return f"{hours:d}:{minutes:02d}:{secs:02d}" if hours else f"{minutes:d}:{secs:02d}"
+
+
+def _sidecar_stale_reasons(sidecar: MediaSidecar, md_abs: str) -> list[str]:
+    try:
+        konspekt_sha = sha256_file(Path(md_abs))
+    except OSError:
+        konspekt_sha = None
+    media_sha: str | None = None
+    if isinstance(sidecar.video, LocalVideoSource):
+        try:
+            media_sha = sha256_file(resolve_data_relative_path(sidecar.video.path))
+        except (OSError, ValueError):
+            media_sha = None
+    return sidecar.stale_reasons(konspekt_sha256=konspekt_sha, media_sha256=media_sha)
+
+
+def _render_media_panel(row: dict[str, Any]) -> None:
+    """Render optional section media from sidecar; never block the plain konspekt row."""
+    md_abs = str(row.get("konspekt_md_abs") or "")
+    if not md_abs:
+        return
+    try:
+        sidecar = load_media_sidecar_for_konspekt(Path(md_abs))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        st.caption(f"🎬 Медиа недоступно: {format_request_error(exc)}")
+        return
+    if sidecar is None:
+        return
+
+    media_section = _media_section_for_row(sidecar, row)
+    stale_reasons = _sidecar_stale_reasons(sidecar, md_abs)
+    if media_section is None:
+        st.caption("🎬 Медиа есть, но для этого раздела таймкод не найден.")
+        return
+
+    st.markdown("**🎬 Материал раздела**")
+    if stale_reasons:
+        st.caption("Таймкоды устарели: " + ", ".join(stale_reasons))
+    if media_section.low_confidence:
+        st.caption("Таймкод примерный: confidence ниже порога.")
+
+    confident_timestamp = media_section.t_start is not None and not stale_reasons and not media_section.low_confidence
+    timestamp_label = _format_timestamp(media_section.t_start)
+
+    if isinstance(sidecar.video, UrlVideoSource):
+        _render_url_video_media(sidecar.video, media_section, confident_timestamp, timestamp_label)
+    elif isinstance(sidecar.video, LocalVideoSource):
+        _render_local_video_media(sidecar.video, media_section, confident_timestamp, timestamp_label)
+
+
+def _render_url_video_media(
+    video: UrlVideoSource,
+    media_section: MediaSection,
+    confident_timestamp: bool,
+    timestamp_label: str,
+) -> None:
+    try:
+        normalized = normalize_video_url(video.canonical_url or video.url)
+    except ValueError:
+        st.link_button("Открыть видео", video.url, width="stretch")
+        return
+
+    if normalized.is_youtube and confident_timestamp:
+        st.link_button(
+            f"Смотреть с {timestamp_label}",
+            normalized.with_timestamp(media_section.t_start),
+            width="stretch",
+        )
+    else:
+        st.link_button("Открыть видео", normalized.canonical_url, width="stretch")
+
+
+def _render_local_video_media(
+    video: LocalVideoSource,
+    media_section: MediaSection,
+    confident_timestamp: bool,
+    timestamp_label: str,
+) -> None:
+    try:
+        video_path = resolve_data_relative_path(video.path)
+    except ValueError as exc:
+        st.caption(f"Локальное видео отклонено path-safety: {format_request_error(exc)}")
+        return
+    if not video_path.exists():
+        st.caption(f"Локальное видео не найдено: `{video.path}`")
+        return
+
+    start_time = int(media_section.t_start or 0) if confident_timestamp else 0
+    st.video(str(video_path), start_time=start_time)
+    if confident_timestamp:
+        st.caption(f"Старт: {timestamp_label}")
+
+
 def _render_collected_sections(rows: list[dict[str, Any]]) -> None:
     from app.obsidian_export import obsidian_uri, vscode_uri
 
@@ -347,6 +475,7 @@ def _render_collected_sections(rows: list[dict[str, Any]]) -> None:
                 if (md_abs, heading_text) in duplicate_keys or _heading_ambiguous(md_abs, heading_text):
                     st.caption("⚠️ Заголовок повторяется в документе — VS Code точнее для повторяющихся заголовков.")
                 st.write(str(row.get("text") or "")[:400])
+                _render_media_panel(row)
             with cols[1]:
                 if md_abs:
                     st.link_button(

@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from app.section_index import IndexedSection
-from app.ui.knowledge_graph_d3 import _document_sections, _load_html_template
+from app.ui.knowledge_graph_d3 import _document_sections, _load_html_template, build_kg_html
 
 MD = Path("D:/vault/lecture.md")
 
@@ -163,3 +163,24 @@ class TestKnowledgeGraphTemplateFallback:
         assert "Knowledge Graph не смог загрузить HTML-шаблон" in html
         assert "knowledge_graph_d3_template.html" in html
         _load_html_template.cache_clear()
+
+
+class TestKnowledgeGraphSelectionBridge:
+    def test_node_click_bridge_forces_parent_rerun(self):
+        html = build_kg_html(
+            {
+                "nodes": [],
+                "edges": [],
+                "levels": {},
+                "stats": {},
+                "weekly_plan": [],
+                "health": {},
+                "cluster_labels": {},
+                "decay_vector": {},
+                "mastery_history": [],
+                "compiler_health": None,
+            }
+        )
+
+        assert "pu.searchParams.set('_kgc',d.id)" in html
+        assert "window.parent.location.assign(pu.toString())" in html

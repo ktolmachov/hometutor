@@ -80,9 +80,9 @@
 
 Для `.docx` используется `python-docx`/зависимости извлечения текста, для PDF — PDF extraction stack из зависимостей.
 
-Мультимодальный M0a не добавляет видео как индексируемый формат. Он добавляет только
-metadata-контракт sidecar v1 для будущего связывания конспекта с локальным видео,
-external video URL, таймкодами разделов и изображениями.
+Мультимодальный M0a/M0.3 не добавляет видео как индексируемый формат. Он добавляет
+metadata-контракт sidecar v1 и section media panel в `Живом конспекте` для связывания
+конспекта с локальным видео, external video URL, таймкодами разделов и изображениями.
 
 ## Хранилища и артефакты
 
@@ -169,7 +169,7 @@ SSR строит next-step recommendation из локальных сигнало
 
 ### Multimodal sidecar v1
 
-M0a реализует проверяемый media metadata contract без ASR, UI и LLM.
+M0a/M0.3 реализуют проверяемый media metadata contract и UI-render без ASR и LLM.
 
 Основные модули:
 
@@ -178,6 +178,8 @@ M0a реализует проверяемый media metadata contract без ASR
 - `app/media_urls.py` — нормализация YouTube URL (`watch`, `youtu.be`, `embed`) и
   timestamp parsing; unknown `http(s)` URL остаётся external link;
 - `app/path_safety.py` — запрет persisted absolute, drive-relative и traversal paths.
+- `app/ui/living_konspekt_view.py` — render media panel внутри собранного раздела,
+  `st.video(..., start_time=...)` для валидного локального файла, timestamp link для YouTube.
 
 Sidecar хранится внутри `data/` как `<konspekt_stem>.media.json`; frontmatter конспекта
 содержит только data-relative pointer. Persisted local media/image paths также
@@ -187,6 +189,10 @@ data-relative. Абсолютный внешний путь может быть 
 Invalidation считается по `schema_version`, `konspekt_sha256`, `media_sha256`,
 ASR model и alignment version. `section_slug` предназначен для UI/deep-link, а стабильным
 ключом раздела остаётся `section_id`.
+
+UI показывает уверенный timestamp action только если sidecar не stale и confidence section
+timestamp не ниже порога. Stale, low-confidence, missing local media и unsafe path отображаются
+как degraded state без падения страницы.
 
 ### Аутентификация
 
@@ -244,5 +250,6 @@ ASR model и alignment version. `section_slug` предназначен для U
   реального `JWT_SECRET` (fail-fast guard — дефолтный dev-секрет отклоняется на старте).
 - HF Spaces demo-деплой работает на эфемерном FS контейнера: аккаунты и прогресс не персистентны
   между перезапусками Space.
-- Multimodal M0a — это metadata plumbing: локальный video render, ASR, VLM captions,
-  timestamped source cards и `media_progress` ещё не являются runtime-возможностями.
+- Multimodal M0a/M0.3 — это metadata plumbing и media panel: ASR, VLM captions,
+  timestamped source cards, автоматическое создание sidecar и `media_progress` ещё не
+  являются runtime-возможностями.

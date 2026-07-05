@@ -432,6 +432,7 @@ def _render_classic_agraph(knowledge_graph, learned_set: set[str]) -> None:
         pid = picked.get("id") or picked.get("label") if isinstance(picked, dict) else picked
         if pid is not None and str(pid) in visible_ids:
             st.session_state["kg_selected_concept"] = str(pid)
+            st.session_state["kg_action_concept"] = str(pid)
             st.rerun()
 
 
@@ -514,6 +515,7 @@ def _render_knowledge_graph_tab() -> None:
     _kgc_param = str(st.query_params.get("_kgc") or "").strip()
     if _kgc_param and _kgc_param in node_ids:
         st.session_state["kg_selected_concept"] = _kgc_param
+        st.session_state["kg_action_concept"] = _kgc_param
         # Show a subtle indicator that the graph click was picked up
         st.toast(f"📍 Концепт из графа: **{_kgc_param}**", icon="🕸")
         # Clear the param to avoid sticky pre-selection on refresh
@@ -527,6 +529,8 @@ def _render_knowledge_graph_tab() -> None:
     prev = st.session_state.get("kg_selected_concept")
     if prev in node_ids:
         default_sel = prev
+    if st.session_state.get("kg_action_concept") not in node_ids and default_sel in node_ids:
+        st.session_state["kg_action_concept"] = default_sel
 
     with st.expander("⚡ Действия с концептом", expanded=True):
         if node_ids:

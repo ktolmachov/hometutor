@@ -48,11 +48,15 @@ def _no_vault_name(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(autouse=True)
 def _isolated_kv(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Гидрация/авто-персист корзины не должны трогать реальный user_state.db."""
+    """Гидрация/авто-персист/аналитика/память не должны трогать реальный user_state.db."""
+    import app.ui_events as ui_events
+    import app.user_state as user_state
     import app.user_state_core as user_state_core
 
     monkeypatch.setattr(user_state_core, "get_kv", lambda key, default=None: default)
     monkeypatch.setattr(user_state_core, "set_kv", lambda key, value: None)
+    monkeypatch.setattr(ui_events, "track_event", lambda name, payload=None: None)
+    monkeypatch.setattr(user_state, "count_due_flashcards", lambda **kwargs: 0)
 
 
 class TestRenderLivingKonspektViewSmoke:
@@ -152,5 +156,5 @@ class TestTermCardsPanelSmoke:
         assert at.session_state["fc_deck_name"] == "Термины — lecture5.md"
         assert "prev_f_0" not in at.session_state
         cards = at.session_state["fc_preview_cards"]
-        assert {"front": "LLM", "back": "большая языковая модель.", "tags": "источник:lecture5.md"} in cards
+        assert {"front": "LLM", "back": "большая языковая модель.", "tags": f"source:{md}"} in cards
         assert len(cards) == 5

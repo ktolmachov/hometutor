@@ -5,24 +5,40 @@ description: Короткие always-on правила процесса итер
 
 ## Рабочий процесс
 
-Источник scope, статусов и критериев: [doc/backlog_registry.yaml](../../doc/backlog_registry.yaml). [doc/tasklist.md](../../doc/tasklist.md) — только производный weekly view после sync. Стек/границы: [doc/vision.md](../../doc/vision.md). Код-правила: [conventions.mdc](conventions.mdc); полный `doc/conventions.md` в контекст **не** подтягивать — только TL;DR в начале файла и при необходимости [conventions_architecture.md](../../doc/conventions_architecture.md) / [conventions_reference.md](../../doc/conventions_reference.md).
+Этот checkout — runtime-репозиторий `hometutor`: код, тесты, запуск и текущая
+документация живут в `app/`, `tests/`, `scripts/`, `docs/`. Backlog, user stories
+и командный workflow находятся в соседнем `hometutor-studio`; в этом репозитории
+их не обновлять. `doc/archive/` может содержать legacy/archive-артефакты, но это
+не текущий docs-root.
+
+Код-правила: [conventions.mdc](conventions.mdc), [AGENTS.md](../../AGENTS.md),
+[CLAUDE.md](../../CLAUDE.md), [docs/conventions.md](../../docs/conventions.md),
+[docs/conventions_architecture.md](../../docs/conventions_architecture.md),
+[docs/conventions_reference.md](../../docs/conventions_reference.md). При конфликте
+приоритет у `docs/conventions*.md` и кода.
 
 ### Минимальный цикл
 
-1. План/ТЗ → согласование → реализация в рамках итерации.
-2. Проверка: целевой `pytest` (релевантные файлы/модули) + критерии из `backlog_registry.yaml`.
-3. Закрытие: обновить `backlog_registry.yaml`, затем регенерировать `tasklist.md`; один коммит на завершённую итерацию.
+1. Понять scope/write-set задачи и релевантные runtime-файлы.
+2. Реализовать изменение без попутного рефакторинга соседних модулей.
+3. Проверить targeted `pytest` для затронутой зоны; полный suite — только по явному запросу.
+4. Обновить `docs/` только если изменился публичный API, UI-поведение, архитектура,
+   настройки или инженерные правила.
 
 ### Запреты
 
-Оверинжиниринг; новый стек вне `vision`; задачи вне текущей итерации; пропуск тестов; коммит без обновления `backlog_registry.yaml`/derived `tasklist.md`.
+Оверинжиниринг; новый стек без явной необходимости; задачи вне текущего scope;
+пропуск релевантных targeted-тестов; обновление `hometutor-studio` bookkeeping из
+этого runtime checkout.
 
-**Полный suite:** не запускать `pytest` на весь проект (`pytest` без узкого пути/маркера), если пользователь **явно** этого не попросил или в `backlog_registry.yaml` для текущей итерации **прямо** не требуется полный прогон. По умолчанию — только затронутые тесты.
+**Полный suite:** не запускать `pytest` на весь проект (`pytest` без узкого пути/маркера),
+если пользователь **явно** этого не попросил. По умолчанию — только затронутые тесты.
 
 ### Практика
 
 - Контекст давать точечно (цель + релевантные файлы), не скармливать весь репозиторий.
-- Для ударных backlog-пакетов начинать с контрактного prompt: `Goal`, `Scope`, `Files to inspect first`, `DoD`, `Do not touch`, `Output`. Один prompt = один package/outcome, без широкого анализа и без соседних эпох.
+- Для больших задач начинать с короткого контрактного scope: `Goal`, `Scope`,
+  `Files to inspect first`, `DoD`, `Do not touch`, `Output`.
 - Если диалог потерял фокус — новый чат с кратким резюме и ссылками.
 - Перед завершением смотреть свой diff.
 

@@ -20,6 +20,22 @@ _TERM_LINE_RE = re.compile(
 )
 
 
+def source_tag_value(md: Path) -> str:
+    """Значение для системного тега ``source:`` — относительный путь корпуса.
+
+    Конвенция Flashcards (``_course_card_tags``, ``source_path_from_card``) — «relative
+    path in the corpus»: относительный путь переживает перенос ``user_state.db`` на другую
+    машину и смену ``HOME_RAG_HOME``; абсолютный — нет. Файл вне корпуса — фолбэк на
+    абсолютный (лучше хрупкий провенанс, чем никакого).
+    """
+    try:
+        from app.obsidian_export import corpus_root
+
+        return md.resolve().relative_to(corpus_root().resolve()).as_posix()
+    except Exception:  # noqa: BLE001 - вне корпуса / corpus_root недоступен
+        return str(md)
+
+
 def parse_term_cards(section_text: str) -> list[dict[str, str]]:
     """``[{front, back}, ...]`` из тела раздела-роли ``terms``.
 
@@ -41,7 +57,7 @@ def parse_term_cards(section_text: str) -> list[dict[str, str]]:
 def term_cards_from_documents(md_paths: list[str]) -> tuple[list[dict[str, Any]], list[str]]:
     """Термины-карточки из раздела-роли ``terms`` каждого конспекта (по уникальным md-путям).
 
-    Каждая карточка получает тег ``источник:<файл>`` (провенанс не теряется при сохранении
+    Каждая карточка получает системный тег ``source:<path>`` (провенанс не теряется при сохранении
     колоды). Дедуп по термину МЕЖДУ документами — первое совпадение побеждает, чтобы фронт
     карточки (термин) оставался уникальным в колоде.
 
@@ -60,13 +76,14 @@ def term_cards_from_documents(md_paths: list[str]) -> tuple[list[dict[str, Any]]
         if terms_section is None:
             continue
         doc_name = Path(md).name
+        source_tag = source_tag_value(Path(md))
         added_any = False
         for card in parse_term_cards(terms_section.text):
             key = card["front"].casefold()
             if key in seen_terms:
                 continue
             seen_terms.add(key)
-            cards.append({**card, "tags": f"источник:{doc_name}"})
+            cards.append({**card, "tags": f"source:{source_tag}"})
             added_any = True
         if added_any:
             source_docs.append(doc_name)

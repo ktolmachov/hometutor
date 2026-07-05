@@ -32,6 +32,28 @@ _FC_GENERATE_CACHE_HINT_KEY = "fc_generate_llm_cache_hint"
 _FC_GENERATE_SUMMARY_KEY = "fc_generate_summary"
 
 
+def _route_saved_living_konspekt_deck_to_review(deck_id: int) -> None:
+    """After saving a Living Konspekt deck, make the next screen the review flow."""
+    try:
+        # Финальный шаг funnel «чтение → обучение»: колода из живого конспекта сохранена.
+        from app.ui_events import track_event
+
+        track_event("living_konspekt_term_deck_saved", {"deck_id": deck_id})
+    except Exception:  # noqa: BLE001 - аналитика не должна ломать сохранение колоды
+        pass
+    st.session_state["flashcards_subview"] = "review_from_deck"
+    st.session_state["flashcards_review_session_deck_id"] = deck_id
+    st.session_state["flashcards_review_deck_sync_pending"] = deck_id
+    st.session_state["flashcards_review_queue"] = []
+    st.session_state["flashcards_review_index"] = 0
+    st.session_state["flashcards_card_flipped"] = False
+    st.session_state["flashcards_review_stats"] = {"again": 0, "hard": 0, "good": 0, "easy": 0}
+    st.session_state["flashcards_review_session_status"] = "idle"
+    st.session_state["flashcards_review_session_error"] = None
+    st.session_state.pop("flashcards_review_session_scope_signature", None)
+    st.session_state[pending_section_key()] = FC_MAIN_SECTION_REVIEW
+
+
 def _format_duration_sec(seconds: float) -> str:
     total = max(0, int(round(seconds)))
     minutes, secs = divmod(total, 60)
@@ -429,13 +451,15 @@ def render_generate(*, api_call: Callable[..., Any]) -> None:
                 )
             else:
                 try:
+                    source_type = st.session_state.get("fc_preview_source_type") or scope
+                    source_identifier = st.session_state.get("fc_preview_source_identifier") or identifier
                     r = api_call(
                         "POST",
                         "/flashcards/decks",
                         json={
                             "name": deck_name,
-                            "source_type": st.session_state.get("fc_preview_source_type") or scope,
-                            "source_identifier": st.session_state.get("fc_preview_source_identifier") or identifier,
+                            "source_type": source_type,
+                            "source_identifier": source_identifier,
                             "cards": valid_cards,
                         },
                     )
@@ -445,8 +469,12 @@ def render_generate(*, api_call: Callable[..., Any]) -> None:
                     st.session_state.pop("fc_preview_title", None)
                     st.session_state.pop("fc_preview_source_type", None)
                     st.session_state.pop("fc_preview_source_identifier", None)
-                    st.session_state["flashcards_subview"] = "decks"
-                    st.session_state[pending_section_key()] = "decks"
+                    deck_id = int(r.get("deck_id") or 0)
+                    if source_type == "living_konspekt_terms" and deck_id:
+                        _route_saved_living_konspekt_deck_to_review(deck_id)
+                    else:
+                        st.session_state["flashcards_subview"] = "decks"
+                        st.session_state[pending_section_key()] = "decks"
                     st.rerun()
                 except Exception as e:  # noqa: BLE001 - UI displays API failure.
                     st.error(f"Ошибка сохранения: {e}")

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app.flashcards_tag_display import source_path_from_card
 from app.term_cards import parse_term_cards, term_cards_from_documents
 
 
@@ -69,8 +70,9 @@ class TestTermCardsFromDocuments:
         )
         cards, source_docs = term_cards_from_documents([str(md)])
         assert cards == [
-            {"front": "RAG", "back": "retrieval-augmented generation.", "tags": "источник:lecture.md"}
+            {"front": "RAG", "back": "retrieval-augmented generation.", "tags": f"source:{md}"}
         ]
+        assert source_path_from_card(cards[0]) == str(md)
         assert source_docs == ["lecture.md"]
 
     def test_dedups_terms_across_documents_keeps_first_document(self, tmp_path: Path):

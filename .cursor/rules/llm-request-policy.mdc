@@ -18,8 +18,11 @@ alwaysApply: true
 - Large docs: include only the relevant section, status table, last entry, or short summary.
 
 ## Forbidden full-read files
-SSoT: `doc/token_safety_registry.json`. Check before reading:
-`python scripts/check_readset.py <file>...` — SAFE / WARN / BLOCK.
+- В этом runtime checkout нет актуального `doc/token_safety_registry.json` и
+  `scripts/check_readset.py`; не ссылаться на них как на обязательный gate.
+- Перед чтением больших файлов оценивать размер локально (`rg`, signatures,
+  выборочные секции). Не читать целиком большие Python/UI/test/docs файлы без
+  прямой необходимости.
 
 ## Compression rule
 - > 12k tokens — compress (trim history, use signatures/sections, drop low-signal files).

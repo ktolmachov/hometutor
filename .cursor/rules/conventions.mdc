@@ -4,15 +4,24 @@ alwaysApply: true
 
 ## Код-правила (short)
 
-Расширенные соглашения: [doc/conventions.md](../../doc/conventions.md) (TL;DR + навигация; детали вынесены в `conventions_architecture.md`, `conventions_reference.md`). Границы продукта: [doc/vision.md](../../doc/vision.md). При конфликте приоритет у полного текста в `doc/conventions*.md`.
+Расширенные соглашения: [docs/conventions.md](../../docs/conventions.md)
+(TL;DR + навигация; детали вынесены в
+[docs/conventions_architecture.md](../../docs/conventions_architecture.md) и
+[docs/conventions_reference.md](../../docs/conventions_reference.md)).
+Навигация: [docs/index.md](../../docs/index.md). При конфликте приоритет у
+`docs/conventions*.md` и кода. `doc/archive/` — legacy/archive, не текущий
+docs-root.
 
 ### Must-have
 
 - KISS: маленькие модули, явные зависимости, без лишних абстракций.
-- Конфиг только через `get_settings()` / `get_retrieval_settings()`.
-- LLM/embed только через `app/provider.py`.
-- HTTP только через `app/routers/*` (+ `api_requests.py` / `api_models.py`).
-- Бизнес-логика knowledge в `knowledge_service.py`, guardrails в `guardrails.py`.
+- Runtime/app-конфиг только через `get_settings()` / `get_retrieval_settings()`;
+  raw env только в `app/config.py`, `app/ingestion_env_diag.py` и служебных скриптах.
+- LLM/embed только через provider-layer: `app/provider.py` + внутренний
+  `app/provider_openai.py`.
+- Prompt text source-of-truth — `app/prompts/`; bridge/builders не дублируют тексты.
+- HTTP только через `app/routers/*` (+ `api_requests.py` / `api_models*.py`).
+- Guardrails в `guardrails.py` / `input_validation.py`.
 - Критичные сценарии покрывать `pytest`; `.venv` не коммитить.
 
 ### Стиль (кратко)

@@ -112,6 +112,13 @@ def add_section_to_workbench(
     target[WORKBENCH_SECTIONS_KEY] = rows
     if state is None:
         _persist_workbench(rows)
+        try:
+            # Funnel «чтение → обучение»: раздел добавлен (из графа/карточки/сбора по концепту).
+            from app.ui_events import track_event
+
+            track_event("living_konspekt_section_added")
+        except Exception:  # noqa: BLE001 - аналитика не должна ломать корзину
+            pass
     return True
 
 
@@ -168,11 +175,70 @@ def _lecture_main_ideas(rows: list[dict[str, Any]]) -> list[tuple[str, str]]:
     return out
 
 
+def _sources_footer(rows: list[dict[str, Any]]) -> str:
+    """«## Источники» со списком ``файл:строки`` всех разделов — провенанс живёт в самом
+    сохранённом файле, а не только в session_state. Пустая корзина → пустая строка."""
+    source_lines = [
+        f"- {Path(str(row.get('konspekt_md_abs') or '')).name}:{row.get('line_start')}-{row.get('line_end')}"
+        f" — «{row.get('heading_text') or '—'}»"
+        for row in rows
+    ]
+    return "## Источники\n\n" + "\n".join(source_lines) if source_lines else ""
+
+
+_MAX_CHECK_QUESTIONS = 8
+
+
+def _check_questions_block(rows: list[dict[str, Any]]) -> str:
+    """«## ✅ Проверь себя» из роли ``check_questions`` конспектов корзины (дословно,
+    вопросы лектора). Роли нет / файлы недоступны → пустая строка (честная деградация)."""
+    try:
+        from app.section_index import sections_by_role, _cached_parse_sections
+    except Exception:  # noqa: BLE001 - обогащение опционально
+        return ""
+
+    md_paths: list[str] = []
+    for row in rows:
+        md = str(row.get("konspekt_md_abs") or "")
+        if md and md not in md_paths:
+            md_paths.append(md)
+
+    questions: list[str] = []
+    for md in md_paths:
+        try:
+            parsed = _cached_parse_sections(Path(md))
+        except OSError:
+            continue
+        section = sections_by_role(parsed).get("check_questions")
+        if section is None:
+            continue
+        for line in section.text.splitlines():
+            line = line.strip()
+            if line:
+                questions.append(line)
+            if len(questions) >= _MAX_CHECK_QUESTIONS:
+                break
+        if len(questions) >= _MAX_CHECK_QUESTIONS:
+            break
+    if not questions:
+        return ""
+    return "## ✅ Проверь себя\n\n" + "\n".join(questions)
+
+
+def _study_pack_tail(rows: list[dict[str, Any]]) -> str:
+    """Хвост Study Pack: «Проверь себя» + «Источники» — для ОБОИХ режимов сборки.
+
+    LLM-синтез отдаёт только summary; без этого хвоста сохранённый файл терял провенанс
+    (Findings по ``рабочий-конспект-лекция-2.md``: «Источники» — только имя файла).
+    """
+    blocks = [block for block in (_check_questions_block(rows), _sources_footer(rows)) if block]
+    return "\n\n".join(blocks)
+
+
 def _stitch_verbatim(rows: list[dict[str, Any]]) -> str:
     """Детерминированная склейка: главная мысль лекции + заголовки-источники + якоря + текст.
 
-    В конец — «## Источники» со списком ``файл:строки`` всех разделов (провенанс живёт
-    в самом сохранённом файле, а не только в session_state).
+    В конец — «Проверь себя» (вопросы лектора) и «## Источники» (``файл:строки``).
     """
     header_parts = [
         f"> **Главная мысль исходной лекции ({doc_name}):** {idea}"
@@ -186,18 +252,13 @@ def _stitch_verbatim(rows: list[dict[str, Any]]) -> str:
         location = f"{source_name}:{row.get('line_start')}"
         parts.append(f"## {heading}\n\n*Источник: {location}*\n\n{row.get('text') or ''}")
 
-    source_lines = [
-        f"- {Path(str(row.get('konspekt_md_abs') or '')).name}:{row.get('line_start')}-{row.get('line_end')}"
-        f" — «{row.get('heading_text') or '—'}»"
-        for row in rows
-    ]
-
     blocks: list[str] = []
     if header_parts:
         blocks.append("\n>\n".join(header_parts))
     blocks.append("\n\n---\n\n".join(parts))
-    if source_lines:
-        blocks.append("## Источники\n\n" + "\n".join(source_lines))
+    tail = _study_pack_tail(rows)
+    if tail:
+        blocks.append(tail)
     return "\n\n".join(blocks)
 
 
@@ -318,13 +379,105 @@ def _render_build_panel(rows: list[dict[str, Any]]) -> None:
 
                 sections = [row_to_section(row) for row in rows]
                 result = synthesize_sections(topic=topic, sections=sections)
-                body = str(result["summary"])
+                # Study Pack tail и для LLM-режима: summary модели без «Проверь себя» и
+                # точных «файл:строки» — статичная выжимка, а не живой конспект.
+                body = "\n\n".join(
+                    block for block in (str(result["summary"]).strip(), _study_pack_tail(rows)) if block
+                )
             target_path = _save_living_konspekt(topic, body)
         except Exception as exc:  # noqa: BLE001 - показать пользователю причину сбора/сохранения
             st.error(f"Не удалось собрать конспект: {format_request_error(exc)}")
         else:
+            st.session_state["living_konspekt_last_saved"] = str(target_path)
+            try:
+                from app.ui_events import track_event
+
+                track_event(
+                    "living_konspekt_saved",
+                    {"mode": "verbatim" if mode.startswith("Дословная") else "synthesis", "sections": len(rows)},
+                )
+            except Exception:  # noqa: BLE001 - аналитика не должна ломать сохранение
+                pass
             st.success("✅ Сохранено в vault. Войдёт в поиск и граф после обновления индекса.")
-            st.caption(f"Файл: `{target_path}`")
+
+    # Файл — стартовая площадка, а не финал: постоянный CTA-ряд по последнему сохранённому
+    # (переживает rerun'ы — success-строка выше живёт только один прогон).
+    last_saved = str(st.session_state.get("living_konspekt_last_saved") or "")
+    if last_saved:
+        from app.obsidian_export import obsidian_uri, vscode_uri
+
+        saved_path = Path(last_saved)
+        st.caption(f"Последний собранный: `{saved_path.name}`")
+        cta_cols = st.columns(2)
+        with cta_cols[0]:
+            st.link_button("📄 Открыть в Obsidian", obsidian_uri(saved_path), width="stretch")
+        with cta_cols[1]:
+            st.link_button("🖥 Открыть в VS Code", vscode_uri(saved_path), width="stretch")
+        st.caption("Следующий шаг: «🃏 Карточки из терминов» ниже — и конспект начнёт повторяться сам.")
+
+
+def _due_by_document(rows: list[dict[str, Any]]) -> list[tuple[str, str, int]]:
+    """``[(имя конспекта, source-тег, due), ...]`` по уникальным документам корзины.
+
+    Карточки несут системный тег ``source:<rel>`` (термины из «Живого конспекта»,
+    course-генерация) — SM-2 due по этому тегу и есть «состояние памяти» конспекта.
+    Недоступная БД → пустой список (панель просто не рисуется).
+    """
+    from app.term_cards import source_tag_value
+
+    md_paths: list[str] = []
+    for row in rows:
+        md = str(row.get("konspekt_md_abs") or "")
+        if md and md not in md_paths:
+            md_paths.append(md)
+
+    out: list[tuple[str, str, int]] = []
+    for md in md_paths:
+        tag = f"source:{source_tag_value(Path(md))}"
+        try:
+            from app import user_state
+
+            due = int(user_state.count_due_flashcards(tags=tag))
+        except Exception:  # noqa: BLE001 - память опциональна, корзина работает и без БД
+            continue
+        out.append((Path(md).name, tag, due))
+    return out
+
+
+def _render_memory_panel(rows: list[dict[str, Any]]) -> None:
+    """«🧠 Память конспекта» — замыкание петли: конспект → карточки → угасание → возврат.
+
+    Показывает due-карточки, привязанные к конспектам корзины; «Повторить» открывает
+    review-очередь Flashcards, скоупнутую тегом ``source:`` именно на этот конспект
+    (тег-скоуп — штатный, через ключ ``flashcards_review_session_tags_text``).
+    Нет due — панель молчит: ноль шума, пока память не начала угасать.
+    """
+    entries = [(doc_name, tag, due) for doc_name, tag, due in _due_by_document(rows) if due > 0]
+    if not entries:
+        return
+    st.markdown("### 🧠 Память конспекта")
+    st.caption("Карточки из этих конспектов ждут повторения — забытое подсвечивается здесь само.")
+    for doc_name, tag, due in entries:
+        mem_cols = st.columns([4, 2])
+        with mem_cols[0]:
+            st.markdown(f"**{doc_name}** — {due} карточк(и) к повторению")
+        with mem_cols[1]:
+            if st.button("🔁 Повторить", key=f"wb_review_{tag}", width="stretch"):
+                from app.ui.flashcards_sections import FC_MAIN_SECTION_REVIEW, pending_section_key
+                from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
+
+                # Ключ text_input тег-скоупа в review: установка ДО инстанцирования
+                # виджета (следующий прогон) легальна; scope-signature сам сбросит сессию.
+                st.session_state["flashcards_review_session_tags_text"] = tag
+                st.session_state[pending_section_key()] = FC_MAIN_SECTION_REVIEW
+                st.session_state[PENDING_CURRENT_VIEW_KEY] = "Flashcards"
+                try:
+                    from app.ui_events import track_event
+
+                    track_event("living_konspekt_review_loop_opened", {"due": due})
+                except Exception:  # noqa: BLE001
+                    pass
+                st.rerun()
 
 
 def _render_term_cards_panel(rows: list[dict[str, Any]]) -> None:
@@ -371,6 +524,12 @@ def _render_term_cards_panel(rows: list[dict[str, Any]]) -> None:
         # PENDING_CURRENT_VIEW_KEY, не прямая запись: current_view — ключ уже
         # инстанцированного st.selectbox в main.py на этом прогоне.
         st.session_state[PENDING_CURRENT_VIEW_KEY] = "Flashcards"
+        try:
+            from app.ui_events import track_event
+
+            track_event("living_konspekt_term_cards_created", {"cards": len(cards)})
+        except Exception:  # noqa: BLE001
+            pass
         st.rerun()
 
 
@@ -488,6 +647,7 @@ def render_living_konspekt_view() -> None:
         return
 
     _render_collected_sections(rows)
+    _render_memory_panel(rows)
     st.divider()
     _render_build_panel(rows)
     st.divider()

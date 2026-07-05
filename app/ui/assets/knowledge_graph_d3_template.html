@@ -571,15 +571,21 @@ function openPanel(d){
   pc.querySelectorAll('.action-btn.cpy[data-copy]').forEach(el=>el.addEventListener('click',()=>_copyDocPath(el.dataset.copy,el)));
   panel.classList.add('open');highlight(d);
   history.replaceState(null,'','#c='+encodeURIComponent(d.id));
-  // Streamlit bridge: sync selected concept to parent URL and force a rerun.
-  // `history.replaceState` alone updates the address bar but Streamlit won't
-  // re-execute Python, so the companion selectbox below the graph stays stale.
+  // Streamlit bridge: the custom component wrapper listens for this message and
+  // returns the selected concept to Python as a component value.
   try{
-    const pu=new URL(window.parent.location.href);
-    pu.searchParams.set('_kgc',d.id);
-    if(window.parent.location.href!==pu.toString()) window.parent.location.assign(pu.toString());
-    // Signal bridge indicator via localStorage (read by polling bridge if present)
-    window.parent.localStorage.setItem('_kgc_ts', Date.now()+'|'+d.id);
+    window.parent.postMessage({type:'hometutor:kg-select',concept:d.id},'*');
+  }catch(_){}
+  // Fallback for legacy single-iframe rendering: sync selected concept to the
+  // parent URL and force a rerun. Skip this when nested inside the component
+  // wrapper, where window.parent is the wrapper iframe, not the Streamlit app.
+  try{
+    if(window.parent===window.top){
+      const pu=new URL(window.top.location.href);
+      pu.searchParams.set('_kgc',d.id);
+      window.top.location.assign(pu.toString());
+      window.top.localStorage.setItem('_kgc_ts', Date.now()+'|'+d.id);
+    }
   }catch(_){}
 }
 function focusNode(d){const s=1.6;svg.transition().duration(550).call(zoom.transform,d3.zoomIdentity.translate(W/2-d.x*s,H/2-d.y*s).scale(s));}

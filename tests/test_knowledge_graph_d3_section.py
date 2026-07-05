@@ -166,7 +166,7 @@ class TestKnowledgeGraphTemplateFallback:
 
 
 class TestKnowledgeGraphSelectionBridge:
-    def test_node_click_bridge_forces_parent_rerun(self):
+    def test_node_click_bridge_posts_component_value_and_keeps_url_fallback(self):
         html = build_kg_html(
             {
                 "nodes": [],
@@ -182,5 +182,35 @@ class TestKnowledgeGraphSelectionBridge:
             }
         )
 
+        assert "type:'hometutor:kg-select',concept:d.id" in html
         assert "pu.searchParams.set('_kgc',d.id)" in html
-        assert "window.parent.location.assign(pu.toString())" in html
+        assert "window.top.location.assign(pu.toString())" in html
+
+    def test_renderer_returns_selected_concept_from_component(self, monkeypatch: pytest.MonkeyPatch):
+        import app.ui.knowledge_graph_d3 as kg_d3
+
+        captured: dict[str, object] = {}
+
+        def fake_component():
+            def _call(**kwargs):
+                captured.update(kwargs)
+                return "llm-agent"
+
+            return _call
+
+        monkeypatch.setattr(kg_d3, "_kg_d3_component", fake_component)
+
+        payload = kg_d3.render_d3_knowledge_graph(
+            {
+                "llm-agent": {
+                    "label": "LLM Agent",
+                    "level": "beginner",
+                    "description": "Agent concept.",
+                }
+            },
+            height=500,
+        )
+
+        assert payload["selected_concept"] == "llm-agent"
+        assert captured["height"] == 500
+        assert "LLM Agent" in str(captured["html"])

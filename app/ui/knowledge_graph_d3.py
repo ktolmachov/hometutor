@@ -37,6 +37,7 @@ from app.ui.knowledge_graph_d3_analysis import (
 
 _D3_PATH = Path(__file__).resolve().parent / "assets" / "d3.v7.min.js"
 _HTML_TEMPLATE_PATH = Path(__file__).resolve().parent / "assets" / "knowledge_graph_d3_template.html"
+_COMPONENT_PATH = Path(__file__).resolve().parent / "assets" / "kg_d3_component"
 _MISSING_TEMPLATE_HTML = """<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -413,6 +414,13 @@ def build_kg_html(payload: Mapping[str, Any]) -> str:
     )
 
 
+@lru_cache(maxsize=1)
+def _kg_d3_component():
+    import streamlit.components.v1 as components
+
+    return components.declare_component("kg_d3", path=str(_COMPONENT_PATH))
+
+
 def render_d3_knowledge_graph(
     concepts: Mapping[str, Any],
     mastery_vector: Mapping[str, float] | None = None,
@@ -423,9 +431,7 @@ def render_d3_knowledge_graph(
     *,
     height: int = 720,
 ) -> Dict[str, Any]:
-    """Render via ``st.components.v1.html``; return payload for companion widgets."""
-    import streamlit.components.v1 as components
-
+    """Render via a local Streamlit component; return payload for companion widgets."""
     due_reviews: List[Dict[str, Any]] = []
     sr_records: List[Dict[str, Any]] = []
     quiz_rows: List[Dict[str, Any]] = []
@@ -468,5 +474,12 @@ def render_d3_knowledge_graph(
         compiler_health=compiler_health,
     )
     if payload["nodes"]:
-        components.html(build_kg_html(payload), height=height, scrolling=False)
+        selected = _kg_d3_component()(
+            html=build_kg_html(payload),
+            height=height,
+            default=None,
+            key="kg_d3_component",
+        )
+        if isinstance(selected, str) and selected.strip():
+            payload["selected_concept"] = selected.strip()
     return payload

@@ -509,17 +509,20 @@ def _render_knowledge_graph_tab() -> None:
     node_ids = [n["id"] for n in payload.get("nodes", [])]
 
     # ── D3 → Streamlit concept bridge ──────────────────────────────────
-    # When user clicks a node in D3, `openPanel()` sets ?_kgc=ConceptId in the
-    # parent URL via history.replaceState. On next Streamlit rerun (any widget
-    # interaction), we pick it up here and pre-select the concept.
+    # The D3 graph is rendered as a Streamlit custom component. On node click,
+    # the component returns the selected concept id to Python; `_kgc` remains as
+    # a legacy URL fallback for older single-iframe rendering.
+    component_concept = str(payload.get("selected_concept") or "").strip()
     _kgc_param = str(st.query_params.get("_kgc") or "").strip()
-    if _kgc_param and _kgc_param in node_ids:
-        st.session_state["kg_selected_concept"] = _kgc_param
-        st.session_state["kg_action_concept"] = _kgc_param
+    bridged_concept = component_concept if component_concept in node_ids else _kgc_param
+    if bridged_concept and bridged_concept in node_ids:
+        st.session_state["kg_selected_concept"] = bridged_concept
+        st.session_state["kg_action_concept"] = bridged_concept
         # Show a subtle indicator that the graph click was picked up
-        st.toast(f"📍 Концепт из графа: **{_kgc_param}**", icon="🕸")
+        st.toast(f"📍 Концепт из графа: **{bridged_concept}**", icon="🕸")
         # Clear the param to avoid sticky pre-selection on refresh
-        st.query_params.pop("_kgc", None)
+        if _kgc_param:
+            st.query_params.pop("_kgc", None)
 
     # Default to a "frontier" (ready-to-learn) concept when available.
     default_sel = next(

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<style>
+  html,body{margin:0;padding:0;background:#0a0a0f;overflow:hidden;}
+  iframe{display:block;width:100%;border:0;background:#0a0a0f;}
+</style>
+</head>
+<body>
+<iframe id="kg-frame" title="Knowledge Graph"></iframe>
+<script>
+const frame=document.getElementById('kg-frame');
+
+function streamlitMessage(type,data){
+  window.parent.postMessage(Object.assign({isStreamlitMessage:true,type},data||{}),'*');
+}
+function setComponentReady(){
+  streamlitMessage('streamlit:componentReady',{apiVersion:1});
+}
+function setFrameHeight(height){
+  streamlitMessage('streamlit:setFrameHeight',{height});
+}
+function setComponentValue(value){
+  streamlitMessage('streamlit:setComponentValue',{value,dataType:'json'});
+}
+
+window.addEventListener('message',event=>{
+  const data=event.data||{};
+  if(data.type==='streamlit:render'){
+    const args=data.args||{};
+    const height=Number(args.height)||740;
+    frame.style.height=height+'px';
+    frame.srcdoc=String(args.html||'');
+    setFrameHeight(height);
+    return;
+  }
+  if(data.type==='hometutor:kg-select'&&data.concept){
+    setComponentValue(String(data.concept));
+  }
+});
+
+setComponentReady();
+</script>
+</body>
+</html>

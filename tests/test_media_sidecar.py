@@ -69,6 +69,7 @@ def test_parse_valid_local_media_sidecar(tmp_path: Path):
     assert sidecar.schema_version == 1
     assert isinstance(sidecar.video, LocalVideoSource)
     assert sidecar.video.path == "courses/autonomy/lecture_01/video.mp4"
+    assert sidecar.videos == (sidecar.video,)
     assert sidecar.sections[0].section_id == f"sha256:{SECTION_SHA}"
     assert sidecar.sections[0].has_timestamp is True
     assert sidecar.sections[0].low_confidence is False
@@ -87,6 +88,33 @@ def test_parse_valid_url_media_sidecar(tmp_path: Path):
     assert isinstance(sidecar.video, UrlVideoSource)
     assert sidecar.video.url == "https://youtu.be/abcDEF12345?t=90"
     assert sidecar.video.canonical_url == "https://www.youtube.com/watch?v=abcDEF12345"
+
+
+def test_parse_multiple_videos_with_titles_and_dedupes_primary(tmp_path: Path):
+    payload = _payload()
+    payload["media"]["video"]["title"] = "Local lecture"
+    payload["media"]["videos"] = [
+        {
+            "kind": "local",
+            "title": "Local lecture duplicate",
+            "path": "courses/autonomy/lecture_01/video.mp4",
+            "sha256": MEDIA_SHA,
+        },
+        {
+            "kind": "url",
+            "title": "Reference video",
+            "url": "https://youtu.be/abcDEF12345?t=90",
+        },
+    ]
+
+    sidecar = parse_media_sidecar(payload, data_dir=tmp_path)
+
+    assert len(sidecar.videos) == 2
+    assert isinstance(sidecar.videos[0], LocalVideoSource)
+    assert sidecar.videos[0].title == "Local lecture"
+    assert isinstance(sidecar.videos[1], UrlVideoSource)
+    assert sidecar.videos[1].title == "Reference video"
+    assert sidecar.videos[1].canonical_url == "https://www.youtube.com/watch?v=abcDEF12345"
 
 
 def test_stale_reasons_cover_hash_model_alignment_and_schema(tmp_path: Path):

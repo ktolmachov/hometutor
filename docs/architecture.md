@@ -1,6 +1,6 @@
 # Архитектура hometutor
 
-Актуализировано по runtime-коду: 2026-07-05.
+Актуализировано по runtime-коду: 2026-07-06.
 
 ## Контекст
 
@@ -238,8 +238,9 @@ M0a/M0.3 мультимодального конспекта добавляют 
 - `app/media_urls.py` — нормализация внешних video URL, включая YouTube `watch`,
   `youtu.be`, `embed` и timestamp-параметры;
 - `app/path_safety.py` — единая проверка persisted `DATA_DIR`-relative paths.
-- `app/ui/living_konspekt_view.py` — section media panel: URL action, локальный
-  `st.video(...)` только после path-safety, stale/low-confidence degradation.
+- `app/ui/living_konspekt_view.py` — section media panel: URL action, несколько
+  источников из `media.videos[]`, локальный `st.video(...)` только после path-safety,
+  stale/low-confidence degradation.
 
 Runtime-конспект может хранить во frontmatter только data-relative указатель:
 
@@ -249,7 +250,9 @@ media_sidecar: courses/autonomy/lecture_01/The_Architecture_of_Autonomy.media.js
 
 Sidecar `<konspekt>.media.json` лежит внутри `data/` рядом с runtime-конспектом и
 является source-of-truth для video source, section timestamps, image assets,
-hash invalidation и confidence. JSON Schema: [schemas/media_sidecar_v1.schema.json](schemas/media_sidecar_v1.schema.json).
+hash invalidation и confidence. `media.video` задаёт основной источник, а
+опциональный `media.videos[]` хранит полный список роликов для рендера в UI.
+JSON Schema: [schemas/media_sidecar_v1.schema.json](schemas/media_sidecar_v1.schema.json).
 
 Persisted local media paths не могут быть абсолютными, drive-relative или traversal-путями:
 они проходят `validate_data_relative_path()` / `resolve_data_relative_path()` и остаются

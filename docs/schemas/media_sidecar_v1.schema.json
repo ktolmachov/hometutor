@@ -66,6 +66,20 @@
               "$ref": "#/$defs/urlVideo"
             }
           ]
+        },
+        "videos": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/localVideo"
+              },
+              {
+                "$ref": "#/$defs/urlVideo"
+              }
+            ]
+          },
+          "default": []
         }
       }
     },
@@ -117,6 +131,11 @@
         "sha256": {
           "$ref": "#/$defs/sha256"
         },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
         "duration_seconds": {
           "type": "number",
           "minimum": 0
@@ -143,6 +162,11 @@
           "type": "string",
           "format": "uri",
           "maxLength": 2048
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
         },
         "canonical_url": {
           "type": "string",

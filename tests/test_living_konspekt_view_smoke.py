@@ -96,7 +96,7 @@ def _media_sidecar(confidence: float = 0.82) -> MediaSidecar:
             asr_model="test-asr",
             alignment_version="test-align",
         ),
-        video=UrlVideoSource(url="https://youtu.be/abcDEF12345"),
+        video=UrlVideoSource(url="https://youtu.be/abcDEF12345", title="Видео"),
         sections=(
             MediaSection(
                 section_id=f"sha256:{'b' * 64}",
@@ -109,6 +109,22 @@ def _media_sidecar(confidence: float = 0.82) -> MediaSidecar:
                 confidence=confidence,
             ),
         ),
+    )
+
+
+def _media_sidecar_with_multiple_videos() -> MediaSidecar:
+    sidecar = _media_sidecar()
+    return MediaSidecar(
+        schema_version=sidecar.schema_version,
+        konspekt_sha256=sidecar.konspekt_sha256,
+        media_sha256=sidecar.media_sha256,
+        generated_by=sidecar.generated_by,
+        video=sidecar.video,
+        videos=(
+            sidecar.video,
+            UrlVideoSource(url="https://youtu.be/second12345", title="Дополнительное видео"),
+        ),
+        sections=sidecar.sections,
     )
 
 
@@ -126,8 +142,23 @@ class TestMediaPanelSmoke:
         assert not at.exception
         assert any("Материал раздела" in str(md.value) for md in at.markdown)
         link_buttons = at.get("link_button")
-        assert any(button.label == "Смотреть с 1:15" for button in link_buttons)
+        assert any(button.label == "Смотреть: Видео с 1:15" for button in link_buttons)
         assert any("t=75s" in button.url for button in link_buttons)
+
+    def test_multiple_sidecar_videos_show_all_actions(self, monkeypatch):
+        import app.ui.living_konspekt_view as view
+
+        monkeypatch.setattr(view, "load_media_sidecar_for_konspekt", lambda path: _media_sidecar_with_multiple_videos())
+        monkeypatch.setattr(view, "sha256_file", lambda path: "a" * 64)
+
+        at = AppTest.from_function(_app)
+        at.session_state["workbench_sections"] = [_row()]
+        at.run()
+
+        assert not at.exception
+        labels = [button.label for button in at.get("link_button")]
+        assert "Смотреть: Видео с 1:15" in labels
+        assert "Смотреть: Дополнительное видео с 1:15" in labels
 
     def test_stale_sidecar_degrades_without_timestamp_action(self, monkeypatch):
         import app.ui.living_konspekt_view as view
@@ -143,7 +174,7 @@ class TestMediaPanelSmoke:
         captions = [c.value for c in at.caption]
         assert any("Таймкоды устарели" in c for c in captions)
         link_buttons = at.get("link_button")
-        assert not any(button.label == "Смотреть с 1:15" for button in link_buttons)
+        assert not any(button.label == "Смотреть: Видео с 1:15" for button in link_buttons)
 
     def test_low_confidence_sidecar_degrades_without_timestamp_action(self, monkeypatch):
         import app.ui.living_konspekt_view as view
@@ -159,7 +190,7 @@ class TestMediaPanelSmoke:
         captions = [c.value for c in at.caption]
         assert any("confidence ниже порога" in c for c in captions)
         link_buttons = at.get("link_button")
-        assert not any(button.label == "Смотреть с 1:15" for button in link_buttons)
+        assert not any(button.label == "Смотреть: Видео с 1:15" for button in link_buttons)
 
 
 class TestMemoryPanelSmoke:

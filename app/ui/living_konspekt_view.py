@@ -409,10 +409,26 @@ def _render_media_panel(row: dict[str, Any]) -> None:
     confident_timestamp = media_section.t_start is not None and not stale_reasons and not media_section.low_confidence
     timestamp_label = _format_timestamp(media_section.t_start)
 
-    if isinstance(sidecar.video, UrlVideoSource):
-        _render_url_video_media(sidecar.video, media_section, confident_timestamp, timestamp_label)
-    elif isinstance(sidecar.video, LocalVideoSource):
-        _render_local_video_media(sidecar.video, media_section, confident_timestamp, timestamp_label)
+    for idx, video in enumerate(sidecar.videos, start=1):
+        title = _video_title(video, idx)
+        if len(sidecar.videos) > 1:
+            st.caption(title)
+        if isinstance(video, UrlVideoSource):
+            _render_url_video_media(video, media_section, confident_timestamp, timestamp_label, title)
+        elif isinstance(video, LocalVideoSource):
+            _render_local_video_media(video, media_section, confident_timestamp, timestamp_label, title)
+
+
+def _video_title(video: LocalVideoSource | UrlVideoSource, idx: int) -> str:
+    if video.title:
+        return video.title
+    if isinstance(video, LocalVideoSource):
+        return Path(video.path).name
+    try:
+        normalized = normalize_video_url(video.canonical_url or video.url)
+    except ValueError:
+        return f"Видео {idx}"
+    return normalized.canonical_url
 
 
 def _render_url_video_media(
@@ -420,21 +436,22 @@ def _render_url_video_media(
     media_section: MediaSection,
     confident_timestamp: bool,
     timestamp_label: str,
+    title: str,
 ) -> None:
     try:
         normalized = normalize_video_url(video.canonical_url or video.url)
     except ValueError:
-        st.link_button("Открыть видео", video.url, width="stretch")
+        st.link_button(f"Открыть: {title}", video.url, width="stretch")
         return
 
     if normalized.is_youtube and confident_timestamp:
         st.link_button(
-            f"Смотреть с {timestamp_label}",
+            f"Смотреть: {title} с {timestamp_label}",
             normalized.with_timestamp(media_section.t_start),
             width="stretch",
         )
     else:
-        st.link_button("Открыть видео", normalized.canonical_url, width="stretch")
+        st.link_button(f"Открыть: {title}", normalized.canonical_url, width="stretch")
 
 
 def _render_local_video_media(
@@ -442,6 +459,7 @@ def _render_local_video_media(
     media_section: MediaSection,
     confident_timestamp: bool,
     timestamp_label: str,
+    title: str,
 ) -> None:
     try:
         video_path = resolve_data_relative_path(video.path)
@@ -455,7 +473,7 @@ def _render_local_video_media(
     start_time = int(media_section.t_start or 0) if confident_timestamp else 0
     st.video(str(video_path), start_time=start_time)
     if confident_timestamp:
-        st.caption(f"Старт: {timestamp_label}")
+        st.caption(f"{title} · старт: {timestamp_label}")
 
 
 def _render_collected_sections(rows: list[dict[str, Any]]) -> None:

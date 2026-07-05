@@ -1,6 +1,6 @@
 # Техническая спецификация hometutor
 
-Актуализировано по runtime-коду: 2026-07-05.
+Актуализировано по runtime-коду: 2026-07-06.
 
 ## Назначение
 
@@ -179,12 +179,15 @@ M0a/M0.3 реализуют проверяемый media metadata contract и UI
   timestamp parsing; unknown `http(s)` URL остаётся external link;
 - `app/path_safety.py` — запрет persisted absolute, drive-relative и traversal paths.
 - `app/ui/living_konspekt_view.py` — render media panel внутри собранного раздела,
-  `st.video(..., start_time=...)` для валидного локального файла, timestamp link для YouTube.
+  все источники из `media.videos[]`, `st.video(..., start_time=...)` для валидного
+  локального файла, timestamp link для YouTube.
 
 Sidecar хранится внутри `data/` как `<konspekt_stem>.media.json`; frontmatter конспекта
 содержит только data-relative pointer. Persisted local media/image paths также
 data-relative. Абсолютный внешний путь может быть только import input будущего ASR-flow,
-но не persisted metadata.
+но не persisted metadata. `media.video` остаётся основным видео для обратной совместимости,
+а `media.videos[]` опционально задаёт полный список роликов, которые UI покажет в карточке
+раздела.
 
 Invalidation считается по `schema_version`, `konspekt_sha256`, `media_sha256`,
 ASR model и alignment version. `section_slug` предназначен для UI/deep-link, а стабильным

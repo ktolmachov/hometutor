@@ -29,6 +29,7 @@ class GeneratedBy:
 class LocalVideoSource:
     path: str
     sha256: str
+    title: str | None = None
     duration_seconds: float | None = None
     codec: str | None = None
     kind: str = "local"
@@ -38,6 +39,7 @@ class LocalVideoSource:
 class UrlVideoSource:
     url: str
     canonical_url: str | None = None
+    title: str | None = None
     kind: str = "url"
 
 
@@ -83,6 +85,11 @@ class MediaSidecar:
     video: VideoSource
     sections: tuple[MediaSection, ...]
     media_sha256: str | None = None
+    videos: tuple[VideoSource, ...] = field(default_factory=tuple)
+
+    def __post_init__(self) -> None:
+        if not self.videos:
+            object.__setattr__(self, "videos", (self.video,))
 
     def stale_reasons(
         self,
@@ -156,7 +163,7 @@ def parse_media_sidecar(payload: dict[str, Any], *, data_dir: Path | None = None
     konspekt_sha256 = _expect_sha256(payload["konspekt_sha256"], "konspekt_sha256")
     media_sha256 = _optional_sha256(payload.get("media_sha256"), "media_sha256")
     generated_by = _parse_generated_by(payload["generated_by"])
-    video = _parse_video(payload["media"], data_dir=data_dir)
+    video, videos = _parse_media(payload["media"], data_dir=data_dir)
     sections = tuple(_parse_section(item, data_dir=data_dir) for item in _expect_list(payload["sections"], "sections"))
     return MediaSidecar(
         schema_version=schema_version,
@@ -165,6 +172,7 @@ def parse_media_sidecar(payload: dict[str, Any], *, data_dir: Path | None = None
         video=video,
         sections=sections,
         media_sha256=media_sha256,
+        videos=videos,
     )
 
 
@@ -241,26 +249,54 @@ def _optional_str(value: Any, label: str) -> str | None:
     return None if value is None else _expect_str(value, label)
 
 
-def _parse_video(value: Any, *, data_dir: Path | None) -> VideoSource:
+def _parse_media(value: Any, *, data_dir: Path | None) -> tuple[VideoSource, tuple[VideoSource, ...]]:
     media = _expect_dict(value, "media")
-    _reject_extra_keys(media, {"video"}, "media")
-    video = _expect_dict(media.get("video"), "media.video")
-    kind = _expect_str(video.get("kind"), "media.video.kind")
+    _reject_extra_keys(media, {"video", "videos"}, "media")
+    video = _parse_video_source(media.get("video"), label="media.video", data_dir=data_dir)
+
+    extra_videos: list[VideoSource] = []
+    if "videos" in media:
+        for idx, item in enumerate(_expect_list(media["videos"], "media.videos")):
+            extra_videos.append(_parse_video_source(item, label=f"media.videos[{idx}]", data_dir=data_dir))
+
+    return video, _dedupe_videos((video, *extra_videos))
+
+
+def _dedupe_videos(videos: tuple[VideoSource, ...]) -> tuple[VideoSource, ...]:
+    seen: set[tuple[str, str]] = set()
+    deduped: list[VideoSource] = []
+    for video in videos:
+        key = ("local", video.path) if isinstance(video, LocalVideoSource) else ("url", video.canonical_url or video.url)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(video)
+    return tuple(deduped)
+
+
+def _parse_video_source(value: Any, *, label: str, data_dir: Path | None) -> VideoSource:
+    video = _expect_dict(value, label)
+    kind = _expect_str(video.get("kind"), f"{label}.kind")
     if kind == "local":
-        _reject_extra_keys(video, {"kind", "path", "sha256", "duration_seconds", "codec"}, "media.video")
-        path = validate_data_relative_path(_expect_str(video.get("path"), "media.video.path"), data_dir=data_dir)
+        _reject_extra_keys(video, {"kind", "title", "path", "sha256", "duration_seconds", "codec"}, label)
+        path = validate_data_relative_path(_expect_str(video.get("path"), f"{label}.path"), data_dir=data_dir)
         return LocalVideoSource(
             path=path,
-            sha256=_expect_sha256(video.get("sha256"), "media.video.sha256"),
-            duration_seconds=_optional_non_negative_number(video.get("duration_seconds"), "media.video.duration_seconds"),
-            codec=_optional_str(video.get("codec"), "media.video.codec"),
+            sha256=_expect_sha256(video.get("sha256"), f"{label}.sha256"),
+            title=_optional_str(video.get("title"), f"{label}.title"),
+            duration_seconds=_optional_non_negative_number(video.get("duration_seconds"), f"{label}.duration_seconds"),
+            codec=_optional_str(video.get("codec"), f"{label}.codec"),
         )
     if kind == "url":
-        _reject_extra_keys(video, {"kind", "url", "canonical_url"}, "media.video")
-        normalized = normalize_video_url(_expect_str(video.get("url"), "media.video.url"))
-        canonical_url = _optional_str(video.get("canonical_url"), "media.video.canonical_url") or normalized.canonical_url
-        return UrlVideoSource(url=normalized.original_url, canonical_url=canonical_url)
-    raise ValueError("media.video.kind must be local or url")
+        _reject_extra_keys(video, {"kind", "title", "url", "canonical_url"}, label)
+        normalized = normalize_video_url(_expect_str(video.get("url"), f"{label}.url"))
+        canonical_url = _optional_str(video.get("canonical_url"), f"{label}.canonical_url") or normalized.canonical_url
+        return UrlVideoSource(
+            url=normalized.original_url,
+            canonical_url=canonical_url,
+            title=_optional_str(video.get("title"), f"{label}.title"),
+        )
+    raise ValueError(f"{label}.kind must be local or url")
 
 
 def _optional_non_negative_number(value: Any, label: str) -> float | None:

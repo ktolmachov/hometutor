@@ -84,6 +84,44 @@ class TestRenderLivingKonspektViewSmoke:
         assert any("повторяющихся заголовков" in c for c in captions)
 
 
+class TestMemoryPanelSmoke:
+    """«🧠 Память конспекта» — due-карточки по source:-тегу конспектов корзины."""
+
+    def test_silent_when_no_due_cards(self):
+        """Фикстура _isolated_kv отдаёт due=0 — панель не рисуется (ноль шума)."""
+        at = AppTest.from_function(_app)
+        at.session_state["workbench_sections"] = [_row()]
+        at.run()
+        assert not at.exception
+        assert not any("Память конспекта" in str(md.value) for md in at.markdown)
+
+    def test_shows_due_and_review_button(self, monkeypatch):
+        import app.user_state as user_state
+
+        monkeypatch.setattr(user_state, "count_due_flashcards", lambda **kwargs: 3)
+        at = AppTest.from_function(_app)
+        at.session_state["workbench_sections"] = [_row()]
+        at.run()
+        assert not at.exception
+        assert any("Память конспекта" in str(md.value) for md in at.markdown)
+        assert any(b.label == "🔁 Повторить" for b in at.button)
+
+    def test_review_click_scopes_queue_by_source_tag(self, monkeypatch):
+        import app.user_state as user_state
+
+        monkeypatch.setattr(user_state, "count_due_flashcards", lambda **kwargs: 3)
+        at = AppTest.from_function(_app)
+        at.session_state["workbench_sections"] = [_row()]
+        at.run()
+        review_buttons = [b for b in at.button if b.label == "🔁 Повторить"]
+        review_buttons[0].click().run()
+        assert not at.exception
+        # Тег-скоуп review — штатный ключ text_input в review-секции Flashcards.
+        assert str(at.session_state["flashcards_review_session_tags_text"]).startswith("source:")
+        assert at.session_state["flashcards_section_pending"] == "review"
+        assert at.session_state["_pending_current_view"] == "Flashcards"
+
+
 class TestTermCardsPanelSmoke:
     """«🃏 Карточки из терминов лекции» — без нового LLM-вызова, через preview Flashcards."""
 

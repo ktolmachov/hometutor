@@ -44,11 +44,18 @@ def _state(state: MutableMapping[str, Any] | None) -> MutableMapping[str, Any]:
     return state if state is not None else st.session_state
 
 
+def _ensure_auth_context() -> None:
+    from app.ui.auth_gate import ensure_streamlit_auth_context
+
+    ensure_streamlit_auth_context()
+
+
 def _persist_workbench(rows: list[dict[str, Any]]) -> None:
     """Best-effort автосохранение корзины в локальный профиль (``app_kv``)."""
     try:
         from app.user_state_core import set_kv
 
+        _ensure_auth_context()
         set_kv(_WORKBENCH_KV_KEY, json.dumps(rows, ensure_ascii=False))
     except Exception:  # noqa: BLE001 - авто-персист не должен ломать работу корзины
         pass
@@ -64,11 +71,12 @@ def ensure_workbench_hydrated(state: MutableMapping[str, Any] | None = None) -> 
     if target.get(_WORKBENCH_HYDRATED_KEY):
         return
     target[_WORKBENCH_HYDRATED_KEY] = True
-    if isinstance(target.get(WORKBENCH_SECTIONS_KEY), list):
+    if WORKBENCH_SECTIONS_KEY in target:
         return
     try:
         from app.user_state_core import get_kv
 
+        _ensure_auth_context()
         raw = get_kv(_WORKBENCH_KV_KEY)
         rows = json.loads(raw) if raw else []
     except Exception:  # noqa: BLE001 - недоступный профиль → пустая корзина, не падение

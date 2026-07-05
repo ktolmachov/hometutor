@@ -11,6 +11,7 @@ from app.ui.living_konspekt_view import (
     WORKBENCH_SECTIONS_KEY,
     _collect_concept_context,
     _stitch_verbatim,
+    _study_pack_tail,
     add_section_to_workbench,
     ensure_workbench_hydrated,
     get_workbench_rows,
@@ -73,10 +74,12 @@ class TestAddDedupRemove:
 
     def test_defaults_to_streamlit_session_state(self, monkeypatch):
         import streamlit as st
+        import app.ui_events as ui_events
         import app.user_state_core as user_state_core
 
         monkeypatch.setattr(st, "session_state", {})
         monkeypatch.setattr(user_state_core, "set_kv", lambda key, value: None)  # без записи в user_state.db
+        monkeypatch.setattr(ui_events, "track_event", lambda name, payload=None: None)
         section = _section(MD_A, 30)
         assert add_section_to_workbench(section) is True
         assert st.session_state[WORKBENCH_SECTIONS_KEY][0]["line_start"] == 30
@@ -89,10 +92,12 @@ class TestWorkbenchAutoPersist:
     """
 
     def _capture_kv(self, monkeypatch):
+        import app.ui_events as ui_events
         import app.user_state_core as user_state_core
 
         saved: dict = {}
         monkeypatch.setattr(user_state_core, "set_kv", lambda key, value: saved.__setitem__(key, value))
+        monkeypatch.setattr(ui_events, "track_event", lambda name, payload=None: None)
         return saved
 
     def test_add_with_injected_state_does_not_persist(self, monkeypatch):
@@ -155,6 +160,26 @@ class TestWorkbenchAutoPersist:
         ensure_workbench_hydrated(state)
         assert get_workbench_rows(state) == []
 
+    def test_add_with_session_state_tracks_funnel_event(self, monkeypatch):
+        import streamlit as st
+        import app.ui_events as ui_events
+        import app.user_state_core as user_state_core
+
+        events: list[str] = []
+        monkeypatch.setattr(st, "session_state", {})
+        monkeypatch.setattr(user_state_core, "set_kv", lambda key, value: None)
+        monkeypatch.setattr(ui_events, "track_event", lambda name, payload=None: events.append(name))
+        add_section_to_workbench(_section(MD_A, 10))
+        assert events == ["living_konspekt_section_added"]
+
+    def test_add_with_injected_state_does_not_track(self, monkeypatch):
+        import app.ui_events as ui_events
+
+        events: list[str] = []
+        monkeypatch.setattr(ui_events, "track_event", lambda name, payload=None: events.append(name))
+        add_section_to_workbench(_section(MD_A, 10), {})
+        assert events == []
+
     def test_set_workbench_rows_replaces_and_marks_hydrated(self, monkeypatch):
         import app.user_state_core as user_state_core
 
@@ -211,6 +236,30 @@ class TestStitchVerbatim:
         add_section_to_workbench(_section(md, 6, heading="Первый раздел", text="Содержательный абзац раздела."), state)
         stitched = _stitch_verbatim(get_workbench_rows(state))
         assert "> **Главная мысль исходной лекции (no_role.md):** Содержательный абзац раздела." in stitched
+
+    def test_includes_lecturer_check_questions_when_role_present(self, tmp_path: Path):
+        md = tmp_path / "with_questions.md"
+        md.write_text(
+            "# Конспект\n\n## 🔹 Тема\n\nТело темы.\n\n"
+            "## ❓ Контрольные вопросы\n\n1. Чем workflow отличается от агента?\n2. Что такое harness?\n",
+            encoding="utf-8",
+        )
+        state: dict = {}
+        add_section_to_workbench(_section(md, 5, heading="🔹 Тема", text="Тело темы."), state)
+        stitched = _stitch_verbatim(get_workbench_rows(state))
+        assert "## ✅ Проверь себя" in stitched
+        assert "1. Чем workflow отличается от агента?" in stitched
+        # «Проверь себя» идёт ПЕРЕД источниками — файл заканчивается провенансом.
+        assert stitched.index("## ✅ Проверь себя") < stitched.index("## Источники")
+
+    def test_study_pack_tail_gives_sources_even_without_questions(self):
+        """LLM-режим: summary + tail — провенанс не теряется, даже когда роли нет."""
+        state: dict = {}
+        add_section_to_workbench(_section(MD_A, 10, heading="Тема A"), state)
+        tail = _study_pack_tail(get_workbench_rows(state))
+        assert "## Источники" in tail
+        assert "lecture-a.md:10-13" in tail
+        assert "Проверь себя" not in tail  # файла-конспекта нет — вопросов нет, честно
 
     def test_missing_konspekt_files_keep_stitching_working(self):
         state: dict = {}

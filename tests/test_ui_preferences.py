@@ -14,8 +14,10 @@ def kv_store(monkeypatch):
     def fake_set_kv(key: str, value: str) -> None:
         store[key] = value
 
-    monkeypatch.setattr(prefs, "get_kv", fake_get_kv)
-    monkeypatch.setattr(prefs, "set_kv", fake_set_kv)
+    monkeypatch.setattr(prefs, "_read_raw_kv", fake_get_kv)
+    monkeypatch.setattr(prefs, "_write_raw_kv", fake_set_kv)
+    monkeypatch.setattr(prefs, "_ensure_auth_context", lambda: None)
+    monkeypatch.setattr(prefs, "_maybe_migrate_global_ui_prefs", lambda: None)
     return store
 
 
@@ -46,6 +48,34 @@ def test_set_ui_level_validates_and_clears_overrides(kv_store) -> None:
 def test_set_ui_level_rejects_unknown_level() -> None:
     with pytest.raises(ValueError):
         prefs.set_ui_level("expert")
+
+
+def test_ui_prefs_migrate_from_global_db_for_auth_user(tmp_path, monkeypatch) -> None:
+    """Настройки из глобальной БД переносятся в per-user профиль при первом чтении."""
+    monkeypatch.setenv("USER_STATE_DB", str(tmp_path / "user_state.db"))
+    from app import config
+    from app.auth_context import set_current_user_id
+    from app.user_state import get_kv, set_kv
+    from app.user_state_db import reset_schema_cache_for_tests
+
+    config.reset_settings_cache()
+    reset_schema_cache_for_tests()
+    try:
+        set_kv("ui_level", "3")
+        set_kv("ui_feature_overrides", '{"view:metrics": true}')
+
+        set_current_user_id("user-a")
+        config.reset_settings_cache()
+        reset_schema_cache_for_tests()
+
+        assert prefs.get_ui_level() == "3"
+        assert prefs.get_overrides() == {"view:metrics": True}
+        assert get_kv("ui_level") == "3"
+        assert get_kv("ui_feature_overrides") == '{"view:metrics": true}'
+    finally:
+        set_current_user_id(None)
+        config.reset_settings_cache()
+        reset_schema_cache_for_tests()
 
 
 def test_feature_visible_honors_level_and_override() -> None:

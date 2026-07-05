@@ -91,6 +91,12 @@ _touch_streamlit_session()
 _hydrate_tutor_mastery_from_db()
 _hydrate_tutor_goal_snapshot_once()
 _hydrate_tutorial_progress_once()
+try:
+    from app.ui.living_konspekt_view import ensure_workbench_hydrated
+
+    ensure_workbench_hydrated()
+except Exception as exc:  # noqa: BLE001 - корзина опциональна, не блокируем старт UI
+    logger.debug("Workbench hydration skipped: %s", exc)
 
 
 @st.dialog("Начало работы")

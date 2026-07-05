@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.flashcards_tag_display import source_path_from_card
-from app.term_cards import parse_term_cards, term_cards_from_documents
+from app.term_cards import parse_term_cards, source_tag_value, term_cards_from_documents
 
 
 class TestParseTermCards:
@@ -96,3 +96,37 @@ class TestTermCardsFromDocuments:
 
     def test_empty_paths_returns_empty(self):
         assert term_cards_from_documents([]) == ([], [])
+
+
+class TestSourceTagValue:
+    """Конвенция source:-тега — «relative path in the corpus» (source_path_from_card):
+    относительный путь переживает перенос user_state.db и смену HOME_RAG_HOME."""
+
+    def test_relative_posix_inside_corpus_root(self, tmp_path: Path, monkeypatch):
+        import app.obsidian_export as obsidian_export
+
+        monkeypatch.setattr(obsidian_export, "corpus_root", lambda: tmp_path)
+        md = tmp_path / "ИИ Агенты" / "урок_1.md"
+        md.parent.mkdir(parents=True)
+        md.write_text("# x", encoding="utf-8")
+        assert source_tag_value(md) == "ИИ Агенты/урок_1.md"
+
+    def test_absolute_fallback_outside_corpus_root(self, tmp_path: Path, monkeypatch):
+        import app.obsidian_export as obsidian_export
+
+        monkeypatch.setattr(obsidian_export, "corpus_root", lambda: tmp_path / "corpus")
+        outside = tmp_path / "elsewhere" / "lecture.md"
+        assert source_tag_value(outside) == str(outside)
+
+    def test_cards_get_relative_tag_when_konspekt_inside_corpus(self, tmp_path: Path, monkeypatch):
+        import app.obsidian_export as obsidian_export
+
+        monkeypatch.setattr(obsidian_export, "corpus_root", lambda: tmp_path)
+        md = tmp_path / "lecture.md"
+        md.write_text(
+            "# Конспект\n\n## 🧠 Важные термины и концепции\n\n- **RAG** — определение.\n",
+            encoding="utf-8",
+        )
+        cards, _ = term_cards_from_documents([str(md)])
+        assert cards[0]["tags"] == "source:lecture.md"
+        assert source_path_from_card(cards[0]) == "lecture.md"

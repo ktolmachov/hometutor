@@ -39,6 +39,19 @@ def apply_ui_auth_context() -> None:
     set_current_user_id(current_user_id())
 
 
+def ensure_streamlit_auth_context() -> None:
+    """Проброс user_id в contextvar перед операциями с user_state из UI-слоя.
+
+    Без этого при ``AUTH_ENABLED=true`` запись может уйти в глобальный ``user_state.db``,
+    а чтение после перезапуска — из per-user БД (настройки «сбрасываются»).
+    """
+    try:
+        _ = st.session_state
+    except Exception:  # noqa: BLE001 - вне Streamlit runtime (тесты/CLI) — no-op
+        return
+    apply_ui_auth_context()
+
+
 def require_ui_auth_or_stop() -> None:
     """Гейт для каждого Streamlit-entrypoint (главная + страницы в app/ui/pages/).
 

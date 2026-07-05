@@ -2,9 +2,13 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
+from app.auth_context import get_current_user_id, reset_current_user_id, set_current_user_id
 from app.user_state import get_kv, set_kv
+
+logger = logging.getLogger(__name__)
 
 UI_LEVEL_KEY = "ui_level"
 UI_OVERRIDES_KEY = "ui_feature_overrides"
@@ -12,18 +16,64 @@ LEVEL_ALL = "all"
 VALID_UI_LEVELS = frozenset({"1", "2", "3", "4", "5", LEVEL_ALL})
 
 
-def _safe_get_kv(key: str, default: str | None = None) -> str | None:
+def _ensure_auth_context() -> None:
+    from app.ui.auth_gate import ensure_streamlit_auth_context
+
+    ensure_streamlit_auth_context()
+
+
+def _read_global_kv(key: str, default: str | None = None) -> str | None:
+    """Прочитать ключ из глобального user_state.db (без per-user префикса)."""
+    uid = (get_current_user_id() or "").strip()
+    if not uid:
+        return default
+    token = set_current_user_id(None)
+    try:
+        return get_kv(key, default)
+    except Exception:  # noqa: BLE001 - migration must not break reads
+        return default
+    finally:
+        reset_current_user_id(token)
+
+
+def _maybe_migrate_global_ui_prefs() -> None:
+    """Один раз скопировать ui_level/overrides из глобальной БД в per-user профиль."""
+    if not (get_current_user_id() or "").strip():
+        return
+    if _read_raw_kv(UI_LEVEL_KEY):
+        return
+    global_level = _read_global_kv(UI_LEVEL_KEY)
+    global_overrides = _read_global_kv(UI_OVERRIDES_KEY)
+    if global_level:
+        _write_raw_kv(UI_LEVEL_KEY, global_level)
+    if global_overrides:
+        _write_raw_kv(UI_OVERRIDES_KEY, global_overrides)
+
+
+def _read_raw_kv(key: str, default: str | None = None) -> str | None:
     try:
         return get_kv(key, default)
     except Exception:  # noqa: BLE001 - UI preferences must not break startup.
         return default
 
 
-def _safe_set_kv(key: str, value: str) -> None:
+def _write_raw_kv(key: str, value: str) -> None:
     try:
         set_kv(key, value)
-    except Exception:  # noqa: BLE001
-        return
+    except Exception as exc:  # noqa: BLE001 - log, но не ломаем UI
+        logger.warning("ui_preferences set_kv failed for %r: %s", key, exc)
+
+
+def _safe_get_kv(key: str, default: str | None = None) -> str | None:
+    _ensure_auth_context()
+    if key in (UI_LEVEL_KEY, UI_OVERRIDES_KEY):
+        _maybe_migrate_global_ui_prefs()
+    return _read_raw_kv(key, default)
+
+
+def _safe_set_kv(key: str, value: str) -> None:
+    _ensure_auth_context()
+    _write_raw_kv(key, value)
 
 
 def _has_existing_activity() -> bool:

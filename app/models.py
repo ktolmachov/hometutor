@@ -89,6 +89,7 @@ class PipelineOverrides:
     split_strategy: Optional[str] = None
     window_size: Optional[int] = None
     retrieval_mode: Optional[str] = None
+    doc_top_k: Optional[int] = None
 
 
 RetrievalSource = Literal["vector", "bm25", "rrf", "reranker", "graph_expansion", "doc_then_chunk"]

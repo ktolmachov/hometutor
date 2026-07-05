@@ -2,6 +2,7 @@ import hashlib
 import time
 import traceback
 import logging
+from dataclasses import replace
 from typing import Any
 from threading import Lock
 
@@ -722,10 +723,14 @@ def _resolve_execution_plan_for_question(
     overrides: PipelineOverrides | None = None
     if is_flashcard_handoff(options):
         overrides = flashcard_handoff_pipeline_overrides()
-    elif options.rag_profile:
-        overrides = PipelineOverrides(rag_profile=options.rag_profile)
     else:
         overrides = pipeline_overrides_from_prefs()
+        if options.rag_profile:
+            overrides = (
+                replace(overrides, rag_profile=options.rag_profile)
+                if overrides is not None
+                else PipelineOverrides(rag_profile=options.rag_profile)
+            )
     if overrides is None:
         return resolve_query_execution_plan(
             effective_question,

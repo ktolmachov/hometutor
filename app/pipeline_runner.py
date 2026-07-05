@@ -15,7 +15,7 @@ import asyncio
 import logging
 from typing import Any, Callable
 
-from app.config import get_retrieval_settings, RetrievalSettings
+from app.config import RetrievalSettings
 from app.logging_config import log_event, setup_logging
 from app.metrics import PIPELINE_TRACE_SCHEMA_VERSION
 from app.models import PipelineOverrides, QueryContext, QueryExecutionPlan, QueryOptions
@@ -27,6 +27,7 @@ from app.pipeline_steps import (
     rewrite_step,
     run_step_safe,
 )
+from app.rag_runtime_preferences import effective_retrieval_settings
 from app.session_store import session_store
 
 logger = setup_logging()
@@ -185,7 +186,7 @@ def resolve_retrieval_strategy(
     profile_name = overrides.rag_profile if overrides else None
     if profile_name:
         return get_rag_profile(str(profile_name).strip().lower()).retrieval_mode
-    r = settings or get_retrieval_settings()
+    r = settings or effective_retrieval_settings()
     return r.retrieval_mode
 
 

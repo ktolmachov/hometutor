@@ -8,6 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 import app.api_services as services
 from app.api_helpers import record_api_error
+from app.auth_context import get_current_user_id, reset_current_user_id, set_current_user_id
 from app.guardrails import InputGuardrailError
 from app.models import PipelineOverrides, QueryOptions
 from app.user_state import (
@@ -59,10 +60,13 @@ def _prepare_admin_question(
     return validated.question, validated.options
 
 
-def _reindex_in_background(reset: bool):
+def _reindex_in_background(reset: bool, user_id: str | None = None):
+    token = set_current_user_id(user_id) if user_id else None
     try:
         services.build_index(reset=reset)
     finally:
+        if token is not None:
+            reset_current_user_id(token)
         services.reindex_end()
 
 
@@ -112,7 +116,7 @@ def cache_benchmark(
 def reindex(background_tasks: BackgroundTasks, reset: bool = False):
     if not services.try_reindex_begin():
         raise HTTPException(status_code=409, detail="Reindex is already in progress")
-    background_tasks.add_task(_reindex_in_background, reset)
+    background_tasks.add_task(_reindex_in_background, reset, get_current_user_id())
     return {"status": "started", "reset": reset}
 
 

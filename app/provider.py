@@ -596,9 +596,9 @@ def get_quiz_llm():
     return _build_role_llm(s, model=model, api_base=api_base)
 
 
-def get_ingestion_llm():
+def get_ingestion_llm(settings=None):
     """LLM для ingestion-пайплайна (metadata, fallback извлечения текста); дешёвая модель по желанию."""
-    s = get_settings()
+    s = settings or get_settings()
     if not s.openai_api_key:
         raise ValueError("OPENAI_API_KEY не найден в .env")
     model = ((s.ingestion_model or "").strip() or s.llm_model)
@@ -675,9 +675,9 @@ def _make_embed_model(s) -> OpenAIEmbedding:
     )
 
 
-def get_embed_model():
+def get_embed_model(settings=None):
     """Build the embedding model for queries/retrieval (uses EMBED_* settings)."""
-    s = get_settings()
+    s = settings or get_settings()
     if not s.openai_api_key:
         raise ValueError("OPENAI_API_KEY не найден в .env")
     return _make_embed_model(s)

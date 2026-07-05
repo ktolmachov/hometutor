@@ -22,7 +22,7 @@ import logging
 import time
 from typing import Any, Callable, Optional
 
-from app.config import get_settings
+from app.rag_runtime_preferences import effective_settings as get_settings
 from app.llm_resilience import complete_with_resilience
 from app.logging_config import log_event, setup_logging
 from app.models import QueryContext

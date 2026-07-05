@@ -10,8 +10,9 @@ from typing import Any
 from chromadb.errors import NotFoundError
 
 from app.chroma_vector_backend import get_default_chroma_backend
-from app.config import CHROMA_DIR, get_settings
+from app.config import CHROMA_DIR
 from app.logging_config import setup_logging
+from app.rag_runtime_preferences import effective_settings
 
 logger = setup_logging()
 
@@ -20,7 +21,7 @@ _DEFAULT_SUMMARY_COLLECTION = "home_rag_summaries"
 
 
 def _settings():
-    return get_settings()
+    return effective_settings()
 
 
 def _chroma_dir():

@@ -8,7 +8,7 @@ US-3.6 (MoT#2): ветвление «ранний extractive vs полная LLM
 import logging
 from typing import Any, Optional
 
-from app.config import get_settings
+from app.rag_runtime_preferences import effective_retrieval_settings, effective_settings
 from app.flashcard_handoff import handoff_llm_with_output_cap, is_flashcard_handoff
 from app.llm_guards import resolve_rag_context_token_budget
 from app.provider import llm_source_metadata
@@ -166,7 +166,7 @@ def _resolve_effective_prompt(
         lg = metadata.get("learning_goal") or "understand_topic"
         ad = metadata.get("answer_depth") or "examples"
         ps = metadata.get("preferred_style") or "balanced"
-        s = get_settings()
+        s = effective_settings()
         _inline_in_main = s.enable_tutor_inline_quiz and not s.tutor_inline_quiz_separate_llm_call
         return build_tutor_rag_prompt_with_quiz_difficulty(
             str(lvl),
@@ -249,7 +249,7 @@ def resolve_query_execution_plan(
         )
     )
     faq_cache_eligible, faq_cache_skip_reason = _faq_cache_policy(
-        faq_cache_enabled=get_settings().enable_faq_cache,
+        faq_cache_enabled=effective_settings().enable_faq_cache,
         query_type=query_type,
         options=options,
     )
@@ -274,6 +274,8 @@ def build_query_engine(
     overrides: Optional[PipelineOverrides] = None,
     execution_plan: Optional[QueryExecutionPlan] = None,
 ) -> dict[str, Any]:
+    settings = effective_settings()
+    retrieval_settings = effective_retrieval_settings()
     filters = build_filters(options)
     execution_plan = execution_plan or resolve_query_execution_plan(
         question,
@@ -326,17 +328,20 @@ def build_query_engine(
         options.homework_mode,
         options.assistance_level,
         (options.query_mode or ""),
-        get_settings().enable_tutor_inline_quiz,
-        get_settings().tutor_inline_quiz_separate_llm_call,
+        settings.enable_tutor_inline_quiz,
+        settings.tutor_inline_quiz_separate_llm_call,
         tutor_quiz_diff,
         tutor_socratic,
         tutor_learning_goal,
         tutor_answer_depth,
         tutor_preferred_style,
-        get_settings().enable_tutor_pedagogical_orchestrator,
-        get_settings().enable_graph_augmented_retrieval,
-        get_settings().graph_augment_max_extra_docs,
-        resolve_rag_context_token_budget(get_settings().rag_context_token_budget),
+        settings.enable_tutor_pedagogical_orchestrator,
+        settings.enable_graph_augmented_retrieval,
+        settings.graph_augment_max_extra_docs,
+        resolve_rag_context_token_budget(settings.rag_context_token_budget),
+        retrieval_settings.enable_multi_query,
+        retrieval_settings.multi_query_count,
+        retrieval_settings.enable_lost_in_middle_reorder,
         is_flashcard_handoff(options),
     )
 
@@ -389,7 +394,7 @@ def build_query_engine(
     if use_gating_ctx and rr_raw:
         eff_ga = bool(rr_raw.get("effective_graph_augmented"))
     elif use_gating_ctx:
-        eff_ga = bool(get_settings().enable_graph_augmented_retrieval)
+        eff_ga = bool(settings.enable_graph_augmented_retrieval)
     else:
         eff_ga = True
     classify_cf = (

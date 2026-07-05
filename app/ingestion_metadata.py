@@ -8,6 +8,7 @@ from app.llm_resilience import complete_with_resilience
 from app.logging_config import setup_logging
 from app.prompts import INGESTION_ENRICH_PROMPT, INGESTION_SUMMARY_PROMPT
 from app.provider import get_ingestion_llm
+from app.rag_runtime_preferences import effective_settings
 from app.usage_cost import estimate_cost_usd, extract_token_usage
 
 logger = setup_logging()
@@ -44,7 +45,7 @@ def _safe_json_loads(raw: str) -> dict[str, Any] | None:
 
 
 def _complete_with_cost(prompt: str) -> tuple[Any, LLMCallCost]:
-    llm = get_ingestion_llm()
+    llm = get_ingestion_llm(settings=effective_settings())
     response = complete_with_resilience(
         llm,
         prompt,

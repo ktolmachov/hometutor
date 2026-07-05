@@ -139,6 +139,9 @@ def _render_spec_group(title: str, specs: list[RagSettingSpec], overrides: dict[
 
 def render_rag_settings_section() -> None:
     """Блок «RAG и ingest» внутри панели управления."""
+    from app.ui.auth_gate import ensure_streamlit_auth_context
+
+    ensure_streamlit_auth_context()
     overrides = get_overrides()
     st.markdown("**RAG и ingest**")
     st.caption(

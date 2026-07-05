@@ -7,7 +7,6 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from app.config import get_settings
 from app.flashcard_handoff import is_flashcard_handoff
 from app.graph_retrieval import graph_expansion_trace_scope
 from app.logging_config import log_event
@@ -15,6 +14,7 @@ from app.models import QueryContext, QueryOptions
 from app.otel_tracing import get_tracer
 from app.langfuse_trace_export import apply_langfuse_query_span_attributes
 from app.prompts import TWO_STAGE_EXTRACTIVE_INTRO
+from app.rag_runtime_preferences import effective_settings
 from app.retrieval_context_budget import retrieval_context_budget_trace_scope
 from app.usage_cost import (
     begin_llm_generation_token_accumulation,
@@ -66,7 +66,7 @@ def _scored_node_text(node: Any) -> str:
 
 
 def _two_stage_eligible(ctx: QueryContext, options: QueryOptions) -> bool:
-    settings = get_settings()
+    settings = effective_settings()
     if not settings.enable_two_stage_answer_path:
         return False
     if (options.query_mode or "").strip().lower() == "tutor":
@@ -167,7 +167,7 @@ def execute_rag_query(
                     ctx.trace["graph_expansion"] = graph_trace["graph_expansion"]
             query_execute_ms = (time.perf_counter() - query_started) * 1000
 
-            settings = get_settings()
+            settings = effective_settings()
             max_score = max_source_node_score(scored_nodes)
             nonempty = [n for n in scored_nodes if _scored_node_text(n)]
             thr = float(settings.two_stage_early_exit_min_score)
@@ -266,7 +266,7 @@ def execute_rag_query(
                     ctx.trace["retrieval_context_budget"] = context_budget_traces[-1]
             query_execute_ms = (time.perf_counter() - query_started) * 1000
 
-            settings = get_settings()
+            settings = effective_settings()
             if (
                 settings.enable_retrieval_self_correction
                 and (options.query_mode or "").strip().lower() != "tutor"

@@ -157,9 +157,9 @@ class ContextTokenBudgetPostprocessor(BaseNodePostprocessor):
 
 def append_context_budget_postprocessor(postprocessors: list) -> list:
     """Append the context budget guard as the final source-node postprocessor."""
-    from app.config import get_settings
+    from app.rag_runtime_preferences import effective_settings
 
-    settings = get_settings()
+    settings = effective_settings()
     budget = resolve_rag_context_token_budget(
         int(getattr(settings, "rag_context_token_budget", 0) or 0)
     )

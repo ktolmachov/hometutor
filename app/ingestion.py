@@ -5,7 +5,8 @@ from pathlib import Path
 
 from llama_index.core import Document, SimpleDirectoryReader
 
-from app.config import CHROMA_DIR, DATA_DIR, get_settings
+from app.config import CHROMA_DIR, DATA_DIR
+from app.rag_runtime_preferences import effective_settings as get_settings
 from app.ingestion_chunk_metadata import (
     _configure_document_for_metadata_aware_split,
     _slim_metadata_for_summary,

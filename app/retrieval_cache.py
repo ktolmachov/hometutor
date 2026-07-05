@@ -23,6 +23,7 @@ from app.knowledge_graph import invalidate_knowledge_graph_singleton
 from app.index_state import get_active_collection_names, load_active_index_state
 from app.logging_config import setup_logging
 from app.provider import get_embed_model, get_llm, get_quiz_llm
+from app.rag_runtime_preferences import effective_settings
 
 logger = setup_logging()
 OPENAI_API_KEY = None
@@ -46,6 +47,7 @@ _cached_summary_vector_store = None
 _cached_summary_storage_context = None
 _cached_summary_index = None
 _cached_empty = False  # negative-result cache: True after first EmptyIndexError until clear
+_cached_base_settings_signature = None
 
 
 @dataclass
@@ -72,6 +74,51 @@ _latency_stats = {
     "last_hit_latency_ms": None,
     "last_miss_latency_ms": None,
 }
+
+
+def _base_services_settings_signature(settings: Any) -> tuple[Any, ...]:
+    return (
+        getattr(settings, "embed_model", None),
+        int(getattr(settings, "embed_dimensions", 0) or 0),
+        getattr(settings, "embed_api_base_resolved", None),
+        getattr(settings, "collection_name", None),
+        getattr(settings, "summary_collection_name", None),
+        bool(getattr(settings, "enable_document_summaries", False)),
+    )
+
+
+def _drop_cached_base_services_locked() -> None:
+    global _cached_client
+    global _cached_collection
+    global _cached_vector_store
+    global _cached_storage_context
+    global _cached_embed_model
+    global _cached_llm
+    global _cached_quiz_llm
+    global _cached_index
+    global _cached_summary_collection
+    global _cached_summary_vector_store
+    global _cached_summary_storage_context
+    global _cached_summary_index
+    global _query_engine_cache
+    global _cached_empty
+    global _cached_base_settings_signature
+
+    _cached_empty = False
+    _cached_client = None
+    _cached_collection = None
+    _cached_vector_store = None
+    _cached_storage_context = None
+    _cached_embed_model = None
+    _cached_llm = None
+    _cached_quiz_llm = None
+    _cached_index = None
+    _cached_summary_collection = None
+    _cached_summary_vector_store = None
+    _cached_summary_storage_context = None
+    _cached_summary_index = None
+    _cached_base_settings_signature = None
+    _query_engine_cache = OrderedDict()
 
 
 class ReindexInProgressError(RuntimeError):
@@ -239,7 +286,7 @@ def activate_staging_index(
         if collection.count() == 0:
             raise EmptyIndexError("Cannot activate an empty staging index")
 
-        settings = _settings()
+        settings = effective_settings()
         if settings.enable_document_summaries:
             sc = client.get_collection(summary_collection_name)
             summary_docs = sc.count()
@@ -291,36 +338,8 @@ def activate_staging_index(
 
 
 def clear_retrieval_cache():
-    global _cached_client
-    global _cached_collection
-    global _cached_vector_store
-    global _cached_storage_context
-    global _cached_embed_model
-    global _cached_llm
-    global _cached_quiz_llm
-    global _cached_index
-    global _cached_summary_collection
-    global _cached_summary_vector_store
-    global _cached_summary_storage_context
-    global _cached_summary_index
-    global _query_engine_cache
-    global _cached_empty
-
     with _lock:
-        _cached_empty = False
-        _cached_client = None
-        _cached_collection = None
-        _cached_vector_store = None
-        _cached_storage_context = None
-        _cached_embed_model = None
-        _cached_llm = None
-        _cached_quiz_llm = None
-        _cached_index = None
-        _cached_summary_collection = None
-        _cached_summary_vector_store = None
-        _cached_summary_storage_context = None
-        _cached_summary_index = None
-        _query_engine_cache = OrderedDict()
+        _drop_cached_base_services_locked()
 
         _cache_stats["hits"] = 0
         _cache_stats["misses"] = 0
@@ -398,27 +417,32 @@ def get_base_services():
     global _cached_summary_storage_context
     global _cached_summary_index
     global _cached_empty
+    global _cached_base_settings_signature
 
+    settings = effective_settings()
+    settings_signature = _base_services_settings_signature(settings)
     with _lock:
         if _cached_empty:
             raise EmptyIndexError("Индекс пуст. Запустите индексацию: POST /reindex")
         if _cached_index is not None:
-            return {
-                "client": _cached_client,
-                "collection": _cached_collection,
-                "vector_store": _cached_vector_store,
-                "storage_context": _cached_storage_context,
-                "embed_model": _cached_embed_model,
-                "llm": _cached_llm,
-                "quiz_llm": _cached_quiz_llm,
-                "index": _cached_index,
-                "summary_collection": _cached_summary_collection,
-                "summary_vector_store": _cached_summary_vector_store,
-                "summary_storage_context": _cached_summary_storage_context,
-                "summary_index": _cached_summary_index,
-            }
-
-        settings = _settings()
+            if _cached_base_settings_signature != settings_signature:
+                logger.info("Retrieval base services settings changed; rebuilding cache")
+                _drop_cached_base_services_locked()
+            else:
+                return {
+                    "client": _cached_client,
+                    "collection": _cached_collection,
+                    "vector_store": _cached_vector_store,
+                    "storage_context": _cached_storage_context,
+                    "embed_model": _cached_embed_model,
+                    "llm": _cached_llm,
+                    "quiz_llm": _cached_quiz_llm,
+                    "index": _cached_index,
+                    "summary_collection": _cached_summary_collection,
+                    "summary_vector_store": _cached_summary_vector_store,
+                    "summary_storage_context": _cached_summary_storage_context,
+                    "summary_index": _cached_summary_index,
+                }
         effective_api_key = OPENAI_API_KEY or settings.openai_api_key
         if not effective_api_key:
             raise ValueError("OPENAI_API_KEY не найден в .env")
@@ -458,7 +482,7 @@ def get_base_services():
         _cached_vector_store = ChromaVectorStore(chroma_collection=_cached_collection)
         _cached_storage_context = StorageContext.from_defaults(vector_store=_cached_vector_store)
 
-        _cached_embed_model = get_embed_model()
+        _cached_embed_model = get_embed_model(settings=settings)
         _cached_llm = get_llm()
         _cached_quiz_llm = get_quiz_llm()
 
@@ -494,6 +518,7 @@ def get_base_services():
             )
 
         logger.info("Retrieval base services initialized successfully")
+        _cached_base_settings_signature = settings_signature
 
         return {
             "client": _cached_client,

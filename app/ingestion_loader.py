@@ -10,7 +10,10 @@ from llama_index.core import Document
 
 import app.ingestion as ing
 from app.chroma_vector_backend import get_default_chroma_backend
-from app.rag_runtime_preferences import effective_retrieval_settings, effective_settings
+from app.rag_runtime_preferences import (
+    effective_retrieval_settings as get_retrieval_settings,
+    effective_settings as get_settings,
+)
 from app.ingestion_content_state import (
     build_file_manifest,
     compute_doc_content_hashes,
@@ -95,7 +98,7 @@ def _build_index_execute_reindex_attempt(
     ):
         return
 
-    embed_model = get_embed_model()
+    embed_model = get_embed_model(settings=settings)
     _validate_embed_model_available(embed_model, settings)
 
     documents, current_hashes, unique_doc_ids = _load_documents_and_emit_progress(
@@ -210,7 +213,7 @@ def _prepare_reindex_attempt_inputs(
     data_dir: Path,
     chroma_dir: Path,
 ) -> dict[str, Any]:
-    retrieval_settings = effective_retrieval_settings()
+    retrieval_settings = get_retrieval_settings()
     retrieval_fp = compute_retrieval_fingerprint(
         retrieval_settings.split_strategy,
         retrieval_settings.chunk_size,
@@ -483,7 +486,7 @@ def _load_documents_and_emit_progress(
 
 
 def build_index(reset: bool = False) -> None:
-    settings = effective_settings()
+    settings = get_settings()
     data_dir = ing.DATA_DIR
     chroma_dir = ing.CHROMA_DIR
 
@@ -531,7 +534,7 @@ def build_index(reset: bool = False) -> None:
 
     _log_ingest_settings_early(
         settings=settings,
-        retrieval_settings=effective_retrieval_settings(),
+        retrieval_settings=get_retrieval_settings(),
         reset=reset,
         data_directory=data_dir,
         chroma_persist=chroma_dir,

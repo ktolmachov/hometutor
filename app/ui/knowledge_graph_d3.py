@@ -32,6 +32,7 @@ from app.ui.knowledge_graph_d3_analysis import (
     build_graph_health,
     build_mastery_history,
     build_weekly_plan,
+    compute_decay,
 )
 
 _D3_PATH = Path(__file__).resolve().parent / "assets" / "d3.v7.min.js"

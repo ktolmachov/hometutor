@@ -408,9 +408,9 @@ class GraphExpansionPostprocessor(BaseNodePostprocessor):
         nodes: list[NodeWithScore],
         query_bundle: QueryBundle | None = None,
     ) -> list[NodeWithScore]:
-        from app.config import get_settings
+        from app.rag_runtime_preferences import effective_settings
 
-        s = get_settings()
+        s = effective_settings()
         holder = _graph_expansion_trace_ctx.get()
         if isinstance(holder, dict):
             holder.pop("graph_expansion", None)
@@ -587,14 +587,15 @@ def append_graph_expansion_postprocessor(
     use_composite_graph_gating: bool = False,
 ) -> list:
     """Добавляет graph expansion в конец цепочки postprocessors."""
-    from app.config import get_settings
+    from app.rag_runtime_preferences import effective_settings
 
-    if not get_settings().enable_graph_augmented_retrieval:
+    settings = effective_settings()
+    if not settings.enable_graph_augmented_retrieval:
         return postprocessors
     q = (execution_plan_query_type or "").strip().lower()
     if q not in GRAPH_AUGMENT_QUERY_TYPES:
         return postprocessors
-    max_extra = int(get_settings().graph_augment_max_extra_docs)
+    max_extra = int(settings.graph_augment_max_extra_docs)
     pp = list(postprocessors)
     pp.append(
         GraphExpansionPostprocessor(

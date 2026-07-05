@@ -3,8 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Optional
 
-from app.config import KNOWN_PROFILES, RAG_PROFILE_DEFAULTS, get_retrieval_settings, get_settings
+from app.config import KNOWN_PROFILES, RAG_PROFILE_DEFAULTS
 from app.models import PipelineOverrides, QueryContext, RagProfile, RetrievalRoutingDecision, QueryOptions
+from app.rag_runtime_preferences import effective_retrieval_settings, effective_settings
 
 LOW_CONFIDENCE_ROUTE_THRESHOLD = 0.5
 
@@ -40,7 +41,7 @@ def resolve_rag_profile_for_pipeline(
     requested_profile = (
         (overrides.rag_profile if overrides else None)
         or options.rag_profile
-        or get_retrieval_settings().rag_profile
+        or effective_retrieval_settings().rag_profile
         or "fast"
     )
     selected_profile_key = str(requested_profile).strip().lower() or "fast"
@@ -128,7 +129,7 @@ def build_retrieval_routing_decision(
             }
 
     graph_requested = effective.graph_augmented
-    graph_enabled = bool(get_settings().enable_graph_augmented_retrieval)
+    graph_enabled = bool(effective_settings().enable_graph_augmented_retrieval)
     effective_graph = graph_requested and graph_enabled
     if graph_requested and not effective_graph:
         fallback_reason = fallback_reason or "graph_augmented_disabled"

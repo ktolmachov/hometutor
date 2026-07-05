@@ -2,7 +2,8 @@ import pytest
 
 import app.rag_runtime_preferences as rag_prefs
 from app.config import get_retrieval_settings, get_settings, reset_settings_cache
-from app.models import PipelineOverrides
+from app.models import PipelineOverrides, QueryContext
+from app.pipeline_steps import rewrite_step
 
 
 @pytest.fixture()
@@ -56,11 +57,13 @@ def test_pipeline_overrides_from_prefs(kv_store) -> None:
 
     rag_prefs.set_override("rag_profile", alt_profile)
     rag_prefs.set_override("enable_reranker", False)
+    rag_prefs.set_override("doc_top_k", 9)
 
     overrides = rag_prefs.pipeline_overrides_from_prefs()
     assert isinstance(overrides, PipelineOverrides)
     assert overrides.rag_profile == alt_profile
     assert overrides.enable_reranker is False
+    assert overrides.doc_top_k == 9
 
 
 def test_set_override_rejects_invalid_option(kv_store) -> None:
@@ -74,3 +77,25 @@ def test_ingestion_model_empty_clears_override(kv_store) -> None:
 
     rag_prefs.set_override("ingestion_model", "")
     assert "ingestion_model" not in rag_prefs.get_overrides()
+
+
+def test_ingest_batch_sizes_use_effective_settings(kv_store) -> None:
+    from app.ingestion_index_nodes import _ingest_batch_sizes
+
+    rag_prefs.set_override("ingest_embed_pipeline_batch_size", 7)
+    rag_prefs.set_override("ingest_store_batch_size", 11)
+
+    assert _ingest_batch_sizes() == (7, 11)
+
+
+def test_rewrite_step_uses_effective_settings(kv_store, monkeypatch) -> None:
+    monkeypatch.setenv("ENABLE_REWRITE", "true")
+    reset_settings_cache()
+    try:
+        rag_prefs.set_override("enable_rewrite", False)
+        ctx = rewrite_step(QueryContext(original_question="Что такое RAG?"))
+        assert ctx.trace["rewrite_enabled"] is False
+        assert ctx.rewritten_query is None
+    finally:
+        rag_prefs.clear_overrides()
+        reset_settings_cache()

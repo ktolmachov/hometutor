@@ -9,7 +9,6 @@ from typing import Any, Optional
 
 from llama_index.core.schema import NodeWithScore, QueryBundle
 
-from app.config import get_retrieval_settings, get_settings
 from app.latency_budget import _thresholds_for, resolve_query_surface
 from app.llm_resilience import complete_with_resilience
 from app.logging_config import log_event, setup_logging
@@ -21,6 +20,7 @@ from app.prompts.multi_query_expansion import (
 )
 from app.provider import get_rewrite_llm
 from app.query_routing import KEYWORD_QUERY
+from app.rag_runtime_preferences import effective_retrieval_settings, effective_settings
 from app.utils import safe_preview
 
 logger = setup_logging()
@@ -50,8 +50,8 @@ def should_expand_queries(
     query_context: QueryContext,
 ) -> tuple[bool, str | None]:
     """Architect gating: flag + rewrite + qa/overview + not bm25_only + no subquestions."""
-    retrieval_settings = get_retrieval_settings()
-    runtime_settings = get_settings()
+    retrieval_settings = effective_retrieval_settings()
+    runtime_settings = effective_settings()
 
     if not retrieval_settings.enable_multi_query:
         return False, "flag_off"
@@ -298,7 +298,7 @@ def prepare_multi_query_expansion(
         trace["variant_count"] = 0
         return None, trace
 
-    retrieval_settings = get_retrieval_settings()
+    retrieval_settings = effective_retrieval_settings()
     variant_queries, trace = expand_queries(
         query_context.effective_query,
         multi_query_count=retrieval_settings.multi_query_count,

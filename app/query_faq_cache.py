@@ -6,9 +6,9 @@ import logging
 import time
 from typing import Any, Callable
 
-from app.config import get_settings
 from app.logging_config import log_event
 from app.models import QueryContext, QueryOptions
+from app.rag_runtime_preferences import effective_settings
 from app.query_metrics import (
     _build_retrieval_trace,
     _build_trace_schema_debug,
@@ -101,7 +101,7 @@ def try_faq_cache(
 
     similar = find_similar_faq_entries(
         effective_question=ctx.effective_query,
-        min_score=get_settings().faq_min_score,
+        min_score=effective_settings().faq_min_score,
     )
 
     if not similar:

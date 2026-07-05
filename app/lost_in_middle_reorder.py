@@ -41,9 +41,9 @@ class LostInMiddleReorderPostprocessor(BaseNodePostprocessor):
 
 def append_lost_in_middle_reorder_postprocessor(postprocessors: list) -> list:
     """Append reorder as the last postprocessor when enabled in retrieval settings."""
-    from app.config import get_retrieval_settings
+    from app.rag_runtime_preferences import effective_retrieval_settings
 
-    if not get_retrieval_settings().enable_lost_in_middle_reorder:
+    if not effective_retrieval_settings().enable_lost_in_middle_reorder:
         return postprocessors
     pp = list(postprocessors)
     pp.append(LostInMiddleReorderPostprocessor())

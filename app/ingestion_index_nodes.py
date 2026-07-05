@@ -7,7 +7,10 @@ from llama_index.core.node_parser import SentenceWindowNodeParser, SentenceSplit
 from llama_index.core.schema import MetadataMode
 
 import app.ingestion as ing
-from app.config import get_retrieval_settings, get_settings
+from app.rag_runtime_preferences import (
+    effective_retrieval_settings as get_retrieval_settings,
+    effective_settings as get_settings,
+)
 
 
 def _ingest_batch_sizes() -> tuple[int, int]:

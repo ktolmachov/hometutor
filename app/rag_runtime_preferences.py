@@ -485,17 +485,19 @@ _PIPELINE_OVERRIDE_KEYS = frozenset(
         "split_strategy",
         "window_size",
         "retrieval_mode",
+        "doc_top_k",
     }
 )
 
 
 def _ensure_auth_context() -> None:
-    try:
-        from app.ui.auth_gate import ensure_streamlit_auth_context
+    """Runtime preference access relies on caller-provided auth context.
 
-        ensure_streamlit_auth_context()
-    except Exception:  # noqa: BLE001 - API path may already have auth context
-        return
+    UI entrypoints set it in ``app.ui.auth_gate``; API entrypoints set it in
+    ``app.api_auth``. Keeping this module free of Streamlit imports prevents API
+    requests from accidentally replacing an already-authenticated context.
+    """
+    return
 
 
 def _read_raw_kv(key: str, default: str | None = None) -> str | None:

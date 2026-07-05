@@ -5,11 +5,11 @@ from typing import Optional
 from llama_index.core.postprocessor import MetadataReplacementPostProcessor
 from llama_index.core.vector_stores import MetadataFilter, MetadataFilters
 
-from app.config import get_retrieval_settings
 from app.config import RetrievalSettings
 from app.logging_config import log_event, setup_logging
 from app.models import PipelineOverrides, QueryOptions
 from app.prompts import KEYWORD_PROMPT, QA_PROMPT
+from app.rag_runtime_preferences import effective_retrieval_settings
 
 logger = setup_logging()
 
@@ -51,7 +51,7 @@ def resolve_pipeline_params(
     retrieval_settings: Optional[RetrievalSettings] = None,
 ) -> dict:
     """Собрать параметры пайплайна из retrieval-настроек и опциональных overrides."""
-    r = retrieval_settings if retrieval_settings is not None else get_retrieval_settings()
+    r = retrieval_settings if retrieval_settings is not None else effective_retrieval_settings()
     profile = (r.rag_profile or "fast").strip().lower() or "fast"
     if overrides is not None and overrides.rag_profile is not None:
         profile = overrides.rag_profile
@@ -99,6 +99,8 @@ def resolve_pipeline_params(
         params["window_size"] = overrides.window_size
     if overrides.retrieval_mode is not None:
         params["retrieval_mode"] = overrides.retrieval_mode
+    if overrides.doc_top_k is not None:
+        params["doc_top_k"] = overrides.doc_top_k
 
     return params
 

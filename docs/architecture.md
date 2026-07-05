@@ -1,6 +1,6 @@
 # Архитектура hometutor
 
-Актуализировано по runtime-коду: 2026-06-30.
+Актуализировано по runtime-коду: 2026-07-05.
 
 ## Контекст
 
@@ -226,11 +226,44 @@ SSR — deterministic-first контур рекомендаций:
 
 AI/ML компоненты подключаются как gated enrichment/reranking, но базовая маршрутизация остаётся объяснимой и работает без облачного профиля пользователя.
 
+## Multimodal media metadata
+
+M0a мультимодального конспекта добавляет только контракт metadata, без UI-плеера, ASR,
+VLM, `media_progress` и новых LLM-вызовов.
+
+Ключевые модули:
+
+- `app/media_sidecar.py` — dataclasses, parser/loader и lightweight internal validation
+  sidecar v1;
+- `app/media_urls.py` — нормализация внешних video URL, включая YouTube `watch`,
+  `youtu.be`, `embed` и timestamp-параметры;
+- `app/path_safety.py` — единая проверка persisted `DATA_DIR`-relative paths.
+
+Runtime-конспект может хранить во frontmatter только data-relative указатель:
+
+```yaml
+media_sidecar: courses/autonomy/lecture_01/The_Architecture_of_Autonomy.media.json
+```
+
+Sidecar `<konspekt>.media.json` лежит внутри `data/` рядом с runtime-конспектом и
+является source-of-truth для video source, section timestamps, image assets,
+hash invalidation и confidence. JSON Schema: [schemas/media_sidecar_v1.schema.json](schemas/media_sidecar_v1.schema.json).
+
+Persisted local media paths не могут быть абсолютными, drive-relative или traversal-путями:
+они проходят `validate_data_relative_path()` / `resolve_data_relative_path()` и остаются
+относительными к `DATA_DIR`. Внешние URL допускаются только как `http(s)`; известные YouTube
+формы канонизируются, неизвестные URL остаются обычными external links без timestamp action.
+
+Stale detection работает по `schema_version`, `konspekt_sha256`, `media_sha256`,
+`generated_by.asr_model` и `generated_by.alignment_version`. При mismatch потребители должны
+переходить в degraded state, а не доверять timestamp evidence.
+
 ## Storage view
 
 | Store | Владелец | Назначение |
 |---|---|---|
 | `data/` | пользователь/runtime | исходные материалы |
+| `data/**/*.media.json` | `app/media_sidecar.py` | sidecar v1 для multimodal konspekt metadata; только data-relative media paths |
 | `data/user_state.db` | `app/user_state*.py` | learner state, cards, SRS, quiz, sync (single-user / `AUTH_ENABLED=false`) |
 | `data/users/<user_id>/user_state.db` | `app/user_state_db.py` | per-user state, изоляция при `AUTH_ENABLED=true` |
 | `data/auth.db` | `app/auth_db.py` | глобальный реестр пользователей, JWT-сессии, audit-лог |
@@ -245,6 +278,7 @@ AI/ML компоненты подключаются как gated enrichment/rera
 - Runtime settings: `app/config.py`.
 - LLM/embeddings: `app/provider.py`.
 - Path safety: `app/path_safety.py`.
+- Multimodal sidecar and URL safety: `app/media_sidecar.py`, `app/media_urls.py`.
 - API contracts: `app/api_models.py`, `app/api_requests.py`, `app/routers/*`.
 - UI behavior: `app/ui/main.py` and feature modules under `app/ui/`.
 

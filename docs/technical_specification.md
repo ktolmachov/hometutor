@@ -1,6 +1,6 @@
 # Техническая спецификация hometutor
 
-Актуализировано по runtime-коду: 2026-06-30.
+Актуализировано по runtime-коду: 2026-07-05.
 
 ## Назначение
 
@@ -80,11 +80,16 @@
 
 Для `.docx` используется `python-docx`/зависимости извлечения текста, для PDF — PDF extraction stack из зависимостей.
 
+Мультимодальный M0a не добавляет видео как индексируемый формат. Он добавляет только
+metadata-контракт sidecar v1 для будущего связывания конспекта с локальным видео,
+external video URL, таймкодами разделов и изображениями.
+
 ## Хранилища и артефакты
 
 | Артефакт | Назначение |
 |---|---|
 | `data/` | исходные документы и `user_state.db` |
+| `data/**/*.media.json` | multimodal sidecar v1 для runtime-конспекта; схема: `docs/schemas/media_sidecar_v1.schema.json` |
 | `data/user_state.db` | learner state, quiz, flashcards, SRS, sync |
 | `chroma_db/` | persistent Chroma и retrieval cache data |
 | `data/graph_generations/` | graph bundles по поколениям индекса |
@@ -162,6 +167,27 @@ SSR строит next-step recommendation из локальных сигнало
 - `app/ssr_feedback_collection.py`
 - `app/user_state_ssr_feedback.py`
 
+### Multimodal sidecar v1
+
+M0a реализует проверяемый media metadata contract без ASR, UI и LLM.
+
+Основные модули:
+
+- `app/media_sidecar.py` — dataclasses/parser/loader, чтение `media_sidecar` из
+  frontmatter, stale detection, строгая lightweight validation;
+- `app/media_urls.py` — нормализация YouTube URL (`watch`, `youtu.be`, `embed`) и
+  timestamp parsing; unknown `http(s)` URL остаётся external link;
+- `app/path_safety.py` — запрет persisted absolute, drive-relative и traversal paths.
+
+Sidecar хранится внутри `data/` как `<konspekt_stem>.media.json`; frontmatter конспекта
+содержит только data-relative pointer. Persisted local media/image paths также
+data-relative. Абсолютный внешний путь может быть только import input будущего ASR-flow,
+но не persisted metadata.
+
+Invalidation считается по `schema_version`, `konspekt_sha256`, `media_sha256`,
+ASR model и alignment version. `section_slug` предназначен для UI/deep-link, а стабильным
+ключом раздела остаётся `section_id`.
+
 ### Аутентификация
 
 Опционально (`AUTH_ENABLED`, default `false`); подробное описание — [architecture.md](architecture.md#аутентификация).
@@ -218,3 +244,5 @@ SSR строит next-step recommendation из локальных сигнало
   реального `JWT_SECRET` (fail-fast guard — дефолтный dev-секрет отклоняется на старте).
 - HF Spaces demo-деплой работает на эфемерном FS контейнера: аккаунты и прогресс не персистентны
   между перезапусками Space.
+- Multimodal M0a — это metadata plumbing: локальный video render, ASR, VLM captions,
+  timestamped source cards и `media_progress` ещё не являются runtime-возможностями.

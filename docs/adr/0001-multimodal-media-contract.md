@@ -2,7 +2,7 @@
 
 Date: 2026-07-05
 
-Status: Proposed
+Status: Accepted
 
 ## Context
 
@@ -77,6 +77,9 @@ Tradeoffs:
 ## Implementation Notes
 
 - Path resolution must use the existing path-safety layer.
+- M0a uses lightweight internal validation in `app/media_sidecar.py`; the JSON
+  Schema remains the public contract and sanity-check artifact until the project
+  has a separate reason to add a schema-validator dependency.
 - Runtime settings belong in `app/config.py`.
 - VLM calls, if added, must go through `app/provider.py`.
 - Text LLM calls should keep using the configured `LLM_MODEL`/role model; do not

@@ -88,7 +88,9 @@ flowchart LR
 - `admin`
 - `debug_session_tape`
 
-Подробная карта: [api_reference.md](api_reference.md).
+Подробная карта: [api_reference.md](api_reference.md). Автогенерируемые диаграммы
+(карта API, граф слоёв, ER-схемы SQLite, фичи UI): [diagrams.md](diagrams.md)
+(`python scripts/generate_diagrams.py`).
 
 ## Аутентификация
 

@@ -44,6 +44,8 @@ def _route_saved_living_konspekt_deck_to_review(deck_id: int) -> None:
     st.session_state["flashcards_subview"] = "review_from_deck"
     st.session_state["flashcards_review_session_deck_id"] = deck_id
     st.session_state["flashcards_review_deck_sync_pending"] = deck_id
+    st.session_state["flashcards_review_session_tags_text"] = ""
+    st.session_state["flashcards_review_session_tag_ids"] = []
     st.session_state["flashcards_review_queue"] = []
     st.session_state["flashcards_review_index"] = 0
     st.session_state["flashcards_card_flipped"] = False

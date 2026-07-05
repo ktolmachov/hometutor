@@ -10,7 +10,11 @@ def test_route_saved_living_konspekt_deck_to_review(monkeypatch):
 
     events: list[tuple[str, dict | None]] = []
     monkeypatch.setattr(ui_events, "track_event", lambda name, payload=None: events.append((name, payload)))
-    state: dict[str, object] = {"flashcards_review_session_scope_signature": "old"}
+    state: dict[str, object] = {
+        "flashcards_review_session_scope_signature": "old",
+        "flashcards_review_session_tags_text": "source:old.md",
+        "flashcards_review_session_tag_ids": ["source:old.md"],
+    }
     monkeypatch.setattr(view.st, "session_state", state)
 
     view._route_saved_living_konspekt_deck_to_review(42)
@@ -20,6 +24,8 @@ def test_route_saved_living_konspekt_deck_to_review(monkeypatch):
     assert state["flashcards_subview"] == "review_from_deck"
     assert state["flashcards_review_session_deck_id"] == 42
     assert state["flashcards_review_deck_sync_pending"] == 42
+    assert state["flashcards_review_session_tags_text"] == ""
+    assert state["flashcards_review_session_tag_ids"] == []
     assert state["flashcards_section_pending"] == "review"
     assert state["flashcards_review_queue"] == []
     assert state["flashcards_review_index"] == 0

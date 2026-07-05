@@ -112,12 +112,18 @@ class TestMemoryPanelSmoke:
         monkeypatch.setattr(user_state, "count_due_flashcards", lambda **kwargs: 3)
         at = AppTest.from_function(_app)
         at.session_state["workbench_sections"] = [_row()]
+        at.session_state["flashcards_review_session_deck_id"] = 123
+        at.session_state["flashcards_review_deck_sync_pending"] = 123
+        at.session_state["flashcards_review_session_scope_signature"] = "deck=123|tags=old"
         at.run()
         review_buttons = [b for b in at.button if b.label == "🔁 Повторить"]
         review_buttons[0].click().run()
         assert not at.exception
         # Тег-скоуп review — штатный ключ text_input в review-секции Flashcards.
         assert str(at.session_state["flashcards_review_session_tags_text"]).startswith("source:")
+        assert at.session_state["flashcards_review_session_deck_id"] is None
+        assert at.session_state["flashcards_review_deck_sync_pending"] is None
+        assert "flashcards_review_session_scope_signature" not in at.session_state
         assert at.session_state["flashcards_section_pending"] == "review"
         assert at.session_state["_pending_current_view"] == "Flashcards"
 

@@ -476,7 +476,17 @@ def _render_memory_panel(rows: list[dict[str, Any]]) -> None:
 
                 # Ключ text_input тег-скоупа в review: установка ДО инстанцирования
                 # виджета (следующий прогон) легальна; scope-signature сам сбросит сессию.
+                st.session_state["flashcards_review_session_deck_id"] = None
+                st.session_state["flashcards_review_deck_sync_pending"] = None
                 st.session_state["flashcards_review_session_tags_text"] = tag
+                st.session_state["flashcards_review_session_tag_ids"] = [tag]
+                st.session_state["flashcards_review_queue"] = []
+                st.session_state["flashcards_review_index"] = 0
+                st.session_state["flashcards_card_flipped"] = False
+                st.session_state["flashcards_review_stats"] = {"again": 0, "hard": 0, "good": 0, "easy": 0}
+                st.session_state["flashcards_review_session_status"] = "idle"
+                st.session_state["flashcards_review_session_error"] = None
+                st.session_state.pop("flashcards_review_session_scope_signature", None)
                 st.session_state[pending_section_key()] = FC_MAIN_SECTION_REVIEW
                 st.session_state[PENDING_CURRENT_VIEW_KEY] = "Flashcards"
                 try:

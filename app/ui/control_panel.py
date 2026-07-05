@@ -83,10 +83,16 @@ def _render_overrides(level: str, overrides: dict[str, bool]) -> None:
             st.rerun()
 
 
-@st.dialog("Панель управления")
+@st.dialog("Панель управления", width="large")
 def render_control_panel_dialog() -> None:
-    level = get_ui_level()
-    overrides = get_overrides()
-    _render_level_cards(level, overrides)
-    _render_overrides(level, overrides)
-    st.caption("Настройки хранятся локально в вашем профиле и попадают в backup.")
+    ui_tab, rag_tab = st.tabs(["Интерфейс", "RAG и ingest"])
+    with ui_tab:
+        level = get_ui_level()
+        overrides = get_overrides()
+        _render_level_cards(level, overrides)
+        _render_overrides(level, overrides)
+        st.caption("Настройки интерфейса хранятся локально в профиле и попадают в backup.")
+    with rag_tab:
+        from app.ui.rag_settings_panel import render_rag_settings_section
+
+        render_rag_settings_section()

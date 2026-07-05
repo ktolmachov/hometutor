@@ -24,6 +24,7 @@
 | [quickstart_demo.md](quickstart_demo.md) | screenshot-витрина demo-сценариев и правила её обновления |
 | [api_reference.md](api_reference.md) | актуальная карта HTTP endpoints |
 | [architecture.md](architecture.md) | runtime-архитектура и границы хранилищ |
+| [diagrams.md](diagrams.md) | автогенерируемые диаграммы (API, слои, ER, фичи UI) — обновлять `scripts/generate_diagrams.py` |
 | [technical_specification.md](technical_specification.md) | техническая спецификация runtime-системы |
 | [conventions.md](conventions.md) | короткие инженерные правила |
 | [conventions_architecture.md](conventions_architecture.md) | архитектурные соглашения по слоям |

@@ -717,11 +717,15 @@ def _resolve_execution_plan_for_question(
     options: QueryOptions,
     ctx: QueryContext,
 ):
+    from app.rag_runtime_preferences import pipeline_overrides_from_prefs
+
     overrides: PipelineOverrides | None = None
     if is_flashcard_handoff(options):
         overrides = flashcard_handoff_pipeline_overrides()
     elif options.rag_profile:
         overrides = PipelineOverrides(rag_profile=options.rag_profile)
+    else:
+        overrides = pipeline_overrides_from_prefs()
     if overrides is None:
         return resolve_query_execution_plan(
             effective_question,

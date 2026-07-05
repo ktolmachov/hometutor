@@ -27,21 +27,44 @@ _LEVEL_CARDS: tuple[tuple[str, str, str], ...] = (
 )
 
 
+def _level_title(level_id: str) -> str:
+    for lid, title, _desc in _LEVEL_CARDS:
+        if lid == level_id:
+            return title
+    return level_id
+
+
 def _render_level_card(level_id: str, title: str, description: str, *, current_level: str, confirm_reset: bool) -> None:
     active = current_level == level_id
     with st.container(border=True):
+        if active:
+            st.markdown(
+                '<p style="margin:0 0 0.35rem 0;font-size:0.82rem;font-weight:600;color:#0f766e;">'
+                "● Сейчас активен</p>",
+                unsafe_allow_html=True,
+            )
         st.markdown(f"**{title}**")
         st.caption(description)
-        disabled = active or not confirm_reset
-        label = "Выбрано" if active else "Выбрать"
-        if st.button(label, key=f"ui_level_{level_id}", disabled=disabled, width="stretch"):
-            set_ui_level(level_id)
-            clear_overrides()
-            st.rerun()
+        can_switch = confirm_reset and not active
+        if st.button(
+            "Выбрано" if active else "Выбрать",
+            key=f"ui_level_{level_id}",
+            disabled=active or not confirm_reset,
+            type="primary" if active else "secondary",
+            width="stretch",
+        ):
+            if can_switch:
+                set_ui_level(level_id)
+                clear_overrides()
+                st.rerun()
 
 
 def _render_level_cards(level: str, overrides: dict[str, bool]) -> None:
-    st.caption("Выберите, сколько интерфейса показывать по умолчанию.")
+    st.markdown("**Выбор режима интерфейса**")
+    st.caption(
+        f"Сейчас выбран режим **{_level_title(level)}**. "
+        "Переключите пресет, если хотите упростить или расширить меню и панели."
+    )
     confirm_reset = True
     if overrides:
         confirm_reset = st.checkbox(

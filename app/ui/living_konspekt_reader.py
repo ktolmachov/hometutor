@@ -83,27 +83,31 @@ def render_reader(
         st.markdown("\n".join(toc_lines))
         st.divider()
 
-    section_index = 0
-    for block in reader_blocks(rows):
-        if block["kind"] == "heading":
-            st.markdown(f"<span id='{_reader_anchor(section_index)}'></span>", unsafe_allow_html=True)
-            st.markdown(f"## {block['text']}")
-            section_index += 1
-        elif block["kind"] == "meta":
-            st.caption(block["text"])
-        else:
-            render_markdown_with_mermaid(block["text"])
+    for index, row in enumerate(rows):
+        heading = str(row.get("heading_text") or "Без названия")
+        source = Path(str(row.get("konspekt_md_abs") or "")).name
+        meta_text = f"{source} · строки {row.get('line_start')}-{row.get('line_end')}"
+
+        st.markdown(f"<span id='{_reader_anchor(index)}'></span>", unsafe_allow_html=True)
+        st.markdown(f"## {heading}")
+        st.caption(meta_text)
+
+        with st.expander("Содержимое раздела", expanded=False):
+            md_abs = row.get("konspekt_md_abs")
+            doc_dir = Path(md_abs).parent if md_abs else None
+            render_markdown_with_mermaid(str(row.get("text") or ""), doc_dir=doc_dir)
             if media_renderer is not None:
-                media_renderer(block["row"], section_index == 1)
-            row = block["row"]
+                media_renderer(row, False)
             row_key = str(row.get("row_key") or "")
             if row_key and (save_note is not None or mark_read is not None):
                 _render_section_progress_controls(row, save_note=save_note, mark_read=mark_read)
-            st.divider()
+        st.divider()
+
 
     questions = _check_questions_block(rows)
     if questions:
         st.markdown(questions)
+
 
 
 def _render_section_progress_controls(
@@ -136,10 +140,49 @@ def _render_section_progress_controls(
 _MERMAID_RE = re.compile(r"```(?:mermaid|flowchart).*?\n(.*?)\n```", re.DOTALL | re.IGNORECASE)
 
 
-def render_markdown_with_mermaid(text: str) -> None:
+import base64
+import mimetypes
+
+
+def _resolve_local_images(text: str, doc_dir: Path | None) -> str:
+    if not text:
+        return text
+
+    def replacer(match: re.Match) -> str:
+        alt = match.group(1)
+        path_str = match.group(2).strip()
+
+        # Skip web links and base64
+        if path_str.startswith(("http://", "https://", "data:")):
+            return match.group(0)
+
+        # Resolve path
+        if doc_dir:
+            img_path = (doc_dir / path_str).resolve()
+        else:
+            img_path = Path(path_str).resolve()
+
+        if img_path.is_file():
+            try:
+                mime_type, _ = mimetypes.guess_type(str(img_path))
+                if not mime_type:
+                    mime_type = "image/png"
+                data = img_path.read_bytes()
+                b64_data = base64.b64encode(data).decode("utf-8")
+                return f"![{alt}](data:{mime_type};base64,{b64_data})"
+            except Exception:
+                pass
+        return match.group(0)
+
+    img_re = re.compile(r"!\[(.*?)\]\((.*?)\)")
+    return img_re.sub(replacer, text)
+
+
+def render_markdown_with_mermaid(text: str, doc_dir: Path | None = None) -> None:
     """Render markdown text, rendering any embedded flowchart/mermaid block as an interactive SVG."""
     if not text:
         return
+    text = _resolve_local_images(text, doc_dir)
     last_idx = 0
     for match in _MERMAID_RE.finditer(text):
         start, end = match.span()
@@ -194,7 +237,7 @@ def _render_mermaid_diagram(code: str) -> None:
         <script type="module">
             import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
             mermaid.initialize({{
-                startOnLoad: true,
+                startOnLoad: false,
                 theme: 'default',
                 securityLevel: 'loose',
                 flowchart: {{
@@ -202,6 +245,14 @@ def _render_mermaid_diagram(code: str) -> None:
                     htmlLabels: true
                 }}
             }});
+            function draw() {{
+                if (window.innerWidth > 0 && window.innerHeight > 0) {{
+                    mermaid.run();
+                }} else {{
+                    setTimeout(draw, 50);
+                }}
+            }}
+            draw();
         </script>
     </body>
     </html>

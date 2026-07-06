@@ -748,3 +748,15 @@ After block."""
         assert "A --> B" in html_calls[0]
         assert "C --> D" in html_calls[1]
 
+    def test_rewrite_image_paths_for_artifact(self):
+        from app.konspekt_artifact import _rewrite_image_paths_for_artifact
+        from pathlib import Path
+
+        doc_dir = Path("D:/AI/app/data/Course")
+        text = "This is a note with ![Image](assets/pic.png) and ![Web](https://example.com/logo.png)"
+        rewritten = _rewrite_image_paths_for_artifact(text, doc_dir)
+        
+        assert "../Course/assets/pic.png" in rewritten or "..\\Course\\assets\\pic.png" in rewritten
+        assert "https://example.com/logo.png" in rewritten
+
+

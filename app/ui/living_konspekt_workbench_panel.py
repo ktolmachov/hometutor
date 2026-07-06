@@ -197,8 +197,12 @@ def render_collected_sections(
     from app.obsidian_export import obsidian_uri, vscode_uri
 
     st.markdown("### Собранные разделы")
+    if not rows:
+        return
+
     duplicate_keys = _duplicate_heading_keys(rows)
     row_list = list(rows)
+
     for idx, row in enumerate(row_list):
         md_abs = str(row.get("konspekt_md_abs") or "")
         row_key = str(row.get("row_key") or f"legacy_{idx}")
@@ -214,9 +218,11 @@ def render_collected_sections(
                 stale_status = _row_stale_status(row)
                 if stale_status:
                     st.caption(f"🕰 {stale_status}")
-                from app.ui.living_konspekt_reader import render_markdown_with_mermaid
-                render_markdown_with_mermaid(str(row.get("text") or ""))
-                _render_media_panel(row)
+                with st.expander("Содержимое раздела", expanded=False):
+                    from app.ui.living_konspekt_reader import render_markdown_with_mermaid
+                    doc_dir = Path(md_abs).parent if md_abs else None
+                    render_markdown_with_mermaid(str(row.get("text") or ""), doc_dir=doc_dir)
+                    _render_media_panel(row)
             with cols[1]:
                 if md_abs:
                     st.link_button("📄 Открыть", obsidian_uri(Path(md_abs), heading_text=heading_text), width="stretch")
@@ -235,6 +241,8 @@ def render_collected_sections(
                 if st.button("🗑 Убрать", key=f"wb_remove_{row_key}", width="stretch"):
                     remove_section(row_key)
                     st.rerun()
+
+
 
 
 def render_memory_panel(rows: list[dict[str, Any]]) -> None:

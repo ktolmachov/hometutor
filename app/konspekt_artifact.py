@@ -68,6 +68,37 @@ class SavedArtifact:
         return self.has_manifest and bool(self.artifact_id)
 
 
+import os
+
+
+def _rewrite_image_paths_for_artifact(text: str, doc_dir: Path) -> str:
+    from app.obsidian_export import vault_root
+
+    try:
+        artifacts_dir = (vault_root() / "living-konspekt").resolve()
+    except Exception:
+        from app.config import DATA_DIR
+        artifacts_dir = (DATA_DIR / "living-konspekt").resolve()
+
+    def replacer(match: re.Match) -> str:
+        alt = match.group(1)
+        path_str = match.group(2).strip()
+
+        if path_str.startswith(("http://", "https://", "data:")):
+            return match.group(0)
+
+        img_path = (doc_dir / path_str).resolve()
+        try:
+            rel_path = os.path.relpath(img_path, artifacts_dir)
+            rel_path_posix = rel_path.replace("\\", "/")
+            return f"![{alt}]({rel_path_posix})"
+        except Exception:
+            return match.group(0)
+
+    img_re = re.compile(r"!\[(.*?)\]\((.*?)\)")
+    return img_re.sub(replacer, text)
+
+
 def build_artifact_body(rows: list[dict[str, Any]]) -> str:
     """Build the deterministic readable body for a saved Living Konspekt."""
     header_parts = [
@@ -86,7 +117,11 @@ def build_artifact_body(rows: list[dict[str, Any]]) -> str:
         source_block = f"*Источник: {location}*" + (f"\n\n{media_line}" if media_line else "")
         note = str(row.get("note") or "").strip()
         note_block = f"\n\n### 💬 Моими словами\n\n{note}" if note else ""
-        parts.append(f"## {heading}\n\n{source_block}\n\n{row.get('text') or ''}{note_block}")
+        row_text = str(row.get("text") or "")
+        md_abs = row.get("konspekt_md_abs")
+        if md_abs:
+            row_text = _rewrite_image_paths_for_artifact(row_text, Path(md_abs).parent)
+        parts.append(f"## {heading}\n\n{source_block}\n\n{row_text}{note_block}")
 
     blocks: list[str] = []
     if header_parts:

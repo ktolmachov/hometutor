@@ -25,6 +25,7 @@ from app.ui.living_konspekt_view import (
     set_workbench_rows,
 )
 from app.ui.living_konspekt_next_steps import graph_lens_items
+from app.ui.living_konspekt_workbench_panel import deletion_options
 from app.user_state_research import normalize_research_payload
 from app.ui.sidebar import apply_research_payload
 
@@ -201,6 +202,19 @@ class TestAddDedupRemove:
         assert [row["heading_text"] for row in get_workbench_rows(state)] == ["B"]
         clear_workbench(state)
         assert get_workbench_rows(state) == []
+
+    def test_deletion_options_label_single_and_bulk_cleanup_targets(self):
+        state: dict = {}
+        add_section_to_workbench(_section(MD_A, 10, heading="A"), state)
+        add_section_to_workbench(_section(MD_A, 20, heading="B"), state)
+
+        options = deletion_options(get_workbench_rows(state))
+
+        assert [label for _, label in options] == [
+            "1. A — lecture-a.md:10",
+            "2. B — lecture-a.md:20",
+        ]
+        assert [key for key, _ in options] == [row["row_key"] for row in get_workbench_rows(state)]
 
     def test_note_and_read_progress_update_injected_state(self):
         from app.ui.living_konspekt_view import mark_section_read_in_workbench, update_section_note_in_workbench

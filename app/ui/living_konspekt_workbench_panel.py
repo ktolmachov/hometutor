@@ -29,6 +29,19 @@ def _row_konspekt_label(row: dict[str, Any]) -> str:
     return str(row.get("konspekt_md_label") or row.get("source_label") or "непереносимый источник")
 
 
+def deletion_options(rows: list[dict[str, Any]]) -> list[tuple[str, str]]:
+    """Stable row-key/label pairs for explicit workbench cleanup UI."""
+    options: list[tuple[str, str]] = []
+    for idx, row in enumerate(rows):
+        row_key = str(row.get("row_key") or f"legacy_{idx}")
+        heading = str(row.get("heading_text") or "Без заголовка").strip()
+        doc = _row_konspekt_label(row)
+        line = row.get("line_start")
+        line_suffix = f":{line}" if line else ""
+        options.append((row_key, f"{idx + 1}. {heading} — {doc}{line_suffix}"))
+    return options
+
+
 def _row_stale_status(row: dict[str, Any]) -> str | None:
     if str(row.get("portability_status") or "") == workbench_service.NON_PORTABLE:
         reason = str(row.get("resolve_error") or "источник вне data/").replace("_", " ")
@@ -108,11 +121,11 @@ def render_bulk_document_panel(
     if not documents:
         return
 
-    st.markdown("### 📥 Быстро добавить разделы")
+    st.markdown("### 📥 Быстро добавить разделы документа")
     options = [str(row.get("konspekt_md_abs") or "") for row in documents]
     labels = {path: Path(path).name for path in options}
     selected = st.selectbox("Документ", options, format_func=lambda path: labels.get(path, path), key="living_konspekt_bulk_doc")
-    cols = st.columns([2, 1, 1])
+    cols = st.columns([2, 1])
     with cols[0]:
         if st.button("➕ Добавить крупные разделы документа", key="living_konspekt_bulk_add", width="stretch"):
             try:
@@ -127,9 +140,51 @@ def render_bulk_document_panel(
         if st.button("Убрать документ", key="living_konspekt_bulk_remove_doc", width="stretch"):
             remove_rows(selected_keys)
             st.rerun()
-    with cols[2]:
-        if st.button("Очистить всё", key="living_konspekt_bulk_clear", width="stretch"):
+
+
+def render_cleanup_panel(
+    rows: list[dict[str, Any]],
+    *,
+    remove_rows: RemoveRows,
+    clear_rows: ClearRows,
+) -> None:
+    options = deletion_options(rows)
+    if not options:
+        return
+
+    labels = dict(options)
+    st.markdown("### 🧹 Очистка корзины")
+    selected_keys = st.multiselect(
+        "Разделы для удаления",
+        [key for key, _ in options],
+        format_func=lambda key: labels.get(str(key), str(key)),
+        key="living_konspekt_cleanup_selected",
+        placeholder="Выберите один или несколько разделов",
+    )
+    cols = st.columns([1, 1])
+    with cols[0]:
+        if st.button(
+            "Убрать выбранные",
+            key="living_konspekt_cleanup_remove_selected",
+            width="stretch",
+            disabled=not selected_keys,
+        ):
+            remove_rows({str(key) for key in selected_keys})
+            st.toast(f"Удалено разделов: {len(selected_keys)}", icon="🧹")
+            st.rerun()
+    with cols[1]:
+        confirm = st.checkbox(
+            "Подтвердить очистку всей корзины",
+            key="living_konspekt_cleanup_confirm_all",
+        )
+        if st.button(
+            "Очистить все разделы",
+            key="living_konspekt_cleanup_clear_all",
+            width="stretch",
+            disabled=not confirm,
+        ):
             clear_rows()
+            st.toast("Корзина Живого конспекта очищена.", icon="🧹")
             st.rerun()
 
 

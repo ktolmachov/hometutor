@@ -55,6 +55,7 @@ from app.ui.living_konspekt_workbench_panel import (
     _add_document_sections_to_workbench as _panel_add_document_sections_to_workbench,
     _row_stale_status,
     render_bulk_document_panel,
+    render_cleanup_panel,
     render_collected_sections,
     render_memory_panel,
     render_term_cards_panel,
@@ -639,6 +640,11 @@ def render_living_konspekt_view() -> None:
         render_bulk_document_panel(
             rows,
             add_document_sections=_add_document_sections_to_workbench,
+            remove_rows=remove_sections_from_workbench,
+            clear_rows=clear_workbench,
+        )
+        render_cleanup_panel(
+            rows,
             remove_rows=remove_sections_from_workbench,
             clear_rows=clear_workbench,
         )

@@ -168,6 +168,8 @@ def build_payload(
             "asr_model": segments_file.asr_model,
             "alignment_version": ALIGNMENT_VERSION,
             "created_at": _utc_now(),
+            # fingerprint ASR-параметров → stale detection (см. GeneratedBy.asr_params)
+            **({"asr_params": segments_file.asr_params} if segments_file.asr_params else {}),
         },
         "media": {"video": video_entry, "videos": _preserved_videos(existing, video_entry)},
         "sections": sections_payload,

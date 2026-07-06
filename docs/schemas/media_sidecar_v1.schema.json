@@ -44,6 +44,10 @@
           "minLength": 1,
           "maxLength": 80
         },
+        "asr_params": {
+          "type": "object",
+          "description": "Fingerprint ASR-параметров из <video>.segments.json (asr.params); участвует в stale detection"
+        },
         "created_at": {
           "type": "string",
           "format": "date-time"

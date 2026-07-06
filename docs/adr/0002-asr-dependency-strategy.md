@@ -61,7 +61,7 @@ Positive:
 
 - no heavy ASR dependency in core installs;
 - Python integration is straightforward for tests and script output;
-- word/segment timestamps are available for alignment;
+- segment-level timestamps are persisted for alignment (word-level available upstream in faster-whisper, intentionally not stored in M1);
 - local-first remains the default.
 
 Tradeoffs:

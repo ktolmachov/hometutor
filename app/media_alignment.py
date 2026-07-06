@@ -58,6 +58,7 @@ class SegmentsFile:
     media_sha256: str | None
     asr_model: str | None
     language: str | None
+    asr_params: dict | None
     segments: tuple[TranscriptSegment, ...]
 
 
@@ -94,10 +95,12 @@ def load_segments_file(path: Path) -> SegmentsFile:
         segments.append(TranscriptSegment(start=start, end=end, text=str(raw.get("text") or "")))
     if any(b.start < a.start for a, b in zip(segments, segments[1:])):
         raise ValueError("segments must be sorted by start time")
+    params = asr.get("params")
     return SegmentsFile(
         media_sha256=payload.get("media_sha256"),
         asr_model=asr.get("model"),
         language=asr.get("language"),
+        asr_params=params if isinstance(params, dict) else None,
         segments=tuple(segments),
     )
 

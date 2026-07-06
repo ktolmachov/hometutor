@@ -23,6 +23,10 @@ class GeneratedBy:
     created_at: str
     asr_model: str | None = None
     alignment_version: str | None = None
+    # Полный fingerprint ASR-параметров из <video>.segments.json (asr.params):
+    # участвует в stale detection — перетранскрибация с другими beam_size/language
+    # обязана инвалидировать sidecar даже при неизменном media_sha256.
+    asr_params: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -98,6 +102,7 @@ class MediaSidecar:
         media_sha256: str | None = None,
         asr_model: str | None = None,
         alignment_version: str | None = None,
+        asr_params: dict[str, Any] | None = None,
         schema_version: int = SCHEMA_VERSION,
     ) -> list[str]:
         reasons: list[str] = []
@@ -112,6 +117,8 @@ class MediaSidecar:
             reasons.append("asr_model")
         if alignment_version is not None and self.generated_by.alignment_version != alignment_version:
             reasons.append("alignment_version")
+        if asr_params is not None and self.generated_by.asr_params != asr_params:
+            reasons.append("asr_params")
         return reasons
 
     def is_stale(self, **kwargs: Any) -> bool:
@@ -234,14 +241,18 @@ def _parse_generated_by(value: Any) -> GeneratedBy:
     _require_keys(payload, {"tool", "created_at"}, "generated_by")
     _reject_extra_keys(
         payload,
-        {"tool", "created_at", "asr_model", "alignment_version"},
+        {"tool", "created_at", "asr_model", "alignment_version", "asr_params"},
         "generated_by",
     )
+    asr_params = payload.get("asr_params")
+    if asr_params is not None and not isinstance(asr_params, dict):
+        raise ValueError("generated_by.asr_params must be an object")
     return GeneratedBy(
         tool=_expect_str(payload["tool"], "generated_by.tool"),
         created_at=_expect_str(payload["created_at"], "generated_by.created_at"),
         asr_model=_optional_str(payload.get("asr_model"), "generated_by.asr_model"),
         alignment_version=_optional_str(payload.get("alignment_version"), "generated_by.alignment_version"),
+        asr_params=asr_params,
     )
 
 

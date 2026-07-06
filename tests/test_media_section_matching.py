@@ -68,6 +68,28 @@ def test_row_matches_by_section_id_after_line_shift():
     assert matched.t_start == 120.0
 
 
+def test_sidecar_stale_when_asr_params_change():
+    payload = {
+        "schema_version": 1,
+        "konspekt_sha256": "a" * 64,
+        "generated_by": {
+            "tool": "scripts/build_media_sidecar.py",
+            "created_at": "2026-07-06T00:00:00Z",
+            "asr_model": "large-v3",
+            "asr_params": {"model": "large-v3", "beam_size": 5, "language_requested": "auto"},
+        },
+        "media": {"video": {"kind": "url", "url": "https://www.youtube.com/watch?v=abc123def"}},
+        "sections": [],
+    }
+    sidecar = parse_media_sidecar(payload)
+
+    same = {"model": "large-v3", "beam_size": 5, "language_requested": "auto"}
+    changed = {"model": "large-v3", "beam_size": 1, "language_requested": "ru"}
+
+    assert sidecar.stale_reasons(asr_params=same) == []
+    assert "asr_params" in sidecar.stale_reasons(asr_params=changed)
+
+
 def test_row_falls_back_to_positional_match_without_own_text():
     heading = "Раздел без текста"
     sidecar = _sidecar_with_section("sha256:" + "b" * 64, "раздел-без-текста", heading, line_start=7)

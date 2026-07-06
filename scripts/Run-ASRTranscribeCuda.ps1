@@ -18,7 +18,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Media,
 
-    [string]$Model = "large-v3-turbo",
+    [string]$Model = "large-v3",
 
     [string]$Language = "auto",
 
@@ -120,6 +120,29 @@ except Exception as exc:
     return [int]$count -gt 0
 }
 
+function Add-PipNvidiaCudaBins {
+    param([string]$PythonExe)
+
+    $pipCudaBins = & $PythonExe -c @"
+import importlib.util
+from pathlib import Path
+spec = importlib.util.find_spec('nvidia.cublas')
+if not spec or not spec.submodule_search_locations:
+    raise SystemExit(0)
+site = Path(next(iter(spec.submodule_search_locations))).parents[1]
+for rel in ('nvidia/cublas/bin', 'nvidia/cuda_nvrtc/bin'):
+    p = site / rel
+    if p.is_dir():
+        print(p)
+"@ 2>$null
+    foreach ($line in $pipCudaBins) {
+        if ($line) {
+            Add-ToProcessPath -PathToAdd $line
+            Write-Host "pip CUDA bin: $line" -ForegroundColor Green
+        }
+    }
+}
+
 function Add-ToProcessPath {
     param([string]$PathToAdd)
 
@@ -164,12 +187,22 @@ if (-not (Test-Path -LiteralPath $transcribe)) {
     throw "Не найден scripts\transcribe_media.py"
 }
 
+if ($InstallAsrExtra) {
+    Write-Host "Устанавливаю optional ASR extra..." -ForegroundColor Cyan
+    & $python -m pip install -e "$root[asr]"
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+}
+
 Write-Host "Проверяю NVIDIA GPU..." -ForegroundColor Cyan
 try {
     & nvidia-smi
 } catch {
     throw "nvidia-smi не найден или NVIDIA driver недоступен. Проверьте драйвер NVIDIA."
 }
+
+Add-PipNvidiaCudaBins -PythonExe $python
 
 $cudaBinResolved = Find-CudaBin -Preferred $CudaBin
 if ($cudaBinResolved) {
@@ -195,14 +228,6 @@ if ($cudaBinResolved) {
 
 if (-not (Test-DllVisible "cudnn64_8.dll")) {
     Write-Host "Предупреждение: cudnn64_8.dll не найден в PATH. CTranslate2 speech recognition может потребовать cuDNN 8 for CUDA 12.x." -ForegroundColor Yellow
-}
-
-if ($InstallAsrExtra) {
-    Write-Host "Устанавливаю optional ASR extra..." -ForegroundColor Cyan
-    & $python -m pip install -e "$root[asr]"
-    if ($LASTEXITCODE -ne 0) {
-        exit $LASTEXITCODE
-    }
 }
 
 $env:CUDA_VISIBLE_DEVICES = [string]$GpuIndex

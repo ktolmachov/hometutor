@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -123,12 +124,37 @@ def _is_cuda_runtime_error(exc: BaseException) -> bool:
     )
 
 
+def _prepend_pip_nvidia_cuda_bins() -> None:
+    """Добавить cuBLAS/NVRTC из pip-пакетов nvidia-* в PATH (Windows без полного CUDA Toolkit)."""
+    try:
+        import importlib.util
+
+        spec = importlib.util.find_spec("nvidia.cublas")
+    except ImportError:
+        return
+    if not spec or not spec.submodule_search_locations:
+        return
+    site_packages = Path(next(iter(spec.submodule_search_locations))).parents[1]
+    bins = [
+        str(site_packages / rel)
+        for rel in ("nvidia/cublas/bin", "nvidia/cuda_nvrtc/bin")
+        if (site_packages / rel).is_dir()
+    ]
+    if not bins:
+        return
+    path_parts = [p for p in os.environ.get("PATH", "").split(os.pathsep) if p]
+    for bin_dir in reversed(bins):
+        if bin_dir not in path_parts:
+            path_parts.insert(0, bin_dir)
+    os.environ["PATH"] = os.pathsep.join(path_parts)
+
+
 def _cuda_runtime_hint() -> str:
     return (
         "CUDA runtime недоступен для faster-whisper/CTranslate2. "
         "Для немедленного продолжения запустите с --device cpu. "
-        "Для GPU установите совместимый CUDA 12/13 runtime/cuBLAS и убедитесь, "
-        "что каталог с DLL есть в PATH."
+        "Для GPU установите CUDA 12/13 runtime/cuBLAS (или pip install nvidia-cublas-cu12) "
+        "и убедитесь, что каталог с DLL есть в PATH."
     )
 
 
@@ -173,6 +199,8 @@ def _run_whisper_transcribe(
 
 
 def transcribe(media: Path, *, model_name: str, language: str, device: str, beam_size: int) -> dict:
+    if device in {"auto", "cuda"}:
+        _prepend_pip_nvidia_cuda_bins()
     WhisperModel = _import_whisper()
     try:
         payload, _ = _run_whisper_transcribe(

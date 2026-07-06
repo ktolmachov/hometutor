@@ -16,20 +16,24 @@ from pathlib import Path
 from typing import Any, MutableMapping
 
 import streamlit as st
-import streamlit.components.v1 as components
 
-from app.media_sidecar import (
-    LocalVideoSource,
-    MediaSection,
-    MediaSidecar,
-    UrlVideoSource,
-    load_media_sidecar_for_konspekt,
-    sha256_file,
-)
-from app.media_urls import NormalizedVideoUrl, normalize_video_url
-from app.path_safety import resolve_data_relative_path
+from app.media_sidecar import UrlVideoSource, load_media_sidecar_for_konspekt
+from app.media_urls import normalize_video_url
 from app.section_index import IndexedSection, parse_sections, row_to_section, section_to_row
 from app.ui.living_konspekt_add_panel import render_add_sections_panel
+
+# Медиа-кластер вынесен в living_konspekt_media (size-budget); реэкспорт имён
+# сохраняет существующие импорты тестов/соседних модулей из этого файла.
+from app.ui.living_konspekt_media import (  # noqa: F401 - реэкспорт
+    _expected_asr_params,
+    _format_timestamp,
+    _media_section_for_row,
+    _render_all_lesson_videos_panel,
+    _render_media_panel,
+    _row_section_id,
+    _sidecar_stale_reasons,
+    _unique_document_rows,
+)
 from app.ui.living_konspekt_next_steps import (
     _collect_concept_context,
     render_deep_study_panel,
@@ -44,7 +48,6 @@ _WORKBENCH_KV_KEY = "living_konspekt_workbench_json"
 _WORKBENCH_HYDRATED_KEY = "_workbench_hydrated"
 
 _SLUG_RE = re.compile(r"[^\w\-]+", re.UNICODE)
-_YOUTUBE_PLAYER_HEIGHT = 400
 
 
 # ── Корзина (JSON-safe rows из app.section_index) ───────────────────────
@@ -288,27 +291,128 @@ def _study_pack_tail(rows: list[dict[str, Any]]) -> str:
     return "\n\n".join(blocks)
 
 
+def media_caption_line(
+    t_start: float | int | None,
+    t_end: float | int | None,
+    video_title: str | None,
+    youtube_url_with_t: str | None = None,
+) -> str | None:
+    """Markdown-строка «🎬 видео с таймкодом» для сохранённого артефакта (чистая, тестируемая).
+
+    Без таймкода — ``None``: строка медиа в файле полезна только адресной.
+    """
+    if t_start is None:
+        return None
+    window = _format_timestamp(t_start) + (f"–{_format_timestamp(t_end)}" if t_end is not None else "")
+    title = (video_title or "видео").strip() or "видео"
+    if youtube_url_with_t:
+        return f"*🎬 [{title} · {window}]({youtube_url_with_t})*"
+    return f"*🎬 {title} · {window}*"
+
+
+def _media_line_for_row(
+    row: dict[str, Any],
+    sidecar_cache: dict[str, Any],
+    stale_cache: dict[str, list[str]] | None = None,
+) -> str | None:
+    """Таймкод раздела для артефакта: сохранённый конспект не должен терять видео-привязку.
+
+    Критерий доверия тот же, что в UI-панели (:mod:`living_konspekt_media`): stale-sidecar
+    или low-confidence раздел → ``None``, иначе файл получил бы таймкод, который само
+    приложение считает недостоверным.
+
+    ``stale_cache`` обязателен по смыслу: staleness хэширует konspekt И локальный
+    видеофайл (гигабайты) — считается один раз на документ, а не на каждый раздел.
+    """
+    md_abs = str(row.get("konspekt_md_abs") or "")
+    if not md_abs:
+        return None
+    if md_abs not in sidecar_cache:
+        try:
+            sidecar_cache[md_abs] = load_media_sidecar_for_konspekt(Path(md_abs))
+        except Exception:  # noqa: BLE001 - медиа опционально, склейка не должна падать
+            sidecar_cache[md_abs] = None
+    sidecar = sidecar_cache[md_abs]
+    if sidecar is None:
+        return None
+    media_section = _media_section_for_row(sidecar, row)
+    if media_section is None or media_section.t_start is None or media_section.low_confidence:
+        return None
+    stale = stale_cache if stale_cache is not None else {}
+    if md_abs not in stale:
+        stale[md_abs] = _sidecar_stale_reasons(sidecar, md_abs)
+    if stale[md_abs]:
+        return None
+    # Таймкод легитимен только для первичного видео (по нему выровнен media_sha256);
+    # вторичные media.videos[] — смежные материалы, их не таймкодируем (см. _videos_block).
+    video = sidecar.video
+    youtube_url: str | None = None
+    title: str | None = getattr(video, "title", None)
+    if isinstance(video, UrlVideoSource):
+        try:
+            normalized = normalize_video_url(video.url)
+            if normalized.is_youtube:
+                youtube_url = normalized.with_timestamp(media_section.t_start)
+        except ValueError:
+            youtube_url = None
+    return media_caption_line(media_section.t_start, media_section.t_end, title, youtube_url)
+
+
+def _videos_block(sidecar_cache: dict[str, Any]) -> str:
+    """«🎬 Видео материалов» для артефакта: ВСЕ источники из ``media.videos[]``.
+
+    Первичное видео даёт таймкоды разделов, но вторичные (доклады, разборы) иначе
+    терялись бы при сохранении. URL — кликабельным, локальный файл — именем.
+    """
+    lines: list[str] = []
+    seen: set[str] = set()
+    for sidecar in sidecar_cache.values():
+        if sidecar is None:
+            continue
+        for video in sidecar.videos:
+            if isinstance(video, UrlVideoSource):
+                key = video.canonical_url or video.url
+                label = (video.title or "").strip() or key
+                entry = f"- [{label}]({key})"
+            else:
+                key = str(getattr(video, "path", ""))
+                label = (getattr(video, "title", None) or Path(key).name or "видео").strip()
+                entry = f"- {label} (`{Path(key).name}`)"
+            if key and key not in seen:
+                seen.add(key)
+                lines.append(entry)
+    return "## 🎬 Видео материалов\n\n" + "\n".join(lines) if lines else ""
+
+
 def _stitch_verbatim(rows: list[dict[str, Any]]) -> str:
     """Детерминированная склейка: главная мысль лекции + заголовки-источники + якоря + текст.
 
-    В конец — «Проверь себя» (вопросы лектора) и «## Источники» (``файл:строки``).
+    Под источником — видео-таймкод раздела из media-sidecar (артефакт остаётся
+    мультимодальным). В конец — «Проверь себя» и «## Источники» (``файл:строки``).
     """
     header_parts = [
         f"> **Главная мысль исходной лекции ({doc_name}):** {idea}"
         for doc_name, idea in _lecture_main_ideas(rows)
     ]
 
+    sidecar_cache: dict[str, Any] = {}
+    stale_cache: dict[str, list[str]] = {}
     parts: list[str] = []
     for row in rows:
         heading = str(row.get("heading_text") or "Без названия")
         source_name = Path(str(row.get("konspekt_md_abs") or "")).name
         location = f"{source_name}:{row.get('line_start')}"
-        parts.append(f"## {heading}\n\n*Источник: {location}*\n\n{row.get('text') or ''}")
+        media_line = _media_line_for_row(row, sidecar_cache, stale_cache)
+        source_block = f"*Источник: {location}*" + (f"\n\n{media_line}" if media_line else "")
+        parts.append(f"## {heading}\n\n{source_block}\n\n{row.get('text') or ''}")
 
     blocks: list[str] = []
     if header_parts:
         blocks.append("\n>\n".join(header_parts))
     blocks.append("\n\n---\n\n".join(parts))
+    videos = _videos_block(sidecar_cache)
+    if videos:
+        blocks.append(videos)
     tail = _study_pack_tail(rows)
     if tail:
         blocks.append(tail)
@@ -375,251 +479,39 @@ def _heading_ambiguous(md_abs: str, heading_text: str) -> bool:
         return False
 
 
-def _row_section_id(row: dict[str, Any]) -> str | None:
-    """Стабильный section_id строки (контент-хэш) — переживает сдвиг line_start."""
-    if not (row.get("heading_text") and (row.get("own_text") or row.get("text"))):
-        return None
-    try:
-        from app.media_alignment import compute_section_id
+def _row_stale_status(row: dict[str, Any]) -> str | None:
+    """Дрейф строки корзины относительно исходного конспекта (корзина хранит снимок).
 
-        return compute_section_id(row_to_section(row))
-    except Exception:  # noqa: BLE001 - деградация к позиционному матчингу, не падение рендера
-        return None
-
-
-def _media_section_for_row(sidecar: MediaSidecar, row: dict[str, Any]) -> MediaSection | None:
-    row_slug = str(row.get("slug") or "")
-    row_heading = str(row.get("heading_text") or "")
-    row_line_start = int(row.get("line_start") or 0)
-    row_line_end = int(row.get("line_end") or 0)
-
-    row_id = _row_section_id(row)
-    if row_id is not None:
-        for section in sidecar.sections:
-            if section.section_id == row_id:
-                return section
-    for section in sidecar.sections:
-        if section.section_slug == row_slug and section.line_start == row_line_start:
-            return section
-    for section in sidecar.sections:
-        if section.heading == row_heading and section.line_start == row_line_start:
-            return section
-    for section in sidecar.sections:
-        if section.heading == row_heading and section.line_end == row_line_end:
-            return section
-    return None
-
-
-def _format_timestamp(seconds: float | int | None) -> str:
-    if seconds is None:
-        return "—"
-    total = max(0, int(seconds))
-    hours, remainder = divmod(total, 3600)
-    minutes, secs = divmod(remainder, 60)
-    return f"{hours:d}:{minutes:02d}:{secs:02d}" if hours else f"{minutes:d}:{secs:02d}"
-
-
-def _expected_asr_params(video_abs: Path) -> dict[str, Any] | None:
-    """Ожидаемый fingerprint ASR из <video>.segments.json — источник истины для sidecar.
-
-    Если сегменты перетранскрибированы с другими параметрами (beam_size/language/model),
-    sidecar обязан считаться устаревшим даже при неизменном media_sha256.
+    ``None`` — источник совпадает; иначе короткая причина для caption. Снимок при этом
+    остаётся читаемым/собираемым — это предупреждение, не блокировка.
     """
-    segments_path = video_abs.with_suffix(".segments.json")
-    if not segments_path.is_file():
-        return None
-    try:
-        payload = json.loads(segments_path.read_text(encoding="utf-8"))
-        params = (payload.get("asr") or {}).get("params")
-        return params if isinstance(params, dict) else None
-    except (OSError, ValueError):
-        return None
-
-
-def _sidecar_stale_reasons(sidecar: MediaSidecar, md_abs: str) -> list[str]:
-    try:
-        konspekt_sha = sha256_file(Path(md_abs))
-    except OSError:
-        konspekt_sha = None
-    media_sha: str | None = None
-    asr_params: dict[str, Any] | None = None
-    if isinstance(sidecar.video, LocalVideoSource):
-        try:
-            video_abs = resolve_data_relative_path(sidecar.video.path)
-            media_sha = sha256_file(video_abs)
-            asr_params = _expected_asr_params(video_abs)
-        except (OSError, ValueError):
-            media_sha = None
-    # asr_params передаём только если и sidecar, и segments-файл его знают:
-    # ручные sidecar'ы (tool=manual) без fingerprint не должны стать stale задним числом.
-    if asr_params is None or sidecar.generated_by.asr_params is None:
-        return sidecar.stale_reasons(konspekt_sha256=konspekt_sha, media_sha256=media_sha)
-    return sidecar.stale_reasons(
-        konspekt_sha256=konspekt_sha, media_sha256=media_sha, asr_params=asr_params
-    )
-
-
-def _render_media_panel(row: dict[str, Any]) -> None:
-    """Render optional section media from sidecar; never block the plain konspekt row."""
     md_abs = str(row.get("konspekt_md_abs") or "")
     if not md_abs:
-        return
+        return None
+    path = Path(md_abs)
+    if not path.is_file():
+        return "исходный файл не найден — используется сохранённый снимок"
     try:
-        sidecar = load_media_sidecar_for_konspekt(Path(md_abs))
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
-        st.caption(f"🎬 Медиа недоступно: {format_request_error(exc)}")
-        return
-    if sidecar is None:
-        return
+        from app.section_index import _cached_parse_sections
 
-    media_section = _media_section_for_row(sidecar, row)
-    stale_reasons = _sidecar_stale_reasons(sidecar, md_abs)
-    if media_section is None:
-        st.caption("🎬 Медиа есть, но для этого раздела таймкод не найден.")
-        return
-
-    st.markdown("**🎬 Материал раздела**")
-    if stale_reasons:
-        st.caption("Таймкоды устарели: " + ", ".join(stale_reasons))
-    if media_section.low_confidence:
-        st.caption("Таймкод примерный: confidence ниже порога.")
-
-    confident_timestamp = media_section.t_start is not None and not stale_reasons and not media_section.low_confidence
-    timestamp_label = _format_timestamp(media_section.t_start)
-
-    for idx, video in enumerate(sidecar.videos, start=1):
-        title = _video_title(video, idx)
-        if len(sidecar.videos) > 1:
-            st.caption(title)
-        if isinstance(video, UrlVideoSource):
-            _render_url_video_media(video, media_section, confident_timestamp, timestamp_label, title)
-        elif isinstance(video, LocalVideoSource):
-            _render_local_video_media(video, media_section, confident_timestamp, timestamp_label, title)
-
-
-def _video_title(video: LocalVideoSource | UrlVideoSource, idx: int) -> str:
-    if video.title:
-        return video.title
-    if isinstance(video, LocalVideoSource):
-        return Path(video.path).name
-    try:
-        normalized = normalize_video_url(video.canonical_url or video.url)
-    except ValueError:
-        return f"Видео {idx}"
-    return normalized.canonical_url
-
-
-def _render_youtube_video_player(normalized: NormalizedVideoUrl, *, start_time: int = 0) -> None:
-    components.iframe(normalized.embed_url(start_time), height=_YOUTUBE_PLAYER_HEIGHT)
-
-
-def _render_url_video_player(video: UrlVideoSource, title: str, *, start_time: int = 0) -> None:
-    try:
-        normalized = normalize_video_url(video.canonical_url or video.url)
-    except ValueError:
-        st.link_button(f"Открыть: {title}", video.url, width="stretch")
-        return
-
-    if normalized.is_youtube:
-        _render_youtube_video_player(normalized, start_time=start_time)
-        link_url = normalized.with_timestamp(start_time) if start_time > 0 else normalized.canonical_url
-        if start_time > 0:
-            st.link_button(
-                f"Открыть на YouTube с {_format_timestamp(start_time)}",
-                link_url,
-                width="stretch",
-            )
-        else:
-            st.link_button(f"Открыть на YouTube: {title}", link_url, width="stretch")
-        return
-
-    st.link_button(f"Открыть: {title}", normalized.canonical_url, width="stretch")
-
-
-def _render_url_video_media(
-    video: UrlVideoSource,
-    media_section: MediaSection,
-    confident_timestamp: bool,
-    timestamp_label: str,
-    title: str,
-) -> None:
-    start_time = int(media_section.t_start or 0) if confident_timestamp else 0
-    _render_url_video_player(video, title, start_time=start_time)
-    if confident_timestamp and start_time > 0:
+        sections = _cached_parse_sections(path)
+    except Exception:  # noqa: BLE001 - проверка дрейфа опциональна, корзина работает без неё
+        return None
+    for section in sections:
+        if section.slug == row.get("slug") and section.line_start == row.get("line_start"):
+            if section.text == str(row.get("text") or ""):
+                return None
+            return "раздел изменился в источнике — в корзине старый снимок"
+    row_id = _row_section_id(row)
+    if row_id is not None:
         try:
-            normalized = normalize_video_url(video.canonical_url or video.url)
-        except ValueError:
-            return
-        if normalized.is_youtube:
-            st.caption(f"{title} · старт: {timestamp_label}")
+            from app.media_alignment import compute_section_id
 
-
-def _render_local_video_media(
-    video: LocalVideoSource,
-    media_section: MediaSection,
-    confident_timestamp: bool,
-    timestamp_label: str,
-    title: str,
-) -> None:
-    start_time = int(media_section.t_start or 0) if confident_timestamp else 0
-    _render_local_video_player(video, title, start_time=start_time)
-    if confident_timestamp:
-        st.caption(f"{title} · старт: {timestamp_label}")
-
-
-def _render_local_video_player(video: LocalVideoSource, title: str, *, start_time: int = 0) -> None:
-    try:
-        video_path = resolve_data_relative_path(video.path)
-    except ValueError as exc:
-        st.caption(f"Локальное видео отклонено path-safety: {format_request_error(exc)}")
-        return
-    if not video_path.exists():
-        st.caption(f"Локальное видео не найдено: `{video.path}`")
-        return
-
-    st.video(str(video_path), start_time=start_time)
-
-
-def _unique_document_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    seen: set[str] = set()
-    out: list[dict[str, Any]] = []
-    for row in rows:
-        md_abs = str(row.get("konspekt_md_abs") or "")
-        if not md_abs or md_abs in seen:
-            continue
-        seen.add(md_abs)
-        out.append(row)
-    return out
-
-
-def _render_all_lesson_videos_panel(rows: list[dict[str, Any]]) -> None:
-    entries: list[tuple[str, MediaSidecar, list[str]]] = []
-    for row in _unique_document_rows(rows):
-        md_abs = str(row.get("konspekt_md_abs") or "")
-        try:
-            sidecar = load_media_sidecar_for_konspekt(Path(md_abs))
-        except (OSError, ValueError, json.JSONDecodeError):
-            continue
-        if sidecar is None or not sidecar.videos:
-            continue
-        entries.append((md_abs, sidecar, _sidecar_stale_reasons(sidecar, md_abs)))
-
-    if not entries:
-        return
-
-    st.markdown("### 🎞 Все видео урока")
-    for md_abs, sidecar, stale_reasons in entries:
-        label = f"{Path(md_abs).name} · {len(sidecar.videos)} видео"
-        with st.expander(label, expanded=len(entries) == 1):
-            if stale_reasons:
-                st.caption("Таймкоды устарели: " + ", ".join(stale_reasons))
-            for idx, video in enumerate(sidecar.videos, start=1):
-                title = _video_title(video, idx)
-                with st.expander(title, expanded=len(sidecar.videos) == 1):
-                    if isinstance(video, UrlVideoSource):
-                        _render_url_video_player(video, title)
-                    elif isinstance(video, LocalVideoSource):
-                        _render_local_video_player(video, title)
+            if any(compute_section_id(s) == row_id for s in sections):
+                return "раздел переехал в источнике (строки сместились)"
+        except Exception:  # noqa: BLE001 - compute_section_id опционален — дрейф не проверяем, корзина работает
+            return None
+    return "раздел не найден в источнике — возможно, конспект перегенерирован"
 
 
 def _bulk_heading_normalized(heading: str) -> str:
@@ -712,6 +604,9 @@ def _render_collected_sections(rows: list[dict[str, Any]]) -> None:
                 st.caption(f"{Path(md_abs).name} · строки {line_start}-{row.get('line_end')}")
                 if (md_abs, heading_text) in duplicate_keys or _heading_ambiguous(md_abs, heading_text):
                     st.caption("⚠️ Заголовок повторяется в документе — VS Code точнее для повторяющихся заголовков.")
+                stale_status = _row_stale_status(row)
+                if stale_status:
+                    st.caption(f"🕰 {stale_status}")
                 st.write(str(row.get("text") or "")[:400])
                 _render_media_panel(row)
             with cols[1]:
@@ -756,9 +651,11 @@ def _render_collected_sections(rows: list[dict[str, Any]]) -> None:
 
 def _render_build_panel(rows: list[dict[str, Any]]) -> None:
     st.markdown("### 📚 Собрать рабочий конспект")
+    # Дефолт через setdefault ДО инстанцирования: value= вместе с key= для уже
+    # существующего session_state-ключа — анти-паттерн (Streamlit его игнорирует и warn'ит).
+    st.session_state.setdefault("living_konspekt_title", "Рабочий конспект")
     topic = st.text_input(
         "Название конспекта",
-        value=st.session_state.get("living_konspekt_title") or "Рабочий конспект",
         key="living_konspekt_title",
     )
     mode = st.radio(
@@ -882,7 +779,7 @@ def _render_memory_panel(rows: list[dict[str, Any]]) -> None:
                     from app.ui_events import track_event
 
                     track_event("living_konspekt_review_loop_opened", {"due": due})
-                except Exception:  # noqa: BLE001
+                except Exception:  # noqa: BLE001 - аналитика не должна ломать переход к повторению
                     pass
                 st.rerun()
 
@@ -935,7 +832,7 @@ def _render_term_cards_panel(rows: list[dict[str, Any]]) -> None:
             from app.ui_events import track_event
 
             track_event("living_konspekt_term_cards_created", {"cards": len(cards)})
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001 - аналитика не должна ломать создание карточек
             pass
         st.rerun()
 

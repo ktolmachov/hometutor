@@ -132,7 +132,7 @@ def _media_sidecar_with_multiple_videos() -> MediaSidecar:
 
 class TestMediaPanelSmoke:
     def test_valid_sidecar_shows_youtube_timestamp_action(self, monkeypatch):
-        import app.ui.living_konspekt_view as view
+        import app.ui.living_konspekt_media as view
 
         iframe_calls: list[tuple[str, int]] = []
         monkeypatch.setattr(view.components, "iframe", lambda src, height: iframe_calls.append((src, height)))
@@ -151,7 +151,7 @@ class TestMediaPanelSmoke:
         assert any("youtube.com/embed/abcDEF12345?start=75" in src for src, _ in iframe_calls)
 
     def test_multiple_sidecar_videos_show_all_actions(self, monkeypatch):
-        import app.ui.living_konspekt_view as view
+        import app.ui.living_konspekt_media as view
 
         iframe_calls: list[tuple[str, int]] = []
         monkeypatch.setattr(view.components, "iframe", lambda src, height: iframe_calls.append((src, height)))
@@ -173,7 +173,7 @@ class TestMediaPanelSmoke:
         assert any("youtube.com/embed/second12345" in src for src in iframe_srcs)
 
     def test_stale_sidecar_degrades_without_timestamp_action(self, monkeypatch):
-        import app.ui.living_konspekt_view as view
+        import app.ui.living_konspekt_media as view
 
         monkeypatch.setattr(view, "load_media_sidecar_for_konspekt", lambda path: _media_sidecar())
         monkeypatch.setattr(view, "sha256_file", lambda path: "0" * 64)
@@ -190,7 +190,7 @@ class TestMediaPanelSmoke:
         assert any("Открыть на YouTube: Видео" in button.label for button in link_buttons)
 
     def test_low_confidence_sidecar_degrades_without_timestamp_action(self, monkeypatch):
-        import app.ui.living_konspekt_view as view
+        import app.ui.living_konspekt_media as view
 
         monkeypatch.setattr(view, "load_media_sidecar_for_konspekt", lambda path: _media_sidecar(confidence=0.4))
         monkeypatch.setattr(view, "sha256_file", lambda path: "a" * 64)

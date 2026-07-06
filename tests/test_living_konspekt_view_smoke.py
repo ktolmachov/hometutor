@@ -255,7 +255,10 @@ class TestMediaPanelSmoke:
         assert not any("с 1:15" in button.label for button in link_buttons)
         assert any("Открыть на YouTube: Видео" in button.label for button in link_buttons)
 
-    def test_low_confidence_sidecar_degrades_without_timestamp_action(self, monkeypatch):
+    def test_low_confidence_sidecar_still_seeks_but_flags_as_approximate(self, monkeypatch):
+        """Таймкод есть (пусть и низкой уверенности) — плеер обязан перемотать на него,
+        а не бросать пользователя на 0:00 целой лекции; неопределённость обозначается
+        подписью «(примерно)», а не отказом от перемотки."""
         import app.ui.living_konspekt_media as view
 
         monkeypatch.setattr(view, "load_media_sidecar_for_konspekt", lambda path: _media_sidecar(confidence=0.4))
@@ -268,9 +271,9 @@ class TestMediaPanelSmoke:
         assert not at.exception
         captions = [c.value for c in at.caption]
         assert any("confidence ниже порога" in c for c in captions)
+        assert any("примерно" in c for c in captions)
         link_buttons = at.get("link_button")
-        assert not any("с 1:15" in button.label for button in link_buttons)
-        assert any("Открыть на YouTube: Видео" in button.label for button in link_buttons)
+        assert any("с 1:15" in button.label for button in link_buttons)
 
 
 class TestMemoryPanelSmoke:

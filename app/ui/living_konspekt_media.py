@@ -246,15 +246,18 @@ def _render_url_video_media(
     timestamp_label: str,
     title: str,
 ) -> None:
-    start_time = int(media_section.t_start or 0) if confident_timestamp else 0
+    start_time = int(media_section.t_start or 0) if has_timestamp else 0
     _render_url_video_player(video, title, start_time=start_time)
-    if confident_timestamp and start_time > 0:
+    if has_timestamp and start_time > 0:
         try:
             normalized = normalize_video_url(video.canonical_url or video.url)
         except ValueError:
             return
         if normalized.is_youtube:
-            st.caption(f"{title} · старт: {timestamp_label}")
+            label = f"{title} · старт: {timestamp_label}"
+            if not confident_timestamp:
+                label += " (примерно)"
+            st.caption(label)
 
 
 def _render_local_video_media(
@@ -270,10 +273,13 @@ def _render_local_video_media(
     # хэширует контент, чтобы определить file_id — кэша по mtime у него нет). При
     # 812 МБ-видео и 24 разделах на 2 вкладки это давало ~48 полных чтений файла за
     # rerun. Плеер поэтому рендерится только по явному клику, а не для каждой строки.
-    if confident_timestamp:
-        st.caption(f"{title} · старт: {timestamp_label}")
+    if has_timestamp:
+        label = f"{title} · старт: {timestamp_label}"
+        if not confident_timestamp:
+            label += " (примерно)"
+        st.caption(label)
     if st.checkbox("▶ Показать видео", key=checkbox_key):
-        start_time = int(media_section.t_start or 0) if confident_timestamp else 0
+        start_time = int(media_section.t_start or 0) if has_timestamp else 0
         _render_local_video_player(video, title, start_time=start_time)
 
 

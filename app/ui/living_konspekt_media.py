@@ -388,8 +388,21 @@ def _render_all_lesson_videos_panel(rows: list[dict[str, Any]]) -> None:
                 st.caption("Таймкоды устарели: " + ", ".join(stale_reasons))
             for idx, video in enumerate(sidecar.videos, start=1):
                 title = _video_title(video, idx)
-                with st.expander(title, expanded=len(sidecar.videos) == 1):
+                with st.expander(title, expanded=False):
                     if isinstance(video, UrlVideoSource):
-                        _render_url_video_player(video, title)
+                        try:
+                            normalized = normalize_video_url(video.canonical_url or video.url)
+                            link_url = normalized.canonical_url
+                            st.link_button(f"Открыть на YouTube: {title}", link_url, width="stretch")
+                        except ValueError:
+                            st.link_button(f"Открыть: {title}", video.url, width="stretch")
+                            normalized = None
+
+                        if normalized and normalized.is_youtube:
+                            if st.checkbox("Показать встроенный плеер", key=f"embed_all_v_{md_abs}_{idx}"):
+                                _render_youtube_video_player(normalized)
                     elif isinstance(video, LocalVideoSource):
-                        _render_local_video_player(video, title)
+                        st.caption(f"📹 {title} (локальный файл: {video.path})")
+                        if st.checkbox("Показать встроенный плеер", key=f"embed_all_v_{md_abs}_{idx}"):
+                            _render_local_video_player(video, title)
+

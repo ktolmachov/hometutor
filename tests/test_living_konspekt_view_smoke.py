@@ -222,6 +222,12 @@ class TestMediaPanelSmoke:
         at.session_state["workbench_sections"] = [_row()]
         at.run()
 
+        # Check all checkboxes to render the iframe players
+        for cb in at.checkbox:
+            if "Показать встроенный плеер" in str(cb.label):
+                cb.check()
+        at.run()
+
         assert not at.exception
         assert any("Все видео урока" in str(md.value) for md in at.markdown)
         labels = [button.label for button in at.get("link_button")]

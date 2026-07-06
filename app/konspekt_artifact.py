@@ -154,6 +154,9 @@ def parse_manifest(markdown_text: str) -> ManifestPayload | None:
     )
 
 
+_PARSED_ARTIFACT_CACHE: dict[tuple[str, float, int], SavedArtifact] = {}
+
+
 def scan_saved_artifacts(vault_root: Path) -> list[SavedArtifact]:
     """Return saved Living Konspekt artifacts, including plain files marked as such."""
     artifacts_dir = _artifacts_dir(vault_root)
@@ -163,24 +166,35 @@ def scan_saved_artifacts(vault_root: Path) -> list[SavedArtifact]:
     artifacts: list[SavedArtifact] = []
     for path in sorted(artifacts_dir.rglob("*.md")):
         try:
+            resolved_path = str(path.resolve())
+            stat = path.stat()
+            mtime = stat.st_mtime
+            size = stat.st_size
+            key = (resolved_path, mtime, size)
+            if key in _PARSED_ARTIFACT_CACHE:
+                artifacts.append(_PARSED_ARTIFACT_CACHE[key])
+                continue
+
             text = path.read_text(encoding="utf-8", errors="replace")
             manifest = parse_manifest(text)
+            if manifest is None:
+                artifact = _manifestless_artifact(path)
+            else:
+                artifact = SavedArtifact(
+                    path=path,
+                    artifact_id=manifest.artifact_id,
+                    title=manifest.title,
+                    updated_at=manifest.updated_at,
+                    section_count=len(manifest.rows),
+                    has_manifest=True,
+                )
+            _PARSED_ARTIFACT_CACHE[key] = artifact
+            artifacts.append(artifact)
         except (OSError, UnicodeError, ValueError):
             continue
-        if manifest is None:
-            artifacts.append(_manifestless_artifact(path))
-            continue
-        artifacts.append(
-            SavedArtifact(
-                path=path,
-                artifact_id=manifest.artifact_id,
-                title=manifest.title,
-                updated_at=manifest.updated_at,
-                section_count=len(manifest.rows),
-                has_manifest=True,
-            )
-        )
+
     return sorted(artifacts, key=lambda item: (item.updated_at, item.name), reverse=True)
+
 
 
 def resolve_artifact_path(vault_root: Path, artifact_id: str) -> Path | None:

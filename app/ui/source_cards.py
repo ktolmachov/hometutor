@@ -4,6 +4,7 @@ from __future__ import annotations
 import streamlit as st
 
 from app.living_konspekt_source_resolver import SourceSectionCandidate, resolve_source_section
+from app.living_konspekt_video_citations import video_citation_for_candidate
 from app.ui.answer_helpers import find_best_topic_for_documents
 from app.ui.quiz_learning_mode_widgets import (
     render_scoped_quiz_learning_mode_select,
@@ -220,6 +221,7 @@ def _render_living_konspekt_source_action(src: dict, idx: int, prefix: str) -> N
             _add_candidate_to_living_konspekt(candidate)
             st.rerun()
         st.caption(_candidate_caption(candidate))
+        _render_source_video_citation(candidate, key=f"{action_key}_video")
         return
 
     if not resolution.candidates:
@@ -235,6 +237,7 @@ def _render_living_konspekt_source_action(src: dict, idx: int, prefix: str) -> N
             format_func=_candidate_label,
             key=f"{action_key}_choice",
         )
+        _render_source_video_citation(selected, key=f"{action_key}_video_choice")
         if st.button("Добавить выбранный раздел", key=f"{action_key}_confirm", width="stretch"):
             _add_candidate_to_living_konspekt(selected)
             st.rerun()
@@ -257,3 +260,38 @@ def _candidate_label(candidate: SourceSectionCandidate) -> str:
 
 def _candidate_caption(candidate: SourceSectionCandidate) -> str:
     return f"{_candidate_label(candidate)} · {candidate.reason} · score {candidate.score:.1f}"
+
+
+def _render_source_video_citation(candidate: SourceSectionCandidate, *, key: str) -> None:
+    resolution = video_citation_for_candidate(candidate)
+    if resolution.status != "available" or resolution.citation is None:
+        st.caption(f"🎬 Доверенной видео-цитаты нет: {resolution.message}")
+        return
+
+    citation = resolution.citation
+    _track_video_citation_shown_once(candidate, key)
+    label = f"🎬 Смотреть с {citation.timestamp_label}: {citation.video_title}"
+    if citation.url:
+        st.link_button(label, citation.url, width="stretch")
+    else:
+        st.caption(f"{label} · локальное видео откройте в Живом конспекте")
+    st.caption(f"{citation.heading} · {citation.source_label}")
+
+
+def _track_video_citation_shown_once(candidate: SourceSectionCandidate, key: str) -> None:
+    event_key = f"{key}_shown"
+    if st.session_state.get(event_key):
+        return
+    st.session_state[event_key] = True
+    try:
+        from app.ui_events import track_event
+
+        track_event(
+            "ask_lecturer_video_citation_shown",
+            {
+                "heading": candidate.section.heading_text,
+                "source": str(candidate.section.source_abs.name),
+            },
+        )
+    except Exception:  # noqa: BLE001 - UI analytics must not block source-card rendering
+        pass

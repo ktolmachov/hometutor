@@ -4,18 +4,30 @@
 ``[{start, end, text}]`` (см. ``scripts/transcribe_media.py``). Выход — таймкоды
 ``t_start/t_end`` и ``confidence`` на раздел, детерминированно и без LLM.
 
-Алгоритм ``anchor-lis-v1`` (устойчив к видео 4–5 часов):
+Алгоритм ``anchor-lis-v2`` (устойчив к видео 4–5 часов):
 
 1. Сегменты группируются в блоки ~фиксированного лексического объёма.
-2. Slide-aware якорение: явное «слайд N» в речи или дословное чтение заголовка
-   слайда → сильное свидетельство (confidence 0.75–0.90); при отсутствии номеров
-   в транскрипте — order-rank по хронологии cue-моментов и порядку слайдов.
+   Токены скоринга (не ``compute_section_id``!) канонизируются: RU-стемминг
+   словоформ («токенов»→«токен») + транслитерация латинских терминов
+   конспекта в кириллицу ASR («skills»→«скиллс») — см. ``_tokenize_canon``.
+2. Slide-aware якорение: явное «слайд N» в речи или title-reading заголовка
+   слайда/раздела по скользящему окну ~14 c транскрипта (``_build_windows`` —
+   один ASR-сегмент, медианно 2 c/4 слова, для заголовка мал) → сильное
+   свидетельство (confidence 0.75–0.90); при отсутствии номеров в
+   транскрипте — order-rank по хронологии cue-моментов и порядку слайдов.
 3. Каждый содержательный раздел без slide-якоря получает блок-кандидат (argmax
-   лексического перекрытия ``tokenize_filtered`` по токенам заголовка И тела).
+   лексического перекрытия канонизированных токенов заголовка И тела).
 4. Взвешенный LIS по (порядок раздела, индекс блока) отбрасывает якоря,
    ломающие хронологию лекции.
 5. Разделы без якоря интерполируются между соседними якорями по их
    уточнённым временам и помечаются низким confidence (< 0.70).
+
+v1→v2: тот же контракт и та же (глобальная) модель хронологии — единственный
+монотонный проход по документу. Известное ограничение, вынесенное за скобки
+этой версии: реальные конспекты — несколько тематических «проходов» по одной
+лекции (слайды → ключевые темы → примеры), внутри которых глобальная
+монотонность неверна; это требует отдельного пересмотра LIS-модели и
+тест-сьюта, не входит в v2.
 """
 
 from __future__ import annotations
@@ -29,7 +41,7 @@ from pathlib import Path
 from app.knowledge_text import tokenize_filtered
 from app.section_index import ParsedSection
 
-ALIGNMENT_VERSION = "anchor-lis-v1"
+ALIGNMENT_VERSION = "anchor-lis-v2"
 SEGMENTS_SCHEMA_VERSION = 1
 
 _BLOCK_TOKEN_TARGET = 120  # лексический объём блока (≈30–60 сек речи)
@@ -78,6 +90,79 @@ _GENERIC_HEADING_TITLES = frozenset(
         "схемы и модели",
     }
 )
+
+# ── Канонизация токенов: RU-стемминг + транслитерация ────────────────────
+#
+# Конспект и ASR-транскрипт лексически расходятся сильнее, чем различие в
+# порядке слов: (1) словоформы — конспект пишет «токенов», лектор говорит
+# «токен»/«токены»; (2) латинские термины конспекта («skills», «compacting»,
+# «runtime») лектор произносит и ASR распознаёт кириллицей («скиллы»,
+# «компактинг», «рантайм»). Без этого overlap занижен ~вдвое, из-за чего
+# якоря либо не находятся вовсе, либо матчатся на случайные фоновые слова.
+_RU_SUFFIXES = tuple(
+    sorted(
+        [
+            "иями", "ями", "ами", "иях", "ием", "ии", "ия", "ий", "ый", "ой", "ей",
+            "ов", "ев", "ах", "ях", "ом", "ем", "ам", "ям", "ую", "юю", "ая", "яя",
+            "ое", "ее", "ые", "ие", "ого", "его", "ому", "ему", "ыми", "ими", "ым", "им",
+            "ется", "ются", "ился", "ался", "ать", "ять", "еть", "ить", "ет",
+            "ит", "ут", "ют", "ла", "ло", "ли", "ть",
+            "а", "я", "о", "е", "ы", "и", "у", "ю", "ь",
+        ],
+        key=len,
+        reverse=True,
+    )
+)
+_RU_LETTER_RE = re.compile(r"[а-яё]")
+_LATIN_TOKEN_RE = re.compile(r"[a-z]+")
+_TRANSLIT_DIGRAPHS = (
+    ("sch", "ш"), ("sh", "ш"), ("ch", "ч"), ("th", "т"), ("ph", "ф"), ("kh", "х"),
+    ("oo", "у"), ("ee", "и"), ("ai", "ай"), ("ay", "ай"),
+    ("qu", "кв"), ("ck", "к"), ("ju", "джу"), ("ja", "джа"),
+)
+_TRANSLIT_CHARS = {
+    "a": "а", "b": "б", "c": "к", "d": "д", "e": "е", "f": "ф", "g": "г", "h": "х",
+    "i": "и", "j": "дж", "k": "к", "l": "л", "m": "м", "n": "н", "o": "о", "p": "п",
+    "q": "к", "r": "р", "s": "с", "t": "т", "u": "у", "v": "в", "w": "в", "x": "кс",
+    "y": "и", "z": "з",
+}
+# Оконное чтение заголовка (см. _build_windows): медианный ASR-сегмент —
+# ~2 секунды / 4 слова, заголовок раздела туда не помещается целиком.
+_TITLE_WINDOW_SPAN = 14.0
+
+
+def _stem_ru(token: str) -> str:
+    """Грубый суффиксный стеммер: «токенов»/«токена»/«токеном» → «токен»."""
+    if len(token) <= 4 or not _RU_LETTER_RE.search(token):
+        return token
+    for suf in _RU_SUFFIXES:
+        if token.endswith(suf) and len(token) - len(suf) >= 4:
+            return token[: -len(suf)]
+    return token
+
+
+def _transliterate(token: str) -> str | None:
+    """Латинский токен → фонетическое кириллическое приближение; иначе None."""
+    if not _LATIN_TOKEN_RE.fullmatch(token):
+        return None
+    out = token
+    for src, dst in _TRANSLIT_DIGRAPHS:
+        out = out.replace(src, dst)
+    return "".join(_TRANSLIT_CHARS.get(ch, ch) for ch in out)
+
+
+def _canon_token(token: str) -> str:
+    transliterated = _transliterate(token)
+    return _stem_ru(transliterated) if transliterated is not None else _stem_ru(token)
+
+
+def _tokenize_canon(text: str | None) -> frozenset[str]:
+    """``tokenize_filtered`` + стемминг/транслитерация — токены для скоринга.
+
+    Не используется в :func:`compute_section_id`: id обязан оставаться
+    стабильным между запусками независимо от эволюции скоринговой канонизации.
+    """
+    return frozenset(_canon_token(t) for t in tokenize_filtered(text))
 
 
 def _anchor_confidence(score: float) -> float:
@@ -171,7 +256,7 @@ def _build_blocks(segments: tuple[TranscriptSegment, ...]) -> list[_Block]:
     for idx, seg in enumerate(segments):
         if t_start is None:
             t_start, seg_lo = seg.start, idx
-        tokens |= tokenize_filtered(seg.text)
+        tokens |= _tokenize_canon(seg.text)
         t_end = seg.end
         if len(tokens) >= _BLOCK_TOKEN_TARGET:
             blocks.append(_Block(t_start=t_start, t_end=t_end, tokens=frozenset(tokens), seg_lo=seg_lo, seg_hi=idx))
@@ -204,7 +289,7 @@ def _refine_t_start(
 ) -> float:
     """Начало — не блок целиком, а первый его сегмент с различительной лексикой раздела."""
     for idx in range(block.seg_lo, block.seg_hi + 1):
-        if tokens & tokenize_filtered(segments[idx].text):
+        if tokens & _tokenize_canon(segments[idx].text):
             return segments[idx].start
     return block.t_start
 
@@ -238,21 +323,58 @@ def _normalize_heading_for_title_read(heading_text: str) -> str:
     return text.strip()
 
 
-def _heading_title_tokens(heading_text: str) -> tuple[str, ...]:
-    """Токены заголовка для title-reading; пусто для общеупотребимых H4."""
+def _heading_title_tokens(
+    heading_text: str, background: frozenset[str] = frozenset()
+) -> tuple[str, ...]:
+    """Токены заголовка для title-reading; пусто для общеупотребимых H4.
+
+    ``background`` (фоновые токены лекции, см. :func:`_background_tokens`)
+    вычитается: короткие технические термины («mcp», «llm», «rag») теперь не
+    отфильтровываются по длине, но не должны матчиться на связки лектора.
+    """
     normalized = " ".join(_normalize_heading_for_title_read(heading_text).lower().split())
     if normalized in _GENERIC_HEADING_TITLES:
         return ()
-    tokens = tuple(t for t in tokenize_filtered(_normalize_heading_for_title_read(heading_text)) if len(t) > 3)
+    tokens = tuple(_tokenize_canon(_normalize_heading_for_title_read(heading_text)) - background)
     return tokens
 
 
-def _title_read_score(title_tokens: tuple[str, ...], segment_text: str) -> float:
+def _title_read_score(title_tokens: tuple[str, ...], window_tokens: frozenset[str]) -> float:
+    """Доля токенов заголовка, встретившихся в окне транскрипта (см. :func:`_build_windows`)."""
     if not title_tokens:
         return 0.0
-    seg_tokens = tokenize_filtered(segment_text)
-    hit = len(set(title_tokens) & set(seg_tokens))
+    hit = len(set(title_tokens) & window_tokens)
     return hit / len(title_tokens)
+
+
+@dataclass(frozen=True)
+class _Window:
+    t_start: float
+    tokens: frozenset[str]
+
+
+def _build_windows(
+    segments: tuple[TranscriptSegment, ...], span: float = _TITLE_WINDOW_SPAN
+) -> list[_Window]:
+    """Скользящее окно токенов на каждый сегмент — для title-reading.
+
+    Медианный ASR-сегмент ~2 с / 4 слова: заголовок раздела (обычно 3–6 слов)
+    физически не помещается в один сегмент. Окно агрегирует все сегменты в
+    ``span`` секунд вперёд от текущего — без сдвига якорной точки: индекс
+    и ``t_start`` окна равны индексу/старту исходного сегмента.
+    """
+    n = len(segments)
+    seg_tokens = [_tokenize_canon(s.text) for s in segments]
+    windows: list[_Window] = []
+    for i in range(n):
+        limit = segments[i].start + span
+        tokens: set[str] = set()
+        for k in range(i, n):
+            if segments[k].start > limit:
+                break
+            tokens |= seg_tokens[k]
+        windows.append(_Window(t_start=segments[i].start, tokens=frozenset(tokens)))
+    return windows
 
 
 def _block_idx_for_seg(blocks: list[_Block], seg_idx: int) -> int:
@@ -286,18 +408,20 @@ class _SlideCue:
 def _detect_slide_title_cues(
     segments: tuple[TranscriptSegment, ...],
     slide_sections: list[tuple[int, int, str]],
+    windows: list[_Window],
+    background: frozenset[str],
 ) -> list[_SlideCue]:
     """Title-reading: слайды по номеру, сегменты только вперёд по хронологии."""
     cues: list[_SlideCue] = []
     seg_cursor = 0
     for pos, slide_num, heading in sorted(slide_sections, key=lambda item: item[1]):
-        title_tokens = _heading_title_tokens(_slide_title_from_heading(heading))
+        title_tokens = _heading_title_tokens(_slide_title_from_heading(heading), background)
         if not title_tokens:
             continue
         best_idx = -1
         best_score = 0.0
         for idx in range(seg_cursor, len(segments)):
-            score = _title_read_score(title_tokens, segments[idx].text)
+            score = _title_read_score(title_tokens, windows[idx].tokens)
             if score > best_score:
                 best_score = score
                 best_idx = idx
@@ -347,14 +471,15 @@ def _slide_time_windows(
 def _best_slide_for_heading(
     heading_text: str,
     slide_sections: list[tuple[int, int, str]],
+    background: frozenset[str],
 ) -> tuple[int, float] | None:
-    tokens = _heading_title_tokens(heading_text)
+    tokens = _heading_title_tokens(heading_text, background)
     if not tokens:
         return None
     best_num: int | None = None
     best_overlap = 0.0
     for _pos, slide_num, slide_heading in slide_sections:
-        slide_tokens = _heading_title_tokens(_slide_title_from_heading(slide_heading))
+        slide_tokens = _heading_title_tokens(_slide_title_from_heading(slide_heading), background)
         if not slide_tokens:
             continue
         overlap = len(set(tokens) & set(slide_tokens)) / min(len(tokens), len(slide_tokens))
@@ -373,35 +498,37 @@ def _detect_windowed_heading_cues(
     *,
     slide_sections: list[tuple[int, int, str]],
     anchors: dict[int, tuple[int, float, float]],
+    windows: list[_Window],
+    background: frozenset[str],
 ) -> dict[int, tuple[int, float, float]]:
     """Title-reading в окне слайда, к которому тематически привязан раздел."""
     if len(anchors) < 2:
         return {}
     media_end = segments[-1].end if segments else float("inf")
-    windows = _slide_time_windows(slide_sections, anchors, media_end)
+    slide_windows = _slide_time_windows(slide_sections, anchors, media_end)
     heading_anchors: dict[int, tuple[int, float, float]] = {}
     for pos, section in enumerate(sections):
         if pos in anchors or _slide_number_from_heading(section.heading_text):
             continue
         if section.level >= 5:
             continue
-        title_tokens = _heading_title_tokens(section.heading_text)
+        title_tokens = _heading_title_tokens(section.heading_text, background)
         if len(title_tokens) < 2:
             continue
-        mapped = _best_slide_for_heading(section.heading_text, slide_sections)
+        mapped = _best_slide_for_heading(section.heading_text, slide_sections, background)
         if mapped is None:
             t_lo, t_hi = 0.0, media_end
             min_score = 0.50
         else:
             slide_num, _overlap = mapped
-            t_lo, t_hi = windows.get(slide_num, (0.0, media_end))
+            t_lo, t_hi = slide_windows.get(slide_num, (0.0, media_end))
             min_score = 0.35
         best_idx = -1
         best_score = 0.0
         for idx, seg in enumerate(segments):
             if not (t_lo <= seg.start <= t_hi):
                 continue
-            score = _title_read_score(title_tokens, seg.text)
+            score = _title_read_score(title_tokens, windows[idx].tokens)
             if score > best_score:
                 best_score = score
                 best_idx = idx
@@ -421,6 +548,8 @@ def _windowed_slide_match(
     blocks: list[_Block],
     *,
     anchors_by_num: dict[int, tuple[int, float, float]],
+    windows: list[_Window],
+    background: frozenset[str],
 ) -> dict[int, tuple[int, float, float]]:
     """Поиск title-cue в временном окне между соседними якоренными слайдами."""
     if not unmatched or len(anchors_by_num) < 2:
@@ -433,7 +562,7 @@ def _windowed_slide_match(
         next_nums = [num for num in anchored_nums if num > slide_num]
         t_lo = anchors_by_num[prev_nums[-1]][2] if prev_nums else 0.0
         t_hi = anchors_by_num[next_nums[0]][2] if next_nums else media_end
-        title_tokens = _heading_title_tokens(_slide_title_from_heading(heading))
+        title_tokens = _heading_title_tokens(_slide_title_from_heading(heading), background)
         if not title_tokens:
             continue
         best_idx = -1
@@ -441,7 +570,7 @@ def _windowed_slide_match(
         for idx, seg in enumerate(segments):
             if not (t_lo <= seg.start <= t_hi):
                 continue
-            score = _title_read_score(title_tokens, seg.text)
+            score = _title_read_score(title_tokens, windows[idx].tokens)
             if score > best_score:
                 best_score = score
                 best_idx = idx
@@ -459,6 +588,8 @@ def _build_slide_anchors(
     sections: list[ParsedSection],
     segments: tuple[TranscriptSegment, ...],
     blocks: list[_Block],
+    windows: list[_Window],
+    background: frozenset[str],
 ) -> dict[int, tuple[int, float, float]]:
     """pos -> (block_idx, confidence, t_start) для slide-aware якорей."""
     slide_sections = [
@@ -470,7 +601,7 @@ def _build_slide_anchors(
         return {}
 
     spoken_nums = _detect_spoken_slide_numbers(segments)
-    title_cues = _detect_slide_title_cues(segments, slide_sections)
+    title_cues = _detect_slide_title_cues(segments, slide_sections, windows, background)
     anchors: dict[int, tuple[int, float, float]] = {}
 
     for pos, slide_num, _heading in slide_sections:
@@ -505,7 +636,11 @@ def _build_slide_anchors(
         for pos, slide_num, _ in slide_sections
         if pos in anchors
     }
-    anchors.update(_windowed_slide_match(unmatched, segments, blocks, anchors_by_num=anchors_by_num))
+    anchors.update(
+        _windowed_slide_match(
+            unmatched, segments, blocks, anchors_by_num=anchors_by_num, windows=windows, background=background
+        )
+    )
 
     anchors.update(
         _detect_windowed_heading_cues(
@@ -514,6 +649,8 @@ def _build_slide_anchors(
             blocks,
             slide_sections=slide_sections,
             anchors=anchors,
+            windows=windows,
+            background=background,
         )
     )
     return anchors
@@ -589,12 +726,13 @@ def align_sections(
             for s in sections
         ]
 
+    background = _background_tokens(blocks)
+    windows = _build_windows(segments)
     slide_anchor_by_pos = _filter_slide_anchors_by_lis(
-        _build_slide_anchors(sections, segments, blocks),
+        _build_slide_anchors(sections, segments, blocks, windows, background),
         segments,
     )
 
-    background = _background_tokens(blocks)
     scoring_blocks = [
         _Block(
             t_start=b.t_start, t_end=b.t_end, tokens=frozenset(b.tokens - background),
@@ -618,8 +756,8 @@ def align_sections(
             block_idx, _conf, _t = slide_anchor_by_pos[pos]
             candidates.append((pos, block_idx, _SLIDE_CUE_LIS_WEIGHT))
             continue
-        body_tokens = tokenize_filtered(section.own_text or section.text)
-        heading_tokens = tokenize_filtered(section.heading_text) & spoken_tokens
+        body_tokens = _tokenize_canon(section.own_text or section.text)
+        heading_tokens = _tokenize_canon(section.heading_text) & spoken_tokens
         tokens = frozenset((body_tokens | heading_tokens) - background)
         if len(tokens) < _MIN_SECTION_TOKENS:
             continue

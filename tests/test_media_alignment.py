@@ -1,4 +1,4 @@
-"""Инварианты выравнивания разделов конспекта по ASR-сегментам (anchor-lis-v1)."""
+"""Инварианты выравнивания разделов конспекта по ASR-сегментам (anchor-lis-v2)."""
 
 from __future__ import annotations
 
@@ -8,6 +8,9 @@ from app.media_alignment import (
     align_sections,
     compute_section_id,
     _slide_number_from_heading,
+    _stem_ru,
+    _transliterate,
+    _tokenize_canon,
 )
 from app.section_index import ParsedSection
 
@@ -294,3 +297,57 @@ def test_plural_slide_range_heading_extracts_first_number():
     assert _slide_number_from_heading("Слайды 8–12: LLM") == 8
     assert _slide_number_from_heading("Слайды 25-27: Workflow") == 25
     assert _slide_number_from_heading("Тема без слайда") is None
+
+
+def test_ru_stemming_collapses_wordforms():
+    """«токенов»/«токена»/«токеном» — одна лексема для скоринга overlap."""
+    forms = ["токенов", "токена", "токеном", "токены", "токен"]
+    stems = {_stem_ru(f) for f in forms}
+    assert len(stems) == 1, stems
+
+
+def test_ru_stemming_does_not_touch_short_or_latin_tokens():
+    assert _stem_ru("тест") == "тест"  # <=4 символов — не трогаем
+    assert _stem_ru("skills") == "skills"  # латиница — не по этому пути
+
+
+def test_transliteration_bridges_latin_term_and_cyrillic_asr():
+    """Конспект пишет термин латиницей, ASR — кириллицей; canon должен их сблизить."""
+    assert _transliterate("skills") is not None
+    assert _transliterate("токен") is None  # не латиница — None
+    canon_konspekt = _tokenize_canon("Skills и Compacting контекста")
+    canon_asr = _tokenize_canon("Скиллы и компактинг контекста, вот")
+    assert canon_konspekt & canon_asr, (canon_konspekt, canon_asr)
+
+
+def test_alignment_finds_title_anchor_across_multiple_short_asr_segments():
+    """Заголовок раздела (несколько слов) не влезает в один 2-секундный ASR-сегмент —
+    title-match должен агрегировать окно сегментов, а не только текущий."""
+    segments = (
+        TranscriptSegment(0.0, 2.0, "так, вот"),
+        TranscriptSegment(2.0, 4.0, "смотрите"),
+        TranscriptSegment(4.0, 6.0, "logit biasing"),
+        TranscriptSegment(6.0, 8.0, "и token masking"),
+        TranscriptSegment(8.0, 10.0, "это важная штука"),
+        TranscriptSegment(60.0, 62.0, "дальше про другое"),
+    )
+    sections = [
+        ParsedSection(
+            heading_text="Слайд 30: Logit biasing / token masking",
+            slug="slide-30",
+            level=3,
+            line_start=1,
+            line_end=9,
+            text="конспект про логиты " * 5,
+            own_text="конспект про логиты " * 5,
+        ),
+    ]
+
+    aligned = align_sections(sections, segments)
+
+    assert aligned[0].anchored
+    # Окно агрегирует несколько сегментов вперёд — якорь попадает где-то в
+    # начало реплики, а не строго на первый сегмент с частью термина; важно,
+    # что он НЕ ушёл на посторонний блок в 60 c.
+    assert 0.0 <= aligned[0].t_start < 60.0
+    assert aligned[0].confidence >= 0.70

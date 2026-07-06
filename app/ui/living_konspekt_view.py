@@ -7,14 +7,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, MutableMapping
 
 import streamlit as st
 
 from app import konspekt_artifact
-from app import workbench_service
 from app.section_index import IndexedSection, row_to_section
 from app.ui.living_konspekt_add_panel import render_add_sections_panel
 from app.konspekt_artifact import (  # noqa: F401 - реэкспорт старых импортов feature-тестов
@@ -63,11 +61,6 @@ from app.ui.living_konspekt_workbench_panel import (
 from app.ui.helpers import format_request_error
 from app.ui.widgets import render_panel_header
 
-WORKBENCH_SECTIONS_KEY = workbench_service.WORKBENCH_SECTIONS_KEY
-_WORKBENCH_KV_KEY = workbench_service.WORKBENCH_KV_KEY
-_WORKBENCH_HYDRATED_KEY = "_workbench_hydrated"
-_WORKBENCH_GOAL_HYDRATED_KEY = "_living_konspekt_goal_hydrated"
-_WORKBENCH_GOAL_KEY = "living_konspekt_goal"
 _ACTIVE_ARTIFACT_ID_KEY = "living_konspekt_active_artifact_id"
 _LAST_SAVED_BODY_KEY = "living_konspekt_last_saved_body"
 _NEW_TITLE_PICK = "__new__"
@@ -128,212 +121,41 @@ def _render_konspekt_title_fields() -> str:
     if prev_picked != picked_id:
         st.session_state[_TITLE_PICK_PREV_KEY] = picked_id
         _apply_title_pick(picked_id, id_to_artifact)
+        # «Возврат» к существующему конспекту: пользователь выбрал артефакт в пикере.
+        # Pending-флоу после save/rebuild выставляет prev==picked одинаково → сюда не
+        # попадает, поэтому это именно ручной выбор, а не эхо пересборки.
+        if picked_id != _NEW_TITLE_PICK:
+            try:
+                from app.ui_events import track_event
+
+                track_event(
+                    "artifact_reopened",
+                    {"artifact_id": picked_id, "sections": id_to_artifact[picked_id].section_count},
+                )
+            except Exception:  # noqa: BLE001 - аналитика не должна ломать пикер
+                pass
 
     return st.text_input("Название конспекта", key="living_konspekt_title")
 
 
-# ── Корзина: тонкий Streamlit-адаптер поверх app.workbench_service ───────
-def _state(state: MutableMapping[str, Any] | None) -> MutableMapping[str, Any]:
-    return state if state is not None else st.session_state
-
-
-def _ensure_auth_context() -> None:
-    from app.ui.auth_gate import ensure_streamlit_auth_context
-
-    ensure_streamlit_auth_context()
-
-
-def ensure_workbench_hydrated(state: MutableMapping[str, Any] | None = None) -> None:
-    """Один раз за сессию поднять runtime rows из ``app_kv`` через сервис."""
-    target = _state(state)
-    if target.get(_WORKBENCH_HYDRATED_KEY):
-        return
-    target[_WORKBENCH_HYDRATED_KEY] = True
-    if WORKBENCH_SECTIONS_KEY in target:
-        target[WORKBENCH_SECTIONS_KEY] = workbench_service.normalize_runtime_rows(
-            list(target.get(WORKBENCH_SECTIONS_KEY) or [])
-        )
-        return
-    if state is not None:
-        target[WORKBENCH_SECTIONS_KEY] = []
-        return
-    try:
-        _ensure_auth_context()
-        target[WORKBENCH_SECTIONS_KEY] = workbench_service.load_rows()
-    except Exception:  # noqa: BLE001 - недоступный профиль → пустая корзина, не падение
-        return
-
-
-def ensure_project_goal_hydrated(state: MutableMapping[str, Any] | None = None) -> None:
-    target = _state(state)
-    if target.get(_WORKBENCH_GOAL_HYDRATED_KEY):
-        return
-    target[_WORKBENCH_GOAL_HYDRATED_KEY] = True
-    if _WORKBENCH_GOAL_KEY in target:
-        target[_WORKBENCH_GOAL_KEY] = workbench_service.normalize_goal(target.get(_WORKBENCH_GOAL_KEY))
-        return
-    if state is not None:
-        target[_WORKBENCH_GOAL_KEY] = workbench_service.normalize_goal(None)
-        return
-    try:
-        _ensure_auth_context()
-        target[_WORKBENCH_GOAL_KEY] = workbench_service.load_goal()
-    except Exception:  # noqa: BLE001 - goal is optional; workbench still renders
-        target[_WORKBENCH_GOAL_KEY] = workbench_service.normalize_goal(None)
-
-
-def set_workbench_rows(
-    rows: list[dict[str, Any]],
-    state: MutableMapping[str, Any] | None = None,
-) -> None:
-    """Заменить корзину целиком (restore research-сессии) + авто-персист через сервис."""
-    target = _state(state)
-    runtime_rows = workbench_service.normalize_runtime_rows([row for row in rows if isinstance(row, dict)])
-    target[WORKBENCH_SECTIONS_KEY] = runtime_rows
-    target[_WORKBENCH_HYDRATED_KEY] = True
-    if state is None:
-        try:
-            _ensure_auth_context()
-            workbench_service.save_rows(runtime_rows)
-        except Exception:  # noqa: BLE001 - restore не должен падать из-за авто-персиста
-            pass
-
-
-def get_workbench_rows(state: MutableMapping[str, Any] | None = None) -> list[dict[str, Any]]:
-    rows = _state(state).get(WORKBENCH_SECTIONS_KEY)
-    return rows if isinstance(rows, list) else []
-
-
-def get_project_goal(state: MutableMapping[str, Any] | None = None) -> dict[str, Any]:
-    ensure_project_goal_hydrated(state)
-    return workbench_service.normalize_goal(_state(state).get(_WORKBENCH_GOAL_KEY))
-
-
-def set_project_goal(goal: dict[str, Any], state: MutableMapping[str, Any] | None = None) -> dict[str, Any]:
-    target = _state(state)
-    normalized = workbench_service.normalize_goal(goal)
-    if state is None:
-        try:
-            _ensure_auth_context()
-            normalized = workbench_service.save_goal(normalized)
-        except Exception:  # noqa: BLE001 - goal persistence must not break the workbench
-            pass
-    target[_WORKBENCH_GOAL_KEY] = normalized
-    target["living_konspekt_goal_text"] = str(normalized.get("text") or "")
-    target[_WORKBENCH_GOAL_HYDRATED_KEY] = True
-    return normalized
-
-
-# TODO(W4-cleanup): внутренние UI-модули фичи ещё импортируют эти адаптеры из view;
-# внешний доменный контракт уже живёт в app.workbench_service.
-def add_section_to_workbench(
-    section: IndexedSection,
-    state: MutableMapping[str, Any] | None = None,
-) -> bool:
-    """Добавить раздел в session_state-зеркало; доменная операция живёт в сервисе."""
-    target = _state(state)
-    rows = workbench_service.normalize_runtime_rows(get_workbench_rows(target))
-    before = {str(row.get("row_key") or "") for row in rows}
-    storage = None if state is None else workbench_service.InMemoryWorkbenchStorage()
-    if state is None:
-        _ensure_auth_context()
-    new_rows = workbench_service.add_section(rows, section, storage=storage)
-    target[WORKBENCH_SECTIONS_KEY] = new_rows
-    added = any(str(row.get("row_key") or "") not in before for row in new_rows)
-    if state is None and added:
-        try:
-            # Funnel «чтение → обучение»: раздел добавлен (из графа/карточки/сбора по концепту).
-            from app.ui_events import track_event
-
-            track_event("living_konspekt_section_added")
-        except Exception:  # noqa: BLE001 - аналитика не должна ломать корзину
-            pass
-    return added
-
-
-def move_section_in_workbench(
-    row_key: str,
-    delta: int,
-    state: MutableMapping[str, Any] | None = None,
-) -> bool:
-    """Сдвинуть раздел по ``row_key``; доменная операция живёт в сервисе."""
-    target = _state(state)
-    rows = workbench_service.normalize_runtime_rows(get_workbench_rows(target))
-    storage = None if state is None else workbench_service.InMemoryWorkbenchStorage()
-    if state is None:
-        _ensure_auth_context()
-    new_rows = workbench_service.move_section(rows, row_key, delta, storage=storage)
-    changed = [row.get("row_key") for row in new_rows] != [row.get("row_key") for row in rows]
-    target[WORKBENCH_SECTIONS_KEY] = new_rows
-    return changed
-
-
-def remove_section_from_workbench(
-    row_key: str,
-    state: MutableMapping[str, Any] | None = None,
-) -> None:
-    target = _state(state)
-    rows = workbench_service.normalize_runtime_rows(get_workbench_rows(target))
-    storage = None if state is None else workbench_service.InMemoryWorkbenchStorage()
-    if state is None:
-        _ensure_auth_context()
-    target[WORKBENCH_SECTIONS_KEY] = workbench_service.remove_section(rows, row_key, storage=storage)
-
-
-def remove_sections_from_workbench(
-    row_keys: set[str],
-    state: MutableMapping[str, Any] | None = None,
-) -> None:
-    target = _state(state)
-    rows = workbench_service.normalize_runtime_rows(get_workbench_rows(target))
-    storage = None if state is None else workbench_service.InMemoryWorkbenchStorage()
-    if state is None:
-        _ensure_auth_context()
-    target[WORKBENCH_SECTIONS_KEY] = workbench_service.remove_sections(rows, row_keys, storage=storage)
-
-
-def clear_workbench(state: MutableMapping[str, Any] | None = None) -> None:
-    target = _state(state)
-    storage = None if state is None else workbench_service.InMemoryWorkbenchStorage()
-    if state is None:
-        _ensure_auth_context()
-    target[WORKBENCH_SECTIONS_KEY] = workbench_service.clear_rows(storage=storage)
-
-
-def update_section_note_in_workbench(
-    row_key: str,
-    note: str,
-    state: MutableMapping[str, Any] | None = None,
-) -> None:
-    target = _state(state)
-    rows = workbench_service.normalize_runtime_rows(get_workbench_rows(target))
-    storage = None if state is None else workbench_service.InMemoryWorkbenchStorage()
-    if state is None:
-        _ensure_auth_context()
-    target[WORKBENCH_SECTIONS_KEY] = workbench_service.update_section_fields(
-        rows,
-        row_key,
-        note=note,
-        storage=storage,
-    )
-
-
-def mark_section_read_in_workbench(
-    row_key: str,
-    state: MutableMapping[str, Any] | None = None,
-) -> None:
-    target = _state(state)
-    rows = workbench_service.normalize_runtime_rows(get_workbench_rows(target))
-    storage = None if state is None else workbench_service.InMemoryWorkbenchStorage()
-    if state is None:
-        _ensure_auth_context()
-    read_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-    target[WORKBENCH_SECTIONS_KEY] = workbench_service.update_section_fields(
-        rows,
-        row_key,
-        read_at=read_at,
-        storage=storage,
-    )
+# ── Корзина: state-адаптеры вынесены в living_konspekt_state (size-budget) ──
+# Реэкспорт сохраняет существующие импорты тестов/соседних UI-модулей из view.
+from app.ui.living_konspekt_state import (  # noqa: F401 - реэкспорт адаптеров
+    WORKBENCH_SECTIONS_KEY,
+    add_section_to_workbench,
+    clear_workbench,
+    ensure_project_goal_hydrated,
+    ensure_workbench_hydrated,
+    get_project_goal,
+    get_workbench_rows,
+    mark_section_read_in_workbench,
+    move_section_in_workbench,
+    remove_section_from_workbench,
+    remove_sections_from_workbench,
+    set_project_goal,
+    set_workbench_rows,
+    update_section_note_in_workbench,
+)
 
 
 # ── UI ────────────────────────────────────────────────────────────────────
@@ -486,9 +308,11 @@ def _render_saved_artifacts_panel() -> None:
                         try:
                             from app.ui_events import track_event
 
-                            payload = {"artifact_id": manifest.artifact_id, "sections": len(rows)}
-                            track_event("artifact_reopened", payload)
-                            track_event("artifact_rebuilt", payload)
+                            # «Пересобрать» = rebuild в корзину. «Возврат» (artifact_reopened)
+                            # трекается отдельно — выбором существующего конспекта в пикере выше,
+                            # а не этой кнопкой (раньше оба события стреляли одновременно → метрики
+                            # «rebuild» и «reopen» были тождественны).
+                            track_event("artifact_rebuilt", {"artifact_id": manifest.artifact_id, "sections": len(rows)})
                         except Exception:  # noqa: BLE001 - аналитика не должна ломать пересборку
                             pass
                     except (OSError, UnicodeError, ValueError) as exc:

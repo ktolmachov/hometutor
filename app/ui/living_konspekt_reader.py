@@ -144,6 +144,13 @@ import base64
 import mimetypes
 
 
+# Кэш base64-data-URI локальных картинок по (resolved path, mtime, size).
+# До этого 12 PNG (6,4 МБ) перекодировались в base64 при каждом rerun и для каждой
+# вкладки — десятки мегабайт чтения/кодирования за клик. Картинка неизменна, пока
+# не изменится файл → инвалидируется автоматически по mtime/size.
+_IMAGE_B64_CACHE: dict[tuple[str, float, int], str] = {}
+
+
 def _resolve_local_images(text: str, doc_dir: Path | None) -> str:
     if not text:
         return text
@@ -164,12 +171,20 @@ def _resolve_local_images(text: str, doc_dir: Path | None) -> str:
 
         if img_path.is_file():
             try:
-                mime_type, _ = mimetypes.guess_type(str(img_path))
+                resolved = str(img_path)
+                stat = img_path.stat()
+                cache_key = (resolved, stat.st_mtime, stat.st_size)
+                cached = _IMAGE_B64_CACHE.get(cache_key)
+                if cached is not None:
+                    return f"![{alt}]({cached})"
+                mime_type, _ = mimetypes.guess_type(resolved)
                 if not mime_type:
                     mime_type = "image/png"
                 data = img_path.read_bytes()
                 b64_data = base64.b64encode(data).decode("utf-8")
-                return f"![{alt}](data:{mime_type};base64,{b64_data})"
+                data_uri = f"data:{mime_type};base64,{b64_data}"
+                _IMAGE_B64_CACHE[cache_key] = data_uri
+                return f"![{alt}]({data_uri})"
             except Exception:
                 pass
         return match.group(0)

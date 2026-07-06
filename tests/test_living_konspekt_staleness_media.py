@@ -246,3 +246,61 @@ def test_move_section_reorders_and_persists_bounds(tmp_path):
     last = reordered[-1]
     assert move_section_in_workbench(last["row_key"], 1, state) is False
     assert move_section_in_workbench("нет-такого-row", 1, state) is False
+
+
+def test_sidecar_stale_reasons_is_single_source():
+    """Консолидация: одна реализация _sidecar_stale_reasons во всех модулях."""
+    import app.media_sidecar as media_sidecar
+    import app.konspekt_artifact as konspekt_artifact
+    import app.ui.living_konspekt_media as media
+    import app.living_konspekt_video_citations as citations
+
+    assert konspekt_artifact._sidecar_stale_reasons is media_sidecar.sidecar_stale_reasons
+    assert media._sidecar_stale_reasons is media_sidecar.sidecar_stale_reasons
+    assert citations._sidecar_stale_reasons is media_sidecar.sidecar_stale_reasons
+
+
+def test_load_media_sidecar_caches_per_mtime_size(tmp_path, monkeypatch):
+    """Повторные load_media_sidecar_for_konspekt на один md не перечитывают файл."""
+    import app.media_sidecar as media_sidecar
+
+    md = tmp_path / "konspekt.md"
+    md.write_text("---\nmedia_sidecar: sidecar.json\n---\n\n# T\n\nbody\n", encoding="utf-8")
+    sentinel = object()
+
+    reads = {"n": 0}
+
+    def counting_load(rel, *, data_dir=None):
+        reads["n"] += 1
+        return sentinel
+
+    monkeypatch.setattr(media_sidecar, "load_media_sidecar", counting_load)
+    media_sidecar._SIDECAR_LOAD_CACHE.clear()
+
+    first = media_sidecar.load_media_sidecar_for_konspekt(md, data_dir=tmp_path)
+    second = media_sidecar.load_media_sidecar_for_konspekt(md, data_dir=tmp_path)
+    assert first is sentinel and second is sentinel
+    assert reads["n"] == 1, f"sidecar должен парситься один раз, а не {reads['n']}"
+
+
+def test_resolve_local_images_caches_base64(tmp_path, monkeypatch):
+    """base64-кодирование локальной картинки — один раз на (path, mtime, size)."""
+    import app.ui.living_konspekt_reader as reader
+
+    img = tmp_path / "slide.png"
+    img.write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * 1024)
+    reader._IMAGE_B64_CACHE.clear()
+
+    encodes = {"n": 0}
+    real_b64 = reader.base64.b64encode
+
+    def counting_b64(data):
+        encodes["n"] += 1
+        return real_b64(data)
+
+    monkeypatch.setattr(reader.base64, "b64encode", counting_b64)
+
+    out1 = reader._resolve_local_images("![слайд](slide.png)", doc_dir=tmp_path)
+    out2 = reader._resolve_local_images("![слайд](slide.png)", doc_dir=tmp_path)
+    assert out1 == out2 and "data:image/png;base64," in out1
+    assert encodes["n"] == 1, f"base64 должен кодироваться один раз, а не {encodes['n']}"

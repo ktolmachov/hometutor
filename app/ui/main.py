@@ -92,9 +92,10 @@ _hydrate_tutor_mastery_from_db()
 _hydrate_tutor_goal_snapshot_once()
 _hydrate_tutorial_progress_once()
 try:
-    from app.ui.living_konspekt_view import ensure_workbench_hydrated
+    from app import workbench_service
 
-    ensure_workbench_hydrated()
+    if workbench_service.WORKBENCH_SECTIONS_KEY not in st.session_state:
+        st.session_state[workbench_service.WORKBENCH_SECTIONS_KEY] = workbench_service.load_rows()
 except Exception as exc:  # noqa: BLE001 - корзина опциональна, не блокируем старт UI
     logger.debug("Workbench hydration skipped: %s", exc)
 

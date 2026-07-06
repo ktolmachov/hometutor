@@ -40,7 +40,7 @@ def reset_schema_cache_for_tests() -> None:
 
 
 # Snapshot of Streamlit learning workspace (research session)
-RESEARCH_PAYLOAD_VERSION = 1
+RESEARCH_PAYLOAD_VERSION = 2
 MAX_HISTORY_IN_SNAPSHOT = 20
 
 T = TypeVar("T")

@@ -13,6 +13,7 @@ from types import SimpleNamespace
 import pytest
 from streamlit.testing.v1 import AppTest
 
+from app.config import DATA_DIR
 from app.media_sidecar import GeneratedBy, MediaSection, MediaSidecar, UrlVideoSource
 from app.section_index import IndexedSection, section_to_row
 
@@ -31,10 +32,16 @@ def _row(heading: str = "Тема", line_start: int = 10, konspekt_md_abs: Path 
         line_start=line_start,
         line_end=line_start + 3,
         text="Текст раздела для сборки и промпта.",
-        source_abs=Path("D:/corpus/lecture.txt"),
-        konspekt_md_abs=konspekt_md_abs or Path("D:/vault/lecture.md"),
+        source_abs=DATA_DIR / "_test_view_smoke" / "lecture.txt",
+        konspekt_md_abs=konspekt_md_abs or DATA_DIR / "_test_view_smoke" / "lecture.md",
     )
     return section_to_row(section)
+
+
+def _data_fixture_path(tmp_path: Path, name: str) -> Path:
+    path = DATA_DIR / "_test_view_smoke" / tmp_path.name / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 @pytest.fixture(autouse=True)
@@ -281,7 +288,7 @@ class TestTermCardsPanelSmoke:
     """«🃏 Карточки из терминов лекции» — без нового LLM-вызова, через preview Flashcards."""
 
     def _konspekt_with_terms(self, tmp_path: Path) -> Path:
-        p = tmp_path / "lecture.md"
+        p = _data_fixture_path(tmp_path, "lecture.md")
         p.write_text(
             "# Конспект\n\n## 🧠 Важные термины и концепции\n\n"
             "- **LLM** — большая языковая модель.\n"
@@ -291,7 +298,7 @@ class TestTermCardsPanelSmoke:
         return p
 
     def _konspekt_with_five_terms(self, tmp_path: Path) -> Path:
-        p = tmp_path / "lecture5.md"
+        p = _data_fixture_path(tmp_path, "lecture5.md")
         p.write_text(
             "# Конспект\n\n## 🧠 Важные термины и концепции\n\n"
             "- **LLM** — большая языковая модель.\n"
@@ -349,5 +356,7 @@ class TestTermCardsPanelSmoke:
         assert at.session_state["fc_deck_name"] == "Термины — lecture5.md"
         assert "prev_f_0" not in at.session_state
         cards = at.session_state["fc_preview_cards"]
-        assert {"front": "LLM", "back": "большая языковая модель.", "tags": f"source:{md}"} in cards
+        from app.term_cards import source_tag_value
+
+        assert {"front": "LLM", "back": "большая языковая модель.", "tags": f"source:{source_tag_value(md)}"} in cards
         assert len(cards) == 5

@@ -132,6 +132,27 @@ def _collect_learned_set(concepts: dict) -> set[str]:
     return learned_set
 
 
+def _workbench_state_rows(state=None) -> list[dict]:
+    from app import workbench_service
+
+    source = st.session_state if state is None else state
+    return workbench_service.normalize_runtime_rows(
+        list(source.get(workbench_service.WORKBENCH_SECTIONS_KEY) or [])
+    )
+
+
+def _add_section_to_workbench_state(section, state=None) -> bool:
+    from app import workbench_service
+
+    rows = _workbench_state_rows(state)
+    before = {str(row.get("row_key") or "") for row in rows}
+    storage = None if state is None else workbench_service.InMemoryWorkbenchStorage()
+    new_rows = workbench_service.add_section(rows, section, storage=storage)
+    target = st.session_state if state is None else state
+    target[workbench_service.WORKBENCH_SECTIONS_KEY] = new_rows
+    return any(str(row.get("row_key") or "") not in before for row in new_rows)
+
+
 def _render_document_section_workbench_buttons(*, path: str, query_text: str, concept: str, key: str) -> None:
     """До 3 кнопок «➕ раздел «<heading>»» под документом — секции считаются server-side.
 
@@ -142,7 +163,6 @@ def _render_document_section_workbench_buttons(*, path: str, query_text: str, co
         from dataclasses import replace as _dc_replace
 
         from app.section_index import build_section_index, top_sections_for
-        from app.ui.living_konspekt_view import add_section_to_workbench
 
         sections = build_section_index(path)
         if not sections:
@@ -152,7 +172,7 @@ def _render_document_section_workbench_buttons(*, path: str, query_text: str, co
         return
     for i, section in enumerate(top_sections):
         if st.button(f"➕ раздел «{section.heading_text}»", key=f"{key}_{i}", width="stretch"):
-            added = add_section_to_workbench(_dc_replace(section, concept=concept))
+            added = _add_section_to_workbench_state(_dc_replace(section, concept=concept))
             st.toast(
                 f"Добавлено в рабочий конспект: «{section.heading_text}»" if added else "Уже в рабочем конспекте",
                 icon="📚",
@@ -169,12 +189,11 @@ def _collect_concept_sections_to_workbench(
 ) -> tuple[int, int]:
     """Лучшая секция каждого related-документа → корзина. Возвращает (добавлено, уже было).
 
-    ``state`` — DI для юнит-тестов (см. ``add_section_to_workbench``); в UI — session_state.
+    ``state`` — DI для юнит-тестов; в UI — session_state.
     """
     from dataclasses import replace as _dc_replace
 
     from app.section_index import best_section_for, build_section_index
-    from app.ui.living_konspekt_view import add_section_to_workbench
 
     added = duplicates = 0
     for rel_path in related_docs:
@@ -190,7 +209,7 @@ def _collect_concept_sections_to_workbench(
             continue
         if section is None:
             continue
-        if add_section_to_workbench(_dc_replace(section, concept=concept), state):
+        if _add_section_to_workbench_state(_dc_replace(section, concept=concept), state):
             added += 1
         else:
             duplicates += 1
@@ -336,10 +355,11 @@ def _render_concept_actions(
                     st.toast("Подходящих разделов не нашлось — возможно, конспекты ещё не созданы.", icon="ℹ️")
         with wb_cols[1]:
             try:
-                from app.ui.living_konspekt_view import ensure_workbench_hydrated, get_workbench_rows
+                from app import workbench_service
 
-                ensure_workbench_hydrated()
-                wb_count = len(get_workbench_rows())
+                if workbench_service.WORKBENCH_SECTIONS_KEY not in st.session_state:
+                    st.session_state[workbench_service.WORKBENCH_SECTIONS_KEY] = workbench_service.load_rows()
+                wb_count = len(_workbench_state_rows())
             except Exception:  # noqa: BLE001 - счётчик корзины не должен ломать панель
                 wb_count = 0
             if st.button(f"📚 Живой конспект ({wb_count})", key=f"kg_wb_open_{sel}", width="stretch"):

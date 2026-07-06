@@ -111,10 +111,12 @@ def apply_research_payload(payload: dict) -> None:
     workbench_sections = payload.get("workbench_sections")
     restored_rows = list(workbench_sections) if isinstance(workbench_sections, list) else []
     try:
-        # set_workbench_rows: session_state + авто-персист в app_kv (restore перезаписывает профиль).
-        from app.ui.living_konspekt_view import set_workbench_rows
+        # workbench_service: session_state + авто-персист в app_kv (restore перезаписывает профиль).
+        from app import workbench_service
 
-        set_workbench_rows(restored_rows)
+        runtime_rows = workbench_service.normalize_runtime_rows(restored_rows)
+        st.session_state[workbench_service.WORKBENCH_SECTIONS_KEY] = runtime_rows
+        workbench_service.save_rows(runtime_rows)
     except Exception:  # noqa: BLE001 - restore не должен падать из-за авто-персиста
         st.session_state["workbench_sections"] = restored_rows
 
@@ -179,6 +181,8 @@ def render_sidebar_research_sessions(index_stats: dict | None) -> None:
                 st.warning("Введите имя сессии.")
             else:
                 try:
+                    from app import workbench_service
+
                     payload = user_state.normalize_research_payload(
                         current_view=str(st.session_state.get("current_view") or "Быстрый ответ"),
                         active_topic_id=st.session_state.get("active_topic_id"),
@@ -189,7 +193,9 @@ def render_sidebar_research_sessions(index_stats: dict | None) -> None:
                         history=list(st.session_state.get("history") or []),
                         question_draft=str(st.session_state.get("question_draft") or ""),
                         topic_document_selections=collect_topic_document_selections(),
-                        workbench_sections=list(st.session_state.get("workbench_sections") or []),
+                        workbench_sections=workbench_service.persisted_rows_from_runtime(
+                            list(st.session_state.get("workbench_sections") or [])
+                        ),
                     )
                     user_state.save_research_session(label, payload, index_version=iv or None)
                 except Exception as exc:  # noqa: BLE001 - user session save failure is UI-reportable

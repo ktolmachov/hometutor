@@ -1,16 +1,12 @@
 """«Живой конспект» — study-поверхность над Section Anchor Index.
 
-Корзина (:data:`WORKBENCH_SECTIONS_KEY`) живёт в ``st.session_state`` и
-**автосохраняется** в локальный профиль (``app_kv``, ключ
-:data:`_WORKBENCH_KV_KEY`) при каждом изменении — переживает rerun, перезапуск
-и закрытие вкладки. Гидрация из профиля — один раз за сессию
-(:func:`ensure_workbench_hydrated`). Именованные research-сессии
-(``save_research_session``/``apply_research_payload``) остаются как снимки-варианты.
+Корзина (:data:`WORKBENCH_SECTIONS_KEY`) живёт в ``st.session_state`` как
+реактивное зеркало. Persisted/runtime-контракт и автосохранение принадлежат
+``app.workbench_service``.
 """
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 from typing import Any, MutableMapping
@@ -19,7 +15,8 @@ import streamlit as st
 
 from app.media_sidecar import UrlVideoSource, load_media_sidecar_for_konspekt
 from app.media_urls import normalize_video_url
-from app.section_index import IndexedSection, parse_sections, row_to_section, section_to_row
+from app import workbench_service
+from app.section_index import IndexedSection, parse_sections, row_to_section
 from app.ui.living_konspekt_add_panel import render_add_sections_panel
 
 # Медиа-кластер вынесен в living_konspekt_media (size-budget); реэкспорт имён
@@ -43,18 +40,14 @@ from app.ui.living_konspekt_reader import render_reader
 from app.ui.helpers import format_request_error
 from app.ui.widgets import render_panel_header
 
-WORKBENCH_SECTIONS_KEY = "workbench_sections"
-_WORKBENCH_KV_KEY = "living_konspekt_workbench_json"
+WORKBENCH_SECTIONS_KEY = workbench_service.WORKBENCH_SECTIONS_KEY
+_WORKBENCH_KV_KEY = workbench_service.WORKBENCH_KV_KEY
 _WORKBENCH_HYDRATED_KEY = "_workbench_hydrated"
 
 _SLUG_RE = re.compile(r"[^\w\-]+", re.UNICODE)
 
 
-# ── Корзина (JSON-safe rows из app.section_index) ───────────────────────
-# ``state`` — опциональный DI-параметр (по умолчанию ``st.session_state``): позволяет
-# юнит-тестировать add/dedup/remove на обычном dict без запуска Streamlit runtime.
-# Авто-персист в app_kv срабатывает ТОЛЬКО на реальном session_state (``state is None``) —
-# инжектированный dict в тестах не должен писать в user_state.db.
+# ── Корзина: тонкий Streamlit-адаптер поверх app.workbench_service ───────
 def _state(state: MutableMapping[str, Any] | None) -> MutableMapping[str, Any]:
     return state if state is not None else st.session_state
 
@@ -65,51 +58,42 @@ def _ensure_auth_context() -> None:
     ensure_streamlit_auth_context()
 
 
-def _persist_workbench(rows: list[dict[str, Any]]) -> None:
-    """Best-effort автосохранение корзины в локальный профиль (``app_kv``)."""
-    try:
-        from app.user_state_core import set_kv
-
-        _ensure_auth_context()
-        set_kv(_WORKBENCH_KV_KEY, json.dumps(rows, ensure_ascii=False))
-    except Exception:  # noqa: BLE001 - авто-персист не должен ломать работу корзины
-        pass
-
-
 def ensure_workbench_hydrated(state: MutableMapping[str, Any] | None = None) -> None:
-    """Один раз за сессию поднять корзину из локального профиля (``app_kv``).
-
-    Если в session_state корзина уже есть (rerun, restore research-сессии) —
-    профиль не читается: сессия свежее.
-    """
+    """Один раз за сессию поднять runtime rows из ``app_kv`` через сервис."""
     target = _state(state)
     if target.get(_WORKBENCH_HYDRATED_KEY):
         return
     target[_WORKBENCH_HYDRATED_KEY] = True
     if WORKBENCH_SECTIONS_KEY in target:
+        target[WORKBENCH_SECTIONS_KEY] = workbench_service.normalize_runtime_rows(
+            list(target.get(WORKBENCH_SECTIONS_KEY) or [])
+        )
+        return
+    if state is not None:
+        target[WORKBENCH_SECTIONS_KEY] = []
         return
     try:
-        from app.user_state_core import get_kv
-
         _ensure_auth_context()
-        raw = get_kv(_WORKBENCH_KV_KEY)
-        rows = json.loads(raw) if raw else []
+        target[WORKBENCH_SECTIONS_KEY] = workbench_service.load_rows()
     except Exception:  # noqa: BLE001 - недоступный профиль → пустая корзина, не падение
         return
-    if isinstance(rows, list) and rows:
-        target[WORKBENCH_SECTIONS_KEY] = [row for row in rows if isinstance(row, dict)]
 
 
 def set_workbench_rows(
     rows: list[dict[str, Any]],
     state: MutableMapping[str, Any] | None = None,
 ) -> None:
-    """Заменить корзину целиком (restore research-сессии) + авто-персист."""
+    """Заменить корзину целиком (restore research-сессии) + авто-персист через сервис."""
     target = _state(state)
-    target[WORKBENCH_SECTIONS_KEY] = [row for row in rows if isinstance(row, dict)]
+    runtime_rows = workbench_service.normalize_runtime_rows([row for row in rows if isinstance(row, dict)])
+    target[WORKBENCH_SECTIONS_KEY] = runtime_rows
     target[_WORKBENCH_HYDRATED_KEY] = True
     if state is None:
-        _persist_workbench(target[WORKBENCH_SECTIONS_KEY])
+        try:
+            _ensure_auth_context()
+            workbench_service.save_rows(runtime_rows)
+        except Exception:  # noqa: BLE001 - restore не должен падать из-за авто-персиста
+            pass
 
 
 def get_workbench_rows(state: MutableMapping[str, Any] | None = None) -> list[dict[str, Any]]:
@@ -117,24 +101,23 @@ def get_workbench_rows(state: MutableMapping[str, Any] | None = None) -> list[di
     return rows if isinstance(rows, list) else []
 
 
+# TODO(W4-cleanup): внутренние UI-модули фичи ещё импортируют эти адаптеры из view;
+# внешний доменный контракт уже живёт в app.workbench_service.
 def add_section_to_workbench(
     section: IndexedSection,
     state: MutableMapping[str, Any] | None = None,
 ) -> bool:
-    """Добавить раздел в корзину; дедуп по ``(konspekt_md_abs, line_start)``.
-
-    Возвращает ``True``, если раздел был новым (добавлен), ``False`` — если уже был в корзине.
-    """
+    """Добавить раздел в session_state-зеркало; доменная операция живёт в сервисе."""
     target = _state(state)
-    rows = get_workbench_rows(target)
-    dedup_key = (str(section.konspekt_md_abs), section.line_start)
-    for row in rows:
-        if (str(row.get("konspekt_md_abs") or ""), row.get("line_start")) == dedup_key:
-            return False
-    rows.append(section_to_row(section))
-    target[WORKBENCH_SECTIONS_KEY] = rows
+    rows = workbench_service.normalize_runtime_rows(get_workbench_rows(target))
+    before = {str(row.get("row_key") or "") for row in rows}
+    storage = None if state is None else workbench_service.InMemoryWorkbenchStorage()
     if state is None:
-        _persist_workbench(rows)
+        _ensure_auth_context()
+    new_rows = workbench_service.add_section(rows, section, storage=storage)
+    target[WORKBENCH_SECTIONS_KEY] = new_rows
+    added = any(str(row.get("row_key") or "") not in before for row in new_rows)
+    if state is None:
         try:
             # Funnel «чтение → обучение»: раздел добавлен (из графа/карточки/сбора по концепту).
             from app.ui_events import track_event
@@ -142,59 +125,36 @@ def add_section_to_workbench(
             track_event("living_konspekt_section_added")
         except Exception:  # noqa: BLE001 - аналитика не должна ломать корзину
             pass
-    return True
+    return added
 
 
 def move_section_in_workbench(
-    konspekt_md_abs: str,
-    line_start: int,
+    row_key: str,
     delta: int,
     state: MutableMapping[str, Any] | None = None,
 ) -> bool:
-    """Сдвинуть раздел на ``delta`` позиций (порядок = порядок глав будущего конспекта).
-
-    Возвращает ``True``, если порядок изменился; выход за границы — no-op ``False``.
-    """
+    """Сдвинуть раздел по ``row_key``; доменная операция живёт в сервисе."""
     target = _state(state)
-    rows = get_workbench_rows(target)
-    idx = next(
-        (
-            i
-            for i, row in enumerate(rows)
-            if str(row.get("konspekt_md_abs") or "") == konspekt_md_abs
-            and row.get("line_start") == line_start
-        ),
-        None,
-    )
-    if idx is None:
-        return False
-    new_idx = idx + delta
-    if not 0 <= new_idx < len(rows):
-        return False
-    rows.insert(new_idx, rows.pop(idx))
-    target[WORKBENCH_SECTIONS_KEY] = rows
+    rows = workbench_service.normalize_runtime_rows(get_workbench_rows(target))
+    storage = None if state is None else workbench_service.InMemoryWorkbenchStorage()
     if state is None:
-        _persist_workbench(rows)
-    return True
+        _ensure_auth_context()
+    new_rows = workbench_service.move_section(rows, row_key, delta, storage=storage)
+    changed = [row.get("row_key") for row in new_rows] != [row.get("row_key") for row in rows]
+    target[WORKBENCH_SECTIONS_KEY] = new_rows
+    return changed
 
 
 def remove_section_from_workbench(
-    konspekt_md_abs: str,
-    line_start: int,
+    row_key: str,
     state: MutableMapping[str, Any] | None = None,
 ) -> None:
     target = _state(state)
-    rows = get_workbench_rows(target)
-    target[WORKBENCH_SECTIONS_KEY] = [
-        row
-        for row in rows
-        if not (
-            str(row.get("konspekt_md_abs") or "") == konspekt_md_abs
-            and row.get("line_start") == line_start
-        )
-    ]
+    rows = workbench_service.normalize_runtime_rows(get_workbench_rows(target))
+    storage = None if state is None else workbench_service.InMemoryWorkbenchStorage()
     if state is None:
-        _persist_workbench(target[WORKBENCH_SECTIONS_KEY])
+        _ensure_auth_context()
+    target[WORKBENCH_SECTIONS_KEY] = workbench_service.remove_section(rows, row_key, storage=storage)
 
 
 # ── Сборка рабочего конспекта ────────────────────────────────────────────
@@ -235,7 +195,7 @@ def _sources_footer(rows: list[dict[str, Any]]) -> str:
     """«## Источники» со списком ``файл:строки`` всех разделов — провенанс живёт в самом
     сохранённом файле, а не только в session_state. Пустая корзина → пустая строка."""
     source_lines = [
-        f"- {Path(str(row.get('konspekt_md_abs') or '')).name}:{row.get('line_start')}-{row.get('line_end')}"
+        f"- {_row_konspekt_label(row)}:{row.get('line_start')}-{row.get('line_end')}"
         f" — «{row.get('heading_text') or '—'}»"
         for row in rows
     ]
@@ -400,7 +360,7 @@ def _stitch_verbatim(rows: list[dict[str, Any]]) -> str:
     parts: list[str] = []
     for row in rows:
         heading = str(row.get("heading_text") or "Без названия")
-        source_name = Path(str(row.get("konspekt_md_abs") or "")).name
+        source_name = _row_konspekt_label(row)
         location = f"{source_name}:{row.get('line_start')}"
         media_line = _media_line_for_row(row, sidecar_cache, stale_cache)
         source_block = f"*Источник: {location}*" + (f"\n\n{media_line}" if media_line else "")
@@ -463,6 +423,13 @@ def _duplicate_heading_keys(rows: list[dict[str, Any]]) -> set[tuple[str, str]]:
     return {key for key, count in counts.items() if count > 1}
 
 
+def _row_konspekt_label(row: dict[str, Any]) -> str:
+    md_abs = str(row.get("konspekt_md_abs") or "")
+    if md_abs:
+        return Path(md_abs).name
+    return str(row.get("konspekt_md_label") or row.get("source_label") or "непереносимый источник")
+
+
 def _heading_ambiguous(md_abs: str, heading_text: str) -> bool:
     """Дубль заголовка в самом ДОКУМЕНТЕ (не только среди собранных rows).
 
@@ -485,6 +452,9 @@ def _row_stale_status(row: dict[str, Any]) -> str | None:
     ``None`` — источник совпадает; иначе короткая причина для caption. Снимок при этом
     остаётся читаемым/собираемым — это предупреждение, не блокировка.
     """
+    if str(row.get("portability_status") or "") == workbench_service.NON_PORTABLE:
+        reason = str(row.get("resolve_error") or "источник вне data/").replace("_", " ")
+        return f"непереносимый снимок: {reason}"
     md_abs = str(row.get("konspekt_md_abs") or "")
     if not md_abs:
         return None
@@ -595,13 +565,14 @@ def _render_collected_sections(rows: list[dict[str, Any]]) -> None:
     row_list = list(rows)
     for idx, row in enumerate(row_list):
         md_abs = str(row.get("konspekt_md_abs") or "")
+        row_key = str(row.get("row_key") or f"legacy_{idx}")
         line_start = row.get("line_start")
         heading_text = str(row.get("heading_text") or "")
         with st.container(border=True):
             cols = st.columns([5, 1, 1, 1])
             with cols[0]:
                 st.markdown(f"**{heading_text or '—'}**")
-                st.caption(f"{Path(md_abs).name} · строки {line_start}-{row.get('line_end')}")
+                st.caption(f"{_row_konspekt_label(row)} · строки {line_start}-{row.get('line_end')}")
                 if (md_abs, heading_text) in duplicate_keys or _heading_ambiguous(md_abs, heading_text):
                     st.caption("⚠️ Заголовок повторяется в документе — VS Code точнее для повторяющихся заголовков.")
                 stale_status = _row_stale_status(row)
@@ -626,26 +597,26 @@ def _render_collected_sections(rows: list[dict[str, Any]]) -> None:
                 with move_cols[0]:
                     if st.button(
                         "↑",
-                        key=f"wb_move_up_{md_abs}_{line_start}",
+                        key=f"wb_move_up_{row_key}",
                         disabled=idx == 0,
                         help="Поднять раздел выше",
                         width="stretch",
                     ):
-                        move_section_in_workbench(md_abs, int(line_start) if line_start else 0, -1)
+                        move_section_in_workbench(row_key, -1)
                         st.rerun()
                 with move_cols[1]:
                     if st.button(
                         "↓",
-                        key=f"wb_move_down_{md_abs}_{line_start}",
+                        key=f"wb_move_down_{row_key}",
                         disabled=idx >= len(row_list) - 1,
                         help="Опустить раздел ниже",
                         width="stretch",
                     ):
-                        move_section_in_workbench(md_abs, int(line_start) if line_start else 0, 1)
+                        move_section_in_workbench(row_key, 1)
                         st.rerun()
             with cols[3]:
-                if st.button("🗑 Убрать", key=f"wb_remove_{md_abs}_{line_start}", width="stretch"):
-                    remove_section_from_workbench(md_abs, int(line_start) if line_start else 0)
+                if st.button("🗑 Убрать", key=f"wb_remove_{row_key}", width="stretch"):
+                    remove_section_from_workbench(row_key)
                     st.rerun()
 
 

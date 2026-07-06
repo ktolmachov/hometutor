@@ -36,4 +36,24 @@ def validate_data_relative_path(relative_path: str, *, data_dir: Path | None = N
     return path.relative_to(root).as_posix()
 
 
-__all__ = ["resolve_data_relative_path", "validate_data_relative_path"]
+def data_relative_from_path(path: str | Path, *, data_dir: Path | None = None) -> str:
+    """Return a canonical POSIX path relative to data/ for an absolute path."""
+    raw = Path(path) if isinstance(path, Path) else Path(str(path or "").strip())
+    if not str(raw):
+        raise ValueError("Path is required")
+    if not raw.is_absolute() and not PureWindowsPath(str(raw)).is_absolute():
+        raise ValueError("Path must be absolute")
+
+    root = (data_dir or DATA_DIR).resolve()
+    resolved = raw.resolve()
+    try:
+        return resolved.relative_to(root).as_posix()
+    except ValueError as exc:
+        raise ValueError("Path must stay inside the data directory") from exc
+
+
+__all__ = [
+    "data_relative_from_path",
+    "resolve_data_relative_path",
+    "validate_data_relative_path",
+]

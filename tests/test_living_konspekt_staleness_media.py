@@ -12,11 +12,14 @@ from app.media_sidecar import (
     UrlVideoSource,
     sha256_file,
 )
+from app import workbench_service
 from app.section_index import section_to_row
 from app.ui.living_konspekt_add_panel import sections_of_document
 from app.ui.living_konspekt_view import (
     _media_line_for_row,
     _row_stale_status,
+    _sources_footer,
+    _stitch_verbatim,
     _videos_block,
     media_caption_line,
     move_section_in_workbench,
@@ -72,6 +75,32 @@ def test_row_stale_status_detects_line_shift(tmp_path):
     md.write_text("Новый вводный абзац.\n\n" + _KONSPEKT, encoding="utf-8")
     status = _row_stale_status(rows[0])
     assert status is not None and "переехал" in status
+
+
+def test_non_portable_row_uses_labels_for_staleness_stitch_and_sources():
+    row = {
+        "row_key": "np:test",
+        "portability_status": "non_portable",
+        "resolve_error": "outside_data_dir",
+        "konspekt_md_abs": "",
+        "source_abs": "",
+        "konspekt_md_label": "legacy.md",
+        "source_label": "legacy.txt",
+        "heading_text": "Тема",
+        "slug": "tema",
+        "level": 2,
+        "line_start": 7,
+        "line_end": 9,
+        "text": "Снимок текста.",
+        "own_text": "Снимок текста.",
+        "concept": None,
+        "note": None,
+        "read_at": None,
+    }
+
+    assert "непереносимый снимок" in (_row_stale_status(row) or "")
+    assert "legacy.md:7" in _stitch_verbatim([row])
+    assert "legacy.md:7-9" in _sources_footer([row])
 
 
 def test_media_caption_line_variants():
@@ -168,16 +197,15 @@ def test_move_section_reorders_and_persists_bounds(tmp_path):
     md = tmp_path / "konspekt.md"
     md.write_text(_KONSPEKT, encoding="utf-8")
     rows = _rows_from_file(md)
-    state: dict = {"workbench_sections": list(rows)}
+    runtime_rows = workbench_service.normalize_runtime_rows(list(rows))
+    state: dict = {"workbench_sections": runtime_rows}
 
-    first_key = (str(rows[0]["konspekt_md_abs"]), rows[0]["line_start"])
-    assert move_section_in_workbench(*first_key, 1, state) is True
+    first_key = runtime_rows[0]["row_key"]
+    assert move_section_in_workbench(first_key, 1, state) is True
     reordered = state["workbench_sections"]
-    assert reordered[1]["line_start"] == first_key[1]
+    assert reordered[1]["row_key"] == first_key
 
     # Выход за границы — no-op.
     last = reordered[-1]
-    assert (
-        move_section_in_workbench(str(last["konspekt_md_abs"]), last["line_start"], 1, state) is False
-    )
-    assert move_section_in_workbench("нет-такого.md", 1, 1, state) is False
+    assert move_section_in_workbench(last["row_key"], 1, state) is False
+    assert move_section_in_workbench("нет-такого-row", 1, state) is False

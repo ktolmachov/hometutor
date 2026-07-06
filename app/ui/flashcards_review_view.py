@@ -524,9 +524,9 @@ def _render_card_section_links(card: dict[str, Any], idx: int) -> None:
     if not source_path:
         return
     try:
+        from app import workbench_service
         from app.obsidian_export import obsidian_uri, vscode_uri
         from app.section_index import best_section_for, build_section_index
-        from app.ui.living_konspekt_view import add_section_to_workbench
 
         sections = build_section_index(source_path)
         if not sections:
@@ -559,7 +559,13 @@ def _render_card_section_links(card: dict[str, Any], idx: int) -> None:
         )
     with link_cols[2]:
         if st.button("➕ В рабочий конспект", key=f"fc_section_to_workbench_{idx}", width="stretch"):
-            added = add_section_to_workbench(section)
+            rows = workbench_service.normalize_runtime_rows(
+                list(st.session_state.get(workbench_service.WORKBENCH_SECTIONS_KEY) or [])
+            )
+            before = {str(row.get("row_key") or "") for row in rows}
+            new_rows = workbench_service.add_section(rows, section)
+            st.session_state[workbench_service.WORKBENCH_SECTIONS_KEY] = new_rows
+            added = any(str(row.get("row_key") or "") not in before for row in new_rows)
             st.toast(
                 f"Добавлено в рабочий конспект: «{section.heading_text}»" if added else "Уже в рабочем конспекте",
                 icon="📚",

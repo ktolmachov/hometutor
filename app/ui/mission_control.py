@@ -746,10 +746,13 @@ def render_living_konspekt_mission_card() -> None:
     if spec and not feature_visible(spec, level=get_ui_level(), overrides=get_overrides()):
         return
     try:
-        from app.ui.living_konspekt_view import ensure_workbench_hydrated, get_workbench_rows
+        from app import workbench_service
 
-        ensure_workbench_hydrated()
-        rows = get_workbench_rows()
+        if workbench_service.WORKBENCH_SECTIONS_KEY not in st.session_state:
+            st.session_state[workbench_service.WORKBENCH_SECTIONS_KEY] = workbench_service.load_rows()
+        rows = workbench_service.normalize_runtime_rows(
+            list(st.session_state.get(workbench_service.WORKBENCH_SECTIONS_KEY) or [])
+        )
     except Exception:  # noqa: BLE001 - optional card, must never crash Mission Control
         return
     if not rows:

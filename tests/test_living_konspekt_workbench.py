@@ -6,6 +6,9 @@ from pathlib import Path
 
 from dataclasses import replace
 
+from app import workbench_service
+from app.config import DATA_DIR
+from app.path_safety import data_relative_from_path
 from app.section_index import IndexedSection, section_to_row
 from app.ui.living_konspekt_view import (
     WORKBENCH_SECTIONS_KEY,
@@ -22,8 +25,9 @@ from app.ui.living_konspekt_view import (
 from app.user_state_research import normalize_research_payload
 from app.ui.sidebar import apply_research_payload
 
-MD_A = Path("D:/vault/lecture-a.md")
-MD_B = Path("D:/vault/lecture-b.md")
+MD_A = DATA_DIR / "_test_workbench" / "lecture-a.md"
+MD_B = DATA_DIR / "_test_workbench" / "lecture-b.md"
+SRC_A = DATA_DIR / "_test_workbench" / "lecture-a.txt"
 
 
 def _section(md: Path, line_start: int, heading: str = "Раздел", text: str = "Текст.") -> IndexedSection:
@@ -34,9 +38,70 @@ def _section(md: Path, line_start: int, heading: str = "Раздел", text: str
         line_start=line_start,
         line_end=line_start + 3,
         text=text,
-        source_abs=Path("D:/corpus/lecture-a.txt"),
+        source_abs=SRC_A,
         konspekt_md_abs=md,
     )
+
+
+class TestWorkbenchServiceV2:
+    def test_data_relative_from_path_accepts_abs_inside_data_and_rejects_outside(self):
+        inside = DATA_DIR / "folder" / "lesson.md"
+        assert data_relative_from_path(inside) == "folder/lesson.md"
+        try:
+            data_relative_from_path(Path("D:/outside/lesson.md"))
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("outside DATA_DIR path must be rejected")
+
+    def test_add_dedup_move_remove_with_storage_seam(self):
+        storage = workbench_service.InMemoryWorkbenchStorage()
+        rows: list[dict] = []
+
+        rows = workbench_service.add_section(rows, _section(MD_A, 10, heading="A"), storage=storage)
+        rows = workbench_service.add_section(rows, _section(MD_A, 20, heading="B"), storage=storage)
+        rows = workbench_service.add_section(rows, _section(MD_A, 10, heading="A duplicate"), storage=storage)
+
+        assert [row["heading_text"] for row in rows] == ["A", "B"]
+        assert all(row["row_key"].startswith("p:") for row in rows)
+        assert all("konspekt_md_abs" not in row for row in storage.rows)
+        assert all(row["note"] is None and row["read_at"] is None for row in storage.rows)
+
+        rows = workbench_service.move_section(rows, rows[1]["row_key"], -1, storage=storage)
+        assert [row["heading_text"] for row in rows] == ["B", "A"]
+
+        rows = workbench_service.remove_section(rows, rows[0]["row_key"], storage=storage)
+        assert [row["heading_text"] for row in rows] == ["A"]
+
+    def test_load_rows_lazily_migrates_v1_abs_to_v2_rel(self):
+        legacy_row = section_to_row(_section(MD_A, 10, heading="Legacy"))
+        storage = workbench_service.InMemoryWorkbenchStorage([legacy_row])
+
+        rows = workbench_service.load_rows(storage=storage)
+
+        assert rows[0]["heading_text"] == "Legacy"
+        assert rows[0]["konspekt_md_abs"] == str(MD_A.resolve())
+        assert storage.rows[0]["row_version"] == 2
+        assert storage.rows[0]["portability_status"] == "portable"
+        assert storage.rows[0]["konspekt_md_rel"].endswith("lecture-a.md")
+        assert "konspekt_md_abs" not in storage.rows[0]
+
+    def test_outside_data_dir_legacy_row_becomes_non_portable_snapshot(self):
+        outside = Path("D:/outside/lecture.md")
+        legacy_row = {
+            **section_to_row(_section(outside, 10, heading="Outside")),
+            "source_abs": "D:/outside/source.txt",
+        }
+        storage = workbench_service.InMemoryWorkbenchStorage([legacy_row])
+
+        rows = workbench_service.load_rows(storage=storage)
+
+        assert rows[0]["portability_status"] == "non_portable"
+        assert rows[0]["konspekt_md_abs"] == ""
+        assert rows[0]["source_abs"] == ""
+        assert rows[0]["konspekt_md_label"] == "lecture.md"
+        assert storage.rows[0]["row_key"].startswith("np:")
+        assert "konspekt_md_rel" not in storage.rows[0]
 
 
 class TestAddDedupRemove:
@@ -68,7 +133,7 @@ class TestAddDedupRemove:
         state: dict = {}
         add_section_to_workbench(_section(MD_A, 10), state)
         add_section_to_workbench(_section(MD_A, 20), state)
-        remove_section_from_workbench(str(MD_A), 10, state)
+        remove_section_from_workbench(get_workbench_rows(state)[0]["row_key"], state)
         rows = get_workbench_rows(state)
         assert len(rows) == 1
         assert rows[0]["line_start"] == 20
@@ -79,7 +144,7 @@ class TestAddDedupRemove:
         add_section_to_workbench(_section(MD_A, 20, heading="B"), state)
         add_section_to_workbench(_section(MD_A, 30, heading="C"), state)
 
-        moved = move_section_in_workbench(str(MD_A), 30, -1, state)
+        moved = move_section_in_workbench(get_workbench_rows(state)[2]["row_key"], -1, state)
 
         assert moved is True
         assert [row["heading_text"] for row in get_workbench_rows(state)] == ["A", "C", "B"]
@@ -88,7 +153,7 @@ class TestAddDedupRemove:
         state: dict = {}
         add_section_to_workbench(_section(MD_A, 10, heading="A"), state)
 
-        moved = move_section_in_workbench(str(MD_A), 10, -1, state)
+        moved = move_section_in_workbench(get_workbench_rows(state)[0]["row_key"], -1, state)
 
         assert moved is False
         assert [row["heading_text"] for row in get_workbench_rows(state)] == ["A"]
@@ -135,6 +200,9 @@ class TestWorkbenchAutoPersist:
         add_section_to_workbench(_section(MD_A, 10, heading="Тема"))
         rows = json.loads(saved["living_konspekt_workbench_json"])
         assert rows[0]["heading_text"] == "Тема"
+        assert rows[0]["row_version"] == 2
+        assert rows[0]["portability_status"] == "portable"
+        assert "konspekt_md_abs" not in rows[0]
 
     def test_remove_with_session_state_persists(self, monkeypatch):
         import json
@@ -143,10 +211,10 @@ class TestWorkbenchAutoPersist:
         saved = self._capture_kv(monkeypatch)
         monkeypatch.setattr(st, "session_state", {})
         add_section_to_workbench(_section(MD_A, 10))
-        remove_section_from_workbench(str(MD_A), 10)
+        remove_section_from_workbench(st.session_state[WORKBENCH_SECTIONS_KEY][0]["row_key"])
         assert json.loads(saved["living_konspekt_workbench_json"]) == []
 
-    def test_hydration_loads_rows_once(self, monkeypatch):
+    def test_injected_state_hydration_does_not_read_profile(self, monkeypatch):
         import app.user_state_core as user_state_core
 
         rows_json = '[{"heading_text": "Из профиля", "line_start": 5}]'
@@ -160,8 +228,8 @@ class TestWorkbenchAutoPersist:
         state: dict = {}
         ensure_workbench_hydrated(state)
         ensure_workbench_hydrated(state)  # второй вызов — no-op по флагу
-        assert get_workbench_rows(state)[0]["heading_text"] == "Из профиля"
-        assert calls == ["living_konspekt_workbench_json"]
+        assert get_workbench_rows(state) == []
+        assert calls == []
 
     def test_hydration_does_not_overwrite_existing_session_rows(self, monkeypatch):
         import app.user_state_core as user_state_core
@@ -210,7 +278,7 @@ class TestWorkbenchAutoPersist:
         state: dict = {}
         set_workbench_rows([{"heading_text": "restore"}], state)
         ensure_workbench_hydrated(state)  # не должен перетереть restore профилем
-        assert get_workbench_rows(state) == [{"heading_text": "restore"}]
+        assert get_workbench_rows(state)[0]["heading_text"] == "restore"
 
 
 class TestStitchVerbatim:
@@ -234,7 +302,8 @@ class TestStitchVerbatim:
         assert "lecture-a.md:10-13 — «Тема A»" in stitched
 
     def test_prepends_lecture_main_idea_when_konspekt_exists(self, tmp_path: Path):
-        md = tmp_path / "lecture.md"
+        md = DATA_DIR / "_test_workbench" / "lecture-main-idea.md"
+        md.parent.mkdir(parents=True, exist_ok=True)
         md.write_text(
             "# Конспект\n\n## 🎯 Главная мысль\n\nАгент — система вокруг LLM.\n\n"
             "Второй абзац мысли, который в шапку не идёт.\n\n## 🔹 Тема\n\nТело темы.\n",
@@ -243,12 +312,13 @@ class TestStitchVerbatim:
         state: dict = {}
         add_section_to_workbench(_section(md, 11, heading="🔹 Тема", text="Тело темы."), state)
         stitched = _stitch_verbatim(get_workbench_rows(state))
-        assert "> **Главная мысль исходной лекции (lecture.md):** Агент — система вокруг LLM." in stitched
+        assert "> **Главная мысль исходной лекции (lecture-main-idea.md):** Агент — система вокруг LLM." in stitched
         assert "Второй абзац мысли" not in stitched  # только первый абзац — это шапка, не копия
 
     def test_main_idea_falls_back_to_first_content_h2_without_role_heading(self, tmp_path: Path):
         """Конспект без раздела «Главная мысль» → шапка из первой содержательной H2."""
-        md = tmp_path / "no_role.md"
+        md = DATA_DIR / "_test_workbench" / "no-role.md"
+        md.parent.mkdir(parents=True, exist_ok=True)
         md.write_text(
             "# Конспект\n\n## 📑 Оглавление\n- x\n\n## Первый раздел\n\nСодержательный абзац раздела.\n",
             encoding="utf-8",
@@ -256,10 +326,11 @@ class TestStitchVerbatim:
         state: dict = {}
         add_section_to_workbench(_section(md, 6, heading="Первый раздел", text="Содержательный абзац раздела."), state)
         stitched = _stitch_verbatim(get_workbench_rows(state))
-        assert "> **Главная мысль исходной лекции (no_role.md):** Содержательный абзац раздела." in stitched
+        assert "> **Главная мысль исходной лекции (no-role.md):** Содержательный абзац раздела." in stitched
 
     def test_includes_lecturer_check_questions_when_role_present(self, tmp_path: Path):
-        md = tmp_path / "with_questions.md"
+        md = DATA_DIR / "_test_workbench" / "with-questions.md"
+        md.parent.mkdir(parents=True, exist_ok=True)
         md.write_text(
             "# Конспект\n\n## 🔹 Тема\n\nТело темы.\n\n"
             "## ❓ Контрольные вопросы\n\n1. Чем workflow отличается от агента?\n2. Что такое harness?\n",
@@ -340,11 +411,20 @@ class TestPersistRoundtrip:
         saved: dict = {}
         monkeypatch.setattr(user_state_core, "set_kv", lambda key, value: saved.__setitem__(key, value))
         monkeypatch.setattr(st, "session_state", {"current_view": "x"})
-        rows = [{"konspekt_md_abs": str(MD_A), "line_start": 10, "heading_text": "Тема"}]
+        rows = [
+            {
+                "source_abs": str(SRC_A),
+                "konspekt_md_abs": str(MD_A),
+                "line_start": 10,
+                "heading_text": "Тема",
+            }
+        ]
         apply_research_payload({"workbench_sections": rows})
-        assert st.session_state[WORKBENCH_SECTIONS_KEY] == rows
+        assert st.session_state[WORKBENCH_SECTIONS_KEY][0]["heading_text"] == "Тема"
+        assert st.session_state[WORKBENCH_SECTIONS_KEY][0]["row_key"].startswith("p:")
         # Restore перезаписывает и локальный профиль (авто-персист).
         assert "living_konspekt_workbench_json" in saved
+        assert "konspekt_md_abs" not in saved["living_konspekt_workbench_json"]
 
     def test_apply_clears_workbench_when_absent_from_payload(self, monkeypatch):
         import streamlit as st

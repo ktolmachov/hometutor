@@ -13,9 +13,15 @@ from app.ui.continuity_bridge import (
     guided_primary_reason_line_ru,
     home_sync_transfer_hint_ru,
     load_qa_tutor_handoff_context,
+    restore_course_cta_ru,
     tutor_reason_line_ru,
 )
-from app.ui.study_scope import deactivate_scope, get_active_scope
+from app.ui.study_scope import (
+    deactivate_scope,
+    get_active_scope,
+    get_last_deactivated_scope,
+    restore_scope,
+)
 from app.ui.answer_helpers import source_paths_from_answer as _source_paths_from_answer
 from app.ui.adaptive_plan_card import render_adaptive_plan_hub
 from app.ui.helpers import (
@@ -511,27 +517,39 @@ def _render_primary_mode_slot(slot: str, *, fc_due: int) -> None:
 
 
 def _render_active_course_card() -> None:
-    """Show active course card with deactivate CTA (Package AB / US-16.1)."""
+    """Show active course card or restore CTA (Package AB / US-16.1)."""
     scope = get_active_scope()
-    if not scope:
+    if scope:
+        title = scope.get("title") or scope.get("folder_rel") or "Курс"
+        n_docs = len(scope.get("source_paths") or [])
+        with st.container(border=True):
+            st.caption("Активный курс")
+            st.markdown(f"**{_esc_html(title)}**")
+            st.caption(course_scope_chip_ru(title))
+            if n_docs:
+                st.caption(f"Документов в области: {n_docs}")
+            st.caption(
+                "Пошаговый плейбук для домашних заданий (шаги + самопроверка, без отдельной вкладки) — "
+                "в **Course Cockpit**, пока курс активен."
+            )
+            deactivate_col, _ = st.columns([1, 2])
+            with deactivate_col:
+                if st.button("× Деактивировать курс", key="home_deactivate_scope", type="secondary", width="stretch"):
+                    deactivate_scope()
+                    st.rerun()
         return
-    title = scope.get("title") or scope.get("folder_rel") or "Курс"
-    n_docs = len(scope.get("source_paths") or [])
+
+    last_scope = get_last_deactivated_scope()
+    if not last_scope:
+        return
+    title = last_scope.get("title") or last_scope.get("folder_rel") or "Курс"
     with st.container(border=True):
-        st.caption("Активный курс")
+        st.caption("Недавно деактивированный курс")
         st.markdown(f"**{_esc_html(title)}**")
-        st.caption(course_scope_chip_ru(title))
-        if n_docs:
-            st.caption(f"Документов в области: {n_docs}")
-        st.caption(
-            "Пошаговый плейбук для домашних заданий (шаги + самопроверка, без отдельной вкладки) — "
-            "в **Course Cockpit**, пока курс активен."
-        )
-        deactivate_col, _ = st.columns([1, 2])
-        with deactivate_col:
-            if st.button("× Деактивировать курс", key="home_deactivate_scope", type="secondary", width="stretch"):
-                deactivate_scope()
-                st.rerun()
+        st.caption("Можно вернуть прежнюю область поиска и Course Cockpit одной кнопкой.")
+        if st.button(restore_course_cta_ru(title), key="home_restore_scope", type="secondary", width="stretch"):
+            restore_scope()
+            st.rerun()
 
 
 def _render_more_tools_section() -> None:

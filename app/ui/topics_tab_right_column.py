@@ -10,11 +10,14 @@ from app.ui.quiz_learning_mode_widgets import (
     render_scoped_quiz_learning_mode_select,
     scoped_quiz_learning_mode_value,
 )
+from app.ui.continuity_bridge import restore_course_cta_ru
 from app.ui.study_scope import (
     activate_scope,
     deactivate_scope,
     folder_rel_from_paths,
     get_active_scope,
+    get_last_deactivated_scope,
+    restore_scope,
 )
 from app.ui_client import fetch_json, post_knowledge_workflow
 
@@ -48,10 +51,27 @@ def _render_activate_course_row(
     folder_source_paths = _folder_source_paths_from_index(folder_rel, index_stats) or document_options
     active = get_active_scope()
     is_active = bool(active and active.get("folder_rel") == folder_rel)
+    last_scope = get_last_deactivated_scope()
+    is_restorable = bool(
+        not is_active
+        and last_scope
+        and last_scope.get("folder_rel") == folder_rel
+    )
     act_cols = st.columns([2, 1])
     with act_cols[0]:
         if is_active:
             st.caption(f"✅ Активный курс: **{folder_rel}** — все запросы фильтруются по этой папке")
+        elif is_restorable:
+            course_title = str(last_scope.get("title") or topic.get("topic_name") or folder_rel)
+            st.caption(f"↩ Недавно деактивирован: **{folder_rel}**")
+            if st.button(
+                restore_course_cta_ru(course_title),
+                key=f"restore_course_{topic.get('topic_id', 'none')}",
+                width="stretch",
+                type="secondary",
+            ):
+                restore_scope()
+                st.rerun()
         else:
             course_title = f"Курс: {topic.get('topic_name', folder_rel)}"
             if st.button(

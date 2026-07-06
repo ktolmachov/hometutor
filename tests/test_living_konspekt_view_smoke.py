@@ -93,6 +93,59 @@ class TestRenderLivingKonspektViewSmoke:
         captions = [c.value for c in at.caption]
         assert any("повторяющихся заголовков" in c for c in captions)
 
+    def test_existing_artifacts_show_title_picker(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+        import app.konspekt_artifact as konspekt_artifact_module
+        import app.obsidian_export as obsidian_export
+
+        target_dir = tmp_path / "living-konspekt"
+        target_dir.mkdir()
+        (target_dir / "course-a.md").write_text(
+            konspekt_artifact_module.serialize_manifest(
+                "Курс A",
+                [],
+                [],
+                artifact_id="course-a",
+            )
+            + "# Course A\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(obsidian_export, "vault_root", lambda: tmp_path)
+
+        at = AppTest.from_function(_app)
+        at.session_state["workbench_sections"] = [_row()]
+        at.run()
+        assert not at.exception
+        labels = [str(sb.label) for sb in at.get("selectbox")]
+        assert any("Существующий конспект" in label for label in labels)
+
+    def test_saved_artifacts_panel_shows_delete_button(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+        import app.konspekt_artifact as konspekt_artifact_module
+        import app.obsidian_export as obsidian_export
+
+        target_dir = tmp_path / "living-konspekt"
+        target_dir.mkdir()
+        (target_dir / "course-a.md").write_text(
+            konspekt_artifact_module.serialize_manifest(
+                "Курс A",
+                [],
+                [],
+                artifact_id="course-a",
+            )
+            + "# Course A\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(obsidian_export, "vault_root", lambda: tmp_path)
+
+        at = AppTest.from_function(_app)
+        at.session_state["workbench_sections"] = [_row()]
+        at.run()
+        assert not at.exception
+        delete_buttons = [b for b in at.get("button") if "Удалить" in str(b.label)]
+        assert delete_buttons
+        delete_buttons[0].click().run()
+        assert not (target_dir / "course-a.md").exists()
+        assert not at.exception
+
 
 def _media_sidecar(confidence: float = 0.82) -> MediaSidecar:
     return MediaSidecar(

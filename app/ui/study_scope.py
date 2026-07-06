@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     pass
 
 ACTIVE_SCOPE_KEY = "active_study_scope"
+LAST_DEACTIVATED_SCOPE_KEY = "last_deactivated_study_scope"
 _SCOPE_DERIVED_STATE_KEYS = ("last_synthesis", "last_learning_plan", "last_answer")
 _SCOPE_QUIZ_KEY_PREFIX = "topic_scope_quiz_"
 
@@ -50,12 +51,63 @@ def activate_scope(
     return scope
 
 
+def _normalize_scope_payload(scope: dict[str, Any]) -> dict[str, Any] | None:
+    folder_rel = str(scope.get("folder_rel") or "").strip()
+    if not folder_rel:
+        return None
+    return {
+        "id": str(scope.get("id") or _scope_id(folder_rel)),
+        "title": str(scope.get("title") or folder_rel),
+        "folder_rel": folder_rel,
+        "source_paths": list(scope.get("source_paths") or []),
+        "created_at": str(scope.get("created_at") or datetime.now(timezone.utc).isoformat()),
+    }
+
+
+def _save_last_deactivated_scope(scope: dict[str, Any]) -> None:
+    import streamlit as st
+
+    normalized = _normalize_scope_payload(scope)
+    if normalized is None:
+        return
+    st.session_state[LAST_DEACTIVATED_SCOPE_KEY] = normalized
+
+
 def deactivate_scope() -> None:
     """Clear active study scope → return to global mode."""
     import streamlit as st
 
+    scope = st.session_state.get(ACTIVE_SCOPE_KEY)
+    if isinstance(scope, dict):
+        _save_last_deactivated_scope(scope)
     st.session_state.pop(ACTIVE_SCOPE_KEY, None)
     _clear_scope_derived_state()
+
+
+def get_last_deactivated_scope() -> dict[str, Any] | None:
+    """Return the most recently deactivated scope, if any."""
+    import streamlit as st
+
+    scope = st.session_state.get(LAST_DEACTIVATED_SCOPE_KEY)
+    if not isinstance(scope, dict):
+        return None
+    return _normalize_scope_payload(scope)
+
+
+def restore_scope() -> dict[str, Any] | None:
+    """Re-activate the most recently deactivated study scope."""
+    import streamlit as st
+
+    last = get_last_deactivated_scope()
+    if last is None:
+        return None
+    restored = activate_scope(
+        folder_rel=last["folder_rel"],
+        title=last["title"],
+        source_paths=list(last.get("source_paths") or []),
+    )
+    st.session_state.pop(LAST_DEACTIVATED_SCOPE_KEY, None)
+    return restored
 
 
 def get_active_scope() -> dict[str, Any] | None:

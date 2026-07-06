@@ -437,6 +437,10 @@ def course_scope_chip_ru(course_title: str) -> str:
     return f"🎯 Поиск только в: «{course_title}»"
 
 
+def restore_course_cta_ru(course_title: str) -> str:
+    return f"↩ Восстановить курс: {course_title}"
+
+
 def course_scope_tutor_context_line_ru(course_title: str) -> str:
     return f"Учебный контекст: {course_title}"
 

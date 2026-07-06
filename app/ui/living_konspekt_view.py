@@ -69,6 +69,60 @@ _WORKBENCH_GOAL_HYDRATED_KEY = "_living_konspekt_goal_hydrated"
 _WORKBENCH_GOAL_KEY = "living_konspekt_goal"
 _ACTIVE_ARTIFACT_ID_KEY = "living_konspekt_active_artifact_id"
 _LAST_SAVED_BODY_KEY = "living_konspekt_last_saved_body"
+_NEW_TITLE_PICK = "__new__"
+_TITLE_PICK_KEY = "living_konspekt_title_pick"
+_TITLE_PICK_PREV_KEY = "living_konspekt_title_pick_prev"
+
+
+def _apply_title_pick(
+    picked_id: str,
+    id_to_artifact: dict[str, konspekt_artifact.SavedArtifact],
+) -> None:
+    if picked_id == _NEW_TITLE_PICK:
+        st.session_state.pop(_ACTIVE_ARTIFACT_ID_KEY, None)
+        return
+    artifact = id_to_artifact[picked_id]
+    st.session_state["living_konspekt_title"] = artifact.title
+    st.session_state[_ACTIVE_ARTIFACT_ID_KEY] = artifact.artifact_id
+
+
+def _render_konspekt_title_fields() -> str:
+    from app.obsidian_export import vault_root
+
+    st.session_state.setdefault("living_konspekt_title", "Рабочий конспект")
+    artifacts = [
+        artifact
+        for artifact in konspekt_artifact.scan_saved_artifacts(vault_root())
+        if artifact.artifact_id
+    ]
+    if not artifacts:
+        return st.text_input("Название конспекта", key="living_konspekt_title")
+
+    id_to_artifact = {artifact.artifact_id: artifact for artifact in artifacts}
+    active_id = st.session_state.get(_ACTIVE_ARTIFACT_ID_KEY)
+    if active_id in id_to_artifact:
+        st.session_state.setdefault(_TITLE_PICK_KEY, active_id)
+    else:
+        st.session_state.setdefault(_TITLE_PICK_KEY, _NEW_TITLE_PICK)
+
+    def _format_pick(artifact_id: str) -> str:
+        if artifact_id == _NEW_TITLE_PICK:
+            return "— новое название —"
+        artifact = id_to_artifact[artifact_id]
+        return f"{artifact.title} · {artifact.section_count} разд."
+
+    picked_id = st.selectbox(
+        "Существующий конспект",
+        [_NEW_TITLE_PICK, *id_to_artifact.keys()],
+        format_func=_format_pick,
+        key=_TITLE_PICK_KEY,
+    )
+    prev_picked = st.session_state.get(_TITLE_PICK_PREV_KEY)
+    if prev_picked != picked_id:
+        st.session_state[_TITLE_PICK_PREV_KEY] = picked_id
+        _apply_title_pick(picked_id, id_to_artifact)
+
+    return st.text_input("Название конспекта", key="living_konspekt_title")
 
 
 # ── Корзина: тонкий Streamlit-адаптер поверх app.workbench_service ───────
@@ -338,6 +392,23 @@ def _request_reindex_from_ui() -> None:
     st.session_state["poll_reindex_status"] = True
 
 
+def _clear_deleted_artifact_session_refs(artifact: konspekt_artifact.SavedArtifact) -> None:
+    last_saved = str(st.session_state.get("living_konspekt_last_saved") or "")
+    if last_saved:
+        try:
+            same_file = Path(last_saved).resolve() == artifact.path.resolve()
+        except OSError:
+            same_file = last_saved == str(artifact.path)
+        if same_file:
+            st.session_state.pop("living_konspekt_last_saved", None)
+            st.session_state.pop(_LAST_SAVED_BODY_KEY, None)
+    if artifact.artifact_id and st.session_state.get(_ACTIVE_ARTIFACT_ID_KEY) == artifact.artifact_id:
+        st.session_state.pop(_ACTIVE_ARTIFACT_ID_KEY, None)
+    if artifact.artifact_id and st.session_state.get(_TITLE_PICK_KEY) == artifact.artifact_id:
+        st.session_state[_TITLE_PICK_KEY] = _NEW_TITLE_PICK
+        st.session_state[_TITLE_PICK_PREV_KEY] = _NEW_TITLE_PICK
+
+
 def _render_saved_artifacts_panel() -> None:
     from app.obsidian_export import obsidian_uri, vault_root, vscode_uri
 
@@ -349,7 +420,7 @@ def _render_saved_artifacts_panel() -> None:
 
     for idx, artifact in enumerate(artifacts):
         with st.container(border=True):
-            cols = st.columns([5, 1.2, 1.2, 1.2])
+            cols = st.columns([5, 1.1, 1.1, 1.1, 0.9])
             with cols[0]:
                 st.markdown(f"**{artifact.title}**")
                 manifest_label = f"id: `{artifact.artifact_id}`" if artifact.has_manifest else "без манифеста"
@@ -381,6 +452,8 @@ def _render_saved_artifacts_panel() -> None:
                         set_project_goal(manifest.goal if isinstance(manifest.goal, dict) else {})
                         st.session_state[_ACTIVE_ARTIFACT_ID_KEY] = manifest.artifact_id
                         st.session_state["living_konspekt_title"] = manifest.title
+                        st.session_state[_TITLE_PICK_KEY] = manifest.artifact_id
+                        st.session_state[_TITLE_PICK_PREV_KEY] = manifest.artifact_id
                         st.session_state["living_konspekt_last_saved"] = str(artifact.path)
                         st.session_state.pop(_LAST_SAVED_BODY_KEY, None)
                         try:
@@ -396,17 +469,36 @@ def _render_saved_artifacts_panel() -> None:
                     else:
                         st.toast("Конспект пересобран в корзину.", icon="📚")
                         st.rerun()
+            with cols[4]:
+                artifact_key = artifact.artifact_id or artifact.path.stem
+                if st.button(
+                    "🗑 Удалить",
+                    key=f"living_artifact_delete_{idx}_{artifact_key}",
+                    width="stretch",
+                ):
+                    try:
+                        root = vault_root()
+                        konspekt_artifact.delete_saved_artifact(artifact.path, root)
+                        _clear_deleted_artifact_session_refs(artifact)
+                        try:
+                            from app.ui_events import track_event
+
+                            track_event(
+                                "artifact_deleted",
+                                {"artifact_id": artifact.artifact_id, "name": artifact.name},
+                            )
+                        except Exception:  # noqa: BLE001 - аналитика не должна ломать удаление
+                            pass
+                    except (OSError, ValueError, FileNotFoundError) as exc:
+                        st.error(f"Не удалось удалить конспект: {format_request_error(exc)}")
+                    else:
+                        st.toast(f"Конспект «{artifact.title}» удалён.", icon="🗑")
+                        st.rerun()
 
 
 def _render_build_panel(rows: list[dict[str, Any]]) -> None:
     st.markdown("### 📚 Собрать рабочий конспект")
-    # Дефолт через setdefault ДО инстанцирования: value= вместе с key= для уже
-    # существующего session_state-ключа — анти-паттерн (Streamlit его игнорирует и warn'ит).
-    st.session_state.setdefault("living_konspekt_title", "Рабочий конспект")
-    topic = st.text_input(
-        "Название конспекта",
-        key="living_konspekt_title",
-    )
+    topic = _render_konspekt_title_fields()
     mode = st.radio(
         "Способ сборки",
         ["Дословная сшивка (без LLM)", "LLM-синтез из разделов"],
@@ -439,6 +531,8 @@ def _render_build_panel(rows: list[dict[str, Any]]) -> None:
             st.session_state[_LAST_SAVED_BODY_KEY] = body
             if manifest is not None:
                 st.session_state[_ACTIVE_ARTIFACT_ID_KEY] = manifest.artifact_id
+                st.session_state[_TITLE_PICK_KEY] = manifest.artifact_id
+                st.session_state[_TITLE_PICK_PREV_KEY] = manifest.artifact_id
             try:
                 from app.ui_events import track_event
 

@@ -16,12 +16,15 @@ from app.ui.continuity_bridge import (
     expert_controls_sidebar_blurb_ru,
     sidebar_fast_filters_caption_ru,
     sidebar_focus_view_help_ru,
+    restore_course_cta_ru,
     sync_transfer_sidebar_expander_label_ru,
     sync_transfer_sidebar_intro_caption_ru,
 )
 from app.ui.index_labels import index_version_label
 from app.ui.study_scope import deactivate_scope as _deactivate_scope
 from app.ui.study_scope import get_active_scope as _get_active_scope
+from app.ui.study_scope import get_last_deactivated_scope as _get_last_deactivated_scope
+from app.ui.study_scope import restore_scope as _restore_scope
 from app.ui.topics_catalog import load_topics_catalog
 from app.ui.widgets import render_panel_header
 
@@ -430,6 +433,20 @@ def render_sidebar(index_stats: dict | None):
                 _deactivate_scope()
                 st.rerun()
             st.markdown("---")
+        else:
+            _last_scope = _get_last_deactivated_scope()
+            if _last_scope:
+                _scope_title = str(_last_scope.get("title") or _last_scope.get("folder_rel") or "Курс")
+                st.caption(f"↩ Недавно деактивирован: **{_scope_title}**")
+                if st.button(
+                    restore_course_cta_ru(_scope_title),
+                    key="sidebar_restore_scope",
+                    width="stretch",
+                    type="secondary",
+                ):
+                    _restore_scope()
+                    st.rerun()
+                st.markdown("---")
         if feature_visible_by_id("sidebar:sync_backup"):
             with st.expander(sync_transfer_sidebar_expander_label_ru(), expanded=False):
                 st.caption(sync_transfer_sidebar_intro_caption_ru())

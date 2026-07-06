@@ -268,3 +268,22 @@ def test_collect_sidecar_pointers_reads_source_konspekt_frontmatter() -> None:
 def test_parse_rejects_unsupported_manifest_version() -> None:
     with pytest.raises(ValueError, match="Unsupported artifact manifest version"):
         konspekt_artifact.parse_manifest("---\ntype: living-konspekt\nmanifest_version: 2\n---\n")
+
+
+def test_delete_saved_artifact_removes_file_under_living_konspekt(tmp_path: Path) -> None:
+    target_dir = tmp_path / "living-konspekt"
+    target_dir.mkdir()
+    artifact_path = target_dir / "to-delete.md"
+    artifact_path.write_text("# Delete me\n", encoding="utf-8")
+
+    konspekt_artifact.delete_saved_artifact(artifact_path, tmp_path)
+
+    assert not artifact_path.exists()
+
+
+def test_delete_saved_artifact_rejects_path_outside_living_konspekt(tmp_path: Path) -> None:
+    outside = tmp_path / "outside.md"
+    outside.write_text("# Outside\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="outside the living-konspekt directory"):
+        konspekt_artifact.delete_saved_artifact(outside, tmp_path)

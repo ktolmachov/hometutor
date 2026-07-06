@@ -33,7 +33,14 @@ from app.ui.first_run import render_demo_sandbox_banner, render_empty_index_hero
 from app.ui.preflight import render_preflight_card
 from app.ui.reindex_poll import poll_reindex_status
 from app.ui.seed_questions import render_seed_question_chips
-from app.ui.study_scope import activate_scope, deactivate_scope, get_active_scope
+from app.ui.continuity_bridge import restore_course_cta_ru
+from app.ui.study_scope import (
+    activate_scope,
+    deactivate_scope,
+    get_active_scope,
+    get_last_deactivated_scope,
+    restore_scope,
+)
 from app.ui_preferences import feature_visible, get_overrides, get_ui_level
 
 
@@ -389,6 +396,21 @@ def _render_tile(tile: MissionTile, *, recommended_tile: str, due_count: int | N
     )
     if tile.tile_id == "course" and not get_active_scope():
         st.button(tile.button_label, key=f"mission_tile_{tile.tile_id}", width="stretch", on_click=_course_picker_dialog)
+        last_scope = get_last_deactivated_scope()
+        if last_scope:
+            title = str(last_scope.get("title") or last_scope.get("folder_rel") or "курс")
+
+            def _restore_last_course() -> None:
+                restore_scope()
+                _set_navigation_state("Темы", slot_hint="course")
+
+            st.button(
+                restore_course_cta_ru(title),
+                key="mission_tile_course_restore",
+                width="stretch",
+                type="secondary",
+                on_click=_restore_last_course,
+            )
         return
     st.button(
         tile.button_label,
@@ -528,7 +550,10 @@ def _course_deactivate_dialog() -> None:
 def _render_course_deactivate_dialog_body() -> None:
     scope = get_active_scope() or {}
     title = str(scope.get("title") or scope.get("folder_rel") or "курс")
-    st.caption(f"Отключится активная область «{title}». Прогресс и карточки сохраняются.")
+    st.caption(
+        f"Отключится активная область «{title}». Прогресс и карточки сохраняются; "
+        "курс можно будет восстановить из сайдбара или главной."
+    )
     if st.button(
         "Деактивировать",
         type="primary",

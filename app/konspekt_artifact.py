@@ -190,6 +190,19 @@ def resolve_artifact_path(vault_root: Path, artifact_id: str) -> Path | None:
     return None
 
 
+def delete_saved_artifact(artifact_path: Path, vault_root: Path) -> None:
+    """Delete a saved artifact file under ``vault_root/living-konspekt/``."""
+    base = _artifacts_dir(Path(vault_root)).resolve()
+    target = Path(artifact_path).resolve()
+    try:
+        target.relative_to(base)
+    except ValueError as exc:
+        raise ValueError("Artifact path is outside the living-konspekt directory") from exc
+    if not target.is_file():
+        raise FileNotFoundError(f"Artifact not found: {target.name}")
+    target.unlink()
+
+
 def reassemble_rows(
     manifest: ManifestPayload,
     *,
@@ -692,6 +705,7 @@ __all__ = [
     "artifact_id_from_title",
     "build_artifact_body",
     "collect_sidecar_pointers",
+    "delete_saved_artifact",
     "media_caption_line",
     "parse_manifest",
     "reassemble_rows",

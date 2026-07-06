@@ -85,7 +85,9 @@ def _row_source_ref(row: dict[str, Any]) -> str:
     if md_abs:
         label = Path(md_abs).name
     if not label:
-        label = str(row.get("source_label") or "неизвестный конспект").strip()
+        label = str(row.get("source_rel") or row.get("source_label") or "").strip()
+    if not label:
+        label = "неизвестный конспект"
     start = row.get("line_start")
     end = row.get("line_end")
     if start and end:

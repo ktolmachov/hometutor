@@ -2,7 +2,7 @@ last_review:
   date: 2026-06-25
   code_sha: e385cf58d8e6f7003dfeb4605059b8a609f71e26
   docs_sha: e385cf58d8e6f7003dfeb4605059b8a609f71e26
-  note: "first incremental run; baseline did not previously exist"
+  note: "first incremental run; baseline did not previously exist; status metadata corrected on 2026-07-06 after audit"
   report_files:
     - arch_review_2026-06-25.md
 
@@ -13,8 +13,7 @@ findings:
     files: ["app/llm_local_circuit.py:48-50"]
     first_seen: 2026-06-25
     last_seen: 2026-06-25
-    status: resolved
-    resolved_date: 2026-06-25
+    status: new
     evidence_cmd: 'rg -n "getenv\(\"LLM_LOCAL_CB" app/llm_local_circuit.py'
     expected_evidence: "3 matches (LLM_LOCAL_CB_FAILURES/RESET_SEC/WINDOW_SEC)"
     regression_guard: "scripts/check_config_access.py + docs/conventions_architecture.md §Конфигурация"
@@ -27,8 +26,7 @@ findings:
     files: ["app/flashcard_service.py:120"]
     first_seen: 2026-06-25
     last_seen: 2026-06-25
-    status: resolved
-    resolved_date: 2026-06-25
+    status: new
     evidence_cmd: 'rg -n "os.getenv" app/flashcard_service.py'
     expected_evidence: "match on L120 (HOME_RAG_E2E_OFFLINE)"
     regression_guard: "scripts/check_config_access.py"
@@ -56,10 +54,10 @@ findings:
       - app/prompt_smoke_checks.py
       - app/langfuse_dataset.py
       - app/index_backup.py
+      - app/dummy.py
     first_seen: 2026-06-25
     last_seen: 2026-06-25
-    status: resolved
-    resolved_date: 2026-06-25
+    status: new
     evidence_cmd: 'rg -l "\bsmart_konspekt\b" app tests scripts main.py ingest.py telegram_bot.py --type py'
     expected_evidence: "only app/smart_konspekt.py (self) — no external referrer"
     regression_guard: "scripts/check_dead_modules.py (import-graph orphan detector)"
@@ -72,8 +70,7 @@ findings:
     files: ["app/log_masking_policy.py", "app/logging_config.py", "app/middleware.py"]
     first_seen: 2026-06-25
     last_seen: 2026-06-25
-    status: resolved
-    resolved_date: 2026-06-25
+    status: new
     evidence_cmd: 'rg -ln "log_masking_policy" --type py'
     expected_evidence: "no matches outside app/log_masking_policy.py (masking never applied)"
     regression_guard: "tests/test_logging_invariants.py::test_sink_payload_is_masked"
@@ -82,7 +79,7 @@ findings:
 
   - id: AR-2026-06-25-005
     phase: 2
-    severity: warning
+    severity: info
     files: ["app/ (23 files >600 lines)"]
     first_seen: 2026-06-25
     last_seen: 2026-06-25
@@ -95,7 +92,7 @@ findings:
 
   - id: AR-2026-06-25-006
     phase: 2
-    severity: warning
+    severity: info
     files: ["app/ui/flashcards_review_view.py:262", "app/ui/tutor_chat_session.py:302", "app/user_state_db.py:307"]
     first_seen: 2026-06-25
     last_seen: 2026-06-25
@@ -112,8 +109,7 @@ findings:
     files: ["app/ingestion_sections.py:6", "app/obsidian_export.py:28", "app/smart_konspekt.py:15", "requirements.txt"]
     first_seen: 2026-06-25
     last_seen: 2026-06-25
-    status: resolved
-    resolved_date: 2026-06-25
+    status: new
     evidence_cmd: 'rg -in "pyyaml" requirements.txt'
     expected_evidence: "no match (pyyaml imported but undeclared)"
     regression_guard: "scripts/check_requirements_imports.py"
@@ -126,8 +122,7 @@ findings:
     files: ["tests/"]
     first_seen: 2026-06-25
     last_seen: 2026-06-25
-    status: resolved
-    resolved_date: 2026-06-25
+    status: new
     evidence_cmd: 'rg -l "pipeline_runner|tutor_orchestrator|guardrails" tests/'
     expected_evidence: "no matches (critical paths untested)"
     regression_guard: "tests/test_pipeline_invariants.py + tests/test_guardrails_invariants.py"

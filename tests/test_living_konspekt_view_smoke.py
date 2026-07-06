@@ -156,7 +156,10 @@ class TestMediaPanelSmoke:
         at.run()
 
         assert not at.exception
+        assert any("Все видео урока" in str(md.value) for md in at.markdown)
         labels = [button.label for button in at.get("link_button")]
+        assert "Открыть: Видео" in labels
+        assert "Открыть: Дополнительное видео" in labels
         assert "Смотреть: Видео с 1:15" in labels
         assert "Смотреть: Дополнительное видео с 1:15" in labels
 
@@ -235,6 +238,32 @@ class TestMemoryPanelSmoke:
         assert "flashcards_review_session_scope_signature" not in at.session_state
         assert at.session_state["flashcards_section_pending"] == "review"
         assert at.session_state["_pending_current_view"] == "Flashcards"
+
+
+class TestBulkDocumentSections:
+    def test_adds_h2_document_sections_and_skips_toc(self, tmp_path: Path):
+        import app.ui.living_konspekt_view as view
+
+        md = tmp_path / "lesson.md"
+        md.write_text(
+            "# Lesson\n\n"
+            "## 📑 Оглавление\n\n- [A](#a)\n\n"
+            "## A\n\nТекст раздела A.\n\n### A.1\n\nДеталь A.\n\n"
+            "## B\n\nТекст раздела B.\n",
+            encoding="utf-8",
+        )
+        rows = [_row(heading="A", line_start=5, konspekt_md_abs=md)]
+        state: dict = {}
+
+        added, duplicates = view._add_document_sections_to_workbench(str(md), rows, state=state)
+
+        assert (added, duplicates) == (2, 0)
+        headings = [row["heading_text"] for row in state["workbench_sections"]]
+        assert headings == ["A", "B"]
+
+        added_again, duplicates_again = view._add_document_sections_to_workbench(str(md), rows, state=state)
+
+        assert (added_again, duplicates_again) == (0, 2)
 
 
 class TestTermCardsPanelSmoke:

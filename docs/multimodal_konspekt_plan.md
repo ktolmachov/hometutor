@@ -305,6 +305,20 @@ data/courses/autonomy/lecture_01/The_Architecture_of_Autonomy.segments.json
 MVP должен начинаться с post-hoc alignment: его легче тестировать, легче инвалидировать и он не зависит
 от поведения LLM.
 
+**Статус реализации (2026-07-06):** конвейер §4.2–4.3 реализован.
+
+- `scripts/transcribe_media.py` — ASR через faster-whisper (extra `asr`); аудио декодируется из
+  медиафайла напрямую (PyAV), системный ffmpeg нужен только для `--remux` (`.ts` → браузерный `.mp4`
+  без перекодирования); идемпотентность по sha256 медиа; пишет `<stem>.segments.json` + `<stem>.txt`.
+- `app/media_alignment.py` — post-hoc выравнивание `anchor-lis-v1`: блочный токенный скоринг
+  (`tokenize_filtered`) → взвешенный LIS (гарантия хронологии) → уточнение `t_start` до сегмента →
+  интерполяция промежуточных разделов с confidence < 0.70. Тесты: `tests/test_media_alignment.py`.
+- `scripts/build_media_sidecar.py` — собирает/обновляет `<konspekt>.media.json` (schema v1),
+  сохраняет существующие `media.videos` (в т.ч. YouTube) и картинки разделов, валидирует контракт
+  `parse_media_sidecar` до записи; `--dry-run` показывает покрытие таймкодами.
+
+Compose-time hints (§4.3 п.1) не реализованы — остаются следующим уровнем точности.
+
 ### 4.4 Минимальный путь (MVP-0, без ASR)
 
 Если видео лежит на YouTube или студент пока не хочет транскрибировать его, достаточно безопасной ссылки

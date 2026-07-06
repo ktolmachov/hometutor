@@ -68,12 +68,15 @@ ml = [
     "pyarrow>=14.0",
     "scikit-learn>=1.3",
 ]
+asr = [
+    "faster-whisper>=1.1",  # scripts/transcribe_media.py (транскрибация видеолекций)
+]
 dev = [
     "pytest==9.0.2",
     "pytest-cov==6.0.0",
 ]
 all = [
-    "hometutor[voice,ocr,otel,telegram,ml,dev]",
+    "hometutor[voice,ocr,otel,telegram,ml,asr,dev]",
 ]
 
 [project.scripts]

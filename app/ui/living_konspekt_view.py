@@ -28,7 +28,7 @@ from app.media_sidecar import (
 )
 from app.media_urls import normalize_video_url
 from app.path_safety import resolve_data_relative_path
-from app.section_index import IndexedSection, row_to_section, section_to_row
+from app.section_index import IndexedSection, parse_sections, row_to_section, section_to_row
 from app.study_web_queries import (
     build_query_from_rows,
     build_query_terms,
@@ -441,7 +441,7 @@ def _render_url_video_media(
     try:
         normalized = normalize_video_url(video.canonical_url or video.url)
     except ValueError:
-        st.link_button(f"Открыть: {title}", video.url, width="stretch")
+        _render_url_video_link(video, title)
         return
 
     if normalized.is_youtube and confident_timestamp:
@@ -451,7 +451,16 @@ def _render_url_video_media(
             width="stretch",
         )
     else:
-        st.link_button(f"Открыть: {title}", normalized.canonical_url, width="stretch")
+        _render_url_video_link(video, title)
+
+
+def _render_url_video_link(video: UrlVideoSource, title: str) -> None:
+    try:
+        normalized = normalize_video_url(video.canonical_url or video.url)
+        url = normalized.canonical_url
+    except ValueError:
+        url = video.url
+    st.link_button(f"Открыть: {title}", url, width="stretch")
 
 
 def _render_local_video_media(
@@ -461,6 +470,13 @@ def _render_local_video_media(
     timestamp_label: str,
     title: str,
 ) -> None:
+    start_time = int(media_section.t_start or 0) if confident_timestamp else 0
+    _render_local_video_player(video, title, start_time=start_time)
+    if confident_timestamp:
+        st.caption(f"{title} · старт: {timestamp_label}")
+
+
+def _render_local_video_player(video: LocalVideoSource, title: str, *, start_time: int = 0) -> None:
     try:
         video_path = resolve_data_relative_path(video.path)
     except ValueError as exc:
@@ -470,10 +486,122 @@ def _render_local_video_media(
         st.caption(f"Локальное видео не найдено: `{video.path}`")
         return
 
-    start_time = int(media_section.t_start or 0) if confident_timestamp else 0
     st.video(str(video_path), start_time=start_time)
-    if confident_timestamp:
-        st.caption(f"{title} · старт: {timestamp_label}")
+
+
+def _unique_document_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        md_abs = str(row.get("konspekt_md_abs") or "")
+        if not md_abs or md_abs in seen:
+            continue
+        seen.add(md_abs)
+        out.append(row)
+    return out
+
+
+def _render_all_lesson_videos_panel(rows: list[dict[str, Any]]) -> None:
+    entries: list[tuple[str, MediaSidecar, list[str]]] = []
+    for row in _unique_document_rows(rows):
+        md_abs = str(row.get("konspekt_md_abs") or "")
+        try:
+            sidecar = load_media_sidecar_for_konspekt(Path(md_abs))
+        except (OSError, ValueError, json.JSONDecodeError):
+            continue
+        if sidecar is None or not sidecar.videos:
+            continue
+        entries.append((md_abs, sidecar, _sidecar_stale_reasons(sidecar, md_abs)))
+
+    if not entries:
+        return
+
+    st.markdown("### 🎞 Все видео урока")
+    for md_abs, sidecar, stale_reasons in entries:
+        label = f"{Path(md_abs).name} · {len(sidecar.videos)} видео"
+        with st.expander(label, expanded=len(entries) == 1):
+            if stale_reasons:
+                st.caption("Таймкоды устарели: " + ", ".join(stale_reasons))
+            for idx, video in enumerate(sidecar.videos, start=1):
+                title = _video_title(video, idx)
+                st.markdown(f"**{title}**")
+                if isinstance(video, UrlVideoSource):
+                    _render_url_video_link(video, title)
+                elif isinstance(video, LocalVideoSource):
+                    _render_local_video_player(video, title)
+
+
+def _bulk_heading_normalized(heading: str) -> str:
+    return _SLUG_RE.sub(" ", heading.strip().lower()).strip()
+
+
+def _is_bulk_document_section(section) -> bool:
+    if section.level != 2:
+        return False
+    if not section.text.strip():
+        return False
+    return _bulk_heading_normalized(section.heading_text) not in {"оглавление", "содержание", "toc"}
+
+
+def _add_document_sections_to_workbench(
+    md_abs: str,
+    rows: list[dict[str, Any]],
+    state: MutableMapping[str, Any] | None = None,
+) -> tuple[int, int]:
+    representative = next((row for row in rows if str(row.get("konspekt_md_abs") or "") == md_abs), None)
+    if representative is None:
+        return 0, 0
+
+    md_path = Path(md_abs)
+    source_abs = Path(str(representative.get("source_abs") or md_abs))
+    added = duplicates = 0
+    for parsed in parse_sections(md_path):
+        if not _is_bulk_document_section(parsed):
+            continue
+        section = IndexedSection(
+            heading_text=parsed.heading_text,
+            slug=parsed.slug,
+            level=parsed.level,
+            line_start=parsed.line_start,
+            line_end=parsed.line_end,
+            text=parsed.text,
+            own_text=parsed.own_text,
+            source_abs=source_abs,
+            konspekt_md_abs=md_path,
+            concept=representative.get("concept"),
+        )
+        if add_section_to_workbench(section, state=state):
+            added += 1
+        else:
+            duplicates += 1
+    return added, duplicates
+
+
+def _render_bulk_document_panel(rows: list[dict[str, Any]]) -> None:
+    documents = _unique_document_rows(rows)
+    if not documents:
+        return
+
+    st.markdown("### 📥 Быстро добавить разделы")
+    options = [str(row.get("konspekt_md_abs") or "") for row in documents]
+    labels = {path: Path(path).name for path in options}
+    selected = st.selectbox(
+        "Документ",
+        options,
+        format_func=lambda path: labels.get(path, path),
+        key="living_konspekt_bulk_doc",
+    )
+    if st.button("➕ Добавить крупные разделы документа", key="living_konspekt_bulk_add", width="stretch"):
+        try:
+            added, duplicates = _add_document_sections_to_workbench(selected, rows)
+        except OSError as exc:
+            st.error(f"Не удалось прочитать документ: {format_request_error(exc)}")
+            return
+        st.toast(
+            f"В корзину: +{added}" + (f" · уже было: {duplicates}" if duplicates else ""),
+            icon="📚",
+        )
+        st.rerun()
 
 
 def _render_collected_sections(rows: list[dict[str, Any]]) -> None:
@@ -811,6 +939,8 @@ def render_living_konspekt_view() -> None:
         )
         return
 
+    _render_all_lesson_videos_panel(rows)
+    _render_bulk_document_panel(rows)
     _render_collected_sections(rows)
     _render_memory_panel(rows)
     st.divider()

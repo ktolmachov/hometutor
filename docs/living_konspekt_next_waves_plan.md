@@ -396,7 +396,7 @@ AC волны:
 
 **2026-07-06 (шестой проход) — пере-снятие статуса W5 по встречному аудиту:**
 
-- W5 реализован (ядро + UI) коммитом «Implement living konspekt artifact manifest» —
+- W5 реализован (ядро + UI) коммитом `410662c` «Implement living konspekt artifact manifest» —
   статус волны в таблице и детальном подразделе обновлён; остаток волны: TOC reader,
   bulk-операции, size-budget ≤600 (view 755), события `artifact_reopened`/`rebuilt`.
 - ADR 0004 переведён в Accepted (шапка отставала от реализации — та же болезнь, что

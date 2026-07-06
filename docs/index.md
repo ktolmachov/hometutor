@@ -34,6 +34,7 @@
 | [living_konspekt_next_waves_plan.md](living_konspekt_next_waves_plan.md) | анализ упущений «Живого конспекта» и волны W4–W8 (сервис-слой, методология, жизненный цикл артефакта) |
 | [adr/0001-multimodal-media-contract.md](adr/0001-multimodal-media-contract.md) | ADR по контракту multimodal sidecar и безопасным media paths |
 | [adr/0002-asr-dependency-strategy.md](adr/0002-asr-dependency-strategy.md) | ADR по optional ASR backend (ffmpeg — только remux) и benchmark-spike |
+| [adr/0003-workbench-row-contract.md](adr/0003-workbench-row-contract.md) | ADR по контракту workbench row v2: persisted (rel) vs runtime (abs), `row_version`, миграция abs→rel |
 | [schemas/media_sidecar_v1.schema.json](schemas/media_sidecar_v1.schema.json) | JSON Schema для `<konspekt>.media.json` |
 
 ## Источники истины

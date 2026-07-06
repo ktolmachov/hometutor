@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
 Шаблон полного offline-пайплайна для нового видео: remux (опц.) → GPU ASR → media sidecar.
 

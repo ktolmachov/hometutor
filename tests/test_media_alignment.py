@@ -165,3 +165,79 @@ def test_section_id_stable_and_content_sensitive():
     assert compute_section_id(a1) == compute_section_id(a2)
     assert compute_section_id(a1) != compute_section_id(b)
     assert compute_section_id(a1).startswith("sha256:")
+
+
+def test_slide_direct_number_cue_is_confident():
+    """Явное «слайд N» в речи + заголовок с номером → confident-якорь на cue-сегменте."""
+    segments = (
+        TranscriptSegment(0.0, 5.0, "вступление"),
+        TranscriptSegment(60.0, 65.0, "перейдём к слайду 3 про надёжность"),
+        TranscriptSegment(120.0, 125.0, "дальше про деплой"),
+    )
+    sections = [
+        ParsedSection(
+            heading_text="Слайд 3: Надёжность",
+            slug="slide-3",
+            level=3,
+            line_start=1,
+            line_end=9,
+            text="конспект про надёжность " * 5,
+            own_text="конспект про надёжность " * 5,
+        ),
+    ]
+
+    aligned = align_sections(sections, segments)
+
+    assert aligned[0].anchored
+    assert aligned[0].t_start == 60.0
+    assert aligned[0].confidence >= 0.70
+
+
+def test_slide_order_rank_without_spoken_numbers():
+    """Без номеров в речи: title-reading по хронологии слайдов."""
+    segments = (
+        TranscriptSegment(10.0, 15.0, "работает но не работает в проде"),
+        TranscriptSegment(200.0, 205.0, "бюджет рантайма важен"),
+    )
+    sections = [
+        ParsedSection(
+            heading_text='Слайд 3: "Работает, но не работает"',
+            slug="slide-3",
+            level=3,
+            line_start=1,
+            line_end=9,
+            text="текст " * 6,
+            own_text="текст " * 6,
+        ),
+        ParsedSection(
+            heading_text="Слайд 26: Бюджет рантайма",
+            slug="slide-26",
+            level=3,
+            line_start=11,
+            line_end=19,
+            text="текст " * 6,
+            own_text="текст " * 6,
+        ),
+    ]
+
+    aligned = align_sections(sections, segments)
+
+    assert aligned[0].anchored and aligned[0].confidence >= 0.70
+    assert aligned[0].t_start == 10.0
+    assert aligned[1].anchored and aligned[1].confidence >= 0.70
+    assert aligned[1].t_start == 200.0
+    assert aligned[0].t_start < aligned[1].t_start
+
+
+def test_no_slide_cues_matches_lexical_baseline():
+    """Конспект без слайдовых заголовков — поведение лексического anchor-lis-v1."""
+    topics = ["альфа", "бета"]
+    segments = _segments_from_topics(topics)
+    sections = [_section(f"Тема {t}", _topic_text(t), i) for i, t in enumerate(topics)]
+
+    aligned = align_sections(sections, segments)
+
+    assert all(a.anchored for a in aligned)
+    assert all(a.confidence >= 0.70 for a in aligned)
+    starts = [a.t_start for a in aligned]
+    assert starts == sorted(starts)

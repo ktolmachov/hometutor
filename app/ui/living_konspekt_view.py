@@ -45,9 +45,11 @@ from app.ui.living_konspekt_media import (  # noqa: F401 - реэкспорт
 from app.ui.living_konspekt_next_steps import (
     _collect_concept_context,
     render_graph_lens_panel,
+    render_course_coverage_panel,
     render_deep_study_panel,
     render_web_queries_panel,
 )
+from app.ui.living_konspekt_quiz_panel import render_living_konspekt_quiz_panel
 from app.ui.living_konspekt_reader import render_reader
 from app.ui.living_konspekt_workbench_panel import (
     _add_document_sections_to_workbench as _panel_add_document_sections_to_workbench,
@@ -63,6 +65,8 @@ from app.ui.widgets import render_panel_header
 WORKBENCH_SECTIONS_KEY = workbench_service.WORKBENCH_SECTIONS_KEY
 _WORKBENCH_KV_KEY = workbench_service.WORKBENCH_KV_KEY
 _WORKBENCH_HYDRATED_KEY = "_workbench_hydrated"
+_WORKBENCH_GOAL_HYDRATED_KEY = "_living_konspekt_goal_hydrated"
+_WORKBENCH_GOAL_KEY = "living_konspekt_goal"
 _ACTIVE_ARTIFACT_ID_KEY = "living_konspekt_active_artifact_id"
 _LAST_SAVED_BODY_KEY = "living_konspekt_last_saved_body"
 
@@ -99,6 +103,24 @@ def ensure_workbench_hydrated(state: MutableMapping[str, Any] | None = None) -> 
         return
 
 
+def ensure_project_goal_hydrated(state: MutableMapping[str, Any] | None = None) -> None:
+    target = _state(state)
+    if target.get(_WORKBENCH_GOAL_HYDRATED_KEY):
+        return
+    target[_WORKBENCH_GOAL_HYDRATED_KEY] = True
+    if _WORKBENCH_GOAL_KEY in target:
+        target[_WORKBENCH_GOAL_KEY] = workbench_service.normalize_goal(target.get(_WORKBENCH_GOAL_KEY))
+        return
+    if state is not None:
+        target[_WORKBENCH_GOAL_KEY] = workbench_service.normalize_goal(None)
+        return
+    try:
+        _ensure_auth_context()
+        target[_WORKBENCH_GOAL_KEY] = workbench_service.load_goal()
+    except Exception:  # noqa: BLE001 - goal is optional; workbench still renders
+        target[_WORKBENCH_GOAL_KEY] = workbench_service.normalize_goal(None)
+
+
 def set_workbench_rows(
     rows: list[dict[str, Any]],
     state: MutableMapping[str, Any] | None = None,
@@ -119,6 +141,26 @@ def set_workbench_rows(
 def get_workbench_rows(state: MutableMapping[str, Any] | None = None) -> list[dict[str, Any]]:
     rows = _state(state).get(WORKBENCH_SECTIONS_KEY)
     return rows if isinstance(rows, list) else []
+
+
+def get_project_goal(state: MutableMapping[str, Any] | None = None) -> dict[str, Any]:
+    ensure_project_goal_hydrated(state)
+    return workbench_service.normalize_goal(_state(state).get(_WORKBENCH_GOAL_KEY))
+
+
+def set_project_goal(goal: dict[str, Any], state: MutableMapping[str, Any] | None = None) -> dict[str, Any]:
+    target = _state(state)
+    normalized = workbench_service.normalize_goal(goal)
+    if state is None:
+        try:
+            _ensure_auth_context()
+            normalized = workbench_service.save_goal(normalized)
+        except Exception:  # noqa: BLE001 - goal persistence must not break the workbench
+            pass
+    target[_WORKBENCH_GOAL_KEY] = normalized
+    target["living_konspekt_goal_text"] = str(normalized.get("text") or "")
+    target[_WORKBENCH_GOAL_HYDRATED_KEY] = True
+    return normalized
 
 
 # TODO(W4-cleanup): внутренние UI-модули фичи ещё импортируют эти адаптеры из view;
@@ -336,6 +378,7 @@ def _render_saved_artifacts_panel() -> None:
                             return
                         rows = konspekt_artifact.reassemble_rows(manifest)
                         set_workbench_rows(rows)
+                        set_project_goal(manifest.goal if isinstance(manifest.goal, dict) else {})
                         st.session_state[_ACTIVE_ARTIFACT_ID_KEY] = manifest.artifact_id
                         st.session_state["living_konspekt_title"] = manifest.title
                         st.session_state["living_konspekt_last_saved"] = str(artifact.path)
@@ -385,6 +428,7 @@ def _render_build_panel(rows: list[dict[str, Any]]) -> None:
                 body,
                 rows,
                 artifact_id=st.session_state.get(_ACTIVE_ARTIFACT_ID_KEY),
+                goal=get_project_goal(),
                 save_as_new=save_new_clicked,
             )
             manifest = konspekt_artifact.parse_manifest(target_path.read_text(encoding="utf-8", errors="replace"))
@@ -446,10 +490,30 @@ def _render_build_panel(rows: list[dict[str, Any]]) -> None:
     _render_saved_artifacts_panel()
 
 
+def _render_project_goal_panel() -> None:
+    goal = get_project_goal()
+    current = str(goal.get("text") or "")
+    st.session_state.setdefault("living_konspekt_goal_text", current)
+    st.text_area(
+        "Цель конспекта",
+        key="living_konspekt_goal_text",
+        placeholder="Например: подготовиться к коллоквиуму по теме агентов за 40 минут.",
+        height=80,
+    )
+    if st.button("Сохранить цель", key="living_konspekt_goal_save", width="stretch"):
+        updated = set_project_goal({"text": st.session_state.get("living_konspekt_goal_text")})
+        if updated.get("text"):
+            st.toast("Цель конспекта сохранена.", icon="🎯")
+        else:
+            st.toast("Цель очищена.", icon="🎯")
+        st.rerun()
+
+
 def render_living_konspekt_view() -> None:
     from app.ui.reindex_poll import poll_reindex_status
 
     ensure_workbench_hydrated()
+    ensure_project_goal_hydrated()
     poll_reindex_status()
     render_panel_header(
         "📚 Живой конспект",
@@ -462,6 +526,7 @@ def render_living_konspekt_view() -> None:
         f"В корзине: {len(rows)} раздел(ов) · автосохраняется локально и переживает перезапуск; "
         "именованные сессии в сайдбаре — для снимков-вариантов."
     )
+    _render_project_goal_panel()
     render_add_sections_panel(expanded=not rows)
 
     if not rows:
@@ -498,11 +563,18 @@ def render_living_konspekt_view() -> None:
     with tab_memory:
         render_memory_panel(rows)
         render_term_cards_panel(rows)
+        render_living_konspekt_quiz_panel(
+            rows,
+            title=str(st.session_state.get("living_konspekt_title") or "Рабочий конспект"),
+            goal=get_project_goal(),
+        )
     with tab_export:
         _render_build_panel(rows)
     with tab_next:
         render_web_queries_panel(rows)
         st.divider()
         render_graph_lens_panel(rows)
+        st.divider()
+        render_course_coverage_panel(rows)
         st.divider()
         render_deep_study_panel(rows)

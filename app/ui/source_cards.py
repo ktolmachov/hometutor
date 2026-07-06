@@ -1,8 +1,11 @@
 """Карточки источников retrieval + превью файла, опционально scoped quiz по документу/теме."""
 from __future__ import annotations
 
+from urllib.parse import urlencode
+
 import streamlit as st
 
+from app.config import get_settings
 from app.living_konspekt_source_resolver import SourceSectionCandidate, resolve_source_section
 from app.living_konspekt_video_citations import video_citation_for_candidate
 from app.ui.answer_helpers import find_best_topic_for_documents
@@ -272,7 +275,7 @@ def _render_source_video_citation(candidate: SourceSectionCandidate, *, key: str
     _track_video_citation_shown_once(candidate, key)
     label = f"🎬 Смотреть с {citation.timestamp_label}: {citation.video_title}"
     if citation.url:
-        st.link_button(label, citation.url, width="stretch")
+        st.link_button(label, _tracked_video_citation_url(citation.url, candidate), width="stretch")
     else:
         st.caption(f"{label} · локальное видео откройте в Живом конспекте")
     st.caption(f"{citation.heading} · {citation.source_label}")
@@ -295,3 +298,17 @@ def _track_video_citation_shown_once(candidate: SourceSectionCandidate, key: str
         )
     except Exception:  # noqa: BLE001 - UI analytics must not block source-card rendering
         pass
+
+
+def _tracked_video_citation_url(url: str, candidate: SourceSectionCandidate) -> str:
+    settings = get_settings()
+    if settings.auth_enabled or (settings.home_rag_api_key or "").strip():
+        return url
+    query = urlencode(
+        {
+            "url": url,
+            "heading": candidate.section.heading_text,
+            "source": str(candidate.section.source_abs.name),
+        }
+    )
+    return f"{settings.ui_api_base_url.rstrip('/')}/living-konspekt/video-citation/open?{query}"

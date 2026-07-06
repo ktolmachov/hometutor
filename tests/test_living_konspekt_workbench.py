@@ -112,6 +112,18 @@ class TestWorkbenchServiceV2:
         assert storage.rows[0]["note"] == "моя мысль"
         assert storage.rows[0]["read_at"] == "2026-07-06T10:00:00Z"
 
+    def test_project_goal_normalization_and_storage(self, monkeypatch):
+        saved: dict[str, str] = {}
+
+        monkeypatch.setattr("app.user_state_core.get_kv", lambda key, default=None: saved.get(key, default))
+        monkeypatch.setattr("app.user_state_core.set_kv", lambda key, value: saved.__setitem__(key, value))
+
+        goal = workbench_service.save_goal({"text": "  подготовиться к экзамену  "})
+
+        assert goal["text"] == "подготовиться к экзамену"
+        assert goal["updated_at"]
+        assert workbench_service.load_goal()["text"] == "подготовиться к экзамену"
+
     def test_load_rows_lazily_migrates_v1_abs_to_v2_rel(self):
         legacy_row = section_to_row(_section(MD_A, 10, heading="Legacy"))
         storage = workbench_service.InMemoryWorkbenchStorage([legacy_row])

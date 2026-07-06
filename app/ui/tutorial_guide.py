@@ -172,7 +172,12 @@ def render_tutorial_entry() -> None:
     )
     c1, c2 = st.columns([2, 1])
     with c1:
-        if st.button("Пройти интерактивный тур (5 глав)", key="tutorial_start_btn", type="primary", width="stretch"):
+        if st.button(
+            f"Пройти интерактивный тур ({total} глав)",
+            key="tutorial_start_btn",
+            type="primary",
+            width="stretch",
+        ):
             start_tutorial(chapter_idx if st.session_state.get("tutorial_active") else 0)
             _jump_to_target_view()
             st.rerun()

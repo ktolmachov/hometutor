@@ -247,6 +247,7 @@ def save_artifact(
     rows: list[dict[str, Any]],
     *,
     artifact_id: str | None = None,
+    goal: Any = None,
     save_as_new: bool = False,
     vault_root_path: Path | None = None,
 ) -> Path:
@@ -268,7 +269,7 @@ def save_artifact(
         persisted_rows,
         collect_sidecar_pointers(persisted_rows),
         artifact_id=normalized_id,
-        goal=previous_manifest.goal if previous_manifest is not None else None,
+        goal=goal if goal is not None else (previous_manifest.goal if previous_manifest is not None else None),
         created_at=previous_manifest.created_at if previous_manifest is not None else None,
     )
     target_path.write_text(f"{manifest}# {title}\n\n{body_markdown}\n", encoding="utf-8")

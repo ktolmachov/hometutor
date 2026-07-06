@@ -166,7 +166,36 @@ def generate_scoped_quiz(
             kc = subgraph.get("key_concepts") or []
             extra = ", ".join(str(x) for x in kc[:24]) if kc else "—"
 
-    if len(content) < 120:
+    return generate_scoped_quiz_from_content(
+        scope=scope,
+        identifier=ident,
+        title=title,
+        content=content,
+        subgraph=subgraph,
+        adaptive_level=adaptive_level,
+        num_questions=nq,
+        learning_mode=learning_mode,
+        extra_context=extra,
+    )
+
+
+def generate_scoped_quiz_from_content(
+    *,
+    scope: str,
+    identifier: str,
+    title: str,
+    content: str,
+    subgraph: dict[str, Any],
+    adaptive_level: str,
+    num_questions: int = 6,
+    learning_mode: str | None = None,
+    extra_context: str = "—",
+) -> dict[str, Any]:
+    """Generate scoped quiz from already bounded context text, without retrieval."""
+    ident = (identifier or "").strip()
+    nq = max(5, min(8, int(num_questions)))
+    context = (content or "").strip()
+    if len(context) < 120:
         return {
             "success": False,
             "error": "Слишком мало текста для генерации quiz (нужно хотя бы ~120 символов).",
@@ -174,7 +203,7 @@ def generate_scoped_quiz(
         }
 
     def _generate_body() -> dict[str, Any]:
-        trimmed = content[:_MAX_CONTEXT_CHARS]
+        trimmed = context[:_MAX_CONTEXT_CHARS]
         mode_key = normalize_quiz_learning_mode(
             learning_mode or get_settings().quiz_learning_mode_default
         )
@@ -183,7 +212,7 @@ def generate_scoped_quiz(
             num_questions=nq,
             adaptive_profile=_scoped_adaptive_profile_hint(adaptive_level),
             title=(title or "без названия").strip() or "без названия",
-            extra_context=extra,
+            extra_context=extra_context,
             context_str=trimmed,
         )
         try:
@@ -216,9 +245,13 @@ def generate_scoped_quiz(
             motivation = (
                 f"Ты на **{pct}%** знаешь этот документ! 🔥 **+{xp_max} XP** при идеальном результате"
             )
-        else:
+        elif scope == "topic":
             motivation = (
                 f"Глубокий тест по теме **{title}** — до **+{xp_max} XP** 🔥"
+            )
+        else:
+            motivation = (
+                f"Тест по вашей сборке **{title}** — до **+{xp_max} XP** 🔥"
             )
 
         return {
@@ -239,3 +272,13 @@ def generate_scoped_quiz(
     payload = dict(budget.result)
     payload["latency_budget"] = budget_meta_to_session_event(budget.meta)
     return payload
+
+
+__all__ = [
+    "estimate_mastery_percent",
+    "generate_scoped_quiz",
+    "generate_scoped_quiz_from_content",
+    "parse_scoped_quiz_json",
+    "scoped_quiz_xp_reward",
+    "weak_spot_scoped_quiz_params",
+]

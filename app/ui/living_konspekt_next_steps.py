@@ -7,6 +7,7 @@ web-ссылки лектора, поисковые запросы по разд
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import streamlit as st
@@ -107,6 +108,52 @@ def render_graph_lens_panel(rows: list[dict[str, Any]]) -> None:
         st.markdown("**Рядом по графу:** " + ", ".join(nearby))
 
 
+def course_coverage_summary(rows: list[dict[str, Any]], active_scope: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(active_scope, dict) or not active_scope.get("active"):
+        return None
+    source_paths = [
+        str(path).strip().replace("\\", "/")
+        for path in active_scope.get("source_paths") or []
+        if str(path).strip()
+    ]
+    if not source_paths:
+        return None
+    covered_sources = {_row_source_rel(row) for row in rows if isinstance(row, dict)}
+    covered_sources.discard("")
+    covered = [path for path in source_paths if path in covered_sources]
+    missing = [path for path in source_paths if path not in covered_sources]
+    return {
+        "title": str(active_scope.get("title") or active_scope.get("folder_rel") or "Активный курс"),
+        "covered": len(covered),
+        "total": len(source_paths),
+        "ratio": len(covered) / len(source_paths),
+        "covered_paths": covered,
+        "missing_paths": missing,
+    }
+
+
+def render_course_coverage_panel(rows: list[dict[str, Any]]) -> None:
+    try:
+        from app.ui.study_scope import get_active_scope
+
+        summary = course_coverage_summary(rows, get_active_scope())
+    except Exception:  # noqa: BLE001 - coverage map is optional and must degrade quietly
+        summary = None
+    if not summary:
+        return
+    pct = round(float(summary["ratio"]) * 100)
+    st.markdown("### 🗺 Покрытие курса")
+    st.caption(f"{summary['title']}: в сборке {summary['covered']} из {summary['total']} документов ({pct}%).")
+    st.progress(float(summary["ratio"]))
+    missing = list(summary.get("missing_paths") or [])
+    if missing:
+        labels = ", ".join(Path(path).name for path in missing[:5])
+        suffix = "…" if len(missing) > 5 else ""
+        st.caption(f"Ещё не представлены: {labels}{suffix}")
+    else:
+        st.success("Все документы активного курса представлены в текущем Живом конспекте.")
+
+
 def render_deep_study_panel(rows: list[dict[str, Any]]) -> None:
     st.markdown("### 🧠 Промпт для глубокого изучения")
     topic = str(st.session_state.get("living_konspekt_title") or "Рабочий конспект")
@@ -123,3 +170,18 @@ def render_deep_study_panel(rows: list[dict[str, Any]]) -> None:
     for col, (label, url) in zip(prompt_cols, _EXTERNAL_LLM_TARGETS):
         with col:
             st.link_button(label, url, width="stretch")
+
+
+def _row_source_rel(row: dict[str, Any]) -> str:
+    rel = str(row.get("source_rel") or "").strip().replace("\\", "/")
+    if rel:
+        return rel
+    source_abs = str(row.get("source_abs") or "").strip()
+    if not source_abs:
+        return ""
+    try:
+        from app.path_safety import data_relative_from_path
+
+        return data_relative_from_path(source_abs).replace("\\", "/")
+    except ValueError:
+        return ""

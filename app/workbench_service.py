@@ -11,6 +11,7 @@ from app.path_safety import data_relative_from_path, resolve_data_relative_path
 from app.section_index import IndexedSection, section_to_row
 
 WORKBENCH_KV_KEY = "living_konspekt_workbench_json"
+WORKBENCH_GOAL_KV_KEY = "living_konspekt_goal_json"
 WORKBENCH_SECTIONS_KEY = "workbench_sections"
 ROW_VERSION = 2
 PORTABLE = "portable"
@@ -263,6 +264,42 @@ def save_rows(rows: list[dict[str, Any]], storage: WorkbenchStorage | None = Non
     return runtime_rows
 
 
+def normalize_goal(value: Any) -> dict[str, Any]:
+    """Normalize the Living Konspekt project goal persisted next to the workbench."""
+    if isinstance(value, dict):
+        text = str(value.get("text") or "").strip()
+        updated_at = str(value.get("updated_at") or "").strip() or None
+    else:
+        text = str(value or "").strip()
+        updated_at = None
+    return {"text": text[:500], "updated_at": updated_at}
+
+
+def load_goal() -> dict[str, Any]:
+    from app.user_state_core import get_kv
+
+    raw = get_kv(WORKBENCH_GOAL_KV_KEY)
+    if not raw:
+        return normalize_goal(None)
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return normalize_goal(None)
+    return normalize_goal(parsed)
+
+
+def save_goal(goal: Any) -> dict[str, Any]:
+    from datetime import datetime, timezone
+
+    from app.user_state_core import set_kv
+
+    normalized = normalize_goal(goal)
+    if normalized["text"]:
+        normalized["updated_at"] = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    set_kv(WORKBENCH_GOAL_KV_KEY, json.dumps(normalized, ensure_ascii=False))
+    return normalized
+
+
 def add_section(
     current_rows: list[dict[str, Any]],
     section: IndexedSection,
@@ -358,11 +395,13 @@ __all__ = [
     "PORTABLE",
     "ROW_VERSION",
     "UserStateWorkbenchStorage",
+    "WORKBENCH_GOAL_KV_KEY",
     "WORKBENCH_KV_KEY",
     "WORKBENCH_SECTIONS_KEY",
     "WorkbenchStorage",
     "add_section",
     "load_rows",
+    "load_goal",
     "move_section",
     "normalize_runtime_rows",
     "persisted_row_from_runtime",
@@ -372,5 +411,7 @@ __all__ = [
     "runtime_row_from_persisted",
     "runtime_rows_from_persisted",
     "save_rows",
+    "save_goal",
+    "normalize_goal",
     "update_section_fields",
 ]

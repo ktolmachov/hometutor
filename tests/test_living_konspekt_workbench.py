@@ -708,3 +708,43 @@ class TestLivingKonspektSynthesisMapReduce:
         assert res["summary"] == "Giant Synthesis Output"
         assert len(llm.calls) == 1
         assert len(llm.calls[0]) < 70000
+
+    def test_render_markdown_with_mermaid(self, monkeypatch):
+        from app.ui.living_konspekt_reader import render_markdown_with_mermaid
+
+        markdown_calls = []
+        html_calls = []
+
+        def mock_markdown(text, *args, **kwargs):
+            markdown_calls.append(text)
+
+        def mock_html(html, *args, **kwargs):
+            html_calls.append(html)
+
+        import streamlit as st
+        import streamlit.components.v1 as components
+
+        monkeypatch.setattr(st, "markdown", mock_markdown)
+        monkeypatch.setattr(components, "html", mock_html)
+
+        text = """Before block.
+```flowchart LR
+    A --> B
+```
+Middle block.
+```mermaid
+    C --> D
+```
+After block."""
+
+        render_markdown_with_mermaid(text)
+
+        assert len(markdown_calls) == 3
+        assert markdown_calls[0] == "Before block.\n"
+        assert markdown_calls[1] == "\nMiddle block.\n"
+        assert markdown_calls[2] == "\nAfter block."
+
+        assert len(html_calls) == 2
+        assert "A --> B" in html_calls[0]
+        assert "C --> D" in html_calls[1]
+

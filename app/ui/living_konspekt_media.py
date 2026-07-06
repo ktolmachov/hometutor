@@ -216,6 +216,7 @@ def _render_media_panel(row: dict[str, Any], is_first: bool = False) -> None:
         expander_label += f" ({_format_timestamp(media_section.t_start)})"
 
     with st.expander(expander_label, expanded=is_first):
+        st.markdown("**🎬 Материал раздела**")
         if stale_reasons:
             st.caption("Таймкоды устарели: " + ", ".join(stale_reasons))
         if media_section.low_confidence:
@@ -283,7 +284,7 @@ def _render_url_video_media(
     timestamp_label: str,
     title: str,
 ) -> None:
-    start_time = int(media_section.t_start or 0) if has_timestamp else 0
+    start_time = int(media_section.t_start or 0) if confident_timestamp else 0
     _render_url_video_player(video, title, start_time=start_time)
     if confident_timestamp and start_time > 0:
         try:
@@ -302,7 +303,7 @@ def _render_local_video_media(
     timestamp_label: str,
     title: str,
 ) -> None:
-    start_time = int(media_section.t_start or 0) if has_timestamp else 0
+    start_time = int(media_section.t_start or 0) if confident_timestamp else 0
     _render_local_video_player(video, title, start_time=start_time)
     if confident_timestamp:
         st.caption(f"{title} · старт: {timestamp_label}")

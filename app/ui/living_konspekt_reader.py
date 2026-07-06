@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 from typing import Any, Callable, Mapping
 
 import streamlit as st
@@ -91,7 +92,7 @@ def render_reader(
         elif block["kind"] == "meta":
             st.caption(block["text"])
         else:
-            st.markdown(block["text"])
+            render_markdown_with_mermaid(block["text"])
             if media_renderer is not None:
                 media_renderer(block["row"], section_index == 1)
             row = block["row"]
@@ -130,3 +131,81 @@ def _render_section_progress_controls(
     with cols[2]:
         if read_at:
             st.caption(f"Прочитано: {read_at}")
+
+
+_MERMAID_RE = re.compile(r"```(?:mermaid|flowchart).*?\n(.*?)\n```", re.DOTALL | re.IGNORECASE)
+
+
+def render_markdown_with_mermaid(text: str) -> None:
+    """Render markdown text, rendering any embedded flowchart/mermaid block as an interactive SVG."""
+    if not text:
+        return
+    last_idx = 0
+    for match in _MERMAID_RE.finditer(text):
+        start, end = match.span()
+        if start > last_idx:
+            st.markdown(text[last_idx:start])
+        code = match.group(1).strip()
+        _render_mermaid_diagram(code)
+        last_idx = end
+    if last_idx < len(text):
+        st.markdown(text[last_idx:])
+
+
+def _render_mermaid_diagram(code: str) -> None:
+    lines = [line for line in code.splitlines() if line.strip()]
+    is_lr = "LR" in code.upper()
+    num_lines = len(lines)
+    if is_lr:
+        height = max(180, min(500, 150 + num_lines * 25))
+    else:
+        height = max(250, min(800, 200 + num_lines * 45))
+
+    html_code = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {{
+                background-color: transparent;
+                margin: 0;
+                padding: 0;
+                overflow: hidden;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                font-family: system-ui, -apple-system, sans-serif;
+            }}
+            .mermaid {{
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                margin: 0 auto;
+                width: 100%;
+                height: 100%;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="mermaid">
+{code}
+        </div>
+        <script type="module">
+            import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+            mermaid.initialize({{
+                startOnLoad: true,
+                theme: 'default',
+                securityLevel: 'loose',
+                flowchart: {{
+                    useWidth: true,
+                    htmlLabels: true
+                }}
+            }});
+        </script>
+    </body>
+    </html>
+    """
+    import streamlit.components.v1 as components
+    components.html(html_code, height=height, scrolling=True)
+

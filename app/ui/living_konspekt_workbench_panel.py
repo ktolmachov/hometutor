@@ -214,7 +214,8 @@ def render_collected_sections(
                 stale_status = _row_stale_status(row)
                 if stale_status:
                     st.caption(f"🕰 {stale_status}")
-                st.write(str(row.get("text") or "")[:400])
+                from app.ui.living_konspekt_reader import render_markdown_with_mermaid
+                render_markdown_with_mermaid(str(row.get("text") or ""))
                 _render_media_panel(row)
             with cols[1]:
                 if md_abs:

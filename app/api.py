@@ -19,7 +19,6 @@ from app.middleware import ErrorHandlingMiddleware, LoggingMiddleware, RateLimit
 from app.routers.admin import router as admin_router
 from app.routers.auth import router as auth_router
 from app.routers.ssr import router as ssr_router
-from app.routers.debug_session_tape import router as debug_session_tape_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.core import router as core_router
 from app.routers.feedback import router as feedback_router
@@ -289,7 +288,6 @@ app.include_router(learner_router, dependencies=_protected_dependencies)
 app.include_router(feedback_router, dependencies=_protected_dependencies)
 app.include_router(files_router, dependencies=_protected_dependencies)
 app.include_router(admin_router, dependencies=_protected_dependencies)
-app.include_router(debug_session_tape_router, dependencies=_protected_dependencies)
 
 
 @app.exception_handler(RequestValidationError)

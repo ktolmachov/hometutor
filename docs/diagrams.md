@@ -24,7 +24,6 @@ flowchart LR
     API --> quiz["quiz<br/>3 routes"]
     API --> sync["sync<br/>3 routes"]
     API --> files["files<br/>2 routes"]
-    API --> debug_session_tape["debug_session_tape<br/>1 routes"]
     API --> feedback["feedback<br/>1 routes"]
     API --> query["query<br/>1 routes"]
     API --> review["review<br/>1 routes"]
@@ -83,12 +82,6 @@ flowchart LR
 | GET | `/dashboard/adaptive_daily_plan` |
 | GET | `/dashboard/analytics` |
 | GET | `/dashboard/offline_status` |
-
-### `debug_session_tape` (1)
-
-| Метод | Путь |
-|---|---|
-| GET | `/debug/session-tape/{session_id}` |
 
 ### `feedback` (1)
 

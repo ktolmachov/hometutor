@@ -59,7 +59,6 @@
 | `files` | `app/routers/files.py` | `/explain/file`, `/content/file` |
 | `metrics` | `app/routers/metrics.py` | `/metrics/*`, `/feedback`, `/history`, `/pipeline/trace` |
 | `admin` | `app/routers/admin.py` | `/reindex`, `/index/*`, `/cache/*`, `/profile/*`, `/learner-state/*`, `/faq/similar` |
-| `debug` | `app/routers/debug_session_tape.py` | `/debug/session-tape/{session_id}` |
 
 ## Core
 
@@ -267,4 +266,3 @@ Snapshot может подмешиваться в `/ask` для tutor goal field
 | GET | `/profile/query` | профиль одного запроса |
 | GET | `/profile/compare` | сравнение конфигураций |
 | GET | `/profile/compare-eval` | eval-сравнение |
-| GET | `/debug/session-tape/{session_id}` | gated debug replay session tape |

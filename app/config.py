@@ -105,7 +105,6 @@ class Settings(BaseSettings):
     embed_dimensions: int = Field(default=1024, ge=0, le=65536)
     eval_judge_llm: str | None = None
     enable_async_quality_judge: bool = False
-    enable_ragas_metrics: bool = False
     async_quality_judge_sample_rate: float = Field(default=0.1, ge=0.0, le=1.0)
     rewrite_model: str | None = None
     classifier_model: str | None = None
@@ -274,8 +273,6 @@ class Settings(BaseSettings):
     enable_document_summaries: bool = True
     # Итерация 16 tail: инкрементальная переиндексация (хэш контента + копирование векторов из active)
     enable_partial_reindex: bool = True
-    # После активации новой generation (reindex/reset): очистить faq_memory.jsonl (FAQ может ссылаться на старые чанки)
-    clear_faq_on_index_activation: bool = False
     # Optional ingest tail: precompute first-session artifacts after index activation.
     # Disabled by default because it can trigger several slow local LLM calls after
     # the vector index is already successfully built.
@@ -410,7 +407,6 @@ class Settings(BaseSettings):
     quiz_learning_mode_default: str = "default"
     home_rag_micro_quiz_offline: bool = False
     home_rag_e2e_offline: bool = False
-    session_tape_debug_replay_enabled: bool = False
     session_tape_full_events_enabled: bool = False
     # E30: single-pane course cockpit в Streamlit; выкл. по умолчанию — классический tab-flow без изменений
     rag_course_cockpit_v2: bool = False

@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "multimodal_konspekt_plan.md",
+                "file": "living_konspekt_masterpiece_council.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "multimodal_konspekt_plan"
+              "title": "living_konspekt_masterpiece_council"
             }
           }
         ]
@@ -182,27 +182,29 @@
   },
   "active": "3dca82099ed27268",
   "lastOpenFiles": [
+    "living_konspekt_masterpiece_council.md.tmp.42604.0195060e5c80",
+    "living_konspekt_masterpiece_council.md.tmp.42604.be9e81f236a5",
+    "living_konspekt_masterpiece_council.md.tmp.42604.ec075721f535",
+    "living_konspekt_masterpiece_council.md.tmp.42604.bf9b56e1ddef",
+    "living_konspekt_masterpiece_council.md.tmp.42604.a82e920cb1ed",
+    "living_konspekt_masterpiece_council.md.tmp.42604.d46bc9dce3e5",
+    "living_konspekt_masterpiece_council.md.tmp.42604.c4c36ed1c3ee",
+    "living_konspekt_masterpiece_council.md.tmp.42604.1b25c3af5f63",
+    "living_konspekt_masterpiece_council.md.tmp.42604.a9f0c40a4854",
+    "living_konspekt_masterpiece_council.md.tmp.42604.a36bbe4482ad",
+    "living_konspekt_masterpiece_council.md.tmp.42604.975f585bf930",
+    "multimodal_konspekt_plan.md",
     "AI_DEVELOPMENT.md",
     "diagrams.md",
     "adr/0002-asr-dependency-strategy.md",
     "adr/0001-multimodal-media-contract.md",
-    "adr",
-    "schemas/media_sidecar_v1.schema.json",
-    "schemas",
     "quickstart_demo.md",
     "home_rag_integration_gate_v1.md",
     "local_models_comparison_current_v3.md",
-    "local_models_comparison_current_v3.md.tmp.9052.d74ce4cf309c",
     "local_models_comparison_current.md",
     "local_models_report_2026-06-30.md",
     "index.md",
     "local_model_decisions_2026-06-30.md",
-    "technical_specification.md.tmp.36708.2cdacc20fd63",
-    "user_guide.md.tmp.36708.cba778eaed86",
-    "user_guide.md.tmp.36708.b5c3d87e8aa4",
-    "quickstart_demo.md.tmp.36708.4c86c7ce0866",
-    "quickstart_demo.md.tmp.36708.6def8c08130d",
-    "quickstart_demo.md.tmp.36708.e6197c3225ec",
     "technical_specification.md",
     "screenshots/final/scenario_19/02_sidebar_env_context.png",
     "screenshots/final/scenario_19/demo.gif",

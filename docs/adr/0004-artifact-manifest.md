@@ -2,12 +2,16 @@
 
 Date: 2026-07-06
 
-Status: Proposed
+Status: Accepted (implemented 2026-07-06)
 
-Implementation status (2026-07-06): not started. This ADR fixes the W5
-"lifecycle" contract from `docs/living_konspekt_next_waves_plan.md`, §A3/W5,
-before saved Living Konspekts begin to carry user-authored notes and reading
-progress in W6.
+Implementation status (2026-07-06): implemented by commit "Implement living
+konspekt artifact manifest" — `app/konspekt_artifact.py` (manifest v1,
+save-as-upsert, scan, reassemble with `section_id` re-anchoring, sidecar
+pointers, opaque `note`/`read_at` passthrough) plus the view panels
+(«Мои конспекты», «Пересобрать», reindex CTA, print); tests in
+`tests/test_artifact_manifest.py`. This ADR fixes the W5 "lifecycle" contract
+from `docs/living_konspekt_next_waves_plan.md`, §A3/W5, before saved Living
+Konspekts begin to carry user-authored notes and reading progress in W6.
 
 ## Context
 

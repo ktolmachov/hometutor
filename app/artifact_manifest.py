@@ -11,8 +11,10 @@ from typing import Any
 import yaml
 
 from app.ingestion_sections import _parse_md_frontmatter
+from app.media_alignment import compute_section_id
 from app.media_sidecar import read_media_sidecar_pointer
 from app.path_safety import resolve_data_relative_path, validate_data_relative_path
+from app.section_index import ParsedSection
 from app import workbench_service
 
 MANIFEST_TYPE = "living-konspekt"
@@ -30,6 +32,7 @@ class ManifestPayload:
     updated_at: str
     goal: Any
     rows: list[dict[str, Any]]
+    section_anchors: list[dict[str, str]]
     sidecar_pointers: list[dict[str, str]]
     manifest_version: int = MANIFEST_VERSION
     type: str = MANIFEST_TYPE
@@ -65,12 +68,14 @@ def serialize_manifest(
     *,
     artifact_id: str | None = None,
     goal: Any = None,
+    section_anchors: list[dict[str, str]] | None = None,
     created_at: str | None = None,
     updated_at: str | None = None,
 ) -> str:
     """Return YAML frontmatter for a Living Konspekt artifact."""
     now = _utc_now_iso()
     normalized_id = artifact_id_from_title(artifact_id or title)
+    rows = [dict(row) for row in persisted_rows if isinstance(row, dict)]
     payload = {
         "type": MANIFEST_TYPE,
         "manifest_version": MANIFEST_VERSION,
@@ -79,7 +84,12 @@ def serialize_manifest(
         "created_at": created_at or now,
         "updated_at": updated_at or now,
         "goal": goal,
-        "rows": [dict(row) for row in persisted_rows if isinstance(row, dict)],
+        "rows": rows,
+        "section_anchors": (
+            [_normalize_section_anchor(anchor) for anchor in section_anchors]
+            if section_anchors is not None
+            else collect_section_anchors(rows)
+        ),
         "sidecar_pointers": [_normalize_sidecar_pointer(pointer) for pointer in sidecar_pointers],
     }
     return "---\n" + yaml.safe_dump(payload, allow_unicode=True, sort_keys=False) + "---\n\n"
@@ -96,6 +106,8 @@ def parse_manifest(markdown_text: str) -> ManifestPayload | None:
         raise ValueError("Unsupported artifact manifest version")
 
     rows = _expect_list(meta.get("rows"), "rows")
+    row_dicts = [_expect_dict(row, "rows[]") for row in rows]
+    raw_section_anchors = meta.get("section_anchors")
     sidecar_pointers = _expect_list(meta.get("sidecar_pointers"), "sidecar_pointers")
     return ManifestPayload(
         artifact_id=_expect_str(meta.get("artifact_id"), "artifact_id"),
@@ -103,7 +115,12 @@ def parse_manifest(markdown_text: str) -> ManifestPayload | None:
         created_at=_expect_str(meta.get("created_at"), "created_at"),
         updated_at=_expect_str(meta.get("updated_at"), "updated_at"),
         goal=meta.get("goal"),
-        rows=[_expect_dict(row, "rows[]") for row in rows],
+        rows=row_dicts,
+        section_anchors=(
+            [_normalize_section_anchor(anchor) for anchor in _expect_list(raw_section_anchors, "section_anchors")]
+            if raw_section_anchors is not None
+            else collect_section_anchors(row_dicts)
+        ),
         sidecar_pointers=[_normalize_sidecar_pointer(pointer) for pointer in sidecar_pointers],
     )
 
@@ -189,8 +206,51 @@ def collect_sidecar_pointers(
     return pointers
 
 
+def collect_section_anchors(persisted_rows: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Compute stable content anchors for manifest rows without changing row v2."""
+    anchors: list[dict[str, str]] = []
+    for row in persisted_rows:
+        if not isinstance(row, dict):
+            continue
+        row_key = str(row.get("row_key") or "").strip()
+        if not row_key:
+            continue
+        try:
+            section = ParsedSection(
+                heading_text=str(row.get("heading_text") or ""),
+                slug=str(row.get("slug") or ""),
+                level=int(row.get("level") or 0),
+                line_start=int(row.get("line_start") or 0),
+                line_end=int(row.get("line_end") or 0),
+                text=str(row.get("text") or ""),
+                own_text=str(row.get("own_text") or ""),
+            )
+        except (TypeError, ValueError):
+            continue
+        anchors.append(
+            {
+                "row_key": row_key,
+                "section_id": compute_section_id(section),
+                "anchor_status": "snapshot",
+            }
+        )
+    return anchors
+
+
 def _artifacts_dir(vault_root: Path) -> Path:
     return Path(vault_root) / ARTIFACTS_DIR_NAME
+
+
+def _normalize_section_anchor(value: Any) -> dict[str, str]:
+    anchor = _expect_dict(value, "section_anchors[]")
+    section_id = _expect_str(anchor.get("section_id"), "section_anchors[].section_id")
+    if not section_id.startswith("sha256:"):
+        raise ValueError("section_anchors[].section_id must start with sha256:")
+    return {
+        "row_key": _expect_str(anchor.get("row_key"), "section_anchors[].row_key"),
+        "section_id": section_id,
+        "anchor_status": str(anchor.get("anchor_status") or "snapshot"),
+    }
 
 
 def _normalize_sidecar_pointer(value: Any) -> dict[str, str]:
@@ -236,6 +296,7 @@ __all__ = [
     "ManifestPayload",
     "SavedArtifact",
     "artifact_id_from_title",
+    "collect_section_anchors",
     "collect_sidecar_pointers",
     "find_artifact_path",
     "parse_manifest",

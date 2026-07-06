@@ -261,6 +261,19 @@ class TestWorkbenchAutoPersist:
         add_section_to_workbench(_section(MD_A, 10))
         assert events == ["living_konspekt_section_added"]
 
+    def test_duplicate_with_session_state_does_not_track_funnel_event(self, monkeypatch):
+        import streamlit as st
+        import app.ui_events as ui_events
+        import app.user_state_core as user_state_core
+
+        events: list[str] = []
+        monkeypatch.setattr(st, "session_state", {})
+        monkeypatch.setattr(user_state_core, "set_kv", lambda key, value: None)
+        monkeypatch.setattr(ui_events, "track_event", lambda name, payload=None: events.append(name))
+        add_section_to_workbench(_section(MD_A, 10, heading="First"))
+        add_section_to_workbench(_section(MD_A, 10, heading="Duplicate"))
+        assert events == ["living_konspekt_section_added"]
+
     def test_add_with_injected_state_does_not_track(self, monkeypatch):
         import app.ui_events as ui_events
 

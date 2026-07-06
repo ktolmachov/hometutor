@@ -50,6 +50,10 @@ def test_serialize_parse_manifest_roundtrip_preserves_rows_and_sidecars() -> Non
     assert manifest.manifest_version == 1
     assert manifest.artifact_id == "working-konspekt"
     assert manifest.rows == persisted
+    assert manifest.section_anchors == artifact_manifest.collect_section_anchors(persisted)
+    assert manifest.section_anchors[0]["row_key"] == persisted[0]["row_key"]
+    assert manifest.section_anchors[0]["section_id"].startswith("sha256:")
+    assert "section_id" not in manifest.rows[0]
     assert manifest.sidecar_pointers == [
         {
             "konspekt_md_rel": "_test_artifact_manifest/lecture.md",
@@ -60,6 +64,16 @@ def test_serialize_parse_manifest_roundtrip_preserves_rows_and_sidecars() -> Non
 
 def test_parse_manifest_returns_none_for_plain_markdown() -> None:
     assert artifact_manifest.parse_manifest("# Просто markdown") is None
+
+
+def test_parse_manifest_derives_section_anchors_for_early_v1_files() -> None:
+    persisted = workbench_service.persisted_rows_from_runtime([_runtime_row()])
+    text = artifact_manifest.serialize_manifest("T", persisted, [], artifact_id="t")
+    text = text.replace("section_anchors:\n", "legacy_removed:\n", 1)
+
+    manifest = artifact_manifest.parse_manifest(text)
+
+    assert manifest.section_anchors == artifact_manifest.collect_section_anchors(persisted)
 
 
 def test_reassemble_rows_uses_workbench_runtime_contract() -> None:

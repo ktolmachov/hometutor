@@ -120,7 +120,7 @@ def add_section_to_workbench(
     new_rows = workbench_service.add_section(rows, section, storage=storage)
     target[WORKBENCH_SECTIONS_KEY] = new_rows
     added = any(str(row.get("row_key") or "") not in before for row in new_rows)
-    if state is None:
+    if state is None and added:
         try:
             # Funnel «чтение → обучение»: раздел добавлен (из графа/карточки/сбора по концепту).
             from app.ui_events import track_event

@@ -53,6 +53,10 @@ rows:
     text: Дословный текст
     note: null
     read_at: null
+section_anchors:
+  - row_key: p:courses/lecture.md:10
+    section_id: sha256:...
+    anchor_status: snapshot
 sidecar_pointers:
   - konspekt_md_rel: courses/lecture.md
     media_sidecar: courses/lecture.media.json
@@ -63,6 +67,15 @@ sidecar_pointers:
 hydrate, or reinterpret row fields itself. `note` and `read_at` are opaque
 passthrough fields: even `null` must survive save -> reassemble -> re-save, and
 future W6 values must not require a manifest version bump.
+
+`section_anchors` stores artifact-level content anchors outside the row contract.
+Each entry maps a row's current `row_key` to the `section_id` computed from the
+row snapshot with `app.media_alignment.compute_section_id`. This deliberately
+does not extend persisted row v2. `section_id` is a snapshot taken at save time:
+future re-anchoring can use it as a best-effort content anchor after source
+regeneration, and if no matching source section is found the row remains a
+readable non-portable-style snapshot rather than silently moving notes to the
+wrong section.
 
 `goal` is reserved for W6. In v1 it is opaque passthrough data and is not filled
 by W5.
@@ -80,6 +93,10 @@ manifest.rows
   -> Living Konspekt workbench basket
 ```
 
+`section_anchors` is not required for the basic W5 reassembly path; it is carried
+by the manifest so W6+ can preserve notes/progress across source drift without
+changing manifest v1.
+
 Portable and non-portable rows both survive this path because the manifest stores
 the already persisted row shape from ADR 0003, including non-portable snapshots.
 
@@ -94,6 +111,8 @@ Positive:
 
 - saved Living Konspekts become machine-readable without losing readable markdown;
 - rows can be restored to the workbench through the ADR 0003 service contract;
+- content anchors give W6 a stable note/progress hook that is less brittle than
+  `row_key`'s line-number component;
 - W6 can add notes, reading progress, and goals without a manifest bump;
 - update-vs-copy is based on stable identity instead of filename probing;
 - media timestamps remain sourced from the original sidecars, avoiding duplicate

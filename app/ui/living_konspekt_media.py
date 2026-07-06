@@ -217,15 +217,18 @@ def _render_media_panel(row: dict[str, Any]) -> None:
     if media_section.low_confidence:
         st.caption("Таймкод примерный: confidence ниже порога.")
 
-    confident_timestamp = media_section.t_start is not None and not stale_reasons and not media_section.low_confidence
+    # has_timestamp: таймкод пригоден для перемотки (есть и sidecar не устарел).
+    # confident_timestamp: дополнительно требует low_confidence=False — для точной подписи.
+    has_timestamp = media_section.t_start is not None and not stale_reasons
+    confident_timestamp = has_timestamp and not media_section.low_confidence
     timestamp_label = _format_timestamp(media_section.t_start)
 
     video = sidecar.video
     title = _video_title(video, 1)
     if isinstance(video, UrlVideoSource):
-        _render_url_video_media(video, media_section, confident_timestamp, timestamp_label, title)
+        _render_url_video_media(video, media_section, has_timestamp, confident_timestamp, timestamp_label, title)
     elif isinstance(video, LocalVideoSource):
-        _render_local_video_media(video, media_section, confident_timestamp, timestamp_label, title)
+        _render_local_video_media(video, media_section, has_timestamp, confident_timestamp, timestamp_label, title)
 
 
 def _video_title(video: LocalVideoSource | UrlVideoSource, idx: int) -> str:
@@ -270,11 +273,12 @@ def _render_url_video_player(video: UrlVideoSource, title: str, *, start_time: i
 def _render_url_video_media(
     video: UrlVideoSource,
     media_section: MediaSection,
+    has_timestamp: bool,
     confident_timestamp: bool,
     timestamp_label: str,
     title: str,
 ) -> None:
-    start_time = int(media_section.t_start or 0) if confident_timestamp else 0
+    start_time = int(media_section.t_start or 0) if has_timestamp else 0
     _render_url_video_player(video, title, start_time=start_time)
     if confident_timestamp and start_time > 0:
         try:
@@ -288,11 +292,12 @@ def _render_url_video_media(
 def _render_local_video_media(
     video: LocalVideoSource,
     media_section: MediaSection,
+    has_timestamp: bool,
     confident_timestamp: bool,
     timestamp_label: str,
     title: str,
 ) -> None:
-    start_time = int(media_section.t_start or 0) if confident_timestamp else 0
+    start_time = int(media_section.t_start or 0) if has_timestamp else 0
     _render_local_video_player(video, title, start_time=start_time)
     if confident_timestamp:
         st.caption(f"{title} · старт: {timestamp_label}")

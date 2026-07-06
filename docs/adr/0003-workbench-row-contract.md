@@ -5,7 +5,8 @@ schema; `section_index.py` stays runtime-only; path-safety abs→rel helper;
 service auth boundary; research-payload backward-compat rule; non-portable mode
 requires consumer UI guards (incl. render/export/source footer); live-state model
 service↔session_state fixed to one option; `data_relative_from_path` raise-style
-contract; `row_key` stable identity for add/move/remove/dedup)
+contract; `row_key` stable identity for add/move/remove/dedup with non-portable
+hash identity; explicit base section row vs workbench runtime row boundary)
 
 Status: Proposed
 
@@ -75,14 +76,22 @@ note, read_at
 ```
 
 - `row_key` — stable row identity, present on **every** row (portable and
-  non-portable, persisted and runtime). Canonical derivation, computed by the
-  service at add/migration time: `f"{path_identity}:{line_start}"`, where
-  `path_identity` is `konspekt_md_rel` (portable) or `konspekt_md_label`
-  (non-portable). Invariants: deterministic from persisted fields (so dedup is
-  correct), stable across persisted↔runtime conversion (keyed off the persisted
-  identity, not the runtime abs), recomputed once during the abs→rel migration and
-  stable thereafter, and able to disambiguate non-portable rows that share an empty
-  path. W4 operations (add/dedup/move/remove) key off `row_key`, replacing today's
+  non-portable, persisted and runtime). It is computed by the service at
+  add/migration time and then treated as the row's identity. Canonical forms:
+  - portable: `p:{konspekt_md_rel}:{line_start}`;
+  - non-portable: `np:{sha256(snapshot_identity)[:16]}`, where
+    `snapshot_identity` is a canonical JSON/UTF-8 payload built only from
+    persisted, non-secret snapshot fields: `konspekt_md_label`, `source_label`,
+    `heading_text`, `line_start`, `line_end`, and `text`.
+
+  The non-portable key deliberately does **not** use only the basename: two legacy
+  files from different folders can share `lecture_01.md` and the same line number.
+  The hash keeps the key privacy-safe (no absolute path on disk) while avoiding
+  that collision class. Invariants: deterministic from persisted fields, stable
+  across persisted↔runtime conversion (keyed off the persisted identity, not the
+  runtime abs), recomputed once during the abs→rel migration and stable thereafter,
+  and able to disambiguate rows that share an empty runtime path. W4 operations
+  (add/dedup/move/remove) key off `row_key`, replacing today's
   `(konspekt_md_abs, line_start)` identity — which collapses for non-portable rows
   (`living_konspekt_view.py` add/dedup, move, remove all match on `konspekt_md_abs`).
 - `konspekt_md_rel`, `source_rel` — POSIX paths relative to `DATA_DIR`. Absent on a
@@ -102,10 +111,12 @@ note, read_at
   opaque passthrough with no schema bump between W4 and W6.
 - `concept` stays `str | None`, as in v1.
 
-### Runtime row (what the UI and other consumers see after hydration)
+### Workbench runtime row (what the UI and other consumers see after hydration)
 
-The workbench service resolves `rel → abs` on hydration and returns the dict in
-today's shape so consuming code is unchanged:
+The workbench service resolves `rel → abs` on hydration and returns a workbench
+runtime row: today's section row shape plus workbench-owned metadata (`row_key`,
+later `note`/`read_at`, and non-portable diagnostic fields). This is intentionally
+different from the base row produced by `app/section_index.py`.
 
 ```text
 row_key, konspekt_md_abs, source_abs, heading_text, slug, level,
@@ -113,9 +124,10 @@ line_start, line_end, text, own_text, concept, note, read_at
 ```
 
 `konspekt_md_abs`/`source_abs` are present but **computed**, never stored. For
-portable rows, dedup keys, deep-links, staleness and Obsidian/VS Code opening keep
-working without edits in `living_konspekt_view.py` or the external importers — this
-is the contract's stability goal.
+portable rows, path consumers (deep-links, staleness, media, Obsidian/VS Code
+opening) keep working with the same abs-keyed fields. Identity consumers
+(add/dedup/move/remove) change in W4 to use `row_key`; that is part of the W4 AC,
+not a behavior left to callers.
 
 For a non-portable row the runtime row keeps the **same keys** (stable shape for
 consumers) and always carries `row_key`, but `konspekt_md_abs`/`source_abs` are
@@ -141,11 +153,14 @@ The persisted form has exactly one owner:
   or writes the persisted row. It owns the persisted↔runtime conversion
   (`persisted_row_from_runtime` / `runtime_row_from_persisted`), `row_key`
   derivation, the lazy abs→rel migration, and the non-portable-snapshot decision.
-- **`app/section_index.py` stays runtime-only.** It keeps `IndexedSection` /
-  `ParsedSection` and the *runtime* row (`section_to_row` / `row_to_section`,
-  today's abs-keyed shape). It must **not** learn the persisted schema — otherwise
-  it becomes a second owner and the "single owner" invariant is broken.
-- UI modules, routers and other consumers receive the runtime row only.
+- **`app/section_index.py` stays section-index-only.** It keeps `IndexedSection` /
+  `ParsedSection` and the **base section row** (`section_to_row` / `row_to_section`,
+  today's abs-keyed shape, no `row_key`, no persisted fields). It must **not** learn
+  the persisted schema or derive `row_key` — otherwise it becomes a second owner
+  and the "single owner" invariant is broken.
+- `app/workbench_service.py` upgrades a base section row into a **workbench runtime
+  row** by adding `row_key`, optional workbench fields, and portability diagnostics.
+  UI modules, routers and other consumers receive the workbench runtime row only.
 
 This is the AC that closes the "domain logic in the UI layer" debt (plan §A1):
 `dashboards_graph`, `flashcards_review_view`, `mission_control`, `sidebar` and
@@ -163,6 +178,13 @@ context before calling the service — today that is `_ensure_auth_context()` in
 UI; in FastAPI it is the request-scoped dependency, in Telegram the bot handler.
 The Streamlit-only `state: MutableMapping` DI parameter of the current view helpers
 does not move into the service: persistence is `app_kv`, not session_state.
+
+For tests and non-Streamlit callers, the service exposes a narrow storage seam
+(for example a `WorkbenchStorage` protocol or injected `load_json`/`save_json`
+callables). The production adapter uses `app.user_state*` helpers; unit tests may
+use an in-memory adapter to verify add/dedup/move/remove/migration without writing
+SQLite. This replaces the current `state: MutableMapping` DI with a service-level
+test seam that still preserves the single persisted owner.
 
 ### Live-state model (service vs Streamlit session)
 
@@ -247,9 +269,9 @@ Positive:
 - rows survive a machine or `DATA_DIR` move without silent breakage;
 - sync stays correct: `app_kv` is already whitelisted, and nothing absolute is
   serialized anymore;
-- portable-row consumers (UI + external importers) are unchanged because the
-  runtime row keeps today's shape; non-portable mode adds only targeted guards
-  (see Runtime row);
+- path consumers (UI + external importers) keep today's abs-keyed fields for
+  portable rows; identity operations move to `row_key`, and non-portable mode adds
+  targeted guards (see Workbench runtime row);
 - one path-resolution convention is shared with `media_sidecar` (ADR 0001);
 - reserved `note`/`read_at` avoid a second schema bump when W6 fills them.
 
@@ -265,10 +287,12 @@ Tradeoffs:
 
 ## Implementation Notes
 
-- The runtime row is produced/consumed by `section_to_row` / `row_to_section` in
-  `app/section_index.py`, unchanged in shape. The persisted↔runtime conversion
-  (persisted schema, `row_version`, portability status, lazy abs→rel migration)
-  lives in `app/workbench_service.py` — `section_index.py` stays runtime-only.
+- The base section row is produced/consumed by `section_to_row` / `row_to_section`
+  in `app/section_index.py`, unchanged in shape. The workbench runtime row
+  (`row_key`, optional workbench fields, portability diagnostics) and the
+  persisted↔runtime conversion (persisted schema, `row_version`, portability
+  status, lazy abs→rel migration) live in `app/workbench_service.py` —
+  `section_index.py` stays section-index-only.
 - Persistence goes through `app/user_state*` helpers (`app_kv`) and research
   sessions; both are already in the sync whitelist, so no whitelist change is
   needed.

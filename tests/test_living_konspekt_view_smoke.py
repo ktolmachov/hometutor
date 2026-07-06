@@ -134,6 +134,8 @@ class TestMediaPanelSmoke:
     def test_valid_sidecar_shows_youtube_timestamp_action(self, monkeypatch):
         import app.ui.living_konspekt_view as view
 
+        iframe_calls: list[tuple[str, int]] = []
+        monkeypatch.setattr(view.components, "iframe", lambda src, height: iframe_calls.append((src, height)))
         monkeypatch.setattr(view, "load_media_sidecar_for_konspekt", lambda path: _media_sidecar())
         monkeypatch.setattr(view, "sha256_file", lambda path: "a" * 64)
 
@@ -144,12 +146,15 @@ class TestMediaPanelSmoke:
         assert not at.exception
         assert any("Материал раздела" in str(md.value) for md in at.markdown)
         link_buttons = at.get("link_button")
-        assert any(button.label == "Смотреть: Видео с 1:15" for button in link_buttons)
+        assert any(button.label == "Открыть на YouTube с 1:15" for button in link_buttons)
         assert any("t=75s" in button.url for button in link_buttons)
+        assert any("youtube.com/embed/abcDEF12345?start=75" in src for src, _ in iframe_calls)
 
     def test_multiple_sidecar_videos_show_all_actions(self, monkeypatch):
         import app.ui.living_konspekt_view as view
 
+        iframe_calls: list[tuple[str, int]] = []
+        monkeypatch.setattr(view.components, "iframe", lambda src, height: iframe_calls.append((src, height)))
         monkeypatch.setattr(view, "load_media_sidecar_for_konspekt", lambda path: _media_sidecar_with_multiple_videos())
         monkeypatch.setattr(view, "sha256_file", lambda path: "a" * 64)
 
@@ -160,10 +165,12 @@ class TestMediaPanelSmoke:
         assert not at.exception
         assert any("Все видео урока" in str(md.value) for md in at.markdown)
         labels = [button.label for button in at.get("link_button")]
-        assert "Открыть: Видео" in labels
-        assert "Открыть: Дополнительное видео" in labels
-        assert "Смотреть: Видео с 1:15" in labels
-        assert "Смотреть: Дополнительное видео с 1:15" in labels
+        assert "Открыть на YouTube: Видео" in labels
+        assert "Открыть на YouTube: Дополнительное видео" in labels
+        assert "Открыть на YouTube с 1:15" in labels
+        iframe_srcs = [src for src, _ in iframe_calls]
+        assert any("youtube.com/embed/abcDEF12345" in src for src in iframe_srcs)
+        assert any("youtube.com/embed/second12345" in src for src in iframe_srcs)
 
     def test_stale_sidecar_degrades_without_timestamp_action(self, monkeypatch):
         import app.ui.living_konspekt_view as view
@@ -179,7 +186,8 @@ class TestMediaPanelSmoke:
         captions = [c.value for c in at.caption]
         assert any("Таймкоды устарели" in c for c in captions)
         link_buttons = at.get("link_button")
-        assert not any(button.label == "Смотреть: Видео с 1:15" for button in link_buttons)
+        assert not any("с 1:15" in button.label for button in link_buttons)
+        assert any("Открыть на YouTube: Видео" in button.label for button in link_buttons)
 
     def test_low_confidence_sidecar_degrades_without_timestamp_action(self, monkeypatch):
         import app.ui.living_konspekt_view as view
@@ -195,7 +203,8 @@ class TestMediaPanelSmoke:
         captions = [c.value for c in at.caption]
         assert any("confidence ниже порога" in c for c in captions)
         link_buttons = at.get("link_button")
-        assert not any(button.label == "Смотреть: Видео с 1:15" for button in link_buttons)
+        assert not any("с 1:15" in button.label for button in link_buttons)
+        assert any("Открыть на YouTube: Видео" in button.label for button in link_buttons)
 
 
 class TestMemoryPanelSmoke:

@@ -127,7 +127,7 @@ def _cuda_runtime_hint() -> str:
     return (
         "CUDA runtime недоступен для faster-whisper/CTranslate2. "
         "Для немедленного продолжения запустите с --device cpu. "
-        "Для GPU установите совместимый CUDA 12 runtime/cuBLAS и убедитесь, "
+        "Для GPU установите совместимый CUDA 12/13 runtime/cuBLAS и убедитесь, "
         "что каталог с DLL есть в PATH."
     )
 

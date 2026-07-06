@@ -30,6 +30,15 @@ class NormalizedVideoUrl:
             return self.canonical_url
         return _replace_query_param(self.canonical_url, "t", f"{value}s")
 
+    def embed_url(self, seconds: int | float | None = None) -> str:
+        if not self.is_youtube or not self.video_id:
+            raise ValueError("Not a YouTube URL")
+        start = self.timestamp_seconds if seconds is None else int(seconds)
+        base = f"https://www.youtube.com/embed/{self.video_id}"
+        if start is not None and start > 0:
+            return f"{base}?start={start}"
+        return base
+
 
 def _parse_timestamp(value: str | None) -> int | None:
     if not value:

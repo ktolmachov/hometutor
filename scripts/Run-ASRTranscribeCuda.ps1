@@ -18,7 +18,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Media,
 
-    [string]$Model = "large-v3",
+    [string]$Model = "large-v3-turbo",
 
     [string]$Language = "auto",
 
@@ -48,19 +48,33 @@ function Resolve-RepoRoot {
     return (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 }
 
-function Find-Cuda12Bin {
+function Test-CudaBinDir {
+    param([string]$BinDir)
+
+    if (-not $BinDir) { return $false }
+    foreach ($dll in "cublas64_12.dll", "cublas64_13.dll") {
+        if (Test-Path -LiteralPath (Join-Path $BinDir $dll)) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Find-CudaBin {
     param([string]$Preferred)
 
     if ($Preferred) {
-        if (Test-Path -LiteralPath (Join-Path $Preferred "cublas64_12.dll")) {
+        if (Test-CudaBinDir -BinDir $Preferred) {
             return (Resolve-Path -LiteralPath $Preferred).Path
         }
-        throw "CudaBin задан, но cublas64_12.dll там не найден: $Preferred"
+        throw "CudaBin задан, но cublas64_12.dll / cublas64_13.dll там не найден: $Preferred"
     }
 
     $candidates = New-Object System.Collections.Generic.List[string]
 
-    foreach ($name in "CUDA_PATH", "CUDA_PATH_V12_0", "CUDA_PATH_V12_1", "CUDA_PATH_V12_2", "CUDA_PATH_V12_3", "CUDA_PATH_V12_4", "CUDA_PATH_V12_5", "CUDA_PATH_V12_6", "CUDA_PATH_V12_8") {
+    foreach ($name in "CUDA_PATH", "CUDA_PATH_V13_0", "CUDA_PATH_V13_1", "CUDA_PATH_V13_2", "CUDA_PATH_V13_3",
+        "CUDA_PATH_V12_0", "CUDA_PATH_V12_1", "CUDA_PATH_V12_2", "CUDA_PATH_V12_3", "CUDA_PATH_V12_4",
+        "CUDA_PATH_V12_5", "CUDA_PATH_V12_6", "CUDA_PATH_V12_8") {
         $value = [Environment]::GetEnvironmentVariable($name)
         if ($value) {
             $candidates.Add((Join-Path $value "bin"))
@@ -69,24 +83,41 @@ function Find-Cuda12Bin {
 
     $toolkitRoot = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA"
     if (Test-Path -LiteralPath $toolkitRoot) {
-        Get-ChildItem -LiteralPath $toolkitRoot -Directory -Filter "v12.*" |
+        Get-ChildItem -LiteralPath $toolkitRoot -Directory |
+            Where-Object { $_.Name -match '^v1[23]\.' } |
             Sort-Object Name -Descending |
             ForEach-Object { $candidates.Add((Join-Path $_.FullName "bin")) }
     }
 
     foreach ($pathPart in ($env:PATH -split ";")) {
-        if ($pathPart -and (Test-Path -LiteralPath (Join-Path $pathPart "cublas64_12.dll"))) {
+        if (Test-CudaBinDir -BinDir $pathPart) {
             $candidates.Add($pathPart)
         }
     }
 
     foreach ($candidate in $candidates) {
-        if ($candidate -and (Test-Path -LiteralPath (Join-Path $candidate "cublas64_12.dll"))) {
+        if (Test-CudaBinDir -BinDir $candidate) {
             return (Resolve-Path -LiteralPath $candidate).Path
         }
     }
 
     return $null
+}
+
+function Test-CudaRuntimeReady {
+    param([string]$PythonExe)
+
+    $probe = @"
+import sys
+try:
+    import ctranslate2
+    print(ctranslate2.get_cuda_device_count())
+except Exception as exc:
+    print(f"ERR:{exc}", file=sys.stderr)
+    print(0)
+"@
+    $count = & $PythonExe -c $probe 2>$null | Select-Object -Last 1
+    return [int]$count -gt 0
 }
 
 function Add-ToProcessPath {
@@ -140,25 +171,26 @@ try {
     throw "nvidia-smi не найден или NVIDIA driver недоступен. Проверьте драйвер NVIDIA."
 }
 
-$cudaBinResolved = Find-Cuda12Bin -Preferred $CudaBin
-if (-not $cudaBinResolved) {
+$cudaBinResolved = Find-CudaBin -Preferred $CudaBin
+if ($cudaBinResolved) {
+    Add-ToProcessPath -PathToAdd $cudaBinResolved
+    Write-Host "CUDA bin для текущего процесса: $cudaBinResolved" -ForegroundColor Green
+
+    if ($PersistUserPath) {
+        Add-ToUserPath -PathToAdd $cudaBinResolved
+    }
+
+    if (-not (Test-DllVisible "cublas64_12.dll") -and -not (Test-DllVisible "cublas64_13.dll")) {
+        Write-Host "Предупреждение: cuBLAS DLL не виден в PATH даже после добавления CUDA bin." -ForegroundColor Yellow
+    }
+} elseif (-not (Test-CudaRuntimeReady -PythonExe $python)) {
     Write-Host ""
-    Write-Host "Не найден cublas64_12.dll в PATH и стандартных CUDA 12 каталогах." -ForegroundColor Red
-    Write-Host "Установите CUDA Toolkit/Runtime 12.x и cuDNN для CUDA 12.x, затем повторите запуск." -ForegroundColor Yellow
-    Write-Host "После установки должно сработать:" -ForegroundColor Yellow
-    Write-Host "  where.exe cublas64_12.dll" -ForegroundColor Yellow
+    Write-Host "Не найден cublas64_12.dll / cublas64_13.dll и CTranslate2 не видит CUDA." -ForegroundColor Red
+    Write-Host "Установите CUDA Toolkit 12.x/13.x и cuDNN, затем повторите запуск." -ForegroundColor Yellow
+    Write-Host "Проверка: where.exe cublas64_12.dll  или  .\.venv\Scripts\python.exe -c ""import ctranslate2; print(ctranslate2.get_cuda_device_count())""" -ForegroundColor Yellow
     exit 2
-}
-
-Add-ToProcessPath -PathToAdd $cudaBinResolved
-Write-Host "CUDA bin для текущего процесса: $cudaBinResolved" -ForegroundColor Green
-
-if ($PersistUserPath) {
-    Add-ToUserPath -PathToAdd $cudaBinResolved
-}
-
-if (-not (Test-DllVisible "cublas64_12.dll")) {
-    throw "cublas64_12.dll всё ещё не виден после обновления PATH."
+} else {
+    Write-Host "cuBLAS DLL не найден в PATH, но CTranslate2 видит CUDA — продолжаю." -ForegroundColor Yellow
 }
 
 if (-not (Test-DllVisible "cudnn64_8.dll")) {

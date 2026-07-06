@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, MutableMapping
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from app.media_sidecar import (
     LocalVideoSource,
@@ -25,7 +26,7 @@ from app.media_sidecar import (
     load_media_sidecar_for_konspekt,
     sha256_file,
 )
-from app.media_urls import normalize_video_url
+from app.media_urls import NormalizedVideoUrl, normalize_video_url
 from app.path_safety import resolve_data_relative_path
 from app.section_index import IndexedSection, parse_sections, row_to_section, section_to_row
 from app.ui.living_konspekt_add_panel import render_add_sections_panel
@@ -43,6 +44,7 @@ _WORKBENCH_KV_KEY = "living_konspekt_workbench_json"
 _WORKBENCH_HYDRATED_KEY = "_workbench_hydrated"
 
 _SLUG_RE = re.compile(r"[^\w\-]+", re.UNICODE)
+_YOUTUBE_PLAYER_HEIGHT = 400
 
 
 # ── Корзина (JSON-safe rows из app.section_index) ───────────────────────
@@ -507,6 +509,33 @@ def _video_title(video: LocalVideoSource | UrlVideoSource, idx: int) -> str:
     return normalized.canonical_url
 
 
+def _render_youtube_video_player(normalized: NormalizedVideoUrl, *, start_time: int = 0) -> None:
+    components.iframe(normalized.embed_url(start_time), height=_YOUTUBE_PLAYER_HEIGHT)
+
+
+def _render_url_video_player(video: UrlVideoSource, title: str, *, start_time: int = 0) -> None:
+    try:
+        normalized = normalize_video_url(video.canonical_url or video.url)
+    except ValueError:
+        st.link_button(f"Открыть: {title}", video.url, width="stretch")
+        return
+
+    if normalized.is_youtube:
+        _render_youtube_video_player(normalized, start_time=start_time)
+        link_url = normalized.with_timestamp(start_time) if start_time > 0 else normalized.canonical_url
+        if start_time > 0:
+            st.link_button(
+                f"Открыть на YouTube с {_format_timestamp(start_time)}",
+                link_url,
+                width="stretch",
+            )
+        else:
+            st.link_button(f"Открыть на YouTube: {title}", link_url, width="stretch")
+        return
+
+    st.link_button(f"Открыть: {title}", normalized.canonical_url, width="stretch")
+
+
 def _render_url_video_media(
     video: UrlVideoSource,
     media_section: MediaSection,
@@ -514,29 +543,15 @@ def _render_url_video_media(
     timestamp_label: str,
     title: str,
 ) -> None:
-    try:
-        normalized = normalize_video_url(video.canonical_url or video.url)
-    except ValueError:
-        _render_url_video_link(video, title)
-        return
-
-    if normalized.is_youtube and confident_timestamp:
-        st.link_button(
-            f"Смотреть: {title} с {timestamp_label}",
-            normalized.with_timestamp(media_section.t_start),
-            width="stretch",
-        )
-    else:
-        _render_url_video_link(video, title)
-
-
-def _render_url_video_link(video: UrlVideoSource, title: str) -> None:
-    try:
-        normalized = normalize_video_url(video.canonical_url or video.url)
-        url = normalized.canonical_url
-    except ValueError:
-        url = video.url
-    st.link_button(f"Открыть: {title}", url, width="stretch")
+    start_time = int(media_section.t_start or 0) if confident_timestamp else 0
+    _render_url_video_player(video, title, start_time=start_time)
+    if confident_timestamp and start_time > 0:
+        try:
+            normalized = normalize_video_url(video.canonical_url or video.url)
+        except ValueError:
+            return
+        if normalized.is_youtube:
+            st.caption(f"{title} · старт: {timestamp_label}")
 
 
 def _render_local_video_media(
@@ -600,11 +615,11 @@ def _render_all_lesson_videos_panel(rows: list[dict[str, Any]]) -> None:
                 st.caption("Таймкоды устарели: " + ", ".join(stale_reasons))
             for idx, video in enumerate(sidecar.videos, start=1):
                 title = _video_title(video, idx)
-                st.markdown(f"**{title}**")
-                if isinstance(video, UrlVideoSource):
-                    _render_url_video_link(video, title)
-                elif isinstance(video, LocalVideoSource):
-                    _render_local_video_player(video, title)
+                with st.expander(title, expanded=len(sidecar.videos) == 1):
+                    if isinstance(video, UrlVideoSource):
+                        _render_url_video_player(video, title)
+                    elif isinstance(video, LocalVideoSource):
+                        _render_local_video_player(video, title)
 
 
 def _bulk_heading_normalized(heading: str) -> str:

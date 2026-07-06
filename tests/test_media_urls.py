@@ -33,6 +33,14 @@ def test_normalizes_youtube_embed_url():
     assert normalized.with_timestamp() == "https://www.youtube.com/watch?v=abcDEF12345&t=125s"
 
 
+def test_youtube_embed_url_with_start():
+    normalized = normalize_video_url("https://youtu.be/abcDEF12345?t=75")
+
+    assert normalized.embed_url() == "https://www.youtube.com/embed/abcDEF12345?start=75"
+    assert normalized.embed_url(120) == "https://www.youtube.com/embed/abcDEF12345?start=120"
+    assert normalized.embed_url(0) == "https://www.youtube.com/embed/abcDEF12345"
+
+
 def test_unknown_http_url_remains_external_link_without_timestamp_action():
     normalized = normalize_video_url("https://example.com/video.mp4?t=90#fragment")
 

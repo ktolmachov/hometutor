@@ -85,7 +85,11 @@ param(
 
     [switch]$SkipSidecar,
 
-    [switch]$DryRunSidecar
+    [switch]$DryRunSidecar,
+
+    [string]$CoverageJson = "",
+
+    [switch]$SkipFrontmatter
 )
 
 $ErrorActionPreference = "Stop"
@@ -201,6 +205,12 @@ if (-not $SkipSidecar) {
     if ($DryRunSidecar) {
         $sidecarArgs += "--dry-run"
     }
+    if ($CoverageJson) {
+        $sidecarArgs += @("--coverage-json", $CoverageJson)
+    }
+    if ($SkipFrontmatter) {
+        $sidecarArgs += "--no-frontmatter"
+    }
 
     Invoke-Step "Media sidecar ($Konspekt → $Video)" {
         & $python @sidecarArgs
@@ -215,3 +225,5 @@ Write-Host "  Конспект:  $Konspekt"
 Write-Host "  Видео:     $Video"
 Write-Host "  Сегменты:  $([System.IO.Path]::ChangeExtension($playableAbs, '.segments.json'))"
 Write-Host "  Sidecar:   $([System.IO.Path]::ChangeExtension($konspektAbs, '.media.json'))"
+
+exit 0

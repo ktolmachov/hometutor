@@ -8,11 +8,13 @@
 
 1. Сегменты группируются в блоки ~фиксированного лексического объёма.
 2. Каждый содержательный раздел получает блок-кандидат (argmax лексического
-   перекрытия ``tokenize_filtered``).
+   перекрытия ``tokenize_filtered`` по токенам заголовка И тела — заголовок
+   сильнейший сигнал, особенно для слайдовых конспектов).
 3. Взвешенный LIS по (порядок раздела, индекс блока) отбрасывает якоря,
    ломающие хронологию лекции.
-4. Разделы без якоря интерполируются между соседними якорями и помечаются
-   низким confidence (< 0.70 → UI показывает «неуверенно»).
+4. Разделы без якоря интерполируются между соседними якорями по их
+   уточнённым временам (старт сегмента с различительной лексикой, не граница
+   блока) и помечаются низким confidence (< 0.70 → UI показывает «неуверенно»).
 """
 
 from __future__ import annotations
@@ -220,11 +222,18 @@ def align_sections(
         )
         for b in blocks
     ]
+    # Лексика, звучавшая хотя бы в одном блоке лекции. Заголовок в скоринг включается
+    # только пересечением с ней: так слайдовые заголовки («Stop Controller», если лектор
+    # это произнёс) добавляют попадания, а слова-связки из заголовка («тема», «слайд»),
+    # которых нет в речи, не разбавляют знаменатель и не роняют пограничный якорь.
+    spoken_tokens = frozenset().union(*[b.tokens for b in blocks]) if blocks else frozenset()
 
     section_tokens: dict[int, frozenset[str]] = {}
     candidates: list[tuple[int, int, float]] = []  # (section_pos, block_idx, score)
     for pos, section in enumerate(sections):
-        tokens = frozenset(tokenize_filtered(section.own_text or section.text) - background)
+        body_tokens = tokenize_filtered(section.own_text or section.text)
+        heading_tokens = tokenize_filtered(section.heading_text) & spoken_tokens
+        tokens = frozenset((body_tokens | heading_tokens) - background)
         if len(tokens) < _MIN_SECTION_TOKENS:
             continue
         section_tokens[pos] = tokens
@@ -235,9 +244,18 @@ def align_sections(
 
     kept = _weighted_lis(candidates)
     anchor_by_pos = {pos: (blk, score) for pos, blk, score in candidates if pos in kept}
+    anchored_positions = sorted(anchor_by_pos)
+
+    # Уточнённые времена якорей (старт сегмента с различительной лексикой раздела,
+    # а не граница блока). Интерполяция опирается именно на них: иначе значения сразу
+    # после якоря выходят раньше его уточнённого времени и схлопываются клэмпом в одну
+    # точку («стена одинаковых таймкодов» у десятков соседних разделов).
+    anchor_t_start: dict[int, float] = {}
+    for pos in anchored_positions:
+        block_idx, _score = anchor_by_pos[pos]
+        anchor_t_start[pos] = round(_refine_t_start(section_tokens[pos], blocks[block_idx], segments), 2)
 
     aligned: list[AlignedSection] = []
-    anchored_positions = sorted(anchor_by_pos)
     for pos, section in enumerate(sections):
         if pos in anchor_by_pos:
             block_idx, score = anchor_by_pos[pos]
@@ -245,14 +263,14 @@ def align_sections(
             aligned.append(
                 AlignedSection(
                     section=section,
-                    t_start=round(_refine_t_start(section_tokens[pos], block, segments), 2),
+                    t_start=anchor_t_start[pos],
                     t_end=round(block.t_end, 2),
                     confidence=_anchor_confidence(score),
                     anchored=True,
                 )
             )
             continue
-        t_interp = _interpolate(pos, anchored_positions, anchor_by_pos, blocks, len(sections))
+        t_interp = _interpolate(pos, anchored_positions, anchor_t_start)
         aligned.append(
             AlignedSection(
                 section=section,
@@ -273,16 +291,14 @@ def align_sections(
 def _interpolate(
     pos: int,
     anchored_positions: list[int],
-    anchor_by_pos: dict[int, tuple[int, float]],
-    blocks: list[_Block],
-    total: int,
+    anchor_t_start: dict[int, float],
 ) -> float | None:
     prev_pos = max((p for p in anchored_positions if p < pos), default=None)
     next_pos = min((p for p in anchored_positions if p > pos), default=None)
     if prev_pos is None or next_pos is None:
         return None  # край без обеих опор — честнее не выдумывать таймкод
-    t_prev = blocks[anchor_by_pos[prev_pos][0]].t_start
-    t_next = blocks[anchor_by_pos[next_pos][0]].t_start
+    t_prev = anchor_t_start[prev_pos]
+    t_next = anchor_t_start[next_pos]
     frac = (pos - prev_pos) / (next_pos - prev_pos)
     return round(t_prev + (t_next - t_prev) * frac, 2)
 

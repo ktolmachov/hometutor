@@ -10,7 +10,7 @@ from app.ui.living_konspekt_add_panel import (
     search_sections_across,
     sections_of_document,
 )
-from app.ui.living_konspekt_reader import reader_blocks
+from app.ui.living_konspekt_reader import reader_blocks, reader_toc
 
 
 def _write_md(path: Path, body: str) -> Path:
@@ -95,3 +95,15 @@ class TestReaderBlocks:
         assert blocks[2]["text"] == "Полный текст A."
         assert blocks[3]["text"] == "B"
         assert blocks[5]["text"] == "Полный текст B."
+
+    def test_reader_toc_appears_only_for_long_workbench(self, tmp_path: Path):
+        rows = [
+            section_to_row(_section(tmp_path / "a.md", index * 10, f"Тема {index}", "Текст."))
+            for index in range(1, 9)
+        ]
+
+        toc = reader_toc(rows)
+
+        assert [item["label"] for item in toc] == [f"Тема {index}" for index in range(1, 9)]
+        assert toc[0]["anchor"] == "lk-reader-1"
+        assert reader_toc(rows[:7]) == []

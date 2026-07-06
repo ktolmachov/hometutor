@@ -161,6 +161,16 @@ def test_note_read_at_and_goal_survive_reassemble_and_resave() -> None:
     assert reparsed.rows[0]["read_at"] is None
 
 
+def test_artifact_body_includes_user_note_block() -> None:
+    row = _runtime_row()
+    row["note"] = "моя мысль"
+
+    body = konspekt_artifact.build_artifact_body([row])
+
+    assert "### 💬 Моими словами" in body
+    assert "моя мысль" in body
+
+
 def test_non_portable_rows_survive_roundtrip() -> None:
     persisted = [
         {

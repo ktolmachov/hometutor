@@ -29,6 +29,13 @@ _CONTENT_FIELDS = (
 _RESERVED_FIELDS = ("note", "read_at")
 
 
+class _UnsetValue:
+    pass
+
+
+_UNSET = _UnsetValue()
+
+
 class WorkbenchStorage(Protocol):
     def load_json(self) -> list[dict[str, Any]]:
         """Load persisted workbench rows."""
@@ -300,7 +307,52 @@ def remove_section(
     return new_rows
 
 
+def remove_sections(
+    current_rows: list[dict[str, Any]],
+    row_keys: set[str] | list[str] | tuple[str, ...],
+    storage: WorkbenchStorage | None = None,
+) -> list[dict[str, Any]]:
+    rows = normalize_runtime_rows(current_rows)
+    keys = {str(row_key) for row_key in row_keys}
+    new_rows = [row for row in rows if str(row.get("row_key") or "") not in keys]
+    (storage or UserStateWorkbenchStorage()).save_json(persisted_rows_from_runtime(new_rows))
+    return new_rows
+
+
+def clear_rows(storage: WorkbenchStorage | None = None) -> list[dict[str, Any]]:
+    (storage or UserStateWorkbenchStorage()).save_json([])
+    return []
+
+
+def update_section_fields(
+    current_rows: list[dict[str, Any]],
+    row_key: str,
+    *,
+    note: str | None | _UnsetValue = _UNSET,
+    read_at: str | None | _UnsetValue = _UNSET,
+    storage: WorkbenchStorage | None = None,
+) -> list[dict[str, Any]]:
+    rows = normalize_runtime_rows(current_rows)
+    changed = False
+    new_rows: list[dict[str, Any]] = []
+    for row in rows:
+        if str(row.get("row_key") or "") != row_key:
+            new_rows.append(row)
+            continue
+        updated = dict(row)
+        if not isinstance(note, _UnsetValue):
+            updated["note"] = (note or "").strip() or None
+        if not isinstance(read_at, _UnsetValue):
+            updated["read_at"] = read_at
+        changed = changed or updated != row
+        new_rows.append(updated)
+    if changed:
+        (storage or UserStateWorkbenchStorage()).save_json(persisted_rows_from_runtime(new_rows))
+    return new_rows
+
+
 __all__ = [
+    "clear_rows",
     "InMemoryWorkbenchStorage",
     "NON_PORTABLE",
     "PORTABLE",
@@ -316,7 +368,9 @@ __all__ = [
     "persisted_row_from_runtime",
     "persisted_rows_from_runtime",
     "remove_section",
+    "remove_sections",
     "runtime_row_from_persisted",
     "runtime_rows_from_persisted",
     "save_rows",
+    "update_section_fields",
 ]

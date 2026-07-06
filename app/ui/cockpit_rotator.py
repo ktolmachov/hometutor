@@ -7,7 +7,13 @@ from typing import Final
 import streamlit as st
 
 SESSION_KEY: Final[str] = "cockpit_rotator_slot_index"
-DEFAULT_SLOTS: Final[tuple[str, ...]] = ("flashcards", "micro_quiz", "tutor_chat")
+DEFAULT_SLOTS: Final[tuple[str, ...]] = ("flashcards", "micro_quiz", "tutor_chat", "living_konspekt")
+SLOT_LABELS: Final[dict[str, str]] = {
+    "flashcards": "Flashcards",
+    "micro_quiz": "Micro quiz",
+    "tutor_chat": "Tutor chat",
+    "living_konspekt": "10 минут: пополни конспект недели",
+}
 
 
 def normalize_slot_index(raw: object, n: int | None = None) -> int:
@@ -46,10 +52,14 @@ def current_slot() -> str:
     return DEFAULT_SLOTS[_session_slot_index()]
 
 
+def slot_label(slot_id: str) -> str:
+    return SLOT_LABELS.get(slot_id, slot_id)
+
+
 def render_rotator_panel() -> None:
     """Простая панель ротации в центре кабины (stub UI)."""
     slot = current_slot()
-    st.caption(f"Активный слот: **{slot}** (черновик ротации)")
+    st.caption(f"Активный слот: **{slot_label(slot)}** (черновик ротации)")
     bc = st.columns(2)
     with bc[0]:
         if st.button("← Назад", key="cockpit_rotator_prev"):
@@ -69,5 +79,6 @@ __all__ = [
     "next_slot_index",
     "normalize_slot_index",
     "render_rotator_panel",
+    "slot_label",
     "slot_id_at",
 ]

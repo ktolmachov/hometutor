@@ -62,7 +62,11 @@ param(
 
     [switch]$DryRunSidecar,
 
-    [switch]$StopOnError
+    [switch]$StopOnError,
+
+    [switch]$SkipFrontmatter,
+
+    [switch]$NoManifest
 )
 
 $ErrorActionPreference = "Stop"
@@ -126,6 +130,16 @@ function Get-DataRelativePath {
 function Get-NormalizedStem {
     param([string]$Path)
     return [System.IO.Path]::GetFileNameWithoutExtension($Path).ToLowerInvariant()
+}
+
+function Format-Duration {
+    param([double]$Seconds)
+    $total = [int][math]::Round($Seconds)
+    $h = [int]($total / 3600)
+    $m = [int](($total % 3600) / 60)
+    $s = $total % 60
+    if ($h -gt 0) { return ("{0}:{1:D2}:{2:D2}" -f $h, $m, $s) }
+    return ("{0:D2}:{1:D2}" -f $m, $s)
 }
 
 function Find-MediaForStem {
@@ -208,6 +222,12 @@ foreach ($media in $mediaFiles) {
 $pairs = @()
 $skippedKonspekts = @()
 $usedMedia = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+$chosenByStem = @{}
+$konspektStems = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+
+foreach ($md in $mdFiles) {
+    [void]$konspektStems.Add((Get-NormalizedStem $md.FullName))
+}
 
 foreach ($md in ($mdFiles | Sort-Object FullName)) {
     $stem = Get-NormalizedStem $md.FullName
@@ -220,7 +240,8 @@ foreach ($md in ($mdFiles | Sort-Object FullName)) {
         $skippedKonspekts += $md
         continue
     }
-    $usedMedia.Add($media.FullName) | Out-Null
+    [void]$usedMedia.Add($media.FullName)
+    $chosenByStem[$stem] = $media
     $pairs += [PSCustomObject]@{
         Konspekt = Get-DataRelativePath -AbsolutePath $md.FullName -DataDir $dataDir
         Media    = $media.FullName
@@ -228,7 +249,21 @@ foreach ($md in ($mdFiles | Sort-Object FullName)) {
     }
 }
 
-$orphanMedia = $mediaFiles | Where-Object { -not $usedMedia.Contains($_.FullName) }
+# Не выбранные медиа делим на две категории. Дубликат-сиблинг — тот же stem, что у
+# конспекта, но выбран другой файл (часто .ts рядом с выбранным .mp4, где .mp4 —
+# побочный продукт ремукса). Настоящий сирота — стема нет ни в одном конспекте.
+# Прежний код помечал .ts рядом с .mp4 как «видео без конспекта», противореча очереди.
+$duplicateMedia = @()
+$orphanMedia = @()
+foreach ($media in $mediaFiles) {
+    if ($usedMedia.Contains($media.FullName)) { continue }
+    $stem = Get-NormalizedStem $media.FullName
+    if ($konspektStems.Contains($stem)) {
+        $duplicateMedia += $media
+    } else {
+        $orphanMedia += $media
+    }
+}
 
 Write-Host "Папка:      $folderAbs" -ForegroundColor Cyan
 Write-Host "DATA_DIR:   $dataDir" -ForegroundColor DarkGray
@@ -239,6 +274,24 @@ if ($skippedKonspekts.Count -gt 0) {
     Write-Host "Конспекты без одноимённого видео ($($skippedKonspekts.Count)):" -ForegroundColor Yellow
     foreach ($item in $skippedKonspekts) {
         Write-Host "  - $($item.Name)"
+    }
+}
+
+if ($duplicateMedia.Count -gt 0) {
+    Write-Host ""
+    Write-Host "Дубликаты медиа (конспект есть, выбран другой файл) ($($duplicateMedia.Count)):" -ForegroundColor DarkYellow
+    foreach ($item in ($duplicateMedia | Sort-Object Name)) {
+        $stem = Get-NormalizedStem $item.FullName
+        $chosen = $chosenByStem[$stem]
+        $note = ""
+        if ($chosen) {
+            if ($item.LastWriteTime -gt $chosen.LastWriteTime) {
+                $note = "  ⚠ новее выбранного «$($chosen.Name)» — возможен устаревший ремукс/исходник"
+            } else {
+                $note = "  (выбран $($chosen.Name))"
+            }
+        }
+        Write-Host "  - $($item.Name)$note"
     }
 }
 
@@ -271,8 +324,30 @@ if ($InstallAsrExtra -and -not $WhatIfPreference) {
     }
 }
 
+if (-not $WhatIfPreference) {
+    try {
+        $gpuFree = & nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits --id $GpuIndex 2>$null
+        if ($LASTEXITCODE -eq 0 -and $gpuFree) {
+            $freeMb = [int]($gpuFree.Trim())
+            if ($freeMb -lt 3000) {
+                Write-Host "⚠ GPU $GpuIndex свободно ${freeMb} МБ VRAM — large-v3 (~3 ГБ) может не влезть; освободите GPU или укажите -GpuIndex." -ForegroundColor Yellow
+            } else {
+                Write-Host "GPU ${GpuIndex}: свободно ${freeMb} МБ VRAM." -ForegroundColor DarkGray
+            }
+        }
+    } catch {
+        # nvidia-smi недоступен — диагностика не критична.
+    }
+}
+
+$batchStart = Get-Date
+$tempCovDir = Join-Path $env:TEMP "kilo"
 $ok = 0
 $failed = @()
+$results = @()
+$totConfident = 0
+$totPlaylist = 0.0
+$totMedia = 0.0
 
 for ($i = 0; $i -lt $pairs.Count; $i++) {
     $pair = $pairs[$i]
@@ -287,6 +362,9 @@ for ($i = 0; $i -lt $pairs.Count; $i++) {
     Write-Host $label -ForegroundColor Magenta
     Write-Host "########################################" -ForegroundColor Magenta
 
+    $pairStart = Get-Date
+    $covFile = Join-Path $tempCovDir ("mkbatch_" + [System.IO.Path]::GetRandomFileName() + ".json")
+
     $pipeArgs = @{
         Konspekt = $pair.Konspekt
         Media    = $pair.Media
@@ -299,7 +377,11 @@ for ($i = 0; $i -lt $pairs.Count; $i++) {
     if ($SkipAsr) { $pipeArgs.SkipAsr = $true }
     if ($SkipSidecar) { $pipeArgs.SkipSidecar = $true }
     if ($DryRunSidecar) { $pipeArgs.DryRunSidecar = $true }
+    if ($SkipFrontmatter) { $pipeArgs.SkipFrontmatter = $true }
+    if (-not $NoManifest -and -not $SkipSidecar) { $pipeArgs.CoverageJson = $covFile }
 
+    $status = "ok"
+    $errMsg = ""
     try {
         & $pipelineScript @pipeArgs
         if ($LASTEXITCODE -ne 0) {
@@ -307,25 +389,104 @@ for ($i = 0; $i -lt $pairs.Count; $i++) {
         }
         $ok++
     } catch {
+        $status = "failed"
+        $errMsg = $_.Exception.Message
         $failed += [PSCustomObject]@{
             Konspekt = $pair.Konspekt
             Media    = $pair.Media
-            Error    = $_.Exception.Message
+            Error    = $errMsg
         }
-        Write-Host "ОШИБКА: $($pair.Konspekt) — $($_.Exception.Message)" -ForegroundColor Red
-        if ($StopOnError) {
-            break
+        Write-Host "ОШИБКА: $($pair.Konspekt) — $errMsg" -ForegroundColor Red
+    }
+
+    $elapsed = (Get-Date) - $pairStart
+    $coverage = $null
+    if (Test-Path -LiteralPath $covFile) {
+        try {
+            $coverage = Get-Content -LiteralPath $covFile -Raw -Encoding UTF8 | ConvertFrom-Json
+        } catch {
+            $coverage = $null
         }
+        Remove-Item -LiteralPath $covFile -Force -ErrorAction SilentlyContinue
+    }
+
+    if ($status -eq "ok" -and $coverage) {
+        $totConfident += [int]$coverage.confident
+        $totPlaylist += [double]$coverage.playlist_seconds
+        if ($coverage.media_seconds) { $totMedia += [double]$coverage.media_seconds }
+        Write-Host ("  ▶ confident {0}/{1} · плейлист {2}" -f $coverage.confident, $coverage.sections, (Format-Duration $coverage.playlist_seconds)) -ForegroundColor Cyan
+    }
+
+    $covEntry = $null
+    if ($coverage) {
+        $covEntry = [ordered]@{
+            sections        = $coverage.sections
+            with_timestamp  = $coverage.with_timestamp
+            anchored        = $coverage.anchored
+            interpolated    = $coverage.interpolated
+            confident       = $coverage.confident
+            playlist_seconds = $coverage.playlist_seconds
+            media_seconds   = $coverage.media_seconds
+        }
+    }
+    $results += [PSCustomObject]@{
+        Konspekt  = $pair.Konspekt
+        Media     = $pair.Media
+        Status    = $status
+        Error     = $errMsg
+        ElapsedSec = [math]::Round($elapsed.TotalSeconds, 1)
+        Coverage  = $covEntry
+    }
+
+    $done = $i + 1
+    $avgSec = ((Get-Date) - $batchStart).TotalSeconds / $done
+    $remainSec = ($pairs.Count - $done) * $avgSec
+    Write-Host ("  ⏱ {0} прошло, ~{1} осталось ({2}/{3})" -f (Format-Duration $elapsed.TotalSeconds), (Format-Duration $remainSec), $done, $pairs.Count) -ForegroundColor DarkGray
+
+    if ($status -eq "failed" -and $StopOnError) {
+        break
     }
 }
 
 Write-Host ""
 Write-Host "========== Итог ==========" -ForegroundColor Cyan
 Write-Host "Успешно: $($ok)/$($pairs.Count)"
+if ($ok -gt 0) {
+    Write-Host ("Продуктово: confident-разделов {0} · плейлист-готово {1} из {2} лекций" -f $totConfident, (Format-Duration $totPlaylist), (Format-Duration $totMedia)) -ForegroundColor Cyan
+}
 if ($failed.Count -gt 0) {
     Write-Host "Ошибки:  $($failed.Count)" -ForegroundColor Red
     foreach ($item in $failed) {
         Write-Host "  - $($item.Konspekt): $($item.Error)" -ForegroundColor Red
     }
+}
+
+if (-not $NoManifest -and -not $WhatIfPreference) {
+    if (-not (Test-Path -LiteralPath $tempCovDir)) {
+        New-Item -ItemType Directory -Path $tempCovDir -Force | Out-Null
+    }
+    $manifestPath = Join-Path $folderAbs "media_konspekt_batch_manifest.json"
+    $manifest = [ordered]@{
+        started_at  = $batchStart.ToString("o")
+        finished_at = (Get-Date).ToString("o")
+        folder      = $folderAbs
+        data_dir    = $dataDir
+        gpu_index   = $GpuIndex
+        totals      = [ordered]@{
+            pairs              = $pairs.Count
+            ok                 = $ok
+            failed             = $failed.Count
+            confident_sections = $totConfident
+            playlist_seconds   = [math]::Round($totPlaylist, 2)
+            media_seconds      = [math]::Round($totMedia, 2)
+        }
+        results     = $results
+    }
+    $manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+    Write-Host "Манифест:  $manifestPath" -ForegroundColor DarkGray
+}
+
+if ($failed.Count -gt 0) {
     exit 1
 }
+exit 0

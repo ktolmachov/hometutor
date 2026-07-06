@@ -149,6 +149,23 @@ def test_media_line_suppressed_for_stale_and_low_confidence(tmp_path):
     assert stale is None, "stale sidecar (konspekt изменился) не должен давать таймкод"
 
 
+def test_playlist_items_use_trusted_timestamps_in_workbench_order(tmp_path, monkeypatch):
+    import app.ui.living_konspekt_media as media
+
+    md = tmp_path / "konspekt.md"
+    md.write_text(_KONSPEKT, encoding="utf-8")
+    rows = _rows_from_file(md)
+    sidecar = _sidecar_for_row(rows[0], sha256_file(md), confidence=0.9)
+    monkeypatch.setattr(media, "load_media_sidecar_for_konspekt", lambda path: sidecar)
+
+    items = media.playlist_items_from_rows(rows[:1])
+
+    assert items[0]["heading"] == rows[0]["heading_text"]
+    assert items[0]["start"] == 90
+    assert items[0]["duration"] == 60
+    assert str(items[0]["url"]).endswith("t=90s")
+
+
 def test_stale_check_runs_once_per_document_not_per_row(tmp_path, monkeypatch):
     """P2 аудита: staleness хэширует konspekt и видео — не должен зваться на каждый раздел."""
     import app.ui.living_konspekt_view as view

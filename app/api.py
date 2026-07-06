@@ -25,6 +25,7 @@ from app.routers.feedback import router as feedback_router
 from app.routers.files import router as files_router
 from app.routers.knowledge import router as knowledge_router
 from app.routers.learner import router as learner_router
+from app.routers.living_konspekt import router as living_konspekt_router
 from app.routers.metrics import router as metrics_router
 from app.routers.query import router as query_router
 from app.routers.flashcards import router as flashcards_router
@@ -285,6 +286,7 @@ app.include_router(flashcards_router, dependencies=_protected_dependencies)
 app.include_router(metrics_router, dependencies=_protected_dependencies)
 app.include_router(knowledge_router, dependencies=_protected_dependencies)
 app.include_router(learner_router, dependencies=_protected_dependencies)
+app.include_router(living_konspekt_router, dependencies=_protected_dependencies)
 app.include_router(feedback_router, dependencies=_protected_dependencies)
 app.include_router(files_router, dependencies=_protected_dependencies)
 app.include_router(admin_router, dependencies=_protected_dependencies)

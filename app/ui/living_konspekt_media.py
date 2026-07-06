@@ -76,6 +76,79 @@ def _format_timestamp(seconds: float | int | None) -> str:
     return f"{hours:d}:{minutes:02d}:{secs:02d}" if hours else f"{minutes:d}:{secs:02d}"
 
 
+def playlist_items_from_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Trusted video fragments in current workbench order."""
+    items: list[dict[str, Any]] = []
+    sidecar_cache: dict[str, MediaSidecar | None] = {}
+    stale_cache: dict[str, list[str]] = {}
+    for row in rows:
+        md_abs = str(row.get("konspekt_md_abs") or "")
+        if not md_abs:
+            continue
+        if md_abs not in sidecar_cache:
+            try:
+                sidecar_cache[md_abs] = load_media_sidecar_for_konspekt(Path(md_abs))
+            except (OSError, ValueError, json.JSONDecodeError):
+                sidecar_cache[md_abs] = None
+        sidecar = sidecar_cache[md_abs]
+        if sidecar is None:
+            continue
+        media_section = _media_section_for_row(sidecar, row)
+        if media_section is None or media_section.t_start is None or media_section.low_confidence:
+            continue
+        if md_abs not in stale_cache:
+            stale_cache[md_abs] = _sidecar_stale_reasons(sidecar, md_abs)
+        if stale_cache[md_abs]:
+            continue
+        video = sidecar.video
+        title = _video_title(video, 1)
+        start = int(media_section.t_start)
+        end = int(media_section.t_end) if media_section.t_end is not None else None
+        url = _playlist_video_url(video, start)
+        items.append(
+            {
+                "heading": str(row.get("heading_text") or "Без названия"),
+                "source": Path(md_abs).name,
+                "title": title,
+                "start": start,
+                "end": end,
+                "duration": max(0, end - start) if end is not None else 0,
+                "url": url,
+            }
+        )
+    return items
+
+
+def render_playlist_panel(rows: list[dict[str, Any]]) -> None:
+    items = playlist_items_from_rows(rows)
+    if not items:
+        return
+    total_seconds = sum(int(item.get("duration") or 0) for item in items)
+    minutes = max(1, round(total_seconds / 60)) if total_seconds else len(items)
+    st.markdown(f"### 🎧 Мои {minutes} минут")
+    st.caption("Плейлист идёт в порядке собранных фрагментов и берёт только доверенные таймкоды.")
+    for idx, item in enumerate(items, start=1):
+        label = f"{idx}. {item['heading']} · {item['title']} · {_format_timestamp(item['start'])}"
+        if item.get("end") is not None:
+            label += f"–{_format_timestamp(item['end'])}"
+        if item.get("url"):
+            st.link_button(label, str(item["url"]), width="stretch")
+        else:
+            st.caption(f"{label} · {item['source']}")
+
+
+def _playlist_video_url(video: LocalVideoSource | UrlVideoSource, start: int) -> str | None:
+    if isinstance(video, LocalVideoSource):
+        return None
+    try:
+        normalized = normalize_video_url(video.canonical_url or video.url)
+    except ValueError:
+        return video.url
+    if normalized.is_youtube:
+        return normalized.with_timestamp(start)
+    return normalized.canonical_url
+
+
 def _expected_asr_params(video_abs: Path) -> dict[str, Any] | None:
     """Ожидаемый fingerprint ASR из <video>.segments.json — источник истины для sidecar.
 
@@ -277,5 +350,4 @@ def _render_all_lesson_videos_panel(rows: list[dict[str, Any]]) -> None:
                         _render_url_video_player(video, title)
                     elif isinstance(video, LocalVideoSource):
                         _render_local_video_player(video, title)
-
 

@@ -1,6 +1,6 @@
 # HTTP API
 
-Актуализировано по `app/api.py` и `app/routers/*`: 2026-06-30.
+Актуализировано по `app/api.py` и `app/routers/*`: 2026-07-06.
 
 Живая схема API доступна после запуска сервера:
 
@@ -50,6 +50,7 @@
 | `sessions` | `app/routers/sessions.py` | `/sessions`, `/sessions/{session_id}`, `/sessions/{session_id}/metadata` |
 | `knowledge` | `app/routers/knowledge.py` | `/topics`, `/synthesize`, `/learning-plan`, `/kb/*` |
 | `learner` | `app/routers/learner.py` | `/learner/goal-snapshot` |
+| `living-konspekt` | `app/routers/living_konspekt.py` | `/living-konspekt/workbench/status` |
 | `ssr-feedback` | `app/routers/feedback.py` | `/ssr/recommendation-feedback` |
 | `quiz` | `app/routers/quiz.py` | `/quiz/generate`, `/quiz/generate/scoped`, `/quiz/evaluate` |
 | `review` | `app/routers/review.py` | `/review/due` |
@@ -139,6 +140,12 @@ Feedback сохраняет структурные поля рекомендац
 | DELETE | `/learner/goal-snapshot` | очистить snapshot |
 
 Snapshot может подмешиваться в `/ask` для tutor goal fields.
+
+## Living Konspekt
+
+| Method | Path | Назначение |
+|---|---|---|
+| GET | `/living-konspekt/workbench/status` | read-only статус локальной корзины: `sections`, `with_notes`, `read` |
 
 ## Knowledge
 

@@ -16,12 +16,15 @@ from app.ui.living_konspekt_view import (
     _stitch_verbatim,
     _study_pack_tail,
     add_section_to_workbench,
+    clear_workbench,
     ensure_workbench_hydrated,
     get_workbench_rows,
     move_section_in_workbench,
     remove_section_from_workbench,
+    remove_sections_from_workbench,
     set_workbench_rows,
 )
+from app.ui.living_konspekt_next_steps import graph_lens_items
 from app.user_state_research import normalize_research_payload
 from app.ui.sidebar import apply_research_payload
 
@@ -72,6 +75,42 @@ class TestWorkbenchServiceV2:
 
         rows = workbench_service.remove_section(rows, rows[0]["row_key"], storage=storage)
         assert [row["heading_text"] for row in rows] == ["A"]
+
+    def test_remove_many_and_clear_with_storage_seam(self):
+        storage = workbench_service.InMemoryWorkbenchStorage()
+        rows: list[dict] = []
+        rows = workbench_service.add_section(rows, _section(MD_A, 10, heading="A"), storage=storage)
+        rows = workbench_service.add_section(rows, _section(MD_A, 20, heading="B"), storage=storage)
+        rows = workbench_service.add_section(rows, _section(MD_A, 30, heading="C"), storage=storage)
+
+        rows = workbench_service.remove_sections(
+            rows,
+            {rows[0]["row_key"], rows[2]["row_key"]},
+            storage=storage,
+        )
+
+        assert [row["heading_text"] for row in rows] == ["B"]
+        assert [row["heading_text"] for row in workbench_service.load_rows(storage)] == ["B"]
+        assert workbench_service.clear_rows(storage=storage) == []
+        assert storage.rows == []
+
+    def test_update_note_and_read_at_with_storage_seam(self):
+        storage = workbench_service.InMemoryWorkbenchStorage()
+        rows = workbench_service.add_section([], _section(MD_A, 10, heading="A"), storage=storage)
+        row_key = rows[0]["row_key"]
+
+        rows = workbench_service.update_section_fields(
+            rows,
+            row_key,
+            note="  моя мысль  ",
+            read_at="2026-07-06T10:00:00Z",
+            storage=storage,
+        )
+
+        assert rows[0]["note"] == "моя мысль"
+        assert rows[0]["read_at"] == "2026-07-06T10:00:00Z"
+        assert storage.rows[0]["note"] == "моя мысль"
+        assert storage.rows[0]["read_at"] == "2026-07-06T10:00:00Z"
 
     def test_load_rows_lazily_migrates_v1_abs_to_v2_rel(self):
         legacy_row = section_to_row(_section(MD_A, 10, heading="Legacy"))
@@ -137,6 +176,33 @@ class TestAddDedupRemove:
         rows = get_workbench_rows(state)
         assert len(rows) == 1
         assert rows[0]["line_start"] == 20
+
+    def test_remove_many_and_clear_update_injected_state(self):
+        state: dict = {}
+        add_section_to_workbench(_section(MD_A, 10, heading="A"), state)
+        add_section_to_workbench(_section(MD_A, 20, heading="B"), state)
+        add_section_to_workbench(_section(MD_A, 30, heading="C"), state)
+
+        rows = get_workbench_rows(state)
+        remove_sections_from_workbench({rows[0]["row_key"], rows[2]["row_key"]}, state)
+
+        assert [row["heading_text"] for row in get_workbench_rows(state)] == ["B"]
+        clear_workbench(state)
+        assert get_workbench_rows(state) == []
+
+    def test_note_and_read_progress_update_injected_state(self):
+        from app.ui.living_konspekt_view import mark_section_read_in_workbench, update_section_note_in_workbench
+
+        state: dict = {}
+        add_section_to_workbench(_section(MD_A, 10, heading="A"), state)
+        row_key = get_workbench_rows(state)[0]["row_key"]
+
+        update_section_note_in_workbench(row_key, "моя мысль", state)
+        mark_section_read_in_workbench(row_key, state)
+
+        row = get_workbench_rows(state)[0]
+        assert row["note"] == "моя мысль"
+        assert str(row["read_at"]).endswith("Z")
 
     def test_move_reorders_sections_inside_workbench(self):
         state: dict = {}
@@ -508,6 +574,19 @@ class TestCollectConceptContext:
         # "B" — сам концепт корзины (не показываем его как "недостающий prereq"); "Общий" дедупнут.
         assert prereqs == ["Общий"]
         assert related == ["C"]
+
+    def test_graph_lens_marks_missing_and_nearby_concepts(self, monkeypatch):
+        self._patch_kg(
+            monkeypatch,
+            {
+                "A": {"prerequisites": ["B"], "related_concepts": ["C"]},
+            },
+        )
+        row = replace(_section(MD_A, 10), concept="A")
+
+        items = graph_lens_items([_row(row)])
+
+        assert items == [{"kind": "missing", "label": "B"}, {"kind": "nearby", "label": "C"}]
 
     def test_no_concept_on_rows_returns_empty_without_touching_graph(self, monkeypatch):
         def _boom():

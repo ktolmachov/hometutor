@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,13 +28,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.media_alignment import (  # noqa: E402
     ALIGNMENT_VERSION,
+    AlignedSection,
     align_sections,
     compute_section_id,
     load_segments_file,
 )
 from app.media_sidecar import parse_media_sidecar, sha256_file  # noqa: E402
-from app.path_safety import resolve_data_relative_path  # noqa: E402
+from app.path_safety import data_relative_from_path, resolve_data_relative_path  # noqa: E402
 from app.section_index import parse_sections  # noqa: E402
+
+# Указатель sidecar в frontmatter конспекта. Применяется построчно (.match на одной
+# строке без \r/\n), поэтому CRLF- и LF-файлы обрабатываются одинаково; окончания
+# строк остального файла preservation см. в _ensure_frontmatter_pointer.
+_FRONTMATTER_POINTER_RE = re.compile(
+    r"media_sidecar:\s*[\"']?(?P<path>[^\"'\r\n#]+)[\"']?[ \t]*$"
+)
 
 
 def _utc_now() -> str:
@@ -115,10 +124,11 @@ def build_payload(
     video_rel: str,
     segments_path: Path,
     existing: dict | None,
-) -> dict:
+) -> tuple[dict, list[AlignedSection], float | None]:
     segments_file = load_segments_file(segments_path)
     sections = parse_sections(konspekt_abs)
     aligned = align_sections(sections, segments_file.segments)
+    media_duration = segments_file.segments[-1].end if segments_file.segments else None
 
     video_abs = resolve_data_relative_path(video_rel)
     video_sha = sha256_file(video_abs)
@@ -159,35 +169,136 @@ def build_payload(
             entry["images"] = preserved
         sections_payload.append(entry)
 
-    return {
-        "schema_version": 1,
-        "konspekt_sha256": sha256_file(konspekt_abs),
-        "media_sha256": video_entry["sha256"],
-        "generated_by": {
-            "tool": "scripts/build_media_sidecar.py",
-            "asr_model": segments_file.asr_model,
-            "alignment_version": ALIGNMENT_VERSION,
-            "created_at": _utc_now(),
-            # fingerprint ASR-параметров → stale detection (см. GeneratedBy.asr_params)
-            **({"asr_params": segments_file.asr_params} if segments_file.asr_params else {}),
+    return (
+        {
+            "schema_version": 1,
+            "konspekt_sha256": sha256_file(konspekt_abs),
+            "media_sha256": video_entry["sha256"],
+            "generated_by": {
+                "tool": "scripts/build_media_sidecar.py",
+                "asr_model": segments_file.asr_model,
+                "alignment_version": ALIGNMENT_VERSION,
+                "created_at": _utc_now(),
+                # fingerprint ASR-параметров → stale detection (см. GeneratedBy.asr_params)
+                **({"asr_params": segments_file.asr_params} if segments_file.asr_params else {}),
+            },
+            "media": {"video": video_entry, "videos": _preserved_videos(existing, video_entry)},
+            "sections": sections_payload,
         },
-        "media": {"video": video_entry, "videos": _preserved_videos(existing, video_entry)},
-        "sections": sections_payload,
+        aligned,
+        media_duration,
+    )
+
+
+def _fmt_ts(seconds: float | None) -> str:
+    """Человеко-читаемое время H:MM:SS / M:SS; None → «—».
+
+    Прежний формат «{мин}:{сек:02d}» ломался после часа (5400 c → «90:00»),
+    маскируя двухчасовые лекции.
+    """
+    if seconds is None:
+        return "—"
+    total = int(round(seconds))
+    h, total = divmod(total, 3600)
+    m, s = divmod(total, 60)
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+
+
+def _coverage_metrics(
+    payload: dict, aligned: list[AlignedSection], media_duration: float | None
+) -> dict:
+    """Продуктовые метрики покрытия для отчёта и batch-манифеста.
+
+    Метки считаются по реальному флагу ``aligned.anchored``, а не по confidence:
+    payload хранит только confidence, поэтому прежний отчёт не мог отличить
+    настоящий якорь (выживший LIS) со score 0.18–0.40 от интерполяции — оба
+    оказывались «ниже 0.70» и клались в одну корзину «интерполировано».
+    """
+    sections = payload["sections"]
+    with_ts = [s for s in sections if "t_start" in s]
+    confident = [s for s in with_ts if s["confidence"] >= 0.70]
+    anchored_n = sum(1 for a in aligned if a.anchored)
+    interpolated_n = sum(1 for a in aligned if (not a.anchored) and a.t_start is not None)
+    no_ts_n = sum(1 for a in aligned if a.t_start is None)
+    # «Мои 18 минут»: суммарная длительность confident-фрагментов (ставка W5.5/W6).
+    playlist_seconds = 0.0
+    for s in confident:
+        t0, t1 = s.get("t_start"), s.get("t_end")
+        if t0 is not None and t1 is not None and t1 > t0:
+            playlist_seconds += t1 - t0
+    return {
+        "sections": len(sections),
+        "with_timestamp": len(with_ts),
+        "anchored": anchored_n,
+        "interpolated": interpolated_n,
+        "no_timestamp": no_ts_n,
+        "confident": len(confident),
+        "playlist_seconds": round(playlist_seconds, 2),
+        "media_seconds": round(media_duration, 2) if media_duration is not None else None,
     }
 
 
-def _print_coverage(payload: dict) -> None:
+def _print_coverage(
+    payload: dict, aligned: list[AlignedSection], media_duration: float | None
+) -> None:
     sections = payload["sections"]
-    with_ts = [s for s in sections if "t_start" in s]
-    anchored = [s for s in with_ts if s["confidence"] >= 0.70]
-    print(f"Разделов: {len(sections)}; с таймкодом: {len(with_ts)} "
-          f"(якорных: {len(anchored)}, интерполировано: {len(with_ts) - len(anchored)})")
-    for s in sections[:12]:
+    m = _coverage_metrics(payload, aligned, media_duration)
+    print(
+        f"Разделов: {m['sections']}; с таймкодом: {m['with_timestamp']} "
+        f"(якорей: {m['anchored']}, интерполировано: {m['interpolated']}, без таймкода: {m['no_timestamp']})"
+    )
+    print(
+        f"Confident (≥0.70, кликабельны в UI): {m['confident']}/{m['sections']} · "
+        f"плейлист-готово: {_fmt_ts(m['playlist_seconds'])} из {_fmt_ts(m['media_seconds'])}"
+    )
+    for a, s in list(zip(aligned, sections))[:12]:
         ts = s.get("t_start")
-        mark = f"{int(ts // 60):3d}:{int(ts % 60):02d}" if ts is not None else "  — "
-        print(f"  [{mark}] conf={s['confidence']:.2f}  {s['heading'][:70]}")
+        kind = "⚓" if a.anchored else ("≈" if a.t_start is not None else "·")
+        print(f"  [{_fmt_ts(ts):>7}] conf={s['confidence']:.2f} {kind} {s['heading'][:70]}")
     if len(sections) > 12:
         print(f"  … ещё {len(sections) - 12} разделов")
+
+
+def _write_coverage_json(path: Path, metrics: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(metrics, ensure_ascii=False, indent=2), encoding="utf-8", newline="\n")
+
+
+def _insert_frontmatter_line(text: str, line: str, nl: str) -> str:
+    """Вставляет ``line`` в YAML frontmatter (после открывающего ``---``) или создаёт новый блок."""
+    if text.startswith("---"):
+        first_nl = text.find(nl)
+        if first_nl != -1:
+            return text[: first_nl + len(nl)] + line + nl + text[first_nl + len(nl) :]
+    return f"---{nl}{line}{nl}---{nl}{nl}" + text
+
+
+def _ensure_frontmatter_pointer(konspekt_abs: Path, sidecar_abs: Path) -> tuple[bool, str]:
+    """Идемпотентная запись ``media_sidecar:`` в frontmatter конспекта.
+
+    Без указателя sidecar невидим приложению: обнаружение идёт ТОЛЬКО через
+    frontmatter (``app.media_sidecar``), co-location fallback'а нет. Построчная
+    обработка с определением разделителя сохраняет окончания строк остального
+    файла (минимальный diff) и корректно работает с CRLF и LF.
+    """
+    sidecar_rel = data_relative_from_path(sidecar_abs)
+    raw = konspekt_abs.read_bytes()
+    nl = "\r\n" if b"\r\n" in raw[:8192] else "\n"
+    text = raw.decode("utf-8")
+    desired = f"media_sidecar: {sidecar_rel}"
+
+    parts = [p.rstrip("\r") for p in text.split("\n")]
+    idx = next((i for i, ln in enumerate(parts) if _FRONTMATTER_POINTER_RE.match(ln)), None)
+    if idx is not None:
+        current = _FRONTMATTER_POINTER_RE.match(parts[idx]).group("path").strip().strip("'\"")
+        if current == sidecar_rel:
+            return False, f"Frontmatter уже подключён: {desired}"
+        parts[idx] = desired
+        konspekt_abs.write_bytes(nl.join(parts).encode("utf-8"))
+        return True, f"Обновлён frontmatter (было «{current}»): {desired}"
+
+    konspekt_abs.write_bytes(_insert_frontmatter_line(text, desired, nl).encode("utf-8"))
+    return True, f"Добавлен frontmatter: {desired}"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -199,6 +310,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--video", help="Data-relative путь к видео (default: из существующего sidecar)")
     parser.add_argument("--segments", help="Путь к .segments.json (default: рядом с конспектом/видео)")
     parser.add_argument("--dry-run", action="store_true", help="Показать покрытие, файл не писать")
+    parser.add_argument(
+        "--coverage-json",
+        help="Абсолютный путь, куда записать метрики покрытия (для batch-манифеста)",
+    )
+    parser.add_argument(
+        "--no-frontmatter",
+        action="store_true",
+        help="Не записывать указатель media_sidecar: в frontmatter конспекта",
+    )
     args = parser.parse_args(argv)
 
     konspekt_abs, _ = _resolve_konspekt(args.konspekt)
@@ -227,19 +347,26 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    payload = build_payload(
+    payload, aligned, media_duration = build_payload(
         konspekt_abs=konspekt_abs, video_rel=video_rel, segments_path=segments_path, existing=existing
     )
     parse_media_sidecar(payload)  # контрактная валидация до записи
 
-    _print_coverage(payload)
+    _print_coverage(payload, aligned, media_duration)
+    if args.coverage_json:
+        _write_coverage_json(Path(args.coverage_json), _coverage_metrics(payload, aligned, media_duration))
+
     if args.dry_run:
         print("(dry-run: файл не записан)")
         return 0
     sidecar_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8", newline="\n")
     print(f"Записано: {sidecar_path}")
-    if existing is None:
-        print(f"Не забудьте frontmatter-указатель в конспекте: media_sidecar: <data-relative путь к {sidecar_path.name}>")
+    if args.no_frontmatter:
+        print(f"Указатель для frontmatter (добавьте вручную): media_sidecar: "
+              f"{data_relative_from_path(sidecar_path)}")
+    else:
+        _wired, msg = _ensure_frontmatter_pointer(konspekt_abs, sidecar_path)
+        print(msg)
     return 0
 
 

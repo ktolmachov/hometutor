@@ -83,7 +83,9 @@ def build_artifact_body(rows: list[dict[str, Any]]) -> str:
         location = f"{source_name}:{row.get('line_start')}"
         media_line = _media_line_for_row(row, sidecar_cache, stale_cache)
         source_block = f"*Источник: {location}*" + (f"\n\n{media_line}" if media_line else "")
-        parts.append(f"## {heading}\n\n{source_block}\n\n{row.get('text') or ''}")
+        note = str(row.get("note") or "").strip()
+        note_block = f"\n\n### 💬 Моими словами\n\n{note}" if note else ""
+        parts.append(f"## {heading}\n\n{source_block}\n\n{row.get('text') or ''}{note_block}")
 
     blocks: list[str] = []
     if header_parts:

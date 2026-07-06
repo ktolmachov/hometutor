@@ -86,6 +86,27 @@ def _collect_concept_context(rows: list[dict[str, Any]]) -> tuple[list[str], lis
     return prereqs_dedup, related_dedup
 
 
+def graph_lens_items(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
+    prerequisites, related = _collect_concept_context(rows)
+    items = [{"kind": "missing", "label": value} for value in prerequisites[:5]]
+    items.extend({"kind": "nearby", "label": value} for value in related[:5])
+    return items
+
+
+def render_graph_lens_panel(rows: list[dict[str, Any]]) -> None:
+    items = graph_lens_items(rows)
+    if not items:
+        return
+    st.markdown("### 🕸 Граф-линза")
+    st.caption("Что граф видит рядом с собранными фрагментами: недостающие prerequisites и соседние темы.")
+    missing = [item["label"] for item in items if item["kind"] == "missing"]
+    nearby = [item["label"] for item in items if item["kind"] == "nearby"]
+    if missing:
+        st.markdown("**Стоит добавить/повторить:** " + ", ".join(missing))
+    if nearby:
+        st.markdown("**Рядом по графу:** " + ", ".join(nearby))
+
+
 def render_deep_study_panel(rows: list[dict[str, Any]]) -> None:
     st.markdown("### 🧠 Промпт для глубокого изучения")
     topic = str(st.session_state.get("living_konspekt_title") or "Рабочий конспект")

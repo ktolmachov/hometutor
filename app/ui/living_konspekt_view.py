@@ -340,12 +340,29 @@ def _heading_ambiguous(md_abs: str, heading_text: str) -> bool:
         return False
 
 
+def _row_section_id(row: dict[str, Any]) -> str | None:
+    """Стабильный section_id строки (контент-хэш) — переживает сдвиг line_start."""
+    if not (row.get("heading_text") and (row.get("own_text") or row.get("text"))):
+        return None
+    try:
+        from app.media_alignment import compute_section_id
+
+        return compute_section_id(row_to_section(row))
+    except Exception:  # noqa: BLE001 - деградация к позиционному матчингу, не падение рендера
+        return None
+
+
 def _media_section_for_row(sidecar: MediaSidecar, row: dict[str, Any]) -> MediaSection | None:
     row_slug = str(row.get("slug") or "")
     row_heading = str(row.get("heading_text") or "")
     row_line_start = int(row.get("line_start") or 0)
     row_line_end = int(row.get("line_end") or 0)
 
+    row_id = _row_section_id(row)
+    if row_id is not None:
+        for section in sidecar.sections:
+            if section.section_id == row_id:
+                return section
     for section in sidecar.sections:
         if section.section_slug == row_slug and section.line_start == row_line_start:
             return section

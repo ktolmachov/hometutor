@@ -135,10 +135,26 @@ def _build_blocks(segments: tuple[TranscriptSegment, ...]) -> list[_Block]:
     return blocks
 
 
+def _background_tokens(blocks: list[_Block]) -> frozenset[str]:
+    """Токены-фон: звучат в большинстве блоков лекции (общие термины, слова-связки).
+
+    Они не различают темы, но пересекаются с любым разделом — без фильтра якорь
+    «прилипает» к чужому блоку, а уточнение t_start — к первому попавшемуся сегменту.
+    """
+    if len(blocks) < 4:
+        return frozenset()
+    counts: dict[str, int] = {}
+    for block in blocks:
+        for token in block.tokens:
+            counts[token] = counts.get(token, 0) + 1
+    threshold = len(blocks) / 2
+    return frozenset(t for t, n in counts.items() if n > threshold)
+
+
 def _refine_t_start(
     tokens: frozenset[str], block: _Block, segments: tuple[TranscriptSegment, ...]
 ) -> float:
-    """Начало — не блок целиком, а первый его сегмент с лексикой раздела."""
+    """Начало — не блок целиком, а первый его сегмент с различительной лексикой раздела."""
     for idx in range(block.seg_lo, block.seg_hi + 1):
         if tokens & tokenize_filtered(segments[idx].text):
             return segments[idx].start
@@ -193,14 +209,23 @@ def align_sections(
             for s in sections
         ]
 
+    background = _background_tokens(blocks)
+    scoring_blocks = [
+        _Block(
+            t_start=b.t_start, t_end=b.t_end, tokens=frozenset(b.tokens - background),
+            seg_lo=b.seg_lo, seg_hi=b.seg_hi,
+        )
+        for b in blocks
+    ]
+
     section_tokens: dict[int, frozenset[str]] = {}
     candidates: list[tuple[int, int, float]] = []  # (section_pos, block_idx, score)
     for pos, section in enumerate(sections):
-        tokens = frozenset(tokenize_filtered(section.own_text or section.text))
+        tokens = frozenset(tokenize_filtered(section.own_text or section.text) - background)
         if len(tokens) < _MIN_SECTION_TOKENS:
             continue
         section_tokens[pos] = tokens
-        scores = [_overlap_score(tokens, block) for block in blocks]
+        scores = [_overlap_score(tokens, block) for block in scoring_blocks]
         block_idx = max(range(len(blocks)), key=lambda i: scores[i])
         if scores[block_idx] >= _MIN_ANCHOR_SCORE:
             candidates.append((pos, block_idx, scores[block_idx]))

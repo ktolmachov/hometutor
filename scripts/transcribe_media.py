@@ -44,6 +44,41 @@ def _load_existing(segments_path: Path) -> dict | None:
         return None
 
 
+def _data_dir() -> Path:
+    from app.path_safety import resolve_data_relative_path
+
+    return resolve_data_relative_path(".").resolve()
+
+
+def _import_media_to_data(media: Path, target_rel_dir: str) -> Path:
+    """Копировать внешний медиафайл в DATA_DIR/<target_rel_dir>/ (ADR 0002)."""
+    from app.path_safety import resolve_data_relative_path, validate_data_relative_path
+
+    rel_dir = validate_data_relative_path(target_rel_dir)
+    target_dir = resolve_data_relative_path(rel_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / media.name
+    if target.resolve() == media.resolve():
+        return media
+    if target.exists() and sha256_file(target) == sha256_file(media):
+        print(f"Импорт: {target} уже существует с тем же содержимым — копирование пропущено.")
+        return target
+    print(f"Импорт в DATA_DIR: {media} → {target} ({media.stat().st_size / 1e6:.0f} МБ)…")
+    shutil.copy2(media, target)
+    return target
+
+
+def _asr_params_fingerprint(model: str, language: str, beam_size: int) -> dict:
+    """Все параметры, влияющие на результат ASR — участвуют в идемпотентности."""
+    return {
+        "schema_version": SEGMENTS_SCHEMA_VERSION,
+        "model": model,
+        "language_requested": language,
+        "beam_size": beam_size,
+        "vad_filter": True,
+    }
+
+
 def _import_whisper():
     try:
         from faster_whisper import WhisperModel
@@ -57,7 +92,7 @@ def _import_whisper():
     return WhisperModel
 
 
-def transcribe(media: Path, *, model_name: str, language: str | None, device: str) -> dict:
+def transcribe(media: Path, *, model_name: str, language: str, device: str, beam_size: int) -> dict:
     WhisperModel = _import_whisper()
     print(f"[1/3] Загрузка модели {model_name} (device={device})…")
     model = WhisperModel(model_name, device=device, compute_type="auto")
@@ -65,9 +100,9 @@ def transcribe(media: Path, *, model_name: str, language: str | None, device: st
     started = time.monotonic()
     segments_iter, info = model.transcribe(
         str(media),
-        language=None if language in (None, "auto") else language,
+        language=None if language == "auto" else language,
         vad_filter=True,
-        beam_size=5,
+        beam_size=beam_size,
     )
     segments = []
     for seg in segments_iter:
@@ -83,6 +118,7 @@ def transcribe(media: Path, *, model_name: str, language: str | None, device: st
             "model": model_name,
             "language": info.language,
             "created_at": _utc_now(),
+            "params": _asr_params_fingerprint(model_name, language, beam_size),
         },
         "segments": segments,
     }
@@ -123,6 +159,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", default="large-v3", help="Модель faster-whisper (default: large-v3)")
     parser.add_argument("--language", default="auto", help="Код языка или auto (default: auto)")
     parser.add_argument("--device", default="auto", choices=["auto", "cuda", "cpu"])
+    parser.add_argument("--beam-size", type=int, default=5, help="beam_size faster-whisper (default: 5)")
+    parser.add_argument(
+        "--import-to-data",
+        metavar="REL_DIR",
+        help="Скопировать внешний файл в DATA_DIR/<REL_DIR>/ и работать с копией (ADR 0002)",
+    )
     parser.add_argument("--remux", action="store_true", help="Также сделать браузерный .mp4 (нужен ffmpeg)")
     parser.add_argument("--force", action="store_true", help="Игнорировать существующий .segments.json")
     args = parser.parse_args(argv)
@@ -136,26 +178,42 @@ def main(argv: list[str] | None = None) -> int:
               file=sys.stderr)
         return 2
 
+    if args.import_to_data:
+        media = _import_media_to_data(media, args.import_to_data)
+    else:
+        try:
+            media.relative_to(_data_dir())
+        except ValueError:
+            print(
+                f"ВНИМАНИЕ: {media} лежит вне DATA_DIR ({_data_dir()}). Артефакты рядом с ним\n"
+                "не смогут использоваться sidecar-контрактом (data-relative paths). Используйте\n"
+                "--import-to-data <относительная-папка>, чтобы импортировать файл в DATA_DIR.",
+                file=sys.stderr,
+            )
+
     segments_path = media.with_suffix(".segments.json")
     txt_path = media.with_suffix(".txt")
 
     print(f"Хэширование {media.name} ({media.stat().st_size / 1e6:.0f} МБ)…")
     media_sha = sha256_file(media)
 
+    fingerprint = _asr_params_fingerprint(args.model, args.language, args.beam_size)
     existing = _load_existing(segments_path)
     if (
         not args.force
         and existing is not None
         and existing.get("media_sha256") == media_sha
-        and (existing.get("asr") or {}).get("model") == args.model
+        and ((existing.get("asr") or {}).get("params") or {}) == fingerprint
     ):
         print(f"Актуальный {segments_path.name} уже существует ({len(existing.get('segments') or [])} "
-              "сегментов) — пропускаю. Используйте --force для повторной транскрибации.")
+              "сегментов, те же ASR-параметры) — пропускаю. --force для повторной транскрибации.")
         if args.remux:
             remux_to_mp4(media)
         return 0
 
-    result = transcribe(media, model_name=args.model, language=args.language, device=args.device)
+    result = transcribe(
+        media, model_name=args.model, language=args.language, device=args.device, beam_size=args.beam_size
+    )
     payload = {
         "schema_version": SEGMENTS_SCHEMA_VERSION,
         "media_sha256": media_sha,

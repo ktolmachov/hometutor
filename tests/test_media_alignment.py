@@ -126,6 +126,37 @@ def test_anchor_t_end_stretches_to_next_timestamp():
     assert aligned[1].t_end == segments[-1].end
 
 
+def test_alignment_survives_shared_vocabulary_between_topics():
+    """Реалистичный случай: общие термины (модель, токен, агент…) звучат всю лекцию,
+    темы различаются лишь частью лексики. Якоря обязаны остаться хронологичными и
+    попасть в окно своей темы."""
+    shared = " ".join(f"общий{i}" for i in range(15))  # фон, повторяющийся в каждом сегменте
+    topics = ["альфа", "бета", "гамма", "дельта"]
+    segments: list[TranscriptSegment] = []
+    t = 0.0
+    for topic in topics:
+        for chunk in range(8):
+            specific = " ".join(f"{topic}слово{chunk * 12 + i}" for i in range(12))
+            segments.append(TranscriptSegment(start=t, end=t + 30.0, text=f"{shared} {specific}"))
+            t += 30.0
+    sections = [
+        _section(
+            f"Тема {topic}",
+            f"{shared} " + " ".join(f"{topic}слово{i}" for i in range(30)),
+            i,
+        )
+        for i, topic in enumerate(topics)
+    ]
+
+    aligned = align_sections(sections, tuple(segments))
+
+    starts = [a.t_start for a in aligned]
+    assert all(s is not None for s in starts)
+    assert starts == sorted(starts)
+    for i, a in enumerate(aligned):
+        assert i * 240.0 <= a.t_start < (i + 1) * 240.0, (i, a.t_start)
+
+
 def test_section_id_stable_and_content_sensitive():
     a1 = _section("Тема", _topic_text("альфа"), 0)
     a2 = _section("Тема", _topic_text("альфа"), 5)  # другие строки — id тот же

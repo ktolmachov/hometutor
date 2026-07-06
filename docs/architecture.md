@@ -228,7 +228,10 @@ AI/ML компоненты подключаются как gated enrichment/rera
 ## Multimodal media metadata
 
 M0a/M0.3 мультимодального конспекта добавляют metadata contract и осторожный render в
-«Живом конспекте», без ASR, VLM, `media_progress` и новых LLM-вызовов.
+«Живом конспекте», без VLM, `media_progress` и новых LLM-вызовов. ASR-конвейер M1
+(`scripts/transcribe_media.py` → `app/media_alignment.py` → `scripts/build_media_sidecar.py`)
+существует как offline maintainer-прототип с юнит-тестами: приложение его не вызывает,
+benchmark-spike из `docs/adr/0002-asr-dependency-strategy.md` не проведён.
 
 Ключевые модули:
 

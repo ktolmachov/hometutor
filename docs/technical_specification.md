@@ -253,6 +253,9 @@ timestamp не ниже порога. Stale, low-confidence, missing local media
   реального `JWT_SECRET` (fail-fast guard — дефолтный dev-секрет отклоняется на старте).
 - HF Spaces demo-деплой работает на эфемерном FS контейнера: аккаунты и прогресс не персистентны
   между перезапусками Space.
-- Multimodal M0a/M0.3 — это metadata plumbing и media panel: ASR, VLM captions,
-  timestamped source cards, автоматическое создание sidecar и `media_progress` ещё не
-  являются runtime-возможностями.
+- Multimodal M0a/M0.3 — это metadata plumbing и media panel. M1 (ASR + автоматическое
+  создание sidecar) существует как offline maintainer-скрипты-прототипы
+  (`scripts/transcribe_media.py`, `scripts/build_media_sidecar.py`, `app/media_alignment.py`);
+  приложение их не вызывает, benchmark-spike из ADR 0002 не проведён — статус
+  «partially prototyped, not production-ready». VLM captions, timestamped source cards
+  и `media_progress` не являются runtime-возможностями.

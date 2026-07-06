@@ -41,10 +41,23 @@ def _utc_now() -> str:
 
 
 def _resolve_konspekt(raw: str) -> tuple[Path, str]:
-    """(абсолютный путь, data-relative строка) для конспекта."""
+    """(абсолютный путь, data-relative строка) для конспекта.
+
+    Абсолютный путь допустим только внутри DATA_DIR: sidecar-контракт хранит
+    data-relative пути, конспект вне DATA_DIR им не адресуем.
+    """
+    data_root = resolve_data_relative_path(".").resolve()
     p = Path(raw)
     if p.is_absolute():
-        return p.resolve(), ""
+        abs_path = p.resolve()
+        try:
+            rel = abs_path.relative_to(data_root)
+        except ValueError:
+            raise SystemExit(
+                f"Конспект {abs_path} лежит вне DATA_DIR ({data_root}) — "
+                "sidecar-контракт требует data-relative путей."
+            ) from None
+        return abs_path, rel.as_posix()
     abs_path = resolve_data_relative_path(raw)
     return abs_path, raw.replace("\\", "/")
 
@@ -82,13 +95,18 @@ def _preserved_videos(existing: dict | None, video_entry: dict) -> list[dict]:
     return videos
 
 
-def _preserved_images(existing: dict | None) -> dict[tuple[str, int], list[dict]]:
-    out: dict[tuple[str, int], list[dict]] = {}
+def _preserved_images(existing: dict | None) -> tuple[dict[str, list[dict]], dict[tuple[str, int], list[dict]]]:
+    """Картинки старого sidecar: сначала по стабильному section_id, затем fallback."""
+    by_id: dict[str, list[dict]] = {}
+    by_pos: dict[tuple[str, int], list[dict]] = {}
     for raw in (existing or {}).get("sections") or []:
         images = raw.get("images") or []
-        if images:
-            out[(str(raw.get("section_slug")), int(raw.get("line_start") or 0))] = images
-    return out
+        if not images:
+            continue
+        if raw.get("section_id"):
+            by_id[str(raw["section_id"]).lower()] = images
+        by_pos[(str(raw.get("section_slug")), int(raw.get("line_start") or 0))] = images
+    return by_id, by_pos
 
 
 def build_payload(
@@ -103,19 +121,29 @@ def build_payload(
     aligned = align_sections(sections, segments_file.segments)
 
     video_abs = resolve_data_relative_path(video_rel)
+    video_sha = sha256_file(video_abs)
+    if segments_file.media_sha256 and segments_file.media_sha256.lower() != video_sha.lower():
+        raise SystemExit(
+            f"Сегменты {segments_path.name} получены НЕ из этого видео:\n"
+            f"  segments.media_sha256 = {segments_file.media_sha256}\n"
+            f"  sha256({video_rel})   = {video_sha}\n"
+            "Транскрибируйте именно этот файл (например, playable .mp4 после ремукса):\n"
+            f'  python scripts/transcribe_media.py "{video_abs}"'
+        )
     video_entry = {
         "kind": "local",
         "path": video_rel.replace("\\", "/"),
-        "sha256": segments_file.media_sha256 or sha256_file(video_abs),
+        "sha256": video_sha,
         "title": video_abs.stem.replace("_", " "),
     }
-    images_by_key = _preserved_images(existing)
+    images_by_id, images_by_pos = _preserved_images(existing)
 
     sections_payload = []
     for item in aligned:
         s = item.section
+        section_id = compute_section_id(s)
         entry: dict = {
-            "section_id": compute_section_id(s),
+            "section_id": section_id,
             "section_slug": s.slug,
             "heading": s.heading_text,
             "line_start": s.line_start,
@@ -126,7 +154,7 @@ def build_payload(
             entry["t_start"] = item.t_start
         if item.t_end is not None:
             entry["t_end"] = item.t_end
-        preserved = images_by_key.get((s.slug, s.line_start))
+        preserved = images_by_id.get(section_id) or images_by_pos.get((s.slug, s.line_start))
         if preserved:
             entry["images"] = preserved
         sections_payload.append(entry)

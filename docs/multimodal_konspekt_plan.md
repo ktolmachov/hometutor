@@ -305,19 +305,33 @@ data/courses/autonomy/lecture_01/The_Architecture_of_Autonomy.segments.json
 MVP должен начинаться с post-hoc alignment: его легче тестировать, легче инвалидировать и он не зависит
 от поведения LLM.
 
-**Статус реализации (2026-07-06):** конвейер §4.2–4.3 реализован.
+**Статус реализации (2026-07-06): M1 partially prototyped, not production-ready.**
+Конвейер §4.2–4.3 существует как offline maintainer-скрипты с юнит-тестами; приложение их
+не вызывает, benchmark-spike из ADR 0002 не проведён.
 
-- `scripts/transcribe_media.py` — ASR через faster-whisper (extra `asr`); аудио декодируется из
-  медиафайла напрямую (PyAV), системный ffmpeg нужен только для `--remux` (`.ts` → браузерный `.mp4`
-  без перекодирования); идемпотентность по sha256 медиа; пишет `<stem>.segments.json` + `<stem>.txt`.
-- `app/media_alignment.py` — post-hoc выравнивание `anchor-lis-v1`: блочный токенный скоринг
-  (`tokenize_filtered`) → взвешенный LIS (гарантия хронологии) → уточнение `t_start` до сегмента →
-  интерполяция промежуточных разделов с confidence < 0.70. Тесты: `tests/test_media_alignment.py`.
-- `scripts/build_media_sidecar.py` — собирает/обновляет `<konspekt>.media.json` (schema v1),
-  сохраняет существующие `media.videos` (в т.ч. YouTube) и картинки разделов, валидирует контракт
-  `parse_media_sidecar` до записи; `--dry-run` показывает покрытие таймкодами.
+- `scripts/transcribe_media.py` — ASR через faster-whisper (**только** extra `asr`, не в
+  requirements.txt — ADR 0002); аудио декодируется из медиафайла напрямую (PyAV), системный
+  ffmpeg нужен только для `--remux` (`.ts` → браузерный `.mp4` без перекодирования);
+  `--import-to-data <rel-dir>` копирует внешний файл в `DATA_DIR` (файл вне `DATA_DIR` без
+  импорта — явное предупреждение); идемпотентность по sha256 медиа + полному fingerprint
+  ASR-параметров (model, language, beam_size, VAD, schema); пишет `<stem>.segments.json`
+  (segment-level таймкоды; word-level в M1 сознательно не сохраняются) + `<stem>.txt`.
+- `app/media_alignment.py` — post-hoc выравнивание `anchor-lis-v1`: IDF-фильтр фоновой
+  лексики → блочный токенный скоринг (`tokenize_filtered`) → взвешенный LIS (гарантия
+  хронологии) → уточнение `t_start` до сегмента → интерполяция промежуточных разделов с
+  confidence < 0.70; стабильный `section_id` (контент-хэш) — первичный ключ матчинга в UI,
+  позиционный матчинг остаётся fallback. Тесты: `tests/test_media_alignment.py` (включая
+  регрессию на общую повторяющуюся лексику тем), `tests/test_media_section_matching.py`.
+- `scripts/build_media_sidecar.py` — собирает/обновляет `<konspekt>.media.json` (schema v1);
+  конспект принимается только внутри `DATA_DIR`; `segments.media_sha256` сверяется с реальным
+  sha256 видео (несовпадение — отказ с инструкцией); сохраняет существующие `media.videos`
+  (в т.ч. YouTube) и картинки разделов (ключ — `section_id`, fallback — slug+line);
+  валидация контракта `parse_media_sidecar` до записи; `--dry-run` показывает покрытие.
 
-Compose-time hints (§4.3 п.1) не реализованы — остаются следующим уровнем точности.
+Не сделано (границы прототипа): benchmark-spike (никаких обещаний скорости/качества до него),
+ручная проверка `st.video(start_time=…)` на реальном mp4, качество выравнивания на реальной
+4–5-часовой лекции (тесты синтетические, хоть и с повторяющейся лексикой), compose-time hints
+(§4.3 п.1), runtime-интеграция (`ASR_ENABLED`, вызовы из приложения).
 
 ### 4.4 Минимальный путь (MVP-0, без ASR)
 

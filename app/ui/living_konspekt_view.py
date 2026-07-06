@@ -13,6 +13,7 @@ from typing import Any, MutableMapping
 
 import streamlit as st
 
+from app import artifact_manifest
 from app.media_sidecar import UrlVideoSource, load_media_sidecar_for_konspekt
 from app.media_urls import normalize_video_url
 from app import workbench_service
@@ -43,6 +44,8 @@ from app.ui.widgets import render_panel_header
 WORKBENCH_SECTIONS_KEY = workbench_service.WORKBENCH_SECTIONS_KEY
 _WORKBENCH_KV_KEY = workbench_service.WORKBENCH_KV_KEY
 _WORKBENCH_HYDRATED_KEY = "_workbench_hydrated"
+_ACTIVE_ARTIFACT_ID_KEY = "living_konspekt_active_artifact_id"
+_LAST_SAVED_BODY_KEY = "living_konspekt_last_saved_body"
 
 _SLUG_RE = re.compile(r"[^\w\-]+", re.UNICODE)
 
@@ -379,22 +382,13 @@ def _stitch_verbatim(rows: list[dict[str, Any]]) -> str:
     return "\n\n".join(blocks)
 
 
-def _filename_slug(title: str) -> str:
-    s = title.strip().lower()
-    s = _SLUG_RE.sub("-", s).strip("-")
-    return s or "konspekt"
-
-
-def _unique_target_path(base_dir: Path, slug: str) -> Path:
-    candidate = base_dir / f"{slug}.md"
-    counter = 1
-    while candidate.exists():
-        candidate = base_dir / f"{slug}-{counter}.md"
-        counter += 1
-    return candidate
-
-
-def _save_living_konspekt(title: str, body_markdown: str) -> Path:
+def _save_living_konspekt(
+    title: str,
+    body_markdown: str,
+    rows: list[dict[str, Any]],
+    *,
+    artifact_id: str | None = None,
+) -> Path:
     """Сохранить в ``vault_root()/"living-konspekt"/<slug>.md`` — НЕ ``vault_target()``.
 
     ``vault_target()`` требует ``source_abs`` и зеркалит путь исходника; у рабочего
@@ -404,8 +398,21 @@ def _save_living_konspekt(title: str, body_markdown: str) -> Path:
 
     target_dir = vault_root() / "living-konspekt"
     target_dir.mkdir(parents=True, exist_ok=True)
-    target_path = _unique_target_path(target_dir, _filename_slug(title))
-    target_path.write_text(f"# {title}\n\n{body_markdown}\n", encoding="utf-8")
+    persisted_rows = workbench_service.persisted_rows_from_runtime(rows)
+    normalized_artifact_id = artifact_manifest.artifact_id_from_title(artifact_id or title)
+    target_path = artifact_manifest.target_path_for_artifact(vault_root(), title, normalized_artifact_id)
+    previous_manifest = None
+    if target_path.exists():
+        previous_manifest = artifact_manifest.parse_manifest(target_path.read_text(encoding="utf-8", errors="replace"))
+    manifest = artifact_manifest.serialize_manifest(
+        title,
+        persisted_rows,
+        artifact_manifest.collect_sidecar_pointers(persisted_rows),
+        artifact_id=normalized_artifact_id,
+        goal=previous_manifest.goal if previous_manifest is not None else None,
+        created_at=previous_manifest.created_at if previous_manifest is not None else None,
+    )
+    target_path.write_text(f"{manifest}# {title}\n\n{body_markdown}\n", encoding="utf-8")
     return target_path
 
 
@@ -620,6 +627,91 @@ def _render_collected_sections(rows: list[dict[str, Any]]) -> None:
                     st.rerun()
 
 
+def _build_living_konspekt_body(topic: str, rows: list[dict[str, Any]], mode: str) -> str:
+    if mode.startswith("Дословная"):
+        return _stitch_verbatim(rows)
+    from app.knowledge_synthesis import synthesize_sections  # heavy: LLM/Chroma services
+
+    sections = [row_to_section(row) for row in rows]
+    result = synthesize_sections(topic=topic, sections=sections)
+    # Study Pack tail и для LLM-режима: summary модели без «Проверь себя» и
+    # точных «файл:строки» — статичная выжимка, а не живой конспект.
+    return "\n\n".join(block for block in (str(result["summary"]).strip(), _study_pack_tail(rows)) if block)
+
+
+def _open_print_living_konspekt(title: str, body: str, rows: list[dict[str, Any]]) -> None:
+    from app.ui.print_view import open_print_view
+
+    documents = list(dict.fromkeys(_row_konspekt_label(row) for row in rows))
+    open_print_view(
+        title=title,
+        subtitle="Живой конспект для печати или PDF.",
+        body_md=body,
+        export_md=f"# {title}\n\n{body}\n",
+        documents=documents,
+        sources=[
+            {
+                "file_name": _row_konspekt_label(row),
+                "text": str(row.get("heading_text") or ""),
+                "line_start": row.get("line_start"),
+                "line_end": row.get("line_end"),
+            }
+            for row in rows
+        ],
+    )
+
+
+def _request_reindex_from_ui() -> None:
+    from app.ui_client import fetch_json
+
+    fetch_json("POST", "/reindex", timeout=30, params={"reset": False})
+    st.session_state["poll_reindex_status"] = True
+
+
+def _render_saved_artifacts_panel() -> None:
+    from app.obsidian_export import obsidian_uri, vault_root, vscode_uri
+
+    st.markdown("### Мои конспекты")
+    artifacts = artifact_manifest.scan_saved_artifacts(vault_root())
+    if not artifacts:
+        st.caption("Сохранённых живых конспектов пока нет.")
+        return
+
+    for idx, artifact in enumerate(artifacts):
+        with st.container(border=True):
+            cols = st.columns([5, 1.2, 1.2, 1.2])
+            with cols[0]:
+                st.markdown(f"**{artifact.title}**")
+                st.caption(
+                    f"{artifact.name} · разделов: {artifact.section_count} · обновлён: {artifact.updated_at} · "
+                    f"id: `{artifact.artifact_id}`"
+                )
+            with cols[1]:
+                st.link_button("📄 Открыть", obsidian_uri(artifact.path), width="stretch")
+            with cols[2]:
+                st.link_button("🖥 VS Code", vscode_uri(artifact.path), width="stretch")
+            with cols[3]:
+                if st.button("↩ Пересобрать", key=f"living_artifact_reassemble_{idx}_{artifact.artifact_id}", width="stretch"):
+                    try:
+                        manifest = artifact_manifest.parse_manifest(
+                            artifact.path.read_text(encoding="utf-8", errors="replace")
+                        )
+                        if manifest is None:
+                            st.error("В файле нет манифеста живого конспекта.")
+                            return
+                        rows = artifact_manifest.reassemble_rows(manifest)
+                        set_workbench_rows(rows)
+                        st.session_state[_ACTIVE_ARTIFACT_ID_KEY] = manifest.artifact_id
+                        st.session_state["living_konspekt_title"] = manifest.title
+                        st.session_state["living_konspekt_last_saved"] = str(artifact.path)
+                        st.session_state.pop(_LAST_SAVED_BODY_KEY, None)
+                    except (OSError, UnicodeError, ValueError) as exc:
+                        st.error(f"Не удалось пересобрать конспект: {format_request_error(exc)}")
+                    else:
+                        st.toast("Конспект пересобран в корзину.", icon="📚")
+                        st.rerun()
+
+
 def _render_build_panel(rows: list[dict[str, Any]]) -> None:
     st.markdown("### 📚 Собрать рабочий конспект")
     # Дефолт через setdefault ДО инстанцирования: value= вместе с key= для уже
@@ -635,25 +727,28 @@ def _render_build_panel(rows: list[dict[str, Any]]) -> None:
         key="living_konspekt_mode",
         horizontal=True,
     )
-    if st.button("Собрать и сохранить", key="living_konspekt_build", type="primary"):
+    action_cols = st.columns([1.2, 1])
+    with action_cols[0]:
+        save_clicked = st.button("Собрать и сохранить", key="living_konspekt_build", type="primary", width="stretch")
+    with action_cols[1]:
+        print_clicked = st.button("Печать/PDF", key="living_konspekt_print", width="stretch")
+    if save_clicked:
         try:
-            if mode.startswith("Дословная"):
-                body = _stitch_verbatim(rows)
-            else:
-                from app.knowledge_synthesis import synthesize_sections  # heavy: LLM/Chroma services
-
-                sections = [row_to_section(row) for row in rows]
-                result = synthesize_sections(topic=topic, sections=sections)
-                # Study Pack tail и для LLM-режима: summary модели без «Проверь себя» и
-                # точных «файл:строки» — статичная выжимка, а не живой конспект.
-                body = "\n\n".join(
-                    block for block in (str(result["summary"]).strip(), _study_pack_tail(rows)) if block
-                )
-            target_path = _save_living_konspekt(topic, body)
+            body = _build_living_konspekt_body(topic, rows, mode)
+            target_path = _save_living_konspekt(
+                topic,
+                body,
+                rows,
+                artifact_id=st.session_state.get(_ACTIVE_ARTIFACT_ID_KEY),
+            )
+            manifest = artifact_manifest.parse_manifest(target_path.read_text(encoding="utf-8", errors="replace"))
         except Exception as exc:  # noqa: BLE001 - показать пользователю причину сбора/сохранения
             st.error(f"Не удалось собрать конспект: {format_request_error(exc)}")
         else:
             st.session_state["living_konspekt_last_saved"] = str(target_path)
+            st.session_state[_LAST_SAVED_BODY_KEY] = body
+            if manifest is not None:
+                st.session_state[_ACTIVE_ARTIFACT_ID_KEY] = manifest.artifact_id
             try:
                 from app.ui_events import track_event
 
@@ -664,6 +759,14 @@ def _render_build_panel(rows: list[dict[str, Any]]) -> None:
             except Exception:  # noqa: BLE001 - аналитика не должна ломать сохранение
                 pass
             st.success("✅ Сохранено в vault. Войдёт в поиск и граф после обновления индекса.")
+    if print_clicked:
+        try:
+            body = _build_living_konspekt_body(topic, rows, mode)
+            _open_print_living_konspekt(topic, body, rows)
+        except Exception as exc:  # noqa: BLE001 - показать пользователю причину подготовки print-view
+            st.error(f"Не удалось подготовить печать/PDF: {format_request_error(exc)}")
+        else:
+            st.rerun()
 
     # Файл — стартовая площадка, а не финал: постоянный CTA-ряд по последнему сохранённому
     # (переживает rerun'ы — success-строка выше живёт только один прогон).
@@ -673,12 +776,28 @@ def _render_build_panel(rows: list[dict[str, Any]]) -> None:
 
         saved_path = Path(last_saved)
         st.caption(f"Последний собранный: `{saved_path.name}`")
-        cta_cols = st.columns(2)
+        cta_cols = st.columns(4)
         with cta_cols[0]:
             st.link_button("📄 Открыть в Obsidian", obsidian_uri(saved_path), width="stretch")
         with cta_cols[1]:
             st.link_button("🖥 Открыть в VS Code", vscode_uri(saved_path), width="stretch")
+        with cta_cols[2]:
+            if st.button("🔄 Обновить индекс", key="living_konspekt_reindex", width="stretch"):
+                try:
+                    _request_reindex_from_ui()
+                except Exception as exc:  # noqa: BLE001 - показать пользователю причину отказа API
+                    st.error(f"Не удалось запустить переиндексацию: {format_request_error(exc)}")
+                else:
+                    st.success("Переиндексация запущена.")
+                    st.rerun()
+        with cta_cols[3]:
+            saved_body = str(st.session_state.get(_LAST_SAVED_BODY_KEY) or "")
+            if st.button("🖨 Печать/PDF", key="living_konspekt_last_print", width="stretch", disabled=not saved_body):
+                _open_print_living_konspekt(topic, saved_body, rows)
+                st.rerun()
         st.caption("Следующий шаг: «🃏 Карточки из терминов» ниже — и конспект начнёт повторяться сам.")
+    st.divider()
+    _render_saved_artifacts_panel()
 
 
 def _due_by_document(rows: list[dict[str, Any]]) -> list[tuple[str, str, int]]:
@@ -817,7 +936,10 @@ def _clear_flashcards_preview_widget_state() -> None:
 
 
 def render_living_konspekt_view() -> None:
+    from app.ui.reindex_poll import poll_reindex_status
+
     ensure_workbench_hydrated()
+    poll_reindex_status()
     render_panel_header(
         "📚 Живой конспект",
         "Собирайте разделы лекций из графа/карточек, проверяйте актуальность и готовьте промпт "

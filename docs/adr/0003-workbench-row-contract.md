@@ -8,11 +8,13 @@ service↔session_state fixed to one option; `data_relative_from_path` raise-sty
 contract; `row_key` stable identity for add/move/remove/dedup with non-portable
 hash identity; explicit base section row vs workbench runtime row boundary)
 
-Status: Proposed
+Status: Accepted (implemented in W4, 2026-07-06)
 
-Implementation status (2026-07-06): not started. This ADR fixes the contract that
-W4 of the Living Konspekt plan (`docs/living_konspekt_next_waves_plan.md`, §A2/W4)
-must implement before any user data (notes, reading progress) is introduced.
+Implementation status (2026-07-06): implemented by W4 — `app/workbench_service.py`
+(single owner of the persisted form), `app/path_safety.py::data_relative_from_path`,
+`RESEARCH_PAYLOAD_VERSION=2`; verification is recorded in the W4 PR/commit message
+per the plan's journal rule. Remaining follow-up: the internal-feature import
+cleanup tracked as `TODO(W4-cleanup)` in `app/ui/living_konspekt_view.py`.
 
 ## Context
 

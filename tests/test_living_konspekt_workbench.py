@@ -8,12 +8,20 @@ from dataclasses import replace
 
 from app import workbench_service
 from app.config import DATA_DIR
+from app.konspekt_artifact import (
+    _check_questions_block,
+    build_videos_block_for_rows,
+    parse_manifest,
+    reassemble_rows,
+    serialize_manifest,
+)
 from app.path_safety import data_relative_from_path
 from app.section_index import IndexedSection, section_to_row
 from app.ui.living_konspekt_view import (
     WORKBENCH_SECTIONS_KEY,
     _collect_concept_context,
     _stitch_verbatim,
+    _strip_synthesis_tail_sections,
     _study_pack_tail,
     add_section_to_workbench,
     clear_workbench,
@@ -464,6 +472,73 @@ class TestStitchVerbatim:
         stitched = _stitch_verbatim(get_workbench_rows(state))
         assert "Главная мысль исходной лекции" not in stitched  # файла нет — шапки нет
         assert "## Тема A" in stitched
+
+
+class TestArtifactManifestSlim:
+    """Артефакт не должен дублировать источник: portable-строки slim, non-portable — снимок."""
+
+    def test_portable_row_omits_text_and_own_text_in_manifest(self):
+        state: dict = {}
+        add_section_to_workbench(_section(MD_A, 10, heading="Тема A", text="Уникальное тело A."), state)
+        rows = get_workbench_rows(state)
+        assert rows[0]["portability_status"] == workbench_service.PORTABLE
+
+        manifest_yaml = serialize_manifest("T", workbench_service.persisted_rows_from_runtime(rows), [])
+        payload = parse_manifest(manifest_yaml)
+        row = payload.rows[0]
+        assert "text" not in row and "own_text" not in row, "portable manifest row must be slim"
+        assert row["section_id"].startswith("sha256:")
+
+    def test_portable_round_trip_restores_text_from_source(self):
+        md = DATA_DIR / "_test_workbench" / "slim-roundtrip.md"
+        md.parent.mkdir(parents=True, exist_ok=True)
+        md.write_text("# Конспект\n\n## Тема\n\nУникальное тело для round-trip.\n", encoding="utf-8")
+        try:
+            state: dict = {}
+            add_section_to_workbench(_section(md, 3, heading="Тема", text="Уникальное тело для round-trip."), state)
+            rows = get_workbench_rows(state)
+            manifest_yaml = serialize_manifest("T", workbench_service.persisted_rows_from_runtime(rows), [])
+            reassembled = reassemble_rows(parse_manifest(manifest_yaml), data_dir=DATA_DIR)
+            assert "Уникальное тело для round-trip." in (reassembled[0].get("text") or "")
+        finally:
+            md.unlink()
+
+    def test_non_portable_row_keeps_text_snapshot(self):
+        np = workbench_service.persisted_row_from_runtime({
+            "portability_status": workbench_service.NON_PORTABLE, "resolve_error": "outside_data_dir",
+            "konspekt_md_abs": "", "source_abs": "",
+            "konspekt_md_label": "legacy.md", "source_label": "legacy.txt",
+            "heading_text": "Тема", "slug": "tema", "level": 2,
+            "line_start": 7, "line_end": 9, "text": "Снимок.", "own_text": "Снимок.",
+        })
+        row = parse_manifest(serialize_manifest("T", [np], [])).rows[0]
+        assert row.get("text") == "Снимок." and row.get("own_text") == "Снимок."
+
+    def test_check_questions_distributed_across_documents(self):
+        md1 = DATA_DIR / "_test_workbench" / "questions-a.md"
+        md2 = DATA_DIR / "_test_workbench" / "questions-b.md"
+        md1.write_text("# A\n\n## ❓ Контрольные вопросы\n\n1. Q1a\n2. Q2a\n3. Q3a\n", encoding="utf-8")
+        md2.write_text("# B\n\n## ❓ Контрольные вопросы\n\n1. Q1b\n2. Q2b\n", encoding="utf-8")
+        try:
+            rows = [{"konspekt_md_abs": str(md1)}, {"konspekt_md_abs": str(md2)}]
+            block = _check_questions_block(rows)
+            assert "Q1a" in block and "Q1b" in block, "questions must cover BOTH documents"
+            # round-robin: первый вопрос каждого документа идёт раньше вторых
+            assert block.index("Q1a") < block.index("Q2a")
+            assert block.index("Q1b") < block.index("Q2b")
+        finally:
+            md1.unlink()
+            md2.unlink()
+
+    def test_strip_synthesis_tail_removes_llm_sources_block(self):
+        sample = "## Введение\n\nТекст.\n\n## Итог\n\nВыводы.\n\n## Источники\n\n- файл.md"
+        stripped = _strip_synthesis_tail_sections(sample)
+        assert "## Итог" in stripped and "Выводы." in stripped
+        assert "## Источники" not in stripped
+
+    def test_build_videos_block_for_rows_returns_empty_without_sidecar(self):
+        # Нет sidecar-файла → пустой блок (медиа опционально и не должно ронять сборку).
+        assert build_videos_block_for_rows([{"konspekt_md_abs": str(MD_A)}]) == ""
 
 
 class TestPersistRoundtrip:

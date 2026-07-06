@@ -197,7 +197,7 @@ class TestMediaPanelSmoke:
         iframe_calls: list[tuple[str, int]] = []
         monkeypatch.setattr(view.components, "iframe", lambda src, height: iframe_calls.append((src, height)))
         monkeypatch.setattr(view, "load_media_sidecar_for_konspekt", lambda path: _media_sidecar())
-        monkeypatch.setattr(view, "sha256_file", lambda path: "a" * 64)
+        monkeypatch.setattr(view, "_sidecar_stale_reasons", lambda sc, md_abs: [])
 
         at = AppTest.from_function(_app)
         at.session_state["workbench_sections"] = [_row()]
@@ -216,7 +216,7 @@ class TestMediaPanelSmoke:
         iframe_calls: list[tuple[str, int]] = []
         monkeypatch.setattr(view.components, "iframe", lambda src, height: iframe_calls.append((src, height)))
         monkeypatch.setattr(view, "load_media_sidecar_for_konspekt", lambda path: _media_sidecar_with_multiple_videos())
-        monkeypatch.setattr(view, "sha256_file", lambda path: "a" * 64)
+        monkeypatch.setattr(view, "_sidecar_stale_reasons", lambda sc, md_abs: [])
 
         at = AppTest.from_function(_app)
         at.session_state["workbench_sections"] = [_row()]
@@ -242,11 +242,7 @@ class TestMediaPanelSmoke:
         import app.ui.living_konspekt_media as view
 
         monkeypatch.setattr(view, "load_media_sidecar_for_konspekt", lambda path: _media_sidecar())
-        monkeypatch.setattr(
-            view,
-            "current_konspekt_sha256_for_sidecar",
-            lambda path, sidecar_sha: "0" * 64,
-        )
+        monkeypatch.setattr(view, "_sidecar_stale_reasons", lambda sc, md_abs: ["konspekt_changed"])
 
         at = AppTest.from_function(_app)
         at.session_state["workbench_sections"] = [_row()]
@@ -263,7 +259,7 @@ class TestMediaPanelSmoke:
         import app.ui.living_konspekt_media as view
 
         monkeypatch.setattr(view, "load_media_sidecar_for_konspekt", lambda path: _media_sidecar(confidence=0.4))
-        monkeypatch.setattr(view, "sha256_file", lambda path: "a" * 64)
+        monkeypatch.setattr(view, "_sidecar_stale_reasons", lambda sc, md_abs: [])
 
         at = AppTest.from_function(_app)
         at.session_state["workbench_sections"] = [_row()]

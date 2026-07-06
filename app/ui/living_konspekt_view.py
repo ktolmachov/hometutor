@@ -337,17 +337,12 @@ def mark_section_read_in_workbench(
 
 
 # ── UI ────────────────────────────────────────────────────────────────────
-def _media_line_for_row(
-    row: dict[str, Any],
-    sidecar_cache: dict[str, Any],
-    stale_cache: dict[str, list[str]] | None = None,
-) -> str | None:
-    original = konspekt_artifact._sidecar_stale_reasons
-    try:
-        konspekt_artifact._sidecar_stale_reasons = _sidecar_stale_reasons
-        return konspekt_artifact._media_line_for_row(row, sidecar_cache, stale_cache)
-    finally:
-        konspekt_artifact._sidecar_stale_reasons = original
+# _media_line_for_row (медиа-подпись строки для артефакта) — доменная функция
+# из konspekt_artifact. Раньше здесь был monkey-patch, подменявший
+# konspekt_artifact._sidecar_stale_reasons UI-версией «на время вызова» — но
+# реализации были побайтово идентичны, патч был no-op и при том не потокобезопасен
+# (несколько Streamlit-сессий = потоки). Реализация теперь единая в media_sidecar.
+_media_line_for_row = konspekt_artifact._media_line_for_row
 
 
 def _add_document_sections_to_workbench(
@@ -365,9 +360,33 @@ def _build_living_konspekt_body(topic: str, rows: list[dict[str, Any]], mode: st
 
     sections = [row_to_section(row) for row in rows]
     result = synthesize_sections(topic=topic, sections=sections)
-    # Study Pack tail и для LLM-режима: summary модели без «Проверь себя» и
-    # точных «файл:строки» — статичная выжимка, а не живой конспект.
-    return "\n\n".join(block for block in (str(result["summary"]).strip(), _study_pack_tail(rows)) if block)
+    # SYNTHESIS_PROMPT просит модель писать «## Источники» — но авторитетный провенанс
+    # с точными «файл:строки» даёт _study_pack_tail. Убираем LLM-ный хвост во избежание
+    # дубля (в сохранённом артефакте их было два подряд).
+    summary = _strip_synthesis_tail_sections(str(result["summary"]).strip())
+    # Медиа-слой: раньше в LLM-режиме sidecar_cache не заполнялся и «🎬 Видео материалов»
+    # пропадал целиком — хотя sidecar свежий и доверенные таймкоды есть. Восстанавливаем.
+    videos = konspekt_artifact.build_videos_block_for_rows(rows)
+    tail = _study_pack_tail(rows)
+    return "\n\n".join(block for block in (summary, videos, tail) if block)
+
+
+# Заголовки хвостовых блоков, которые SYNTHESIS_PROMPT просит модель генерировать, но
+# которые детерминированно и точнее собирает _study_pack_tail. Сравнение без регистра.
+_SYNTH_TAIL_HEADINGS = frozenset(
+    {"## источники", "## источник", "## ✅ проверь себя", "## проверь себя"}
+)
+
+
+def _strip_synthesis_tail_sections(summary: str) -> str:
+    """Отрезать LLM-ные блоки «Источники»/«Проверь себя» — их заменяет _study_pack_tail."""
+    if not summary:
+        return summary
+    lines = summary.splitlines()
+    for i, line in enumerate(lines):
+        if line.strip().lower() in _SYNTH_TAIL_HEADINGS:
+            return "\n".join(lines[:i]).rstrip()
+    return summary
 
 
 def _open_print_living_konspekt(title: str, body: str, rows: list[dict[str, Any]]) -> None:

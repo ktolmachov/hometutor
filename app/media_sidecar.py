@@ -177,6 +177,53 @@ def current_konspekt_sha256_for_sidecar(path: Path, sidecar_konspekt_sha256: str
     return normalized
 
 
+def expected_asr_params(video_abs: Path) -> dict[str, Any] | None:
+    """Ожидаемый fingerprint ASR из ``<video>.segments.json`` — источник истины для sidecar.
+
+    Если сегменты перетранскрибированы с другими параметрами (beam_size/language/model),
+    sidecar обязан считаться устаревшим даже при неизменном media_sha256.
+    """
+    segments_path = video_abs.with_suffix(".segments.json")
+    if not segments_path.is_file():
+        return None
+    try:
+        payload = json.loads(segments_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    params = (payload.get("asr") or {}).get("params")
+    return params if isinstance(params, dict) else None
+
+
+def sidecar_stale_reasons(sidecar: MediaSidecar, md_abs: str) -> list[str]:
+    """Почему sidecar протух относительно konspekt-файла и/или медиа.
+
+    Единая реализация для артефакта, медиа-панели UI и video-citations
+    (раньше жила в трёх идентичных копиях). Делегирует хэш-вычисления
+    :func:`sha256_file`/:func:`current_konspekt_sha256_for_sidecar`, у которых уже
+    есть mtime/size-кэш, поэтому повторные вызовы на один документ дёшевы.
+    """
+    try:
+        konspekt_sha = current_konspekt_sha256_for_sidecar(Path(md_abs), sidecar.konspekt_sha256)
+    except OSError:
+        konspekt_sha = None
+    media_sha: str | None = None
+    asr_params: dict[str, Any] | None = None
+    if isinstance(sidecar.video, LocalVideoSource):
+        try:
+            video_abs = resolve_data_relative_path(sidecar.video.path)
+            media_sha = sha256_file(video_abs)
+            asr_params = expected_asr_params(video_abs)
+        except (OSError, ValueError):
+            media_sha = None
+    # asr_params учитываем только если и sidecar, и segments-файл его знают:
+    # ручные sidecar'ы (tool=manual) без fingerprint не должны стать stale задним числом.
+    if asr_params is None or sidecar.generated_by.asr_params is None:
+        return sidecar.stale_reasons(konspekt_sha256=konspekt_sha, media_sha256=media_sha)
+    return sidecar.stale_reasons(
+        konspekt_sha256=konspekt_sha, media_sha256=media_sha, asr_params=asr_params
+    )
+
+
 def _strip_media_sidecar_pointer(markdown_text: str) -> str:
     split = _split_frontmatter(markdown_text)
     if split is None:
@@ -230,12 +277,34 @@ def read_media_sidecar_pointer(markdown_text: str, *, data_dir: Path | None = No
     return validate_data_relative_path(pointer_match.group("path").strip(), data_dir=data_dir)
 
 
+_SIDECAR_LOAD_CACHE: dict[tuple[str, float, int, str], MediaSidecar | None] = {}
+
+
 def load_media_sidecar_for_konspekt(konspekt_path: Path, *, data_dir: Path | None = None) -> MediaSidecar | None:
+    # Каждый rerun Живого конспекта звал это по разу на строку × вкладку (до 48 раз
+    # на документ). md (128 КБ) + sidecar JSON парсились каждый раз. Кэш по
+    # (resolved path, mtime, size, data_dir) схлопывает повторы в один парс на документ;
+    # инвалидируется автоматически при любой правке md.
+    try:
+        resolved = str(konspekt_path.resolve())
+        stat = konspekt_path.stat()
+        cache_key = (resolved, stat.st_mtime, stat.st_size, str(data_dir) if data_dir else "")
+    except OSError:
+        cache_key = None
+
+    if cache_key is not None and cache_key in _SIDECAR_LOAD_CACHE:
+        return _SIDECAR_LOAD_CACHE[cache_key]
+
     markdown_text = konspekt_path.read_text(encoding="utf-8", errors="replace")
     pointer = read_media_sidecar_pointer(markdown_text, data_dir=data_dir)
     if pointer is None:
-        return None
-    return load_media_sidecar(pointer, data_dir=data_dir)
+        result = None
+    else:
+        result = load_media_sidecar(pointer, data_dir=data_dir)
+
+    if cache_key is not None:
+        _SIDECAR_LOAD_CACHE[cache_key] = result
+    return result
 
 
 def load_media_sidecar(relative_path: str, *, data_dir: Path | None = None) -> MediaSidecar:

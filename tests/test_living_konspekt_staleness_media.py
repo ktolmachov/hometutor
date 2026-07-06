@@ -185,7 +185,7 @@ def test_playlist_items_use_trusted_timestamps_in_workbench_order(tmp_path, monk
 
 def test_stale_check_runs_once_per_document_not_per_row(tmp_path, monkeypatch):
     """P2 аудита: staleness хэширует konspekt и видео — не должен зваться на каждый раздел."""
-    import app.ui.living_konspekt_view as view
+    import app.konspekt_artifact as konspekt_artifact
 
     md = tmp_path / "konspekt.md"
     md.write_text(_KONSPEKT, encoding="utf-8")
@@ -199,11 +199,14 @@ def test_stale_check_runs_once_per_document_not_per_row(tmp_path, monkeypatch):
         calls.append(md_abs)
         return []
 
-    monkeypatch.setattr(view, "_sidecar_stale_reasons", _counting_stale)
+    # Единая реализация _sidecar_stale_reasons теперь живёт в media_sidecar и
+    # реэкспортируется алиасом в konspekt_artifact; _media_line_for_row ссылается
+    # на этот модуль-глобал, поэтому патчим именно его.
+    monkeypatch.setattr(konspekt_artifact, "_sidecar_stale_reasons", _counting_stale)
     sidecar_cache = {str(md): sidecar}
     stale_cache: dict[str, list[str]] = {}
     for row in rows:
-        view._media_line_for_row(row, sidecar_cache, stale_cache)
+        konspekt_artifact._media_line_for_row(row, sidecar_cache, stale_cache)
 
     assert len(calls) == 1, f"staleness должен считаться один раз на документ, было {len(calls)}"
 

@@ -13,12 +13,10 @@ from app.media_sidecar import (
     MediaSection,
     MediaSidecar,
     UrlVideoSource,
-    current_konspekt_sha256_for_sidecar,
     load_media_sidecar_for_konspekt,
-    sha256_file,
+    sidecar_stale_reasons as _sidecar_stale_reasons,
 )
 from app.media_urls import normalize_video_url
-from app.path_safety import resolve_data_relative_path
 from app.section_index import IndexedSection, section_to_row
 
 
@@ -134,43 +132,6 @@ def _row_section_id(section: IndexedSection) -> str:
     from app.media_alignment import compute_section_id
 
     return compute_section_id(section)
-
-
-def _sidecar_stale_reasons(sidecar: MediaSidecar, md_abs: str) -> list[str]:
-    try:
-        konspekt_sha = current_konspekt_sha256_for_sidecar(
-            Path(md_abs), sidecar.konspekt_sha256
-        )
-    except OSError:
-        konspekt_sha = None
-    media_sha: str | None = None
-    asr_params: dict[str, Any] | None = None
-    if isinstance(sidecar.video, LocalVideoSource):
-        try:
-            video_abs = resolve_data_relative_path(sidecar.video.path)
-            media_sha = sha256_file(video_abs)
-            asr_params = _expected_asr_params(video_abs)
-        except (OSError, ValueError):
-            media_sha = None
-    if asr_params is None or sidecar.generated_by.asr_params is None:
-        return sidecar.stale_reasons(konspekt_sha256=konspekt_sha, media_sha256=media_sha)
-    return sidecar.stale_reasons(
-        konspekt_sha256=konspekt_sha,
-        media_sha256=media_sha,
-        asr_params=asr_params,
-    )
-
-
-def _expected_asr_params(video_abs: Path) -> dict[str, Any] | None:
-    segments_path = video_abs.with_suffix(".segments.json")
-    if not segments_path.is_file():
-        return None
-    try:
-        payload = json.loads(segments_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    params = (payload.get("asr") or {}).get("params")
-    return params if isinstance(params, dict) else None
 
 
 def _first_url_video(sidecar: MediaSidecar) -> UrlVideoSource | None:

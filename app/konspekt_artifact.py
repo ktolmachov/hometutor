@@ -18,12 +18,10 @@ from app.config import DATA_DIR
 from app.ingestion_sections import _parse_md_frontmatter
 from app.media_alignment import compute_section_id
 from app.media_sidecar import (
-    LocalVideoSource,
     UrlVideoSource,
-    current_konspekt_sha256_for_sidecar,
     load_media_sidecar_for_konspekt,
     read_media_sidecar_pointer,
-    sha256_file,
+    sidecar_stale_reasons as _sidecar_stale_reasons,
 )
 from app.media_urls import normalize_video_url
 from app.path_safety import resolve_data_relative_path, validate_data_relative_path
@@ -35,6 +33,9 @@ ARTIFACTS_DIR_NAME = "living-konspekt"
 
 _MAX_CHECK_QUESTIONS = 8
 _SLUG_RE = re.compile(r"[^\w\-]+", re.UNICODE)
+# Поля portable-строк, восстанавливаемые из источника при reassemble — не хранятся
+# в манифесте, чтобы не дублировать контент лекции (97% размера артефакта раньше).
+_SLIM_PORTABLE_DROP_FIELDS = ("text", "own_text")
 
 
 @dataclass(frozen=True)
@@ -391,7 +392,9 @@ def _check_questions_block(rows: list[dict[str, Any]]) -> str:
     except Exception:  # noqa: BLE001 - optional enrichment must not block artifact export
         return ""
 
-    questions: list[str] = []
+    # Round-robin по документам: сборка из нескольких лекций получает вопросы из
+    # каждой, а не только из первой сверху (retrieval practice по СВОЕЙ сборке).
+    per_doc: list[list[str]] = []
     for md in _unique_md_paths(rows):
         try:
             parsed = _cached_parse_sections(Path(md))
@@ -400,14 +403,24 @@ def _check_questions_block(rows: list[dict[str, Any]]) -> str:
         section = sections_by_role(parsed).get("check_questions")
         if section is None:
             continue
-        for line in section.text.splitlines():
-            line = line.strip()
-            if line:
-                questions.append(line)
-            if len(questions) >= _MAX_CHECK_QUESTIONS:
-                break
-        if len(questions) >= _MAX_CHECK_QUESTIONS:
+        doc_questions = [line.strip() for line in section.text.splitlines() if line.strip()]
+        if doc_questions:
+            per_doc.append(doc_questions)
+    if not per_doc:
+        return ""
+    questions: list[str] = []
+    idx = 0
+    while len(questions) < _MAX_CHECK_QUESTIONS:
+        added_this_round = False
+        for doc_questions in per_doc:
+            if idx < len(doc_questions):
+                questions.append(doc_questions[idx])
+                added_this_round = True
+                if len(questions) >= _MAX_CHECK_QUESTIONS:
+                    break
+        if not added_this_round:
             break
+        idx += 1
     if not questions:
         return ""
     return "## ✅ Проверь себя\n\n" + "\n".join(questions)
@@ -492,6 +505,25 @@ def _videos_block(sidecar_cache: dict[str, Any]) -> str:
     return "## 🎬 Видео материалов\n\n" + "\n".join(lines) if lines else ""
 
 
+def build_videos_block_for_rows(rows: list[dict[str, Any]]) -> str:
+    """Блок «Видео материалов» по sidecar'ам документов корзины.
+
+    Используется в LLM-режиме сборки (раньше медиа-слой терялся целиком: sidecar_cache
+    не заполнялся и ``_videos_block`` оставался пустым). Дедуп по md-файлу: один sidecar
+    на документ, независимо от числа разделов из него.
+    """
+    sidecar_cache: dict[str, Any] = {}
+    for row in rows:
+        md_abs = str(row.get("konspekt_md_abs") or "")
+        if not md_abs or md_abs in sidecar_cache:
+            continue
+        try:
+            sidecar_cache[md_abs] = load_media_sidecar_for_konspekt(Path(md_abs))
+        except Exception:  # noqa: BLE001 - optional media must not block artifact export
+            sidecar_cache[md_abs] = None
+    return _videos_block(sidecar_cache)
+
+
 def _filename_slug(title: str) -> str:
     raw = title.strip().lower()
     slug = _SLUG_RE.sub("-", raw).strip("-")
@@ -518,16 +550,25 @@ def _unique_md_paths(rows: list[dict[str, Any]]) -> list[str]:
 
 def _row_with_section_id(row: dict[str, Any]) -> dict[str, Any]:
     out = dict(row)
+    # section_id считается по полному контенту ДО slimming-а — это стабильный якорь
+    # привязки к источнику, переживает сдвиг line_start при редактировании конспекта.
     section = ParsedSection(
-        heading_text=str(row.get("heading_text") or ""),
-        slug=str(row.get("slug") or ""),
-        level=int(row.get("level") or 0),
-        line_start=int(row.get("line_start") or 0),
-        line_end=int(row.get("line_end") or 0),
-        text=str(row.get("text") or ""),
-        own_text=str(row.get("own_text") or ""),
+        heading_text=str(out.get("heading_text") or ""),
+        slug=str(out.get("slug") or ""),
+        level=int(out.get("level") or 0),
+        line_start=int(out.get("line_start") or 0),
+        line_end=int(out.get("line_end") or 0),
+        text=str(out.get("text") or ""),
+        own_text=str(out.get("own_text") or ""),
     )
     out["section_id"] = compute_section_id(section)
+    # Portable-строки при reassemble полностью перепривязываются к источнику
+    # (_reanchor_or_snapshot перечитывает text/own_text из md-файла). Хранить их в
+    # манифесте = дублировать источник и раздувать артефакт (раньше 97% файла — YAML).
+    # Non-portable снимки обязаны сохранять текст: источник для них недоступен.
+    if str(out.get("portability_status") or workbench_service.PORTABLE) == workbench_service.PORTABLE:
+        for field in _SLIM_PORTABLE_DROP_FIELDS:
+            out.pop(field, None)
     return out
 
 
@@ -624,39 +665,6 @@ def _media_section_for_row(sidecar: Any, row: dict[str, Any]) -> Any | None:
         if section.heading == row_heading and section.line_end == row_line_end:
             return section
     return None
-
-
-def _sidecar_stale_reasons(sidecar: Any, md_abs: str) -> list[str]:
-    try:
-        konspekt_sha = current_konspekt_sha256_for_sidecar(
-            Path(md_abs), sidecar.konspekt_sha256
-        )
-    except OSError:
-        konspekt_sha = None
-    media_sha: str | None = None
-    asr_params: dict[str, Any] | None = None
-    if isinstance(sidecar.video, LocalVideoSource):
-        try:
-            video_abs = resolve_data_relative_path(sidecar.video.path)
-            media_sha = sha256_file(video_abs)
-            asr_params = _expected_asr_params(video_abs)
-        except (OSError, ValueError):
-            media_sha = None
-    if asr_params is None or sidecar.generated_by.asr_params is None:
-        return sidecar.stale_reasons(konspekt_sha256=konspekt_sha, media_sha256=media_sha)
-    return sidecar.stale_reasons(konspekt_sha256=konspekt_sha, media_sha256=media_sha, asr_params=asr_params)
-
-
-def _expected_asr_params(video_abs: Path) -> dict[str, Any] | None:
-    segments_path = video_abs.with_suffix(".segments.json")
-    if not segments_path.is_file():
-        return None
-    try:
-        payload = json.loads(segments_path.read_text(encoding="utf-8"))
-        params = (payload.get("asr") or {}).get("params")
-        return params if isinstance(params, dict) else None
-    except (OSError, ValueError):
-        return None
 
 
 def _format_timestamp(seconds: float | int | None) -> str:
@@ -756,6 +764,7 @@ __all__ = [
     "_videos_block",
     "artifact_id_from_title",
     "build_artifact_body",
+    "build_videos_block_for_rows",
     "collect_sidecar_pointers",
     "delete_saved_artifact",
     "media_caption_line",

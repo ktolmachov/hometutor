@@ -20,9 +20,9 @@ from app.media_sidecar import (
     MediaSection,
     MediaSidecar,
     UrlVideoSource,
-    current_konspekt_sha256_for_sidecar,
+    expected_asr_params as _expected_asr_params,
     load_media_sidecar_for_konspekt,
-    sha256_file,
+    sidecar_stale_reasons as _sidecar_stale_reasons,
 )
 from app.media_urls import NormalizedVideoUrl, normalize_video_url
 from app.path_safety import resolve_data_relative_path
@@ -148,48 +148,6 @@ def _playlist_video_url(video: LocalVideoSource | UrlVideoSource, start: int) ->
     if normalized.is_youtube:
         return normalized.with_timestamp(start)
     return normalized.canonical_url
-
-
-def _expected_asr_params(video_abs: Path) -> dict[str, Any] | None:
-    """Ожидаемый fingerprint ASR из <video>.segments.json — источник истины для sidecar.
-
-    Если сегменты перетранскрибированы с другими параметрами (beam_size/language/model),
-    sidecar обязан считаться устаревшим даже при неизменном media_sha256.
-    """
-    segments_path = video_abs.with_suffix(".segments.json")
-    if not segments_path.is_file():
-        return None
-    try:
-        payload = json.loads(segments_path.read_text(encoding="utf-8"))
-        params = (payload.get("asr") or {}).get("params")
-        return params if isinstance(params, dict) else None
-    except (OSError, ValueError):
-        return None
-
-
-def _sidecar_stale_reasons(sidecar: MediaSidecar, md_abs: str) -> list[str]:
-    try:
-        konspekt_sha = current_konspekt_sha256_for_sidecar(
-            Path(md_abs), sidecar.konspekt_sha256
-        )
-    except OSError:
-        konspekt_sha = None
-    media_sha: str | None = None
-    asr_params: dict[str, Any] | None = None
-    if isinstance(sidecar.video, LocalVideoSource):
-        try:
-            video_abs = resolve_data_relative_path(sidecar.video.path)
-            media_sha = sha256_file(video_abs)
-            asr_params = _expected_asr_params(video_abs)
-        except (OSError, ValueError):
-            media_sha = None
-    # asr_params передаём только если и sidecar, и segments-файл его знают:
-    # ручные sidecar'ы (tool=manual) без fingerprint не должны стать stale задним числом.
-    if asr_params is None or sidecar.generated_by.asr_params is None:
-        return sidecar.stale_reasons(konspekt_sha256=konspekt_sha, media_sha256=media_sha)
-    return sidecar.stale_reasons(
-        konspekt_sha256=konspekt_sha, media_sha256=media_sha, asr_params=asr_params
-    )
 
 
 def _render_media_panel(row: dict[str, Any], is_first: bool = False, *, key_prefix: str = "wb") -> None:

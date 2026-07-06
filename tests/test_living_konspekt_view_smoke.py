@@ -51,6 +51,7 @@ def _no_vault_name(monkeypatch: pytest.MonkeyPatch) -> None:
 def _isolated_kv(monkeypatch: pytest.MonkeyPatch) -> None:
     """Гидрация/авто-персист/аналитика/память не должны трогать реальный user_state.db."""
     import app.ui_events as ui_events
+    import app.ui.living_konspekt_view as living_konspekt_view
     import app.user_state as user_state
     import app.user_state_core as user_state_core
 
@@ -58,6 +59,7 @@ def _isolated_kv(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(user_state_core, "set_kv", lambda key, value: None)
     monkeypatch.setattr(ui_events, "track_event", lambda name, payload=None: None)
     monkeypatch.setattr(user_state, "count_due_flashcards", lambda **kwargs: 0)
+    monkeypatch.setattr(living_konspekt_view, "render_add_sections_panel", lambda *, expanded=False: None)
 
 
 class TestRenderLivingKonspektViewSmoke:

@@ -15,6 +15,7 @@ from app.ui.living_konspekt_view import (
     add_section_to_workbench,
     ensure_workbench_hydrated,
     get_workbench_rows,
+    move_section_in_workbench,
     remove_section_from_workbench,
     set_workbench_rows,
 )
@@ -71,6 +72,26 @@ class TestAddDedupRemove:
         rows = get_workbench_rows(state)
         assert len(rows) == 1
         assert rows[0]["line_start"] == 20
+
+    def test_move_reorders_sections_inside_workbench(self):
+        state: dict = {}
+        add_section_to_workbench(_section(MD_A, 10, heading="A"), state)
+        add_section_to_workbench(_section(MD_A, 20, heading="B"), state)
+        add_section_to_workbench(_section(MD_A, 30, heading="C"), state)
+
+        moved = move_section_in_workbench(str(MD_A), 30, -1, state)
+
+        assert moved is True
+        assert [row["heading_text"] for row in get_workbench_rows(state)] == ["A", "C", "B"]
+
+    def test_move_outside_bounds_is_noop(self):
+        state: dict = {}
+        add_section_to_workbench(_section(MD_A, 10, heading="A"), state)
+
+        moved = move_section_in_workbench(str(MD_A), 10, -1, state)
+
+        assert moved is False
+        assert [row["heading_text"] for row in get_workbench_rows(state)] == ["A"]
 
     def test_defaults_to_streamlit_session_state(self, monkeypatch):
         import streamlit as st

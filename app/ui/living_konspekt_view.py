@@ -17,7 +17,6 @@ from typing import Any, MutableMapping
 
 import streamlit as st
 
-from app.deep_study_prompt import build_deep_study_prompt
 from app.media_sidecar import (
     LocalVideoSource,
     MediaSection,
@@ -29,12 +28,13 @@ from app.media_sidecar import (
 from app.media_urls import normalize_video_url
 from app.path_safety import resolve_data_relative_path
 from app.section_index import IndexedSection, parse_sections, row_to_section, section_to_row
-from app.study_web_queries import (
-    build_query_from_rows,
-    build_query_terms,
-    build_web_search_links,
-    harvest_links_from_rows,
+from app.ui.living_konspekt_add_panel import render_add_sections_panel
+from app.ui.living_konspekt_next_steps import (
+    _collect_concept_context,
+    render_deep_study_panel,
+    render_web_queries_panel,
 )
+from app.ui.living_konspekt_reader import render_reader
 from app.ui.helpers import format_request_error
 from app.ui.widgets import render_panel_header
 
@@ -137,6 +137,39 @@ def add_section_to_workbench(
             track_event("living_konspekt_section_added")
         except Exception:  # noqa: BLE001 - аналитика не должна ломать корзину
             pass
+    return True
+
+
+def move_section_in_workbench(
+    konspekt_md_abs: str,
+    line_start: int,
+    delta: int,
+    state: MutableMapping[str, Any] | None = None,
+) -> bool:
+    """Сдвинуть раздел на ``delta`` позиций (порядок = порядок глав будущего конспекта).
+
+    Возвращает ``True``, если порядок изменился; выход за границы — no-op ``False``.
+    """
+    target = _state(state)
+    rows = get_workbench_rows(target)
+    idx = next(
+        (
+            i
+            for i, row in enumerate(rows)
+            if str(row.get("konspekt_md_abs") or "") == konspekt_md_abs
+            and row.get("line_start") == line_start
+        ),
+        None,
+    )
+    if idx is None:
+        return False
+    new_idx = idx + delta
+    if not 0 <= new_idx < len(rows):
+        return False
+    rows.insert(new_idx, rows.pop(idx))
+    target[WORKBENCH_SECTIONS_KEY] = rows
+    if state is None:
+        _persist_workbench(rows)
     return True
 
 
@@ -652,12 +685,13 @@ def _render_collected_sections(rows: list[dict[str, Any]]) -> None:
 
     st.markdown("### Собранные разделы")
     duplicate_keys = _duplicate_heading_keys(rows)
-    for row in list(rows):
+    row_list = list(rows)
+    for idx, row in enumerate(row_list):
         md_abs = str(row.get("konspekt_md_abs") or "")
         line_start = row.get("line_start")
         heading_text = str(row.get("heading_text") or "")
         with st.container(border=True):
-            cols = st.columns([5, 1, 1])
+            cols = st.columns([5, 1, 1, 1])
             with cols[0]:
                 st.markdown(f"**{heading_text or '—'}**")
                 st.caption(f"{Path(md_abs).name} · строки {line_start}-{row.get('line_end')}")
@@ -678,6 +712,28 @@ def _render_collected_sections(rows: list[dict[str, Any]]) -> None:
                         width="stretch",
                     )
             with cols[2]:
+                move_cols = st.columns(2)
+                with move_cols[0]:
+                    if st.button(
+                        "↑",
+                        key=f"wb_move_up_{md_abs}_{line_start}",
+                        disabled=idx == 0,
+                        help="Поднять раздел выше",
+                        width="stretch",
+                    ):
+                        move_section_in_workbench(md_abs, int(line_start) if line_start else 0, -1)
+                        st.rerun()
+                with move_cols[1]:
+                    if st.button(
+                        "↓",
+                        key=f"wb_move_down_{md_abs}_{line_start}",
+                        disabled=idx >= len(row_list) - 1,
+                        help="Опустить раздел ниже",
+                        width="stretch",
+                    ):
+                        move_section_in_workbench(md_abs, int(line_start) if line_start else 0, 1)
+                        st.rerun()
+            with cols[3]:
                 if st.button("🗑 Убрать", key=f"wb_remove_{md_abs}_{line_start}", width="stretch"):
                     remove_section_from_workbench(md_abs, int(line_start) if line_start else 0)
                     st.rerun()
@@ -877,90 +933,6 @@ def _clear_flashcards_preview_widget_state() -> None:
             st.session_state.pop(key, None)
 
 
-def _render_web_queries_panel(rows: list[dict[str, Any]]) -> None:
-    st.markdown("### 🌐 Проверить актуальность · источники")
-
-    # «Источник этих знаний» без сети: ссылки, которые лектор сам приложил к материалу.
-    lecture_links = harvest_links_from_rows(rows)
-    if lecture_links:
-        st.markdown("**🔗 Ссылки из лекции**")
-        for label, url in lecture_links[:8]:
-            st.markdown(f"- [{label}]({url})")
-
-    query = build_query_from_rows(rows)
-    if not query:
-        # Разделы без концепта и с пустыми заголовками — фолбэк на свалку заголовков.
-        heading_texts = [str(row.get("heading_text") or "") for row in rows]
-        key_concepts = [str(row.get("concept") or "") for row in rows if row.get("concept")]
-        query = build_query_terms(heading_texts=heading_texts, key_concepts=key_concepts)
-    links = build_web_search_links(query)
-    if not links:
-        st.caption("Добавьте разделы, чтобы сформировать поисковый запрос.")
-        return
-    st.caption(f"Запрос: «{query}»")
-    link_cols = st.columns(len(links))
-    for col, (label, url) in zip(link_cols, links):
-        with col:
-            st.link_button(label, url, width="stretch")
-
-
-_EXTERNAL_LLM_TARGETS = (
-    ("ChatGPT", "https://chatgpt.com/"),
-    ("Claude", "https://claude.ai/new"),
-    ("Gemini", "https://gemini.google.com/app"),
-)
-
-
-def _collect_concept_context(rows: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
-    """Prerequisites/related_concepts для всех уникальных концептов, привязанных к разделам корзины.
-
-    Раздел получает ``concept`` только когда его добавили из графа
-    (``_render_document_section_workbench_buttons`` в ``dashboards_graph.py``); разделы из
-    Flashcards приходят без концепта — тогда контекст пуст, и это ожидаемо (нет графового
-    привязки, откуда брать prerequisites).
-    """
-    concept_ids = sorted({str(row.get("concept") or "").strip() for row in rows if row.get("concept")})
-    if not concept_ids:
-        return [], []
-    try:
-        from app.knowledge_service import get_active_knowledge_graph
-
-        kg = get_active_knowledge_graph()
-        all_concepts = kg.get_concepts()
-    except Exception:  # noqa: BLE001 - контекст концепта опционален для промпта
-        return [], []
-
-    prereqs: list[str] = []
-    related: list[str] = []
-    for cid in concept_ids:
-        prereqs.extend(str(p) for p in kg.get_prerequisites(cid))
-        info = all_concepts.get(cid) or {}
-        related.extend(str(r) for r in (info.get("related_concepts") or []))
-
-    exclude = set(concept_ids)
-    prereqs_dedup = list(dict.fromkeys(p for p in prereqs if p and p not in exclude))
-    related_dedup = list(dict.fromkeys(r for r in related if r and r not in exclude))
-    return prereqs_dedup, related_dedup
-
-
-def _render_deep_study_panel(rows: list[dict[str, Any]]) -> None:
-    st.markdown("### 🧠 Промпт для глубокого изучения")
-    topic = str(st.session_state.get("living_konspekt_title") or "Рабочий конспект")
-    sections = [row_to_section(row) for row in rows]
-    prerequisites, related_concepts = _collect_concept_context(rows)
-    prompt_text = build_deep_study_prompt(
-        topic=topic,
-        sections=sections,
-        prerequisites=prerequisites,
-        related_concepts=related_concepts,
-    )
-    st.code(prompt_text, language="markdown")
-    prompt_cols = st.columns(len(_EXTERNAL_LLM_TARGETS))
-    for col, (label, url) in zip(prompt_cols, _EXTERNAL_LLM_TARGETS):
-        with col:
-            st.link_button(label, url, width="stretch")
-
-
 def render_living_konspekt_view() -> None:
     ensure_workbench_hydrated()
     render_panel_header(
@@ -974,23 +946,30 @@ def render_living_konspekt_view() -> None:
         f"В корзине: {len(rows)} раздел(ов) · автосохраняется локально и переживает перезапуск; "
         "именованные сессии в сайдбаре — для снимков-вариантов."
     )
+    render_add_sections_panel(expanded=not rows)
 
     if not rows:
         st.info(
-            "Корзина пуста. Добавляйте разделы из панели «⚡ Действия с концептом» на Knowledge Graph "
+            "Корзина пуста. Найдите разделы прямо здесь, добавьте их из Knowledge Graph "
             "или кнопкой «➕ В рабочий конспект» под карточкой Flashcards."
         )
         return
 
-    _render_all_lesson_videos_panel(rows)
-    _render_bulk_document_panel(rows)
-    _render_collected_sections(rows)
-    _render_memory_panel(rows)
-    st.divider()
-    _render_build_panel(rows)
-    st.divider()
-    _render_term_cards_panel(rows)
-    st.divider()
-    _render_web_queries_panel(rows)
-    st.divider()
-    _render_deep_study_panel(rows)
+    tab_sections, tab_reader, tab_memory, tab_export, tab_next = st.tabs(
+        ["🧩 Разделы", "📖 Читать", "🧠 Память", "📚 Сохранить", "🌐 Дальше"]
+    )
+    with tab_sections:
+        _render_all_lesson_videos_panel(rows)
+        _render_bulk_document_panel(rows)
+        _render_collected_sections(rows)
+    with tab_reader:
+        render_reader(rows, media_renderer=_render_media_panel)
+    with tab_memory:
+        _render_memory_panel(rows)
+        _render_term_cards_panel(rows)
+    with tab_export:
+        _render_build_panel(rows)
+    with tab_next:
+        render_web_queries_panel(rows)
+        st.divider()
+        render_deep_study_panel(rows)

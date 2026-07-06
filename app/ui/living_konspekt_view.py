@@ -73,6 +73,7 @@ _LAST_SAVED_BODY_KEY = "living_konspekt_last_saved_body"
 _NEW_TITLE_PICK = "__new__"
 _TITLE_PICK_KEY = "living_konspekt_title_pick"
 _TITLE_PICK_PREV_KEY = "living_konspekt_title_pick_prev"
+_TITLE_PICK_PENDING_KEY = "living_konspekt_title_pick_pending"
 
 
 def _apply_title_pick(
@@ -100,6 +101,11 @@ def _render_konspekt_title_fields() -> str:
         return st.text_input("Название конспекта", key="living_konspekt_title")
 
     id_to_artifact = {artifact.artifact_id: artifact for artifact in artifacts}
+    if _TITLE_PICK_PENDING_KEY in st.session_state:
+        pending_val = st.session_state.pop(_TITLE_PICK_PENDING_KEY)
+        st.session_state[_TITLE_PICK_KEY] = pending_val
+        st.session_state[_TITLE_PICK_PREV_KEY] = pending_val
+
     active_id = st.session_state.get(_ACTIVE_ARTIFACT_ID_KEY)
     if active_id in id_to_artifact:
         st.session_state.setdefault(_TITLE_PICK_KEY, active_id)
@@ -405,9 +411,11 @@ def _clear_deleted_artifact_session_refs(artifact: konspekt_artifact.SavedArtifa
             st.session_state.pop(_LAST_SAVED_BODY_KEY, None)
     if artifact.artifact_id and st.session_state.get(_ACTIVE_ARTIFACT_ID_KEY) == artifact.artifact_id:
         st.session_state.pop(_ACTIVE_ARTIFACT_ID_KEY, None)
-    if artifact.artifact_id and st.session_state.get(_TITLE_PICK_KEY) == artifact.artifact_id:
-        st.session_state[_TITLE_PICK_KEY] = _NEW_TITLE_PICK
-        st.session_state[_TITLE_PICK_PREV_KEY] = _NEW_TITLE_PICK
+    if artifact.artifact_id and (
+        st.session_state.get(_TITLE_PICK_KEY) == artifact.artifact_id
+        or st.session_state.get(_TITLE_PICK_PENDING_KEY) == artifact.artifact_id
+    ):
+        st.session_state[_TITLE_PICK_PENDING_KEY] = _NEW_TITLE_PICK
 
 
 def _render_saved_artifacts_panel() -> None:
@@ -453,8 +461,7 @@ def _render_saved_artifacts_panel() -> None:
                         set_project_goal(manifest.goal if isinstance(manifest.goal, dict) else {})
                         st.session_state[_ACTIVE_ARTIFACT_ID_KEY] = manifest.artifact_id
                         st.session_state["living_konspekt_title"] = manifest.title
-                        st.session_state[_TITLE_PICK_KEY] = manifest.artifact_id
-                        st.session_state[_TITLE_PICK_PREV_KEY] = manifest.artifact_id
+                        st.session_state[_TITLE_PICK_PENDING_KEY] = manifest.artifact_id
                         st.session_state["living_konspekt_last_saved"] = str(artifact.path)
                         st.session_state.pop(_LAST_SAVED_BODY_KEY, None)
                         try:
@@ -532,8 +539,7 @@ def _render_build_panel(rows: list[dict[str, Any]]) -> None:
             st.session_state[_LAST_SAVED_BODY_KEY] = body
             if manifest is not None:
                 st.session_state[_ACTIVE_ARTIFACT_ID_KEY] = manifest.artifact_id
-                st.session_state[_TITLE_PICK_KEY] = manifest.artifact_id
-                st.session_state[_TITLE_PICK_PREV_KEY] = manifest.artifact_id
+                st.session_state[_TITLE_PICK_PENDING_KEY] = manifest.artifact_id
             try:
                 from app.ui_events import track_event
 
@@ -543,7 +549,8 @@ def _render_build_panel(rows: list[dict[str, Any]]) -> None:
                 )
             except Exception:  # noqa: BLE001 - аналитика не должна ломать сохранение
                 pass
-            st.success("✅ Сохранено в vault. Войдёт в поиск и граф после обновления индекса.")
+            st.toast("Сохранено в vault. Войдёт в поиск и граф после обновления индекса.", icon="✅")
+            st.rerun()
     if print_clicked:
         try:
             body = _build_living_konspekt_body(topic, rows, mode)

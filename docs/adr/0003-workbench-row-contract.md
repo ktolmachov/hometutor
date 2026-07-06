@@ -2,7 +2,10 @@
 
 Date: 2026-07-06 (amended 2026-07-06: explicit non-portable snapshot persisted
 schema; `section_index.py` stays runtime-only; path-safety abs→rel helper;
-service auth boundary; research-payload backward-compat rule)
+service auth boundary; research-payload backward-compat rule; non-portable mode
+requires consumer UI guards (incl. render/export/source footer); live-state model
+service↔session_state fixed to one option; `data_relative_from_path` raise-style
+contract; `row_key` stable identity for add/move/remove/dedup)
 
 Status: Proposed
 
@@ -57,7 +60,7 @@ honestly instead of being rewritten to a wrong relative path.
 Portable persisted row (the normal case):
 
 ```text
-konspekt_md_rel, source_rel, row_version, portability_status,
+row_key, konspekt_md_rel, source_rel, row_version, portability_status,
 heading_text, slug, level, line_start, line_end, text, own_text, concept,
 note, read_at
 ```
@@ -65,12 +68,23 @@ note, read_at
 Non-portable persisted row (snapshot of a source no longer inside `DATA_DIR`):
 
 ```text
-row_version, portability_status="non_portable",
+row_key, row_version, portability_status="non_portable",
 konspekt_md_label, source_label, resolve_error,
 heading_text, slug, level, line_start, line_end, text, own_text, concept,
 note, read_at
 ```
 
+- `row_key` — stable row identity, present on **every** row (portable and
+  non-portable, persisted and runtime). Canonical derivation, computed by the
+  service at add/migration time: `f"{path_identity}:{line_start}"`, where
+  `path_identity` is `konspekt_md_rel` (portable) or `konspekt_md_label`
+  (non-portable). Invariants: deterministic from persisted fields (so dedup is
+  correct), stable across persisted↔runtime conversion (keyed off the persisted
+  identity, not the runtime abs), recomputed once during the abs→rel migration and
+  stable thereafter, and able to disambiguate non-portable rows that share an empty
+  path. W4 operations (add/dedup/move/remove) key off `row_key`, replacing today's
+  `(konspekt_md_abs, line_start)` identity — which collapses for non-portable rows
+  (`living_konspekt_view.py` add/dedup, move, remove all match on `konspekt_md_abs`).
 - `konspekt_md_rel`, `source_rel` — POSIX paths relative to `DATA_DIR`. Absent on a
   non-portable row.
 - `portability_status` — `"portable"` (default when the key is absent, for
@@ -94,19 +108,30 @@ The workbench service resolves `rel → abs` on hydration and returns the dict i
 today's shape so consuming code is unchanged:
 
 ```text
-konspekt_md_abs, source_abs, heading_text, slug, level,
+row_key, konspekt_md_abs, source_abs, heading_text, slug, level,
 line_start, line_end, text, own_text, concept, note, read_at
 ```
 
-`konspekt_md_abs`/`source_abs` are present but **computed**, never stored. Dedup
-keys, deep-links, staleness and Obsidian/VS Code opening keep working without
-edits in `living_konspekt_view.py` or the external importers.
+`konspekt_md_abs`/`source_abs` are present but **computed**, never stored. For
+portable rows, dedup keys, deep-links, staleness and Obsidian/VS Code opening keep
+working without edits in `living_konspekt_view.py` or the external importers — this
+is the contract's stability goal.
 
 For a non-portable row the runtime row keeps the **same keys** (stable shape for
-consumers) but `konspekt_md_abs`/`source_abs` are empty strings, and the runtime
-row additionally carries `portability_status`, `konspekt_md_label`, `source_label`
-and `resolve_error`. Staleness/deep-link code reads `portability_status` to show
-the hint and skip resolve instead of touching an empty path.
+consumers) and always carries `row_key`, but `konspekt_md_abs`/`source_abs` are
+empty strings, and the row additionally carries `portability_status`,
+`konspekt_md_label`, `source_label` and `resolve_error`. Non-portable mode is
+**not** free for consumers: today `_row_stale_status` returns `None` on an empty
+`md_abs`, and `_stitch_verbatim` / `_sources_footer` build the source name and the
+provenance footer from `konspekt_md_abs` (`Path(...).name` → empty on a non-portable
+row). W4 must add targeted UI guards:
+
+- staleness/deep-link/media code reads `portability_status` first, shows the
+  `resolve_error` hint, and skips resolve on an empty path;
+- render/export/source footer (`_stitch_verbatim`, `_sources_footer`) fall back to
+  `konspekt_md_label` / `source_label` when the abs path is empty.
+
+Plus tests. These guards are part of the wave's AC, not a follow-up.
 
 ### Single owner and module boundaries
 
@@ -114,8 +139,8 @@ The persisted form has exactly one owner:
 
 - **`app/workbench_service.py` (created in W4)** is the only component that reads
   or writes the persisted row. It owns the persisted↔runtime conversion
-  (`persisted_row_from_runtime` / `runtime_row_from_persisted`), the lazy
-  abs→rel migration, and the non-portable-snapshot decision.
+  (`persisted_row_from_runtime` / `runtime_row_from_persisted`), `row_key`
+  derivation, the lazy abs→rel migration, and the non-portable-snapshot decision.
 - **`app/section_index.py` stays runtime-only.** It keeps `IndexedSection` /
   `ParsedSection` and the *runtime* row (`section_to_row` / `row_to_section`,
   today's abs-keyed shape). It must **not** learn the persisted schema — otherwise
@@ -139,6 +164,36 @@ UI; in FastAPI it is the request-scoped dependency, in Telegram the bot handler.
 The Streamlit-only `state: MutableMapping` DI parameter of the current view helpers
 does not move into the service: persistence is `app_kv`, not session_state.
 
+### Live-state model (service vs Streamlit session)
+
+The service is a **stateless core**: mutators take the current runtime rows and
+return the new runtime rows, and persisting is the service's job (single owner of
+the persisted form). The Streamlit UI keeps
+`st.session_state["workbench_sections"]` as a **reactive cache/mirror** only.
+
+Each mutator has the shape `add_section(current_rows, section) -> new_rows`: it
+dedups over `current_rows` by `row_key`, persists the v2 persisted form (portable or
+non-portable as applicable) to `app_kv`, and returns the new runtime rows.
+`move_section(row_key, delta)` / `remove_section(row_key)` take `row_key`, not
+today's `(konspekt_md_abs, line_start)`. The UI adapter is one line:
+`session_state_rows = service.add_section(session_state_rows, section)`.
+`load_rows()` hydrates + lazily migrates from `app_kv` into runtime rows; the UI
+calls it once per session (today's `ensure_workbench_hydrated` optimization) so
+reruns do not re-read `app_kv`.
+
+This fixes the model to exactly one of the three otherwise-valid options:
+
+- **Chosen:** stateless service + UI session_state write-back cache. The service is
+  the persist authority; session_state is a mirror the UI reassigns from each
+  mutator's return.
+- **Rejected:** service re-reads `app_kv` as source-of-truth on every rerun —
+  wasteful and it loses in-memory reactivity.
+- **Rejected:** service holds its own live in-memory state — not stateless, and it
+  breaks reuse from FastAPI/Telegram/CLI where there is no shared session.
+
+For API/Telegram/CLI there is no session_state: the caller does
+`rows = service.load_rows(); rows = service.add_section(rows, section)` and stops.
+
 ### Path resolution and the non-portable-snapshot rule
 
 Resolution reuses the existing path-safety layer, keeping one resolution convention
@@ -147,13 +202,17 @@ with `media_sidecar`:
 - `app/path_safety.py::resolve_data_relative_path` (rel → abs, must stay inside
   `DATA_DIR`);
 - `app/path_safety.py::validate_data_relative_path` (canonical POSIX rel);
-- `app/path_safety.py::data_relative_from_path` (abs path inside `DATA_DIR` → POSIX
-  rel; returns `None` / signals outside-`DATA_DIR` otherwise) — **added in W4**.
-  The lazy abs→rel migration needs the reverse direction, which the current API
-  lacks (`validate_data_relative_path` rejects absolute input). Adding one helper
-  here also consolidates the ad hoc `relative_to(DATA_DIR).as_posix()` already
-  scattered across `demo_sandbox.py`, `index_diff.py`, `ingestion_content_state.py`
-  and `term_cards.py`, so W4 does not reinvent a fifth copy;
+- `app/path_safety.py::data_relative_from_path(path) -> str` — **added in W4**.
+  Unlike its siblings, it **accepts an absolute path** as input (they reject one)
+  and returns the canonical POSIX rel when the resolved path is inside `DATA_DIR`;
+  it **raises `ValueError`** when the path is outside `DATA_DIR` or invalid
+  (matching the raise-style of `resolve_data_relative_path`). The lazy abs→rel
+  migration wraps it in `try/except ValueError` to classify a row as non-portable.
+  The current API lacks this reverse direction (`validate_data_relative_path`
+  rejects absolute input). Adding one helper here also consolidates the ad hoc
+  `relative_to(DATA_DIR).as_posix()` already scattered across `demo_sandbox.py`,
+  `index_diff.py`, `ingestion_content_state.py` and `term_cards.py`, so W4 does not
+  reinvent a fifth copy;
 - `DATA_DIR` from `app/config.py`.
 
 A row whose path falls **outside** the current `DATA_DIR` at resolve time is not a
@@ -188,8 +247,9 @@ Positive:
 - rows survive a machine or `DATA_DIR` move without silent breakage;
 - sync stays correct: `app_kv` is already whitelisted, and nothing absolute is
   serialized anymore;
-- UI and external importers are unchanged because the runtime row keeps today's
-  shape;
+- portable-row consumers (UI + external importers) are unchanged because the
+  runtime row keeps today's shape; non-portable mode adds only targeted guards
+  (see Runtime row);
 - one path-resolution convention is shared with `media_sidecar` (ADR 0001);
 - reserved `note`/`read_at` avoid a second schema bump when W6 fills them.
 

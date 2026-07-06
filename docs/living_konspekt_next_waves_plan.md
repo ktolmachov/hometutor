@@ -57,6 +57,8 @@ deep-links, staleness и Obsidian/VS Code (`section_index.py`, `living_konspekt_
 
 - **Persisted row (хранится в `app_kv`/research payloads):** `konspekt_md_rel` + `source_rel`
   (DATA_DIR-relative, как в media-sidecar) + `row_version`. Ничего абсолютного на диске.
+  Полная portable/non-portable схема (с `portability_status`, `*_label`, `resolve_error`)
+  и контракт резолва — в **ADR 0003**; этот план фиксирует только инварианты.
 - **Runtime row (то, что видит UI после гидрации):** сервис резолвит rel → abs **на лету** и
   отдаёт ту же форму dict, что и сегодня (`konspekt_md_abs`/`source_abs` присутствуют, вычислены,
   не хранятся) — dedup/deep-links/staleness/Obsidian-URI продолжают работать без изменений в

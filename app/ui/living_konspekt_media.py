@@ -325,6 +325,37 @@ def _unique_document_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def render_lesson_video_links_for_md(md_abs: str) -> None:
+    """Compact link-only panel for all lesson videos of *md_abs* (no embedded player).
+
+    Intended for inline per-section use inside ``render_collected_sections``.
+    Silently no-ops when the document has no sidecar or no videos.
+    """
+    if not md_abs:
+        return
+    try:
+        sidecar = load_media_sidecar_for_konspekt(Path(md_abs))
+    except (OSError, ValueError, json.JSONDecodeError):
+        return
+    if sidecar is None or not sidecar.videos:
+        return
+    stale_reasons = _sidecar_stale_reasons(sidecar, md_abs)
+    st.caption("🎞 Видео урока:")
+    if stale_reasons:
+        st.caption("⚠ Таймкоды устарели: " + ", ".join(stale_reasons))
+    for idx, video in enumerate(sidecar.videos, start=1):
+        title = _video_title(video, idx)
+        if isinstance(video, UrlVideoSource):
+            try:
+                normalized = normalize_video_url(video.canonical_url or video.url)
+            except ValueError:
+                st.link_button(title, video.url, width="stretch")
+                continue
+            st.link_button(title, normalized.canonical_url, width="stretch")
+        elif isinstance(video, LocalVideoSource):
+            st.caption(f"📹 {title} (локальный файл: {video.path})")
+
+
 def _render_all_lesson_videos_panel(rows: list[dict[str, Any]]) -> None:
     entries: list[tuple[str, MediaSidecar, list[str]]] = []
     for row in _unique_document_rows(rows):

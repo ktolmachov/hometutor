@@ -11,7 +11,12 @@ import streamlit as st
 from app import workbench_service
 from app.section_index import IndexedSection, parse_sections
 from app.ui.helpers import format_request_error
-from app.ui.living_konspekt_media import _render_media_panel, _row_section_id, _unique_document_rows
+from app.ui.living_konspekt_media import (
+    _render_media_panel,
+    _row_section_id,
+    _unique_document_rows,
+    render_lesson_video_links_for_md,
+)
 
 _SLUG_RE = re.compile(r"[^\w\-]+", re.UNICODE)
 
@@ -216,6 +221,7 @@ def render_collected_sections(
                     st.caption(f"🕰 {stale_status}")
                 st.write(str(row.get("text") or "")[:400])
                 _render_media_panel(row)
+                render_lesson_video_links_for_md(md_abs)
             with cols[1]:
                 if md_abs:
                     st.link_button("📄 Открыть", obsidian_uri(Path(md_abs), heading_text=heading_text), width="stretch")

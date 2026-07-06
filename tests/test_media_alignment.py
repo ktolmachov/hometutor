@@ -7,6 +7,7 @@ from app.media_alignment import (
     TranscriptSegment,
     align_sections,
     compute_section_id,
+    _slide_number_from_heading,
 )
 from app.section_index import ParsedSection
 
@@ -241,3 +242,55 @@ def test_no_slide_cues_matches_lexical_baseline():
     assert all(a.confidence >= 0.70 for a in aligned)
     starts = [a.t_start for a in aligned]
     assert starts == sorted(starts)
+
+
+def test_slide_recap_late_mention_dropped_by_lis():
+    """Поздний recap «slide 1» не должен давать уверенный якорь раньше slide 3 в хронологии."""
+    segments = (
+        TranscriptSegment(10.0, 15.0, "переходим к slide 3 основной материал"),
+        TranscriptSegment(80.0, 85.0, "напомню slide 1 из начала лекции"),
+    )
+    sections = [
+        ParsedSection(
+            heading_text="Slide 1: Вступление",
+            slug="slide-1",
+            level=3,
+            line_start=1,
+            line_end=9,
+            text="текст " * 6,
+            own_text="текст " * 6,
+        ),
+        ParsedSection(
+            heading_text="Slide 2: Середина",
+            slug="slide-2",
+            level=3,
+            line_start=11,
+            line_end=19,
+            text="текст " * 6,
+            own_text="текст " * 6,
+        ),
+        ParsedSection(
+            heading_text="Slide 3: Основное",
+            slug="slide-3",
+            level=3,
+            line_start=21,
+            line_end=29,
+            text="текст " * 6,
+            own_text="текст " * 6,
+        ),
+    ]
+
+    aligned = align_sections(sections, segments)
+
+    assert aligned[2].anchored
+    assert aligned[2].t_start == 10.0
+    assert aligned[2].confidence >= 0.70
+    slide1 = aligned[0]
+    assert not (slide1.anchored and slide1.confidence >= 0.70 and slide1.t_start == 80.0)
+
+
+def test_plural_slide_range_heading_extracts_first_number():
+    assert _slide_number_from_heading("Слайд 3: works") == 3
+    assert _slide_number_from_heading("Слайды 8–12: LLM") == 8
+    assert _slide_number_from_heading("Слайды 25-27: Workflow") == 25
+    assert _slide_number_from_heading("Тема без слайда") is None

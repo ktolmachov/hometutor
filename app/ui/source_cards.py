@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from app.living_konspekt_source_resolver import SourceSectionCandidate, resolve_source_section
 from app.ui.answer_helpers import find_best_topic_for_documents
 from app.ui.quiz_learning_mode_widgets import (
     render_scoped_quiz_learning_mode_select,
@@ -100,6 +101,7 @@ def render_source_cards(
         )
 
         if show_document_quiz and rel and prefix == "query_src":
+            _render_living_konspekt_source_action(src, idx, prefix)
             dqk = f"{prefix}_scoped_quiz_{idx}"
             _api_lm = scoped_quiz_learning_mode_value(_src_lm_key)
             col_doc, col_top = st.columns([1, 1])
@@ -203,3 +205,55 @@ def render_source_cards(
             elif body_key in st.session_state:
                 lang = preview_code_language(rel) or "text"
                 st.code(st.session_state[body_key], language=lang)
+
+
+def _render_living_konspekt_source_action(src: dict, idx: int, prefix: str) -> None:
+    resolution = resolve_source_section(src)
+    action_key = f"{prefix}_lk_add_{idx}"
+    if resolution.status == "unavailable":
+        st.caption(resolution.message)
+        return
+
+    if resolution.status == "single" and resolution.single is not None:
+        candidate = resolution.single
+        if st.button("➕ В Живой конспект", key=action_key, width="stretch"):
+            _add_candidate_to_living_konspekt(candidate)
+            st.rerun()
+        st.caption(_candidate_caption(candidate))
+        return
+
+    if not resolution.candidates:
+        st.caption(resolution.message)
+        return
+
+    with st.expander("➕ В Живой конспект", expanded=False):
+        st.caption(resolution.message)
+        options = list(resolution.candidates)
+        selected = st.selectbox(
+            "Раздел",
+            options,
+            format_func=_candidate_label,
+            key=f"{action_key}_choice",
+        )
+        if st.button("Добавить выбранный раздел", key=f"{action_key}_confirm", width="stretch"):
+            _add_candidate_to_living_konspekt(selected)
+            st.rerun()
+
+
+def _add_candidate_to_living_konspekt(candidate: SourceSectionCandidate) -> None:
+    from app.ui.living_konspekt_view import add_section_to_workbench
+
+    added = add_section_to_workbench(candidate.section)
+    if added:
+        st.toast("Раздел добавлен в Живой конспект.", icon="📚")
+    else:
+        st.toast("Этот раздел уже есть в Живом конспекте.", icon="📚")
+
+
+def _candidate_label(candidate: SourceSectionCandidate) -> str:
+    section = candidate.section
+    return f"{section.heading_text} · строки {section.line_start}-{section.line_end}"
+
+
+def _candidate_caption(candidate: SourceSectionCandidate) -> str:
+    return f"{_candidate_label(candidate)} · {candidate.reason} · score {candidate.score:.1f}"

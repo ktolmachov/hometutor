@@ -40,7 +40,9 @@ _MAX_ANCHOR_CONFIDENCE = 0.99
 
 # Slide-aware anchoring
 _SLIDE_HEADING_NUM_RE = re.compile(
-    r"сла[йдею][де]?\s*№?\s*(\d+)|slide\s*(\d+)",
+    r"сла[йдею][де]?\s*№?\s*(\d+)|"
+    r"slide\s*(\d+)|"
+    r"слайды?\s*(\d+)\s*[-–—]\s*(\d+)",
     re.IGNORECASE,
 )
 _SLIDE_CUE_NUM_RE = re.compile(
@@ -48,7 +50,7 @@ _SLIDE_CUE_NUM_RE = re.compile(
     re.IGNORECASE,
 )
 _SLIDE_TITLE_PREFIX_RE = re.compile(
-    r"^сла[йдею][де]?\s*№?\s*\d+\s*:?\s*",
+    r"^(?:сла[йдею][де]?\s*№?\s*\d+(?:\s*[-–—]\s*\d+)?|slide\s*\d+)\s*:?\s*",
     re.IGNORECASE,
 )
 _SLIDE_DIRECT_CONFIDENCE = 0.90
@@ -57,7 +59,6 @@ _SLIDE_TITLE_STRONG_SCORE = 0.70
 _SLIDE_TITLE_MIN_SCORE = 0.55
 _SLIDE_TITLE_ORDER_MIN_SCORE = 0.40
 _SLIDE_CUE_LIS_WEIGHT = 100.0
-_MIN_ORDER_RANK_CUES = 4
 _GENERIC_HEADING_TITLES = frozenset(
     {
         "суть",
@@ -222,7 +223,7 @@ def _slide_number_from_heading(heading_text: str) -> int | None:
     match = _SLIDE_HEADING_NUM_RE.search(heading_text)
     if not match:
         return None
-    return int(match.group(1) or match.group(2))
+    return int(match.group(1) or match.group(2) or match.group(3))
 
 
 def _slide_title_from_heading(heading_text: str) -> str:
@@ -471,7 +472,6 @@ def _build_slide_anchors(
     spoken_nums = _detect_spoken_slide_numbers(segments)
     title_cues = _detect_slide_title_cues(segments, slide_sections)
     anchors: dict[int, tuple[int, float, float]] = {}
-    used_segments: set[int] = set()
 
     for pos, slide_num, _heading in slide_sections:
         if slide_num in spoken_nums:
@@ -481,7 +481,6 @@ def _build_slide_anchors(
                 _SLIDE_DIRECT_CONFIDENCE,
                 t_start,
             )
-            used_segments.add(seg_idx)
 
     title_by_num = {cue.slide_num: cue for cue in title_cues if cue.slide_num is not None}
     for pos, slide_num, _heading in slide_sections:
@@ -495,7 +494,6 @@ def _build_slide_anchors(
             _slide_confidence(direct_number=False, title_score=cue.title_score, order_rank=False),
             cue.t_start,
         )
-        used_segments.add(cue.seg_idx)
 
     unmatched = [
         (pos, slide_num, heading)
@@ -524,7 +522,11 @@ def _build_slide_anchors(
 # ── Взвешенный LIS по индексам блоков ───────────────────────────────────
 
 
-def _weighted_lis(anchors: list[tuple[int, int, float]]) -> set[int]:
+def _weighted_lis(
+    anchors: list[tuple[int, int, float]],
+    *,
+    prefer_later_section_on_tie: bool = False,
+) -> set[int]:
     """anchors: (section_pos, block_idx, score) в порядке section_pos.
 
     Возвращает section_pos-ы максимального по суммарному score подмножества
@@ -540,12 +542,37 @@ def _weighted_lis(anchors: list[tuple[int, int, float]]) -> set[int]:
             if anchors[j][1] <= anchors[i][1] and best[j] + anchors[i][2] > best[i]:
                 best[i] = best[j] + anchors[i][2]
                 prev[i] = j
-    tail = max(range(n), key=lambda i: best[i])
+    if prefer_later_section_on_tie:
+        tail = max(range(n), key=lambda i: (best[i], anchors[i][0]))
+    else:
+        tail = max(range(n), key=lambda i: best[i])
     keep: set[int] = set()
     while tail != -1:
         keep.add(anchors[tail][0])
         tail = prev[tail]
     return keep
+
+
+def _seg_idx_at_time(segments: tuple[TranscriptSegment, ...], t_start: float) -> int:
+    for idx, seg in enumerate(segments):
+        if abs(seg.start - t_start) < 0.01:
+            return idx
+    return max(range(len(segments)), key=lambda i: segments[i].start if segments[i].start <= t_start else -1)
+
+
+def _filter_slide_anchors_by_lis(
+    slide_anchor_by_pos: dict[int, tuple[int, float, float]],
+    segments: tuple[TranscriptSegment, ...],
+) -> dict[int, tuple[int, float, float]]:
+    """LIS по seg_idx: отбрасывает slide-cue, ломающие хронологию (recap, ASR-шум)."""
+    if not slide_anchor_by_pos:
+        return {}
+    lis_input = [
+        (pos, _seg_idx_at_time(segments, slide_anchor_by_pos[pos][2]), _SLIDE_CUE_LIS_WEIGHT)
+        for pos in sorted(slide_anchor_by_pos)
+    ]
+    kept = _weighted_lis(lis_input, prefer_later_section_on_tie=True)
+    return {pos: slide_anchor_by_pos[pos] for pos in kept}
 
 
 # ── Публичное выравнивание ──────────────────────────────────────────────
@@ -562,7 +589,10 @@ def align_sections(
             for s in sections
         ]
 
-    slide_anchor_by_pos = _build_slide_anchors(sections, segments, blocks)
+    slide_anchor_by_pos = _filter_slide_anchors_by_lis(
+        _build_slide_anchors(sections, segments, blocks),
+        segments,
+    )
 
     background = _background_tokens(blocks)
     scoring_blocks = [
@@ -602,7 +632,6 @@ def align_sections(
             candidates.append((pos, block_idx, scores[block_idx]))
 
     kept = _weighted_lis(candidates)
-    kept |= set(slide_anchor_by_pos.keys())
     anchor_by_pos: dict[int, tuple[int, float]] = {}
     anchor_t_start: dict[int, float] = {}
     for pos, blk, score in candidates:

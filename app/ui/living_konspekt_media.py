@@ -192,7 +192,7 @@ def _sidecar_stale_reasons(sidecar: MediaSidecar, md_abs: str) -> list[str]:
     )
 
 
-def _render_media_panel(row: dict[str, Any]) -> None:
+def _render_media_panel(row: dict[str, Any], is_first: bool = False) -> None:
     """Render optional section media from sidecar; never block the plain konspekt row."""
     md_abs = str(row.get("konspekt_md_abs") or "")
     if not md_abs:
@@ -211,24 +211,29 @@ def _render_media_panel(row: dict[str, Any]) -> None:
         st.caption("🎬 Медиа есть, но для этого раздела таймкод не найден.")
         return
 
-    st.markdown("**🎬 Материал раздела**")
-    if stale_reasons:
-        st.caption("Таймкоды устарели: " + ", ".join(stale_reasons))
-    if media_section.low_confidence:
-        st.caption("Таймкод примерный: confidence ниже порога.")
+    expander_label = "🎬 Видео раздела"
+    if media_section.t_start is not None:
+        expander_label += f" ({_format_timestamp(media_section.t_start)})"
 
-    # has_timestamp: таймкод пригоден для перемотки (есть и sidecar не устарел).
-    # confident_timestamp: дополнительно требует low_confidence=False — для точной подписи.
-    has_timestamp = media_section.t_start is not None and not stale_reasons
-    confident_timestamp = has_timestamp and not media_section.low_confidence
-    timestamp_label = _format_timestamp(media_section.t_start)
+    with st.expander(expander_label, expanded=is_first):
+        if stale_reasons:
+            st.caption("Таймкоды устарели: " + ", ".join(stale_reasons))
+        if media_section.low_confidence:
+            st.caption("Таймкод примерный: confidence ниже порога.")
 
-    video = sidecar.video
-    title = _video_title(video, 1)
-    if isinstance(video, UrlVideoSource):
-        _render_url_video_media(video, media_section, has_timestamp, confident_timestamp, timestamp_label, title)
-    elif isinstance(video, LocalVideoSource):
-        _render_local_video_media(video, media_section, has_timestamp, confident_timestamp, timestamp_label, title)
+        # has_timestamp: таймкод пригоден для перемотки (есть и sidecar не устарел).
+        # confident_timestamp: дополнительно требует low_confidence=False — для точной подписи.
+        has_timestamp = media_section.t_start is not None and not stale_reasons
+        confident_timestamp = has_timestamp and not media_section.low_confidence
+        timestamp_label = _format_timestamp(media_section.t_start)
+
+        video = sidecar.video
+        title = _video_title(video, 1)
+        if isinstance(video, UrlVideoSource):
+            _render_url_video_media(video, media_section, has_timestamp, confident_timestamp, timestamp_label, title)
+        elif isinstance(video, LocalVideoSource):
+            _render_local_video_media(video, media_section, has_timestamp, confident_timestamp, timestamp_label, title)
+
 
 
 def _video_title(video: LocalVideoSource | UrlVideoSource, idx: int) -> str:

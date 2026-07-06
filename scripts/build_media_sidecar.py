@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,20 +32,19 @@ from app.media_alignment import (  # noqa: E402
     compute_section_id,
     load_segments_file,
 )
+# _FRONTMATTER_RE/_MEDIA_SIDECAR_RE — тот же контракт, что у читателя приложения
+# (app.media_sidecar.read_media_sidecar_pointer). Писатель обязан работать в том же
+# frontmatter-scope: иначе «wired» не гарантирует, что приложение найдёт указатель
+# (строка media_sidecar: в теле конспекта читателем игнорируется).
 from app.media_sidecar import (  # noqa: E402
+    _FRONTMATTER_RE,
+    _MEDIA_SIDECAR_RE,
     parse_media_sidecar,
     sha256_file,
     sha256_konspekt_file,
 )
 from app.path_safety import data_relative_from_path, resolve_data_relative_path  # noqa: E402
 from app.section_index import parse_sections  # noqa: E402
-
-# Указатель sidecar в frontmatter конспекта. Применяется построчно (.match на одной
-# строке без \r/\n), поэтому CRLF- и LF-файлы обрабатываются одинаково; окончания
-# строк остального файла preservation см. в _ensure_frontmatter_pointer.
-_FRONTMATTER_POINTER_RE = re.compile(
-    r"media_sidecar:\s*[\"']?(?P<path>[^\"'\r\n#]+)[\"']?[ \t]*$"
-)
 
 
 def _utc_now() -> str:
@@ -268,22 +266,17 @@ def _write_coverage_json(path: Path, metrics: dict) -> None:
     path.write_text(json.dumps(metrics, ensure_ascii=False, indent=2), encoding="utf-8", newline="\n")
 
 
-def _insert_frontmatter_line(text: str, line: str, nl: str) -> str:
-    """Вставляет ``line`` в YAML frontmatter (после открывающего ``---``) или создаёт новый блок."""
-    if text.startswith("---"):
-        first_nl = text.find(nl)
-        if first_nl != -1:
-            return text[: first_nl + len(nl)] + line + nl + text[first_nl + len(nl) :]
-    return f"---{nl}{line}{nl}---{nl}{nl}" + text
-
-
 def _ensure_frontmatter_pointer(konspekt_abs: Path, sidecar_abs: Path) -> tuple[bool, str]:
     """Идемпотентная запись ``media_sidecar:`` в frontmatter конспекта.
 
-    Без указателя sidecar невидим приложению: обнаружение идёт ТОЛЬКО через
-    frontmatter (``app.media_sidecar``), co-location fallback'а нет. Построчная
-    обработка с определением разделителя сохраняет окончания строк остального
-    файла (минимальный diff) и корректно работает с CRLF и LF.
+    Без указателя sidecar невидим приложению: обнаружение идёт ТОЛЬКО через YAML-блок
+    ``---`` в начале файла (``app.media_sidecar.read_media_sidecar_pointer``),
+    co-location fallback'а нет. Поиск и запись идут строго в том же scope (через
+    ``_FRONTMATTER_RE``/``_MEDIA_SIDECAR_RE`` приложения): строка ``media_sidecar:``
+    в теле конспекта (пример/документация о фиче) НЕ считается указателем и не
+    переписывается — иначе писатель отрапортует «wired», а читатель ничего не найдёт.
+    Построчная обработка с определением разделителя сохраняет окончания строк
+    остального файла (минимальный diff), CRLF и LF обрабатываются корректно.
     """
     sidecar_rel = data_relative_from_path(sidecar_abs)
     raw = konspekt_abs.read_bytes()
@@ -291,17 +284,26 @@ def _ensure_frontmatter_pointer(konspekt_abs: Path, sidecar_abs: Path) -> tuple[
     text = raw.decode("utf-8")
     desired = f"media_sidecar: {sidecar_rel}"
 
-    parts = [p.rstrip("\r") for p in text.split("\n")]
-    idx = next((i for i, ln in enumerate(parts) if _FRONTMATTER_POINTER_RE.match(ln)), None)
+    fm = _FRONTMATTER_RE.match(text)
+    if not fm:
+        # Frontmatter-блока нет — без него читатель указатель не найдёт; создаём поверх.
+        konspekt_abs.write_bytes(f"---{nl}{desired}{nl}---{nl}{nl}{text}".encode("utf-8"))
+        return True, f"Добавлен frontmatter: {desired}"
+
+    body_start, body_end = fm.start("body"), fm.end("body")
+    parts = [p.rstrip("\r") for p in text[body_start:body_end].split("\n")]
+    idx = next((i for i, ln in enumerate(parts) if _MEDIA_SIDECAR_RE.search(ln)), None)
     if idx is not None:
-        current = _FRONTMATTER_POINTER_RE.match(parts[idx]).group("path").strip().strip("'\"")
+        current = _MEDIA_SIDECAR_RE.search(parts[idx]).group("path").strip().strip("'\"")
         if current == sidecar_rel:
             return False, f"Frontmatter уже подключён: {desired}"
         parts[idx] = desired
-        konspekt_abs.write_bytes(nl.join(parts).encode("utf-8"))
+        konspekt_abs.write_bytes((text[:body_start] + nl.join(parts) + text[body_end:]).encode("utf-8"))
         return True, f"Обновлён frontmatter (было «{current}»): {desired}"
 
-    konspekt_abs.write_bytes(_insert_frontmatter_line(text, desired, nl).encode("utf-8"))
+    # Блок есть, указателя в нём нет — вставляем первой строкой тела блока.
+    parts.insert(0, desired)
+    konspekt_abs.write_bytes((text[:body_start] + nl.join(parts) + text[body_end:]).encode("utf-8"))
     return True, f"Добавлен frontmatter: {desired}"
 
 

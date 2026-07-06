@@ -173,6 +173,30 @@ SYNTHESIS_PROMPT = ChatPromptTemplate(
     ]
 )
 
+SYNTHESIS_PARTIAL_PROMPT = ChatPromptTemplate(
+    message_templates=[
+        ChatMessage(role=MessageRole.SYSTEM, content=SYSTEM_RULES),
+        ChatMessage(
+            role=MessageRole.USER,
+            content=(
+                "Фрагменты из нескольких документов:\n"
+                "---------------------\n"
+                "{context_str}\n"
+                "---------------------\n\n"
+                "Тема для краткого обзора: {query_str}\n\n"
+                "Задача: подготовь сжатый, но содержательный и точный обзор/выжимку переданных фрагментов по указанной теме. "
+                "Этот обзор будет использован для последующего объединения в финальный конспект, поэтому крайне важно сохранить ключевые факты и источники.\n\n"
+                "Требования к ответу:\n"
+                "- Изложи суть фрагментов связным текстом или списком ключевых тезисов.\n"
+                "- Для каждого утверждения/тезиса обязательно укажи источник в формате [имя_файла], откуда взят факт.\n"
+                "- Не придумывай новые факты, не выходи за рамки предоставленного контекста.\n"
+                "- Пиши лаконично, убирай повторы, но не теряй важные детали."
+            ),
+        ),
+    ]
+)
+
+
 # ─────────────────────────────────────────────────────────────
 # LEARNING_PLAN — план обучения с зависимостями
 # ─────────────────────────────────────────────────────────────
@@ -246,6 +270,7 @@ PROMPTS = {
     "qa": QA_PROMPT,
     "overview": OVERVIEW_PROMPT,
     "synthesis": SYNTHESIS_PROMPT,
+    "synthesis_partial": SYNTHESIS_PARTIAL_PROMPT,
     "learning_plan": LEARNING_PLAN_PROMPT,
     "keyword": KEYWORD_PROMPT,
 }
@@ -257,6 +282,7 @@ PROMPT_VERSIONS = {
     "qa": "2.2",
     "overview": "2.1",
     "synthesis": "2.1",
+    "synthesis_partial": "2.1",
     "learning_plan": "2.1",
     "keyword": "2.1",
 }

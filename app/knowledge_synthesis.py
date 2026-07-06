@@ -273,25 +273,116 @@ def synthesize_sections(
         raise ValueError("Не выбрано ни одного раздела для синтеза")
     services = services or get_base_services()
 
-    context_sections = [
-        f"Раздел: {section.heading_text}\n"
-        f"Источник: {section.konspekt_md_abs.name} (строки {section.line_start}-{section.line_end})\n"
-        f"{section.text}"
-        for section in sections
-    ]
+    import dataclasses
+    from app.prompts import SYNTHESIS_PARTIAL_PROMPT
+    from app.token_utils import estimate_tokens
 
     llm = services["llm"]
-    prompt = SYNTHESIS_PROMPT.format(
-        context_str="\n\n".join(context_sections),
-        query_str=topic,
-    )
-    response = complete_with_resilience(llm, prompt, stage="synthesize_sections")
+    model = getattr(llm, "model", "gpt-4o-mini")
+
+    # Safe token limit for a single step's context block (so the entire prompt is under 20k tokens)
+    MAX_CONTEXT_TOKENS_PER_STEP = 15_000
+
+    # 1. Preprocess: If any individual section block is too large, truncate it.
+    processed_sections = []
+    for section in sections:
+        sec_text = section.text or ""
+        # Estimate section block tokens
+        block_format = (
+            f"Раздел: {section.heading_text}\n"
+            f"Источник: {section.konspekt_md_abs.name} (строки {section.line_start}-{section.line_end})\n"
+            f"{sec_text}"
+        )
+        sec_tokens = estimate_tokens(block_format, model=model)
+        if sec_tokens > MAX_CONTEXT_TOKENS_PER_STEP:
+            logger.warning(
+                f"Section '{section.heading_text}' is too large ({sec_tokens} tokens). Truncating."
+            )
+            truncated_text = sec_text
+            while estimate_tokens(
+                f"Раздел: {section.heading_text}\n"
+                f"Источник: {section.konspekt_md_abs.name} (строки {section.line_start}-{section.line_end})\n"
+                f"{truncated_text}",
+                model=model
+            ) > MAX_CONTEXT_TOKENS_PER_STEP:
+                truncated_text = truncated_text[:int(len(truncated_text) * 0.9)]
+            section = dataclasses.replace(section, text=truncated_text)
+        processed_sections.append(section)
+
+    # 2. Partition: Group sections to fit within context token budget sequentially.
+    groups: list[list[IndexedSection]] = []
+    current_group: list[IndexedSection] = []
+    current_tokens = 0
+
+    for section in processed_sections:
+        block_text = (
+            f"Раздел: {section.heading_text}\n"
+            f"Источник: {section.konspekt_md_abs.name} (строки {section.line_start}-{section.line_end})\n"
+            f"{section.text}"
+        )
+        sec_tokens = estimate_tokens(block_text, model=model)
+        if current_tokens + sec_tokens > MAX_CONTEXT_TOKENS_PER_STEP and current_group:
+            groups.append(current_group)
+            current_group = [section]
+            current_tokens = sec_tokens
+        else:
+            current_group.append(section)
+            current_tokens += sec_tokens
+
+    if current_group:
+        groups.append(current_group)
+
+    # 3. Synthesis: Single call if 1 group (fast path), otherwise Map-Reduce.
+    if len(groups) <= 1:
+        context_sections = [
+            f"Раздел: {section.heading_text}\n"
+            f"Источник: {section.konspekt_md_abs.name} (строки {section.line_start}-{section.line_end})\n"
+            f"{section.text}"
+            for section in processed_sections
+        ]
+        prompt = SYNTHESIS_PROMPT.format(
+            context_str="\n\n".join(context_sections),
+            query_str=topic,
+        )
+        response = complete_with_resilience(llm, prompt, stage="synthesize_sections")
+        summary_text = response.text.strip()
+    else:
+        logger.info(f"Synthesizing sections in Map-Reduce mode ({len(groups)} chunks)")
+        partial_summaries = []
+        for idx, group in enumerate(groups, 1):
+            context_sections = [
+                f"Раздел: {section.heading_text}\n"
+                f"Источник: {section.konspekt_md_abs.name} (строки {section.line_start}-{section.line_end})\n"
+                f"{section.text}"
+                for section in group
+            ]
+            prompt = SYNTHESIS_PARTIAL_PROMPT.format(
+                context_str="\n\n".join(context_sections),
+                query_str=topic,
+            )
+            response = complete_with_resilience(
+                llm, prompt, stage=f"synthesize_sections_partial_{idx}"
+            )
+            partial_summaries.append(response.text.strip())
+
+        # Reduce step: Combine partial summaries into the final structured synthesis
+        final_context = [
+            f"Часть {idx}:\n{summary}"
+            for idx, summary in enumerate(partial_summaries, 1)
+        ]
+        prompt = SYNTHESIS_PROMPT.format(
+            context_str="\n\n".join(final_context),
+            query_str=topic,
+        )
+        response = complete_with_resilience(llm, prompt, stage="synthesize_sections_reduce")
+        summary_text = response.text.strip()
 
     return {
         "topic": topic,
-        "summary": response.text.strip(),
-        "sections": [section_to_row(section) for section in sections],
+        "summary": summary_text,
+        "sections": [section_to_row(section) for section in processed_sections],
     }
+
 
 
 def fetch_document_chunks_text(

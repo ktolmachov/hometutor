@@ -17,7 +17,7 @@ from typing import Any, Callable, Mapping
 
 import streamlit as st
 
-MediaRenderer = Callable[[dict[str, Any]], None]
+MediaRenderer = Callable[[dict[str, Any], bool], None]
 SaveNote = Callable[[str, str], None]
 MarkRead = Callable[[str], None]
 TOC_THRESHOLD = 8
@@ -93,7 +93,7 @@ def render_reader(
         else:
             st.markdown(block["text"])
             if media_renderer is not None:
-                media_renderer(block["row"])
+                media_renderer(block["row"], section_index == 1)
             row = block["row"]
             row_key = str(row.get("row_key") or "")
             if row_key and (save_note is not None or mark_read is not None):

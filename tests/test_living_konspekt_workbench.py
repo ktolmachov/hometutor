@@ -620,6 +620,7 @@ class TestCollectConceptContext:
 
         import app.knowledge_service as knowledge_service
 
+
         monkeypatch.setattr(knowledge_service, "get_active_knowledge_graph", _boom)
         prereqs, related = _collect_concept_context([_row(_section(MD_A, 10))])
         assert prereqs == []
@@ -636,3 +637,74 @@ class TestCollectConceptContext:
         prereqs, related = _collect_concept_context([_row(row)])
         assert prereqs == []
         assert related == []
+
+
+class DummyLLMResponse:
+    def __init__(self, text: str):
+        self.text = text
+
+
+class DummyLLM:
+    def __init__(self, responses: list[str] | None = None):
+        self.model = "gpt-4o-mini"
+        self.responses = responses or []
+        self.calls = []
+
+    def complete(self, prompt: str, **kwargs: Any) -> DummyLLMResponse:
+        self.calls.append(prompt)
+        text = self.responses.pop(0) if self.responses else f"Synthesis for: {prompt[:30]}..."
+        return DummyLLMResponse(text)
+
+
+class TestLivingKonspektSynthesisMapReduce:
+    def test_synthesize_sections_single_chunk_fast_path(self):
+        from app.knowledge_synthesis import synthesize_sections
+
+        llm = DummyLLM(responses=["Single Synthesis Output"])
+        services = {
+            "llm": llm,
+        }
+
+        sec = _section(MD_A, 10, heading="Sec1", text="Short text.")
+        res = synthesize_sections(topic="My Topic", sections=[sec], services=services)
+
+        assert res["summary"] == "Single Synthesis Output"
+        assert len(llm.calls) == 1
+        assert "Раздел: Sec1" in llm.calls[0]
+
+    def test_synthesize_sections_map_reduce_multiple_chunks(self):
+        from app.knowledge_synthesis import synthesize_sections
+
+        sec1 = _section(MD_A, 10, heading="Sec1", text="A" * 24000)
+        sec2 = _section(MD_A, 20, heading="Sec2", text="B" * 24000)
+        sec3 = _section(MD_A, 30, heading="Sec3", text="C" * 24000)
+
+        llm = DummyLLM(responses=["Summary Group 1", "Summary Group 2", "Final Synthesis Output"])
+        services = {
+            "llm": llm,
+        }
+
+        res = synthesize_sections(topic="My Topic", sections=[sec1, sec2, sec3], services=services)
+
+        assert res["summary"] == "Final Synthesis Output"
+        assert len(llm.calls) == 3
+        assert "Sec1" in llm.calls[0] and "Sec2" in llm.calls[0]
+        assert "Sec3" in llm.calls[1]
+        assert "Summary Group 1" in llm.calls[2] and "Summary Group 2" in llm.calls[2]
+
+    def test_synthesize_sections_truncation_for_giant_section(self):
+        from app.knowledge_synthesis import synthesize_sections
+
+        giant_text = "D" * 70000
+        sec = _section(MD_A, 10, heading="GiantSec", text=giant_text)
+
+        llm = DummyLLM(responses=["Giant Synthesis Output"])
+        services = {
+            "llm": llm,
+        }
+
+        res = synthesize_sections(topic="My Topic", sections=[sec], services=services)
+
+        assert res["summary"] == "Giant Synthesis Output"
+        assert len(llm.calls) == 1
+        assert len(llm.calls[0]) < 70000

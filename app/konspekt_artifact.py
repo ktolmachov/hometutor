@@ -20,6 +20,7 @@ from app.media_alignment import compute_section_id
 from app.media_sidecar import (
     LocalVideoSource,
     UrlVideoSource,
+    current_konspekt_sha256_for_sidecar,
     load_media_sidecar_for_konspekt,
     read_media_sidecar_pointer,
     sha256_file,
@@ -578,7 +579,9 @@ def _media_section_for_row(sidecar: Any, row: dict[str, Any]) -> Any | None:
 
 def _sidecar_stale_reasons(sidecar: Any, md_abs: str) -> list[str]:
     try:
-        konspekt_sha = sha256_file(Path(md_abs))
+        konspekt_sha = current_konspekt_sha256_for_sidecar(
+            Path(md_abs), sidecar.konspekt_sha256
+        )
     except OSError:
         konspekt_sha = None
     media_sha: str | None = None

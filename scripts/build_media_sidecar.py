@@ -33,7 +33,11 @@ from app.media_alignment import (  # noqa: E402
     compute_section_id,
     load_segments_file,
 )
-from app.media_sidecar import parse_media_sidecar, sha256_file  # noqa: E402
+from app.media_sidecar import (  # noqa: E402
+    parse_media_sidecar,
+    sha256_file,
+    sha256_konspekt_file,
+)
 from app.path_safety import data_relative_from_path, resolve_data_relative_path  # noqa: E402
 from app.section_index import parse_sections  # noqa: E402
 
@@ -172,7 +176,7 @@ def build_payload(
     return (
         {
             "schema_version": 1,
-            "konspekt_sha256": sha256_file(konspekt_abs),
+            "konspekt_sha256": sha256_konspekt_file(konspekt_abs),
             "media_sha256": video_entry["sha256"],
             "generated_by": {
                 "tool": "scripts/build_media_sidecar.py",
@@ -352,6 +356,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     parse_media_sidecar(payload)  # контрактная валидация до записи
 
+    frontmatter_msg: str | None = None
+    if not args.dry_run and not args.no_frontmatter:
+        rewired, frontmatter_msg = _ensure_frontmatter_pointer(konspekt_abs, sidecar_path)
+        if rewired:
+            payload, aligned, media_duration = build_payload(
+                konspekt_abs=konspekt_abs,
+                video_rel=video_rel,
+                segments_path=segments_path,
+                existing=existing,
+            )
+            parse_media_sidecar(payload)
+
     _print_coverage(payload, aligned, media_duration)
     if args.coverage_json:
         _write_coverage_json(Path(args.coverage_json), _coverage_metrics(payload, aligned, media_duration))
@@ -365,8 +381,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Указатель для frontmatter (добавьте вручную): media_sidecar: "
               f"{data_relative_from_path(sidecar_path)}")
     else:
-        _wired, msg = _ensure_frontmatter_pointer(konspekt_abs, sidecar_path)
-        print(msg)
+        print(
+            frontmatter_msg
+            or f"Frontmatter уже подключён: media_sidecar: {data_relative_from_path(sidecar_path)}"
+        )
     return 0
 
 

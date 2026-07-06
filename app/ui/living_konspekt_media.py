@@ -20,6 +20,7 @@ from app.media_sidecar import (
     MediaSection,
     MediaSidecar,
     UrlVideoSource,
+    current_konspekt_sha256_for_sidecar,
     load_media_sidecar_for_konspekt,
     sha256_file,
 )
@@ -168,7 +169,9 @@ def _expected_asr_params(video_abs: Path) -> dict[str, Any] | None:
 
 def _sidecar_stale_reasons(sidecar: MediaSidecar, md_abs: str) -> list[str]:
     try:
-        konspekt_sha = sha256_file(Path(md_abs))
+        konspekt_sha = current_konspekt_sha256_for_sidecar(
+            Path(md_abs), sidecar.konspekt_sha256
+        )
     except OSError:
         konspekt_sha = None
     media_sha: str | None = None
@@ -350,4 +353,3 @@ def _render_all_lesson_videos_panel(rows: list[dict[str, Any]]) -> None:
                         _render_url_video_player(video, title)
                     elif isinstance(video, LocalVideoSource):
                         _render_local_video_player(video, title)
-

@@ -236,7 +236,11 @@ class TestMediaPanelSmoke:
         import app.ui.living_konspekt_media as view
 
         monkeypatch.setattr(view, "load_media_sidecar_for_konspekt", lambda path: _media_sidecar())
-        monkeypatch.setattr(view, "sha256_file", lambda path: "0" * 64)
+        monkeypatch.setattr(
+            view,
+            "current_konspekt_sha256_for_sidecar",
+            lambda path, sidecar_sha: "0" * 64,
+        )
 
         at = AppTest.from_function(_app)
         at.session_state["workbench_sections"] = [_row()]

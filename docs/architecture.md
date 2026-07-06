@@ -271,7 +271,9 @@ Persisted local media paths не могут быть абсолютными, dri
 
 Stale detection работает по `schema_version`, `konspekt_sha256`, `media_sha256`,
 `generated_by.asr_model` и `generated_by.alignment_version`. При mismatch потребители должны
-переходить в degraded state, а не доверять timestamp evidence.
+переходить в degraded state, а не доверять timestamp evidence. `konspekt_sha256` считается
+по содержимому конспекта без собственной строки frontmatter `media_sidecar`, чтобы подключение
+sidecar не делало свежие таймкоды устаревшими.
 
 В UI timestamp action показывается только когда sidecar актуален, раздел найден и confidence
 не ниже порога. Для stale/low-confidence state остаётся обычная ссылка/предупреждение.

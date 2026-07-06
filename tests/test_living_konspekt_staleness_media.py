@@ -11,6 +11,7 @@ from app.media_sidecar import (
     MediaSidecar,
     UrlVideoSource,
     sha256_file,
+    sha256_konspekt_file,
 )
 from app import workbench_service
 from app.section_index import section_to_row
@@ -147,6 +148,22 @@ def test_media_line_suppressed_for_stale_and_low_confidence(tmp_path):
 
     stale = _media_line_for_row(row, {str(md): _sidecar_for_row(row, "b" * 64, confidence=0.9)})
     assert stale is None, "stale sidecar (konspekt изменился) не должен давать таймкод"
+
+
+def test_media_line_trusts_sidecar_after_media_pointer_is_added(tmp_path):
+    """Pointer-only frontmatter changes are wiring, not semantic drift."""
+    md = tmp_path / "konspekt.md"
+    md.write_text(_KONSPEKT, encoding="utf-8")
+    legacy_sha = sha256_konspekt_file(md)
+    md.write_text(
+        "---\nmedia_sidecar: courses/autonomy/lecture.media.json\n---\n\n" + _KONSPEKT,
+        encoding="utf-8",
+    )
+    row = _rows_from_file(md)[0]
+
+    trusted = _media_line_for_row(row, {str(md): _sidecar_for_row(row, legacy_sha, confidence=0.9)})
+
+    assert trusted is not None and "1:30" in trusted
 
 
 def test_playlist_items_use_trusted_timestamps_in_workbench_order(tmp_path, monkeypatch):

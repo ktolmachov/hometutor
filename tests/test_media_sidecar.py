@@ -13,6 +13,7 @@ from app.media_sidecar import (
     load_media_sidecar_for_konspekt,
     parse_media_sidecar,
     read_media_sidecar_pointer,
+    sha256_konspekt_file,
 )
 
 SHA = "a" * 64
@@ -191,6 +192,34 @@ media_sidecar: courses/autonomy/lecture_01/video.media.json
     pointer = read_media_sidecar_pointer(markdown, data_dir=tmp_path)
 
     assert pointer == "courses/autonomy/lecture_01/video.media.json"
+
+
+def test_konspekt_hash_ignores_media_sidecar_pointer(tmp_path: Path):
+    plain = tmp_path / "plain.md"
+    plain.write_text("# Lecture\n\n## Topic\n\nBody.\n", encoding="utf-8")
+    plain_hash = sha256_konspekt_file(plain)
+
+    wired = tmp_path / "wired.md"
+    wired.write_text(
+        "---\nmedia_sidecar: courses/autonomy/lecture.media.json\n---\n\n# Lecture\n\n## Topic\n\nBody.\n",
+        encoding="utf-8",
+    )
+
+    assert sha256_konspekt_file(wired) == plain_hash
+
+
+def test_konspekt_hash_preserves_other_frontmatter(tmp_path: Path):
+    before = tmp_path / "before.md"
+    before.write_text("---\nsource: lecture.txt\n---\n\n# Lecture\n", encoding="utf-8")
+    before_hash = sha256_konspekt_file(before)
+
+    after = tmp_path / "after.md"
+    after.write_text(
+        "---\nmedia_sidecar: courses/autonomy/lecture.media.json\nsource: lecture.txt\n---\n\n# Lecture\n",
+        encoding="utf-8",
+    )
+
+    assert sha256_konspekt_file(after) == before_hash
 
 
 def test_read_media_sidecar_pointer_rejects_absolute_path(tmp_path: Path):

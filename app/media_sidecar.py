@@ -133,6 +133,72 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def sha256_konspekt_file(path: Path) -> str:
+    """Content hash for media-sidecar invalidation.
+
+    The frontmatter pointer to the sidecar is wiring metadata. It may be added by
+    ``scripts/build_media_sidecar.py`` during generation and must not make the
+    freshly generated sidecar stale.
+    """
+    text = path.read_text(encoding="utf-8", errors="replace")
+    return hashlib.sha256(_strip_media_sidecar_pointer(text).encode("utf-8")).hexdigest()
+
+
+def current_konspekt_sha256_for_sidecar(path: Path, sidecar_konspekt_sha256: str) -> str:
+    """Return a comparable current hash while accepting legacy sidecar hashes."""
+    normalized = sha256_konspekt_file(path)
+    expected = sidecar_konspekt_sha256.lower()
+    if expected == normalized:
+        return normalized
+    full = sha256_file(path)
+    if expected == full:
+        return full
+    return normalized
+
+
+def _strip_media_sidecar_pointer(markdown_text: str) -> str:
+    split = _split_frontmatter(markdown_text)
+    if split is None:
+        return markdown_text
+
+    opening, frontmatter, closing, remainder = split
+    lines = frontmatter.splitlines(keepends=True)
+    kept = [line for line in lines if not _MEDIA_SIDECAR_RE.match(line.rstrip("\r\n"))]
+    if kept == lines:
+        return markdown_text
+
+    if any(line.strip() for line in kept):
+        return opening + "".join(kept) + closing + remainder
+    if remainder.startswith("\r\n"):
+        return remainder[2:]
+    if remainder.startswith("\n"):
+        return remainder[1:]
+    return remainder
+
+
+def _split_frontmatter(markdown_text: str) -> tuple[str, str, str, str] | None:
+    if markdown_text.startswith("---\r\n"):
+        start = 5
+    elif markdown_text.startswith("---\n"):
+        start = 4
+    else:
+        return None
+
+    pos = start
+    while pos < len(markdown_text):
+        nl_pos = markdown_text.find("\n", pos)
+        if nl_pos == -1:
+            raw_line = markdown_text[pos:]
+            line_end = len(markdown_text)
+        else:
+            raw_line = markdown_text[pos : nl_pos + 1]
+            line_end = nl_pos + 1
+        if raw_line.rstrip("\r\n") == "---":
+            return markdown_text[:start], markdown_text[start:pos], raw_line, markdown_text[line_end:]
+        pos = line_end
+    return None
+
+
 def read_media_sidecar_pointer(markdown_text: str, *, data_dir: Path | None = None) -> str | None:
     match = _FRONTMATTER_RE.match(markdown_text)
     if not match:
@@ -403,9 +469,11 @@ __all__ = [
     "MediaSidecar",
     "SCHEMA_VERSION",
     "UrlVideoSource",
+    "current_konspekt_sha256_for_sidecar",
     "load_media_sidecar",
     "load_media_sidecar_for_konspekt",
     "parse_media_sidecar",
     "read_media_sidecar_pointer",
+    "sha256_konspekt_file",
     "sha256_file",
 ]

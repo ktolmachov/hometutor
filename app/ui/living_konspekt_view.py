@@ -13,12 +13,21 @@ from typing import Any, MutableMapping
 
 import streamlit as st
 
-from app import artifact_manifest
-from app.media_sidecar import UrlVideoSource, load_media_sidecar_for_konspekt
-from app.media_urls import normalize_video_url
+from app import konspekt_artifact
 from app import workbench_service
 from app.section_index import IndexedSection, parse_sections, row_to_section
 from app.ui.living_konspekt_add_panel import render_add_sections_panel
+from app.konspekt_artifact import (  # noqa: F401 - реэкспорт старых импортов feature-тестов
+    _check_questions_block,
+    _lecture_main_ideas,
+    _row_konspekt_label,
+    _sidecar_stale_reasons,
+    _sources_footer,
+    _stitch_verbatim,
+    _study_pack_tail,
+    _videos_block,
+    media_caption_line,
+)
 
 # Медиа-кластер вынесен в living_konspekt_media (size-budget); реэкспорт имён
 # сохраняет существующие импорты тестов/соседних модулей из этого файла.
@@ -46,7 +55,6 @@ _WORKBENCH_KV_KEY = workbench_service.WORKBENCH_KV_KEY
 _WORKBENCH_HYDRATED_KEY = "_workbench_hydrated"
 _ACTIVE_ARTIFACT_ID_KEY = "living_konspekt_active_artifact_id"
 _LAST_SAVED_BODY_KEY = "living_konspekt_last_saved_body"
-
 _SLUG_RE = re.compile(r"[^\w\-]+", re.UNICODE)
 
 
@@ -160,263 +168,20 @@ def remove_section_from_workbench(
     target[WORKBENCH_SECTIONS_KEY] = workbench_service.remove_section(rows, row_key, storage=storage)
 
 
-# ── Сборка рабочего конспекта ────────────────────────────────────────────
-def _lecture_main_ideas(rows: list[dict[str, Any]]) -> list[tuple[str, str]]:
-    """``[(имя конспекта, первый абзац главной мысли), ...]`` по уникальным документам корзины.
-
-    «Дух лекции» едет в сам артефакт, а не только в deep-study промпт. Конспект без
-    раздела-роли ``main_idea`` (или недоступный файл) молча пропускается.
-    """
-    try:
-        from app.section_index import main_idea_section, sections_by_role, _cached_parse_sections
-    except Exception:  # noqa: BLE001 - обогащение опционально
-        return []
-
-    md_paths: list[str] = []
-    for row in rows:
-        md = str(row.get("konspekt_md_abs") or "")
-        if md and md not in md_paths:
-            md_paths.append(md)
-
-    out: list[tuple[str, str]] = []
-    for md in md_paths:
-        try:
-            parsed = _cached_parse_sections(Path(md))
-        except OSError:
-            continue
-        # Роль → эвристика main_idea_section (первая содержательная H2) — как в промпте.
-        main_idea = sections_by_role(parsed).get("main_idea") or main_idea_section(parsed)
-        if main_idea is None or not main_idea.text.strip():
-            continue
-        first_paragraph = main_idea.text.strip().split("\n\n", 1)[0].strip()
-        if first_paragraph:
-            out.append((Path(md).name, first_paragraph))
-    return out
-
-
-def _sources_footer(rows: list[dict[str, Any]]) -> str:
-    """«## Источники» со списком ``файл:строки`` всех разделов — провенанс живёт в самом
-    сохранённом файле, а не только в session_state. Пустая корзина → пустая строка."""
-    source_lines = [
-        f"- {_row_konspekt_label(row)}:{row.get('line_start')}-{row.get('line_end')}"
-        f" — «{row.get('heading_text') or '—'}»"
-        for row in rows
-    ]
-    return "## Источники\n\n" + "\n".join(source_lines) if source_lines else ""
-
-
-_MAX_CHECK_QUESTIONS = 8
-
-
-def _check_questions_block(rows: list[dict[str, Any]]) -> str:
-    """«## ✅ Проверь себя» из роли ``check_questions`` конспектов корзины (дословно,
-    вопросы лектора). Роли нет / файлы недоступны → пустая строка (честная деградация)."""
-    try:
-        from app.section_index import sections_by_role, _cached_parse_sections
-    except Exception:  # noqa: BLE001 - обогащение опционально
-        return ""
-
-    md_paths: list[str] = []
-    for row in rows:
-        md = str(row.get("konspekt_md_abs") or "")
-        if md and md not in md_paths:
-            md_paths.append(md)
-
-    questions: list[str] = []
-    for md in md_paths:
-        try:
-            parsed = _cached_parse_sections(Path(md))
-        except OSError:
-            continue
-        section = sections_by_role(parsed).get("check_questions")
-        if section is None:
-            continue
-        for line in section.text.splitlines():
-            line = line.strip()
-            if line:
-                questions.append(line)
-            if len(questions) >= _MAX_CHECK_QUESTIONS:
-                break
-        if len(questions) >= _MAX_CHECK_QUESTIONS:
-            break
-    if not questions:
-        return ""
-    return "## ✅ Проверь себя\n\n" + "\n".join(questions)
-
-
-def _study_pack_tail(rows: list[dict[str, Any]]) -> str:
-    """Хвост Study Pack: «Проверь себя» + «Источники» — для ОБОИХ режимов сборки.
-
-    LLM-синтез отдаёт только summary; без этого хвоста сохранённый файл терял провенанс
-    (Findings по ``рабочий-конспект-лекция-2.md``: «Источники» — только имя файла).
-    """
-    blocks = [block for block in (_check_questions_block(rows), _sources_footer(rows)) if block]
-    return "\n\n".join(blocks)
-
-
-def media_caption_line(
-    t_start: float | int | None,
-    t_end: float | int | None,
-    video_title: str | None,
-    youtube_url_with_t: str | None = None,
-) -> str | None:
-    """Markdown-строка «🎬 видео с таймкодом» для сохранённого артефакта (чистая, тестируемая).
-
-    Без таймкода — ``None``: строка медиа в файле полезна только адресной.
-    """
-    if t_start is None:
-        return None
-    window = _format_timestamp(t_start) + (f"–{_format_timestamp(t_end)}" if t_end is not None else "")
-    title = (video_title or "видео").strip() or "видео"
-    if youtube_url_with_t:
-        return f"*🎬 [{title} · {window}]({youtube_url_with_t})*"
-    return f"*🎬 {title} · {window}*"
-
-
+# ── UI ────────────────────────────────────────────────────────────────────
 def _media_line_for_row(
     row: dict[str, Any],
     sidecar_cache: dict[str, Any],
     stale_cache: dict[str, list[str]] | None = None,
 ) -> str | None:
-    """Таймкод раздела для артефакта: сохранённый конспект не должен терять видео-привязку.
-
-    Критерий доверия тот же, что в UI-панели (:mod:`living_konspekt_media`): stale-sidecar
-    или low-confidence раздел → ``None``, иначе файл получил бы таймкод, который само
-    приложение считает недостоверным.
-
-    ``stale_cache`` обязателен по смыслу: staleness хэширует konspekt И локальный
-    видеофайл (гигабайты) — считается один раз на документ, а не на каждый раздел.
-    """
-    md_abs = str(row.get("konspekt_md_abs") or "")
-    if not md_abs:
-        return None
-    if md_abs not in sidecar_cache:
-        try:
-            sidecar_cache[md_abs] = load_media_sidecar_for_konspekt(Path(md_abs))
-        except Exception:  # noqa: BLE001 - медиа опционально, склейка не должна падать
-            sidecar_cache[md_abs] = None
-    sidecar = sidecar_cache[md_abs]
-    if sidecar is None:
-        return None
-    media_section = _media_section_for_row(sidecar, row)
-    if media_section is None or media_section.t_start is None or media_section.low_confidence:
-        return None
-    stale = stale_cache if stale_cache is not None else {}
-    if md_abs not in stale:
-        stale[md_abs] = _sidecar_stale_reasons(sidecar, md_abs)
-    if stale[md_abs]:
-        return None
-    # Таймкод легитимен только для первичного видео (по нему выровнен media_sha256);
-    # вторичные media.videos[] — смежные материалы, их не таймкодируем (см. _videos_block).
-    video = sidecar.video
-    youtube_url: str | None = None
-    title: str | None = getattr(video, "title", None)
-    if isinstance(video, UrlVideoSource):
-        try:
-            normalized = normalize_video_url(video.url)
-            if normalized.is_youtube:
-                youtube_url = normalized.with_timestamp(media_section.t_start)
-        except ValueError:
-            youtube_url = None
-    return media_caption_line(media_section.t_start, media_section.t_end, title, youtube_url)
+    original = konspekt_artifact._sidecar_stale_reasons
+    try:
+        konspekt_artifact._sidecar_stale_reasons = _sidecar_stale_reasons
+        return konspekt_artifact._media_line_for_row(row, sidecar_cache, stale_cache)
+    finally:
+        konspekt_artifact._sidecar_stale_reasons = original
 
 
-def _videos_block(sidecar_cache: dict[str, Any]) -> str:
-    """«🎬 Видео материалов» для артефакта: ВСЕ источники из ``media.videos[]``.
-
-    Первичное видео даёт таймкоды разделов, но вторичные (доклады, разборы) иначе
-    терялись бы при сохранении. URL — кликабельным, локальный файл — именем.
-    """
-    lines: list[str] = []
-    seen: set[str] = set()
-    for sidecar in sidecar_cache.values():
-        if sidecar is None:
-            continue
-        for video in sidecar.videos:
-            if isinstance(video, UrlVideoSource):
-                key = video.canonical_url or video.url
-                label = (video.title or "").strip() or key
-                entry = f"- [{label}]({key})"
-            else:
-                key = str(getattr(video, "path", ""))
-                label = (getattr(video, "title", None) or Path(key).name or "видео").strip()
-                entry = f"- {label} (`{Path(key).name}`)"
-            if key and key not in seen:
-                seen.add(key)
-                lines.append(entry)
-    return "## 🎬 Видео материалов\n\n" + "\n".join(lines) if lines else ""
-
-
-def _stitch_verbatim(rows: list[dict[str, Any]]) -> str:
-    """Детерминированная склейка: главная мысль лекции + заголовки-источники + якоря + текст.
-
-    Под источником — видео-таймкод раздела из media-sidecar (артефакт остаётся
-    мультимодальным). В конец — «Проверь себя» и «## Источники» (``файл:строки``).
-    """
-    header_parts = [
-        f"> **Главная мысль исходной лекции ({doc_name}):** {idea}"
-        for doc_name, idea in _lecture_main_ideas(rows)
-    ]
-
-    sidecar_cache: dict[str, Any] = {}
-    stale_cache: dict[str, list[str]] = {}
-    parts: list[str] = []
-    for row in rows:
-        heading = str(row.get("heading_text") or "Без названия")
-        source_name = _row_konspekt_label(row)
-        location = f"{source_name}:{row.get('line_start')}"
-        media_line = _media_line_for_row(row, sidecar_cache, stale_cache)
-        source_block = f"*Источник: {location}*" + (f"\n\n{media_line}" if media_line else "")
-        parts.append(f"## {heading}\n\n{source_block}\n\n{row.get('text') or ''}")
-
-    blocks: list[str] = []
-    if header_parts:
-        blocks.append("\n>\n".join(header_parts))
-    blocks.append("\n\n---\n\n".join(parts))
-    videos = _videos_block(sidecar_cache)
-    if videos:
-        blocks.append(videos)
-    tail = _study_pack_tail(rows)
-    if tail:
-        blocks.append(tail)
-    return "\n\n".join(blocks)
-
-
-def _save_living_konspekt(
-    title: str,
-    body_markdown: str,
-    rows: list[dict[str, Any]],
-    *,
-    artifact_id: str | None = None,
-) -> Path:
-    """Сохранить в ``vault_root()/"living-konspekt"/<slug>.md`` — НЕ ``vault_target()``.
-
-    ``vault_target()`` требует ``source_abs`` и зеркалит путь исходника; у рабочего
-    конспекта нет единого исходника (это сборка из нескольких документов).
-    """
-    from app.obsidian_export import vault_root
-
-    target_dir = vault_root() / "living-konspekt"
-    target_dir.mkdir(parents=True, exist_ok=True)
-    persisted_rows = workbench_service.persisted_rows_from_runtime(rows)
-    normalized_artifact_id = artifact_manifest.artifact_id_from_title(artifact_id or title)
-    target_path = artifact_manifest.target_path_for_artifact(vault_root(), title, normalized_artifact_id)
-    previous_manifest = None
-    if target_path.exists():
-        previous_manifest = artifact_manifest.parse_manifest(target_path.read_text(encoding="utf-8", errors="replace"))
-    manifest = artifact_manifest.serialize_manifest(
-        title,
-        persisted_rows,
-        artifact_manifest.collect_sidecar_pointers(persisted_rows),
-        artifact_id=normalized_artifact_id,
-        goal=previous_manifest.goal if previous_manifest is not None else None,
-        created_at=previous_manifest.created_at if previous_manifest is not None else None,
-    )
-    target_path.write_text(f"{manifest}# {title}\n\n{body_markdown}\n", encoding="utf-8")
-    return target_path
-
-
-# ── UI ────────────────────────────────────────────────────────────────────
 def _duplicate_heading_keys(rows: list[dict[str, Any]]) -> set[tuple[str, str]]:
     """``(konspekt_md_abs, heading_text)`` с >1 разделом в корзине.
 
@@ -672,7 +437,7 @@ def _render_saved_artifacts_panel() -> None:
     from app.obsidian_export import obsidian_uri, vault_root, vscode_uri
 
     st.markdown("### Мои конспекты")
-    artifacts = artifact_manifest.scan_saved_artifacts(vault_root())
+    artifacts = konspekt_artifact.scan_saved_artifacts(vault_root())
     if not artifacts:
         st.caption("Сохранённых живых конспектов пока нет.")
         return
@@ -682,24 +447,31 @@ def _render_saved_artifacts_panel() -> None:
             cols = st.columns([5, 1.2, 1.2, 1.2])
             with cols[0]:
                 st.markdown(f"**{artifact.title}**")
+                manifest_label = f"id: `{artifact.artifact_id}`" if artifact.has_manifest else "без манифеста"
                 st.caption(
                     f"{artifact.name} · разделов: {artifact.section_count} · обновлён: {artifact.updated_at} · "
-                    f"id: `{artifact.artifact_id}`"
+                    f"{manifest_label}"
                 )
             with cols[1]:
                 st.link_button("📄 Открыть", obsidian_uri(artifact.path), width="stretch")
             with cols[2]:
                 st.link_button("🖥 VS Code", vscode_uri(artifact.path), width="stretch")
             with cols[3]:
-                if st.button("↩ Пересобрать", key=f"living_artifact_reassemble_{idx}_{artifact.artifact_id}", width="stretch"):
+                artifact_key = artifact.artifact_id or artifact.path.stem
+                if st.button(
+                    "↩ Пересобрать",
+                    key=f"living_artifact_reassemble_{idx}_{artifact_key}",
+                    width="stretch",
+                    disabled=not artifact.can_reassemble,
+                ):
                     try:
-                        manifest = artifact_manifest.parse_manifest(
+                        manifest = konspekt_artifact.parse_manifest(
                             artifact.path.read_text(encoding="utf-8", errors="replace")
                         )
                         if manifest is None:
                             st.error("В файле нет манифеста живого конспекта.")
                             return
-                        rows = artifact_manifest.reassemble_rows(manifest)
+                        rows = konspekt_artifact.reassemble_rows(manifest)
                         set_workbench_rows(rows)
                         st.session_state[_ACTIVE_ARTIFACT_ID_KEY] = manifest.artifact_id
                         st.session_state["living_konspekt_title"] = manifest.title
@@ -727,21 +499,24 @@ def _render_build_panel(rows: list[dict[str, Any]]) -> None:
         key="living_konspekt_mode",
         horizontal=True,
     )
-    action_cols = st.columns([1.2, 1])
+    action_cols = st.columns([1.2, 1.1, 1])
     with action_cols[0]:
         save_clicked = st.button("Собрать и сохранить", key="living_konspekt_build", type="primary", width="stretch")
     with action_cols[1]:
+        save_new_clicked = st.button("Сохранить как новый", key="living_konspekt_build_new", width="stretch")
+    with action_cols[2]:
         print_clicked = st.button("Печать/PDF", key="living_konspekt_print", width="stretch")
-    if save_clicked:
+    if save_clicked or save_new_clicked:
         try:
             body = _build_living_konspekt_body(topic, rows, mode)
-            target_path = _save_living_konspekt(
+            target_path = konspekt_artifact.save_artifact(
                 topic,
                 body,
                 rows,
                 artifact_id=st.session_state.get(_ACTIVE_ARTIFACT_ID_KEY),
+                save_as_new=save_new_clicked,
             )
-            manifest = artifact_manifest.parse_manifest(target_path.read_text(encoding="utf-8", errors="replace"))
+            manifest = konspekt_artifact.parse_manifest(target_path.read_text(encoding="utf-8", errors="replace"))
         except Exception as exc:  # noqa: BLE001 - показать пользователю причину сбора/сохранения
             st.error(f"Не удалось собрать конспект: {format_request_error(exc)}")
         else:

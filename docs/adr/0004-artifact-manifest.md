@@ -25,7 +25,7 @@ videos, so it has different invariants and needs a separate owner.
 
 ## Decision
 
-Introduce `artifact_manifest_v1`, owned only by `app/artifact_manifest.py`.
+Introduce `artifact_manifest_v1`, owned only by `app/konspekt_artifact.py`.
 
 The manifest lives in the YAML frontmatter of the saved `.md` file. The markdown
 file is self-contained and round-trippable, while the body stays human-readable:
@@ -44,6 +44,7 @@ goal: null
 rows:
   - row_version: 2
     portability_status: portable
+    section_id: sha256:...
     row_key: p:courses/lecture.md:10
     konspekt_md_rel: courses/lecture.md
     source_rel: courses/lecture.txt
@@ -53,29 +54,26 @@ rows:
     text: Дословный текст
     note: null
     read_at: null
-section_anchors:
-  - row_key: p:courses/lecture.md:10
-    section_id: sha256:...
-    anchor_status: snapshot
 sidecar_pointers:
   - konspekt_md_rel: courses/lecture.md
     media_sidecar: courses/lecture.media.json
 ```
 
 `rows` stores the persisted v2 row form returned by
-`workbench_service.persisted_rows_from_runtime`. The manifest does not derive,
-hydrate, or reinterpret row fields itself. `note` and `read_at` are opaque
+`workbench_service.persisted_rows_from_runtime`, plus artifact-level
+`section_id` on each row. `section_id` is not part of the workbench row contract;
+it is the manifest snapshot computed from the row content with
+`app.media_alignment.compute_section_id` at save time. On reassembly the artifact
+owner strips this field before handing rows back to `workbench_service`, after it
+has used the field for best-effort re-anchoring. `note` and `read_at` are opaque
 passthrough fields: even `null` must survive save -> reassemble -> re-save, and
 future W6 values must not require a manifest version bump.
 
-`section_anchors` stores artifact-level content anchors outside the row contract.
-Each entry maps a row's current `row_key` to the `section_id` computed from the
-row snapshot with `app.media_alignment.compute_section_id`. This deliberately
-does not extend persisted row v2. `section_id` is a snapshot taken at save time:
-future re-anchoring can use it as a best-effort content anchor after source
-regeneration, and if no matching source section is found the row remains a
-readable non-portable-style snapshot rather than silently moving notes to the
-wrong section.
+When the source markdown has drifted, reassembly reparses the source and matches
+by `section_id`; if a matching section is found, line/text fields are refreshed
+from the source. If the source disappeared or no matching section exists, the
+row remains a readable non-portable snapshot rather than silently moving notes to
+the wrong section.
 
 `goal` is reserved for W6. In v1 it is opaque passthrough data and is not filled
 by W5.
@@ -93,9 +91,8 @@ manifest.rows
   -> Living Konspekt workbench basket
 ```
 
-`section_anchors` is not required for the basic W5 reassembly path; it is carried
-by the manifest so W6+ can preserve notes/progress across source drift without
-changing manifest v1.
+`section_id` is carried directly on each manifest row so W6+ can preserve
+notes/progress across source drift without changing manifest v1.
 
 Portable and non-portable rows both survive this path because the manifest stores
 the already persisted row shape from ADR 0003, including non-portable snapshots.
@@ -111,7 +108,7 @@ Positive:
 
 - saved Living Konspekts become machine-readable without losing readable markdown;
 - rows can be restored to the workbench through the ADR 0003 service contract;
-- content anchors give W6 a stable note/progress hook that is less brittle than
+- `section_id` gives W6 a stable note/progress hook that is less brittle than
   `row_key`'s line-number component;
 - W6 can add notes, reading progress, and goals without a manifest bump;
 - update-vs-copy is based on stable identity instead of filename probing;
@@ -127,7 +124,8 @@ Tradeoffs:
 
 ## Implementation Notes
 
-- `app/artifact_manifest.py` is the only module that knows the manifest schema.
+- `app/konspekt_artifact.py` is the only module that knows the manifest schema
+  and the readable artifact body shape.
 - YAML parsing reuses the existing markdown frontmatter conventions used by
   `app/ingestion_sections.py`; no new dependency is introduced.
 - Path resolution for sidecar pointers goes through `app/path_safety.py`, and the

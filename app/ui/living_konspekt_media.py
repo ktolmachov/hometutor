@@ -220,14 +220,12 @@ def _render_media_panel(row: dict[str, Any]) -> None:
     confident_timestamp = media_section.t_start is not None and not stale_reasons and not media_section.low_confidence
     timestamp_label = _format_timestamp(media_section.t_start)
 
-    for idx, video in enumerate(sidecar.videos, start=1):
-        title = _video_title(video, idx)
-        if len(sidecar.videos) > 1:
-            st.caption(title)
-        if isinstance(video, UrlVideoSource):
-            _render_url_video_media(video, media_section, confident_timestamp, timestamp_label, title)
-        elif isinstance(video, LocalVideoSource):
-            _render_local_video_media(video, media_section, confident_timestamp, timestamp_label, title)
+    video = sidecar.video
+    title = _video_title(video, 1)
+    if isinstance(video, UrlVideoSource):
+        _render_url_video_media(video, media_section, confident_timestamp, timestamp_label, title)
+    elif isinstance(video, LocalVideoSource):
+        _render_local_video_media(video, media_section, confident_timestamp, timestamp_label, title)
 
 
 def _video_title(video: LocalVideoSource | UrlVideoSource, idx: int) -> str:

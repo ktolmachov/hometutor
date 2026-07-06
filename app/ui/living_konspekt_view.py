@@ -611,6 +611,12 @@ def _render_project_goal_panel() -> None:
         st.rerun()
 
 
+def _reader_media_renderer(row: dict[str, Any], is_first: bool) -> None:
+    # key_prefix отличает чекбоксы "Показать видео" от вкладки «Разделы»: одна и та же
+    # строка рендерится в обеих вкладках за один rerun, ключи виджетов не могут совпадать.
+    _render_media_panel(row, is_first, key_prefix="reader")
+
+
 def render_living_konspekt_view() -> None:
     from app.ui.reindex_poll import poll_reindex_status
 
@@ -663,7 +669,7 @@ def render_living_konspekt_view() -> None:
     with tab_reader:
         render_reader(
             rows,
-            media_renderer=_render_media_panel,
+            media_renderer=_reader_media_renderer,
             save_note=update_section_note_in_workbench,
             mark_read=mark_section_read_in_workbench,
         )

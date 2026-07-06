@@ -192,7 +192,7 @@ def _sidecar_stale_reasons(sidecar: MediaSidecar, md_abs: str) -> list[str]:
     )
 
 
-def _render_media_panel(row: dict[str, Any], is_first: bool = False) -> None:
+def _render_media_panel(row: dict[str, Any], is_first: bool = False, *, key_prefix: str = "wb") -> None:
     """Render optional section media from sidecar; never block the plain konspekt row."""
     md_abs = str(row.get("konspekt_md_abs") or "")
     if not md_abs:
@@ -233,7 +233,11 @@ def _render_media_panel(row: dict[str, Any], is_first: bool = False) -> None:
         if isinstance(video, UrlVideoSource):
             _render_url_video_media(video, media_section, has_timestamp, confident_timestamp, timestamp_label, title)
         elif isinstance(video, LocalVideoSource):
-            _render_local_video_media(video, media_section, has_timestamp, confident_timestamp, timestamp_label, title)
+            row_key = str(row.get("row_key") or f"{row.get('line_start')}_{row.get('heading_text')}")
+            checkbox_key = f"lk_play_video_{key_prefix}_{row_key}"
+            _render_local_video_media(
+                video, media_section, has_timestamp, confident_timestamp, timestamp_label, title, checkbox_key
+            )
 
 
 
@@ -302,11 +306,17 @@ def _render_local_video_media(
     confident_timestamp: bool,
     timestamp_label: str,
     title: str,
+    checkbox_key: str,
 ) -> None:
-    start_time = int(media_section.t_start or 0) if confident_timestamp else 0
-    _render_local_video_player(video, title, start_time=start_time)
+    # Локальный st.video() читает весь файл в память при КАЖДОМ вызове (Streamlit
+    # хэширует контент, чтобы определить file_id — кэша по mtime у него нет). При
+    # 812 МБ-видео и 24 разделах на 2 вкладки это давало ~48 полных чтений файла за
+    # rerun. Плеер поэтому рендерится только по явному клику, а не для каждой строки.
     if confident_timestamp:
         st.caption(f"{title} · старт: {timestamp_label}")
+    if st.checkbox("▶ Показать видео", key=checkbox_key):
+        start_time = int(media_section.t_start or 0) if confident_timestamp else 0
+        _render_local_video_player(video, title, start_time=start_time)
 
 
 def _render_local_video_player(video: LocalVideoSource, title: str, *, start_time: int = 0) -> None:

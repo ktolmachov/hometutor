@@ -67,7 +67,7 @@ Positive:
 Tradeoffs:
 
 - users need compatible CUDA/runtime packages for GPU speed;
-- `ffmpeg` installation remains an operational prerequisite;
+- `ffmpeg` is operationally required only for `--remux` / container normalization;
 - a small benchmark spike is required before promising processing time.
 
 ## Required Spike Before M1 Merge

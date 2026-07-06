@@ -90,6 +90,26 @@ def test_sidecar_stale_when_asr_params_change():
     assert "asr_params" in sidecar.stale_reasons(asr_params=changed)
 
 
+def test_expected_asr_params_read_from_segments_sidecar_file(tmp_path):
+    import json
+
+    from app.ui.living_konspekt_view import _expected_asr_params
+
+    video = tmp_path / "lecture.mp4"
+    video.write_bytes(b"fake")
+    assert _expected_asr_params(video) is None, "нет segments.json → нет ожиданий"
+
+    params = {"model": "large-v3", "beam_size": 5, "language_requested": "auto"}
+    (tmp_path / "lecture.segments.json").write_text(
+        json.dumps({"schema_version": 1, "asr": {"params": params}, "segments": []}),
+        encoding="utf-8",
+    )
+    assert _expected_asr_params(video) == params
+
+    (tmp_path / "lecture.segments.json").write_text("{broken", encoding="utf-8")
+    assert _expected_asr_params(video) is None, "битый файл → мягкая деградация, не падение"
+
+
 def test_row_falls_back_to_positional_match_without_own_text():
     heading = "Раздел без текста"
     sidecar = _sidecar_with_section("sha256:" + "b" * 64, "раздел-без-текста", heading, line_start=7)

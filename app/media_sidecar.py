@@ -125,12 +125,33 @@ class MediaSidecar:
         return bool(self.stale_reasons(**kwargs))
 
 
+_SHA256_FILE_CACHE: dict[tuple[str, float, int], str] = {}
+
+
 def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    try:
+        resolved_path = str(path.resolve())
+        stat = path.stat()
+        mtime = stat.st_mtime
+        size = stat.st_size
+        key = (resolved_path, mtime, size)
+        if key in _SHA256_FILE_CACHE:
+            return _SHA256_FILE_CACHE[key]
+
+        digest = hashlib.sha256()
+        with path.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+                digest.update(chunk)
+        h = digest.hexdigest()
+        _SHA256_FILE_CACHE[key] = h
+        return h
+    except OSError:
+        digest = hashlib.sha256()
+        with path.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
 
 
 def sha256_konspekt_file(path: Path) -> str:

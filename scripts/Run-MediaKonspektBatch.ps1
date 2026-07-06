@@ -66,7 +66,9 @@ param(
 
     [switch]$SkipFrontmatter,
 
-    [switch]$NoManifest
+    [switch]$NoManifest,
+
+    [string]$ManifestPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -341,7 +343,7 @@ if (-not $WhatIfPreference) {
 }
 
 $batchStart = Get-Date
-$tempCovDir = Join-Path $env:TEMP "kilo"
+$tempCovDir = Join-Path $env:TEMP "hometutor_media_batch"
 $ok = 0
 $failed = @()
 $results = @()
@@ -462,10 +464,18 @@ if ($failed.Count -gt 0) {
 }
 
 if (-not $NoManifest -and -not $WhatIfPreference) {
-    if (-not (Test-Path -LiteralPath $tempCovDir)) {
-        New-Item -ItemType Directory -Path $tempCovDir -Force | Out-Null
+    # Манифест — артефакт прогона, не контент: по умолчанию в scratch-каталоге
+    # ($env:TEMP), чтобы не подмешивать провенанс в папку лекций (DATA_DIR).
+    # -ManifestPath задаёт явное расположение (напр., для автоматизации).
+    if (-not $ManifestPath) {
+        $manifestPath = Join-Path $tempCovDir "media_konspekt_batch_manifest.json"
+    } else {
+        $manifestPath = $ManifestPath
     }
-    $manifestPath = Join-Path $folderAbs "media_konspekt_batch_manifest.json"
+    $manifestDir = Split-Path $manifestPath -Parent
+    if ($manifestDir -and -not (Test-Path -LiteralPath $manifestDir)) {
+        New-Item -ItemType Directory -Path $manifestDir -Force | Out-Null
+    }
     $manifest = [ordered]@{
         started_at  = $batchStart.ToString("o")
         finished_at = (Get-Date).ToString("o")

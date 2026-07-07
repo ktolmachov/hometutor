@@ -153,12 +153,19 @@ def _apply_contextualized_chunks(documents: list[Document]) -> list[Document]:
     contextualized: list[Document] = []
     for doc in documents:
         metadata = dict(doc.metadata or {})
-        contextualized.append(
-            Document(
-                text=_build_contextualized_text(doc),
-                metadata=metadata,
-            )
+        new_doc = Document(
+            text=_build_contextualized_text(doc),
+            metadata=metadata,
         )
+        # Переносим exclude-списки из исходного документа: читатели (напр.
+        # FlatMarkdownReader) помечают front-matter (md_*) и прочую provenance
+        # как не-retrieval. Без этого пересозданный Document «забывает» список,
+        # и тяжёлые поля (напр. md_rows в рабочем конспекте) попадают в EMBED/LLM
+        # metadata_str целиком, из-за чего SentenceSplitter (metadata-aware)
+        # падает: «Metadata length ... is longer than chunk size».
+        new_doc.excluded_embed_metadata_keys = list(doc.excluded_embed_metadata_keys or [])
+        new_doc.excluded_llm_metadata_keys = list(doc.excluded_llm_metadata_keys or [])
+        contextualized.append(new_doc)
     return contextualized
 
 

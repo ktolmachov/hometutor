@@ -102,11 +102,12 @@ def video_semantic_moments(rows: list[dict[str, Any]], limit: int = 6) -> list[d
     показывает, о чём лектор говорит в окрестности собранных фрагментов,
     с точным таймкодом. Всё локально, без LLM.
     """
-    from app.media_sidecar import load_media_sidecar_for_konspekt
+    from app.media_sidecar import load_media_sidecar_for_konspekt, sidecar_stale_reasons
     from app.ui.living_konspekt_media import _media_section_for_row
 
     moments: list[dict[str, Any]] = []
     seen: set[tuple[str, float]] = set()
+    stale_cache: dict[str, list[str]] = {}
     for row in rows:
         md_abs = str(row.get("konspekt_md_abs") or "")
         if not md_abs:
@@ -118,7 +119,11 @@ def video_semantic_moments(rows: list[dict[str, Any]], limit: int = 6) -> list[d
         if sidecar is None or not sidecar.semantic_blocks:
             continue
         media_section = _media_section_for_row(sidecar, row)
-        if media_section is None or media_section.t_start is None:
+        if media_section is None or media_section.t_start is None or media_section.low_confidence:
+            continue
+        if md_abs not in stale_cache:
+            stale_cache[md_abs] = sidecar_stale_reasons(sidecar, md_abs)
+        if stale_cache[md_abs]:
             continue
         t_lo = media_section.t_start
         t_hi = media_section.t_end if media_section.t_end is not None else t_lo + 60.0

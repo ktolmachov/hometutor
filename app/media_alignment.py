@@ -4,7 +4,7 @@
 ``[{start, end, text}]`` (см. ``scripts/transcribe_media.py``). Выход — таймкоды
 ``t_start/t_end`` и ``confidence`` на раздел, детерминированно и без LLM.
 
-Алгоритм ``anchor-lis-v3`` (устойчив к видео 4–5 часов):
+Алгоритм ``anchor-lis-v3.1`` (устойчив к видео 4–5 часов):
 
 1. Транскрипт режется на **смысловые блоки** (:func:`build_semantic_blocks`) —
    TextTiling-подобная сегментация по провалам лексической связности между
@@ -14,6 +14,9 @@
    Токены скоринга (не ``compute_section_id``!) канонизируются: RU-стемминг
    словоформ («токенов»→«токен») + транслитерация латинских терминов
    конспекта в кириллицу ASR («skills»→«скиллс») — см. ``_tokenize_canon``.
+   Поверх этого работает локальная детерминированная синонимия L1 для учебных
+   речевых паттернов («практическое задание» ↔ «домашка/попробуйте сами»):
+   без LLM, без provider-вызовов, только как расширение скоринговых токенов.
 2. Slide-aware якорение: явное «слайд N» в речи или title-reading заголовка
    слайда/раздела по скользящему окну ~14 c транскрипта (``_build_windows`` —
    один ASR-сегмент, медианно 2 c/4 слова, для заголовка мал) → сильное
@@ -47,12 +50,14 @@ from pathlib import Path
 from app.knowledge_text import tokenize_filtered
 from app.section_index import ParsedSection
 
-ALIGNMENT_VERSION = "anchor-lis-v3"
+ALIGNMENT_VERSION = "anchor-lis-v3.1"
 SEGMENTS_SCHEMA_VERSION = 1
 
 _MIN_SECTION_TOKENS = 8  # разделы короче не якорим — только интерполяция
+_MIN_EXPANDED_SECTION_TOKENS = 3  # L1-семантика: мало слов, но они должны прозвучать
 _MIN_ANCHOR_SCORE = 0.18  # ниже — совпадение считается шумом
 _MIN_ANCHOR_SCORE_DEEP = 0.25  # H4+: мелкие разделы с generic-лексикой ложатся на случайные блоки
+_MIN_EXPANDED_ANCHOR_SCORE = 0.45  # строгий порог для якоря без прямой лексики
 _LONE_ANCHOR_MIN_SCORE = 0.30  # единственный body-якорь прохода без LIS-проверки
 _INTERPOLATED_CONFIDENCE = 0.40  # < low_confidence-порога сайдкара (0.70)
 _MAX_ANCHOR_CONFIDENCE = 0.99
@@ -106,6 +111,45 @@ _GENERIC_HEADING_TITLES = frozenset(
         "примеры из лекции",
         "схемы и модели",
     }
+)
+
+_SYNONYM_PHRASE_GROUPS = (
+    (
+        "практическое задание",
+        "домашнее задание",
+        "домашка",
+        "упражнение",
+        "самостоятельная работа",
+        "попробуйте сами",
+        "сделайте упражнение",
+        "выполните задание",
+        "повторите самостоятельно",
+        "закрепление",
+    ),
+    (
+        "итоги",
+        "выводы",
+        "резюме",
+        "подведем итог",
+        "подытожим",
+        "главное",
+        "что важно запомнить",
+    ),
+    (
+        "пример",
+        "кейс",
+        "допустим",
+        "рассмотрим ситуацию",
+        "на практике",
+        "практический пример",
+    ),
+    (
+        "ошибки",
+        "ловушки",
+        "частые проблемы",
+        "подводные камни",
+        "pitfalls",
+    ),
 )
 
 # ── Канонизация токенов: RU-стемминг + транслитерация ────────────────────
@@ -180,6 +224,34 @@ def _tokenize_canon(text: str | None) -> frozenset[str]:
     стабильным между запусками независимо от эволюции скоринговой канонизации.
     """
     return frozenset(_canon_token(t) for t in tokenize_filtered(text))
+
+
+def _expand_learning_synonyms(
+    text: str | None,
+    tokens: frozenset[str],
+    spoken_tokens: frozenset[str],
+) -> tuple[frozenset[str], bool]:
+    """Локальная L1-синонимия для учебных речевых паттернов.
+
+    Это намеренно не общий тезаурус. Расширяем только маленький набор
+    проверяемых фраз («практическое задание» ↔ «домашка/упражнение»), причём
+    добавляем лишь те канонические токены, которые реально прозвучали в ASR.
+    Так раздел без прямого лексического пересечения получает шанс на якорь, но
+    не превращается в произвольный semantic search.
+    """
+    base_text_tokens = _tokenize_canon(text)
+    expanded = set(tokens)
+    matched = False
+    for group in _SYNONYM_PHRASE_GROUPS:
+        phrase_tokens = [_tokenize_canon(phrase) for phrase in group]
+        if not any(phrase and phrase <= base_text_tokens for phrase in phrase_tokens):
+            continue
+        group_tokens = frozenset().union(*phrase_tokens)
+        spoken_group_tokens = group_tokens & spoken_tokens
+        if spoken_group_tokens - tokens:
+            expanded.update(spoken_group_tokens)
+            matched = True
+    return frozenset(expanded), matched
 
 
 def _anchor_confidence(score: float) -> float:
@@ -1049,14 +1121,24 @@ def _align_pass(
         body_tokens = _tokenize_canon(section.own_text or section.text)
         heading_tokens = _tokenize_canon(section.heading_text) & spoken_tokens
         tokens = frozenset((body_tokens | heading_tokens) - background)
-        if len(tokens) < _MIN_SECTION_TOKENS:
+        tokens, expanded = _expand_learning_synonyms(
+            "\n".join([section.heading_text, section.own_text or section.text]),
+            tokens,
+            spoken_tokens,
+        )
+        tokens = frozenset(tokens - background)
+        min_tokens = _MIN_EXPANDED_SECTION_TOKENS if expanded else _MIN_SECTION_TOKENS
+        if len(tokens) < min_tokens:
             continue
         section_tokens[pos] = tokens
         scores = [_overlap_score(tokens, block) for block in scoring_blocks]
         min_block = block_floor_by_pos[pos] if pass_slides else 0
         eligible = range(min_block, len(blocks))
         block_idx = max(eligible, key=lambda i: scores[i])
-        min_score = _MIN_ANCHOR_SCORE if section.level <= 3 else _MIN_ANCHOR_SCORE_DEEP
+        if expanded:
+            min_score = _MIN_EXPANDED_ANCHOR_SCORE
+        else:
+            min_score = _MIN_ANCHOR_SCORE if section.level <= 3 else _MIN_ANCHOR_SCORE_DEEP
         if scores[block_idx] >= min_score:
             candidates.append((pos, block_idx, scores[block_idx]))
 

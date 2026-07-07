@@ -109,6 +109,18 @@ def test_parse_semantic_blocks_optional_and_backward_compatible(tmp_path: Path):
     assert sidecar.semantic_blocks[1].label is None
 
 
+def test_public_json_schema_includes_semantic_blocks_contract():
+    schema = json.loads(Path("docs/schemas/media_sidecar_v1.schema.json").read_text(encoding="utf-8"))
+
+    semantic = schema["properties"]["semantic_blocks"]
+    semantic_def = schema["$defs"]["semanticBlock"]
+
+    assert semantic["items"]["$ref"] == "#/$defs/semanticBlock"
+    assert semantic_def["additionalProperties"] is False
+    assert semantic_def["required"] == ["t_start", "t_end"]
+    assert set(semantic_def["properties"]) == {"t_start", "t_end", "keywords", "label"}
+
+
 def test_parse_semantic_blocks_rejects_invalid_ranges_and_keys(tmp_path: Path):
     payload = _payload()
     payload["semantic_blocks"] = [{"t_start": 100.0, "t_end": 50.0}]

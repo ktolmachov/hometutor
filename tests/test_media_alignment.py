@@ -193,6 +193,45 @@ def test_unanchored_section_between_anchors_is_interpolated_low_confidence():
     assert middle.confidence < 0.70, "интерполяция обязана быть low-confidence для UI"
 
 
+def test_practical_assignment_anchors_via_local_synonym_expansion():
+    """Регрессия для раздела без прямого лексического пересечения с речью.
+
+    В конспекте типовой заголовок «Практическое задание», а лектор говорит
+    «домашка/попробуйте сами/упражнение». L1-синонимия должна помочь найти
+    таймкод детерминированно и локально, без LLM.
+    """
+    segments = (
+        TranscriptSegment(
+            0.0,
+            30.0,
+            "сначала обсуждаем архитектуру агент инструменты контекст память планирование",
+        ),
+        TranscriptSegment(
+            30.0,
+            60.0,
+            "теперь домашка попробуйте сами сделайте упражнение повторите самостоятельно",
+        ),
+        TranscriptSegment(
+            60.0,
+            90.0,
+            "после этого перейдем к вопросам и разберем ответы",
+        ),
+    )
+    sections = [
+        _section(
+            "Практическое задание",
+            "Завершающий самостоятельный шаг после урока.",
+            0,
+        )
+    ]
+
+    aligned = align_sections(sections, segments)
+
+    assert aligned[0].anchored
+    assert aligned[0].t_start == 30.0
+    assert aligned[0].confidence >= 0.70
+
+
 def test_edge_section_without_both_anchors_gets_no_timestamp():
     segments = _segments_from_topics(["альфа"])
     sections = [

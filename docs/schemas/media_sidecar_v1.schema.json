@@ -92,6 +92,14 @@
       "items": {
         "$ref": "#/$defs/section"
       }
+    },
+    "semantic_blocks": {
+      "type": "array",
+      "description": "Optional video meaning blocks generated from deterministic transcript segmentation.",
+      "items": {
+        "$ref": "#/$defs/semanticBlock"
+      },
+      "default": []
     }
   },
   "$defs": {
@@ -269,6 +277,38 @@
         "t_start": {
           "type": "number",
           "minimum": 0
+        }
+      }
+    },
+    "semanticBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "t_start",
+        "t_end"
+      ],
+      "properties": {
+        "t_start": {
+          "type": "number",
+          "minimum": 0
+        },
+        "t_end": {
+          "type": "number",
+          "minimum": 0
+        },
+        "keywords": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "default": []
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
         }
       }
     }

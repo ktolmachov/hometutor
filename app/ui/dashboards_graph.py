@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from app.knowledge_text import tokenize_filtered
 from app.ui.answer_helpers import run_synthesis_for_paths as _run_synthesis_for_paths
 from app.ui.helpers import format_request_error as _format_request_error
 from app.ui.home_hub import (
@@ -216,6 +217,236 @@ def _collect_concept_sections_to_workbench(
     return added, duplicates
 
 
+def _concept_terms(concept_id: str, info: dict) -> list[str]:
+    """Human-visible names that can prove or duplicate a graph concept."""
+    raw_terms = [
+        concept_id,
+        info.get("label"),
+        info.get("normalized_label"),
+        *(info.get("aliases") or []),
+    ]
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in raw_terms:
+        term = str(raw or "").strip()
+        key = " ".join(term.lower().split())
+        if not term or key in seen:
+            continue
+        seen.add(key)
+        out.append(term)
+    return out
+
+
+def _concept_term_tokens(value: str) -> frozenset[str]:
+    return frozenset(tokenize_filtered(value))
+
+
+def _alias_similarity(left: str, right: str) -> tuple[float, str] | None:
+    left_key = " ".join(left.lower().split())
+    right_key = " ".join(right.lower().split())
+    if not left_key or not right_key:
+        return None
+    if left_key == right_key:
+        return 1.0, "совпадает alias/label"
+
+    left_tokens = _concept_term_tokens(left)
+    right_tokens = _concept_term_tokens(right)
+    if not left_tokens or not right_tokens:
+        return None
+    if left_tokens == right_tokens:
+        return 0.96, "те же смысловые токены"
+
+    overlap = left_tokens & right_tokens
+    union = left_tokens | right_tokens
+    jaccard = len(overlap) / max(1, len(union))
+    if len(overlap) >= 2 and jaccard >= 0.74:
+        return round(jaccard, 2), "сильное пересечение токенов"
+    if len(overlap) >= 2 and (
+        left_tokens.issubset(right_tokens) or right_tokens.issubset(left_tokens)
+    ):
+        return 0.82, "один термин вложен в другой"
+    return None
+
+
+def _alias_duplicate_suspects(
+    selected: str,
+    concepts: dict,
+    *,
+    limit: int = 5,
+) -> list[dict[str, object]]:
+    """Deterministic duplicate candidates for the selected concept.
+
+    This is intentionally a *candidate* signal: it never mutates the graph and never
+    claims equivalence, it only surfaces concepts worth merging or aliasing.
+    """
+    selected_info = concepts.get(selected)
+    if not isinstance(selected_info, dict):
+        return []
+    selected_terms = _concept_terms(selected, selected_info)
+    out: list[dict[str, object]] = []
+    for cid, raw in concepts.items():
+        if cid == selected or not isinstance(raw, dict):
+            continue
+        best: tuple[float, str, str, str] | None = None
+        for left in selected_terms:
+            for right in _concept_terms(str(cid), raw):
+                match = _alias_similarity(left, right)
+                if match is None:
+                    continue
+                score, reason = match
+                candidate = (score, reason, left, right)
+                if best is None or candidate[0] > best[0]:
+                    best = candidate
+        if best is None:
+            continue
+        score, reason, left, right = best
+        out.append(
+            {
+                "concept_id": str(cid),
+                "label": str(raw.get("label") or cid),
+                "score": score,
+                "reason": reason,
+                "match": f"{left} ↔ {right}",
+            }
+        )
+    out.sort(key=lambda item: (-float(item["score"]), str(item["concept_id"])))
+    return out[:limit]
+
+
+def _section_evidence_for_doc(
+    path: str,
+    query_text: str,
+    *,
+    limit: int = 2,
+) -> list[dict[str, object]]:
+    try:
+        from app.obsidian_export import obsidian_uri, vscode_uri
+        from app.section_index import build_section_index, top_sections_for
+
+        sections = build_section_index(path)
+        return [
+            {
+                "heading": section.heading_text,
+                "line_start": section.line_start,
+                "line_end": section.line_end,
+                "obs_uri": obsidian_uri(section.konspekt_md_abs, heading_text=section.heading_text),
+                "vscode_uri": vscode_uri(section.konspekt_md_abs, line=section.line_start),
+            }
+            for section in top_sections_for(sections, query_text, k=limit)
+        ]
+    except Exception:  # noqa: BLE001 - graph evidence must degrade with one bad document.
+        return []
+
+
+def _concept_evidence_ledger(
+    selected: str,
+    info: dict,
+    prereqs: list[str],
+    related_docs: list,
+    doc_index: dict,
+    *,
+    max_docs: int = 3,
+) -> list[dict[str, object]]:
+    """Explain why a concept exists in the graph using local evidence."""
+    ledger: list[dict[str, object]] = []
+    desc = str(info.get("description") or "").strip()
+    if desc:
+        ledger.append(
+            {
+                "kind": "description",
+                "title": "Описание узла",
+                "detail": desc[:280],
+            }
+        )
+
+    aliases = [term for term in _concept_terms(selected, info) if term != selected]
+    if aliases:
+        ledger.append(
+            {
+                "kind": "aliases",
+                "title": "Aliases",
+                "detail": ", ".join(aliases[:8]),
+            }
+        )
+
+    if prereqs:
+        ledger.append(
+            {
+                "kind": "prerequisites",
+                "title": "Prerequisites",
+                "detail": ", ".join(prereqs[:8]),
+            }
+        )
+
+    query_text = " ".join(
+        part for part in [selected, desc, " ".join(aliases)] if part
+    )
+    for rel_path in related_docs[:max_docs]:
+        meta = doc_index.get(str(rel_path), {}) if isinstance(doc_index, dict) else {}
+        path = str(meta.get("relative_path") or meta.get("file_name") or rel_path)
+        title = path
+        summary = str(meta.get("summary") or "").strip()
+        sections = _section_evidence_for_doc(
+            path,
+            " ".join(
+                part
+                for part in [query_text, " ".join(meta.get("key_concepts") or [])]
+                if part
+            ),
+        )
+        ledger.append(
+            {
+                "kind": "document",
+                "title": title,
+                "detail": summary[:220] if summary else "Документ связан с концептом в graph bundle.",
+                "sections": sections,
+            }
+        )
+    return ledger
+
+
+def _render_concept_evidence_ledger(ledger: list[dict[str, object]]) -> None:
+    if not ledger:
+        st.caption("Evidence пока нет: у узла нет описания, aliases или связанных документов.")
+        return
+    for item in ledger:
+        st.markdown(f"**{item['title']}**")
+        detail = str(item.get("detail") or "").strip()
+        if detail:
+            st.caption(detail)
+        sections = item.get("sections")
+        if isinstance(sections, list) and sections:
+            for section in sections:
+                if not isinstance(section, dict):
+                    continue
+                st.caption(
+                    "📍 "
+                    f"{section.get('heading')} "
+                    f"· строки {section.get('line_start')}-{section.get('line_end')}"
+                )
+                link_cols = st.columns(2)
+                with link_cols[0]:
+                    obs_uri = str(section.get("obs_uri") or "")
+                    if obs_uri:
+                        st.link_button("📍 Открыть", obs_uri, width="stretch")
+                with link_cols[1]:
+                    vscode_uri = str(section.get("vscode_uri") or "")
+                    if vscode_uri:
+                        st.link_button("🖥 VS Code", vscode_uri, width="stretch")
+
+
+def _render_alias_duplicate_suspects(suspects: list[dict[str, object]]) -> None:
+    if not suspects:
+        st.caption("Дубликатов по label/alias не найдено.")
+        return
+    for item in suspects:
+        score = float(item.get("score") or 0.0)
+        st.caption(
+            f"⚠ {item.get('label')} (`{item.get('concept_id')}`) · "
+            f"{score:.2f} · {item.get('reason')} · {item.get('match')}"
+        )
+
+
 def _render_concept_actions(
     sel: str,
     knowledge_graph,
@@ -243,6 +474,14 @@ def _render_concept_actions(
     if prereqs:
         st.markdown("**Prerequisites**")
         _render_chip_row(prereqs)
+
+    evidence = _concept_evidence_ledger(sel, info, prereqs, related_docs, doc_index)
+    with st.expander("🧾 Почему этот узел есть", expanded=False):
+        _render_concept_evidence_ledger(evidence)
+
+    duplicate_suspects = _alias_duplicate_suspects(sel, concepts)
+    with st.expander("🧬 Возможные aliases / дубли", expanded=False):
+        _render_alias_duplicate_suspects(duplicate_suspects)
 
     # ── 🎓 Tutor integration (primary CTA) ──────────────────────────────
     from app.ui.session_state import PENDING_CURRENT_VIEW_KEY

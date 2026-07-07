@@ -11,7 +11,11 @@ from pathlib import Path
 import pytest
 
 from app.section_index import IndexedSection
-from app.ui.dashboards_graph import _collect_concept_sections_to_workbench
+from app.ui.dashboards_graph import (
+    _alias_duplicate_suspects,
+    _collect_concept_sections_to_workbench,
+    _concept_evidence_ledger,
+)
 
 MD_A = Path("D:/vault/lecture_a.md")
 MD_B = Path("D:/vault/lecture_b.md")
@@ -33,6 +37,7 @@ def _section(md: Path, heading: str, line_start: int) -> IndexedSection:
 @pytest.fixture()
 def _stub_section_lookup(monkeypatch: pytest.MonkeyPatch):
     import app.section_index as section_index
+    import app.obsidian_export as obsidian_export
 
     index_by_path = {
         "docs/a.md": [_section(MD_A, "Агенты", 5)],
@@ -41,6 +46,8 @@ def _stub_section_lookup(monkeypatch: pytest.MonkeyPatch):
     }
     monkeypatch.setattr(section_index, "build_section_index", lambda path: index_by_path.get(str(path), []))
     monkeypatch.setattr(section_index, "best_section_for", lambda sections, query: sections[0] if sections else None)
+    monkeypatch.setattr(obsidian_export, "obsidian_uri", lambda md, heading_text=None: "obsidian://stub")
+    monkeypatch.setattr(obsidian_export, "vscode_uri", lambda md, line=None: "vscode://stub")
 
 
 class TestCollectConceptSections:
@@ -124,3 +131,54 @@ class TestCollectConceptSections:
             state=state,
         )
         assert (added, duplicates) == (1, 0)
+
+
+class TestConceptEvidenceLedger:
+    def test_ledger_uses_description_aliases_docs_and_sections(self, _stub_section_lookup):
+        ledger = _concept_evidence_ledger(
+            "ai-agent",
+            {
+                "label": "AI Agent",
+                "description": "Система вокруг LLM, которая планирует и вызывает tools.",
+                "aliases": ["агент", "LLM agent"],
+            },
+            ["llm-call"],
+            ["doc-id-1"],
+            {
+                "doc-id-1": {
+                    "relative_path": "docs/a.md",
+                    "summary": "Урок объясняет агентность.",
+                    "key_concepts": ["агенты"],
+                }
+            },
+        )
+
+        kinds = [item["kind"] for item in ledger]
+        assert kinds[:3] == ["description", "aliases", "prerequisites"]
+        doc_item = next(item for item in ledger if item["kind"] == "document")
+        assert doc_item["title"] == "docs/a.md"
+        assert doc_item["sections"][0]["heading"] == "Агенты"
+        assert doc_item["sections"][0]["line_start"] == 5
+        assert doc_item["sections"][0]["obs_uri"] == "obsidian://stub"
+        assert doc_item["sections"][0]["vscode_uri"] == "vscode://stub"
+
+    def test_alias_duplicate_suspects_surface_close_aliases_only(self):
+        concepts = {
+            "llm-call": {
+                "label": "LLM call",
+                "aliases": ["вызов LLM", "model call"],
+            },
+            "model-call": {
+                "label": "Model call",
+                "aliases": ["LLM вызов"],
+            },
+            "retrieval": {
+                "label": "Retrieval",
+                "aliases": ["поиск контекста"],
+            },
+        }
+
+        suspects = _alias_duplicate_suspects("llm-call", concepts)
+
+        assert [item["concept_id"] for item in suspects] == ["model-call"]
+        assert suspects[0]["score"] >= 0.74

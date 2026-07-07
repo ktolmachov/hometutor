@@ -197,6 +197,9 @@ flowchart LR
 - `app/ingestion_index_nodes.py`
 - `app/index_registry.py`
 - `app/knowledge_graph_bundle.py`
+- `app/ui/dashboards_graph.py` — companion-панель Knowledge Graph: действия с
+  концептом, evidence ledger и deterministic alias/duplicate diagnostics поверх
+  активного graph bundle.
 
 ## Learning loop
 

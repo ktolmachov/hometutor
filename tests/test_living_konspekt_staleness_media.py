@@ -260,6 +260,28 @@ def test_sidecar_stale_reasons_is_single_source():
     assert citations._sidecar_stale_reasons is media_sidecar.sidecar_stale_reasons
 
 
+def test_sidecar_stale_reasons_checks_alignment_version(tmp_path):
+    import app.media_sidecar as media_sidecar
+
+    md = tmp_path / "konspekt.md"
+    md.write_text(_KONSPEKT, encoding="utf-8")
+    row = _rows_from_file(md)[0]
+    base = _sidecar_for_row(row, sha256_konspekt_file(md), confidence=0.9)
+    old_alignment = MediaSidecar(
+        schema_version=base.schema_version,
+        konspekt_sha256=base.konspekt_sha256,
+        generated_by=GeneratedBy(
+            tool=base.generated_by.tool,
+            created_at=base.generated_by.created_at,
+            alignment_version="anchor-lis-v3.1",
+        ),
+        video=base.video,
+        sections=base.sections,
+    )
+
+    assert "alignment_version" in media_sidecar.sidecar_stale_reasons(old_alignment, str(md))
+
+
 def test_load_media_sidecar_caches_per_mtime_size(tmp_path, monkeypatch):
     """Повторные load_media_sidecar_for_konspekt на один md не перечитывают файл."""
     import app.media_sidecar as media_sidecar

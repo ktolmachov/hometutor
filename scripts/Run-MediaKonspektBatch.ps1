@@ -137,8 +137,8 @@ function Get-NormalizedStem {
 function Format-Duration {
     param([double]$Seconds)
     $total = [int][math]::Round($Seconds)
-    $h = [int]($total / 3600)
-    $m = [int](($total % 3600) / 60)
+    $h = [int][math]::Floor($total / 3600)
+    $m = [int][math]::Floor(($total % 3600) / 60)
     $s = $total % 60
     if ($h -gt 0) { return ("{0}:{1:D2}:{2:D2}" -f $h, $m, $s) }
     return ("{0:D2}:{1:D2}" -f $m, $s)

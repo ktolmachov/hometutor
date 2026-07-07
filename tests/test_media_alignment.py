@@ -1,4 +1,4 @@
-"""Инварианты выравнивания разделов конспекта по ASR-сегментам (anchor-lis-v3).
+"""Инварианты выравнивания разделов конспекта по ASR-сегментам (anchor-lis-v3.x).
 
 Фикстуры v3: конспект — иерархия H2-«проходов» (level=2) с содержательными
 разделами внутри (level=3+); хронология таймкодов гарантируется внутри прохода,
@@ -146,6 +146,52 @@ def test_multipass_konspekt_allows_non_monotonic_timestamps_between_passes():
     assert again_alpha.t_start <= again_beta.t_start
 
 
+def test_structural_parent_without_own_text_does_not_consume_child_timestamp():
+    """H2-контейнер не должен якориться по телам детей и сдвигать первый H3.
+
+    Реальный регресс: «📌 Ключевые темы» получал уверенный якорь на текст первого
+    дочернего раздела, а сам дочерний раздел начинался только после искусственного
+    parent-интервала.
+    """
+    segments = _segments_from_topics(["альфа", "бета"])
+    child_text = _topic_text("альфа")
+    sections = [
+        ParsedSection(
+            heading_text="Ключевые темы",
+            slug="ключевые-темы",
+            level=2,
+            line_start=1,
+            line_end=30,
+            text=child_text,
+            own_text="",
+        ),
+        _section("Почему тема альфа важна", child_text, 1),
+        _section("Тема бета", _topic_text("бета"), 2),
+    ]
+
+    aligned = align_sections(sections, segments)
+
+    assert aligned[0].t_start is None
+    assert aligned[1].anchored
+    assert aligned[1].t_start is not None
+    assert aligned[1].t_start < 60.0
+
+
+def test_non_media_summary_sections_do_not_receive_timestamps():
+    segments = _segments_from_topics(["альфа", "бета"])
+    sections = [
+        _section("Главная мысль", _topic_text("альфа"), 0, level=2),
+        _section("Тема альфа", _topic_text("альфа"), 1),
+        _section("Тема бета", _topic_text("бета"), 2),
+    ]
+
+    aligned = align_sections(sections, segments)
+
+    assert aligned[0].t_start is None
+    assert aligned[1].anchored
+    assert aligned[2].anchored
+
+
 def test_split_passes_groups_by_h2():
     sections = [
         _section("Проход 1", "…", 0, level=2),
@@ -229,6 +275,22 @@ def test_practical_assignment_anchors_via_local_synonym_expansion():
 
     assert aligned[0].anchored
     assert aligned[0].t_start == 30.0
+    assert aligned[0].confidence >= 0.70
+
+
+def test_synonym_expansion_does_not_penalize_existing_lexical_anchor():
+    segments = _segments_from_topics(["альфа"])
+    sections = [
+        _section(
+            "Почему это стало возможно",
+            "Разберем пример: " + _topic_text("альфа", words=16),
+            0,
+        )
+    ]
+
+    aligned = align_sections(sections, segments)
+
+    assert aligned[0].anchored
     assert aligned[0].confidence >= 0.70
 
 

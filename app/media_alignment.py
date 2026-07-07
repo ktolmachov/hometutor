@@ -4,7 +4,7 @@
 ``[{start, end, text}]`` (см. ``scripts/transcribe_media.py``). Выход — таймкоды
 ``t_start/t_end`` и ``confidence`` на раздел, детерминированно и без LLM.
 
-Алгоритм ``anchor-lis-v3.1`` (устойчив к видео 4–5 часов):
+Алгоритм ``anchor-lis-v3.3`` (устойчив к видео 4–5 часов):
 
 1. Транскрипт режется на **смысловые блоки** (:func:`build_semantic_blocks`) —
    TextTiling-подобная сегментация по провалам лексической связности между
@@ -50,7 +50,7 @@ from pathlib import Path
 from app.knowledge_text import tokenize_filtered
 from app.section_index import ParsedSection
 
-ALIGNMENT_VERSION = "anchor-lis-v3.1"
+ALIGNMENT_VERSION = "anchor-lis-v3.3"
 SEGMENTS_SCHEMA_VERSION = 1
 
 _MIN_SECTION_TOKENS = 8  # разделы короче не якорим — только интерполяция
@@ -110,6 +110,18 @@ _GENERIC_HEADING_TITLES = frozenset(
         "для команды продукта",
         "примеры из лекции",
         "схемы и модели",
+    }
+)
+
+_NON_MEDIA_HEADING_TITLES = frozenset(
+    {
+        "оглавление",
+        "содержание",
+        "главная мысль",
+        "основная мысль",
+        "карта лекции",
+        "что важно из презентации",
+        "визуальная выжимка слайды которые нужно помнить",
     }
 )
 
@@ -1079,6 +1091,23 @@ def _split_passes(sections: list[ParsedSection]) -> list[list[int]]:
     return passes
 
 
+def _has_child_section(sections: list[ParsedSection], pos: int) -> bool:
+    """Whether *pos* is a structural parent with lower-level sections below it."""
+    level = sections[pos].level
+    for next_section in sections[pos + 1 :]:
+        if next_section.level <= level:
+            return False
+        return True
+    return False
+
+
+def _is_non_media_section(section: ParsedSection) -> bool:
+    normalized = " ".join(
+        _normalize_heading_for_title_read(section.heading_text).lower().split()
+    )
+    return normalized in _NON_MEDIA_HEADING_TITLES
+
+
 @dataclass(frozen=True)
 class _PassAnchor:
     t_start: float
@@ -1118,12 +1147,16 @@ def _align_pass(
             candidates.append((pos, block_idx, _SLIDE_CUE_LIS_WEIGHT))
             continue
         section = sections[pos]
+        if _is_non_media_section(section):
+            continue
+        if not section.own_text.strip() and _has_child_section(sections, pos):
+            continue
         body_tokens = _tokenize_canon(section.own_text or section.text)
         heading_tokens = _tokenize_canon(section.heading_text) & spoken_tokens
-        tokens = frozenset((body_tokens | heading_tokens) - background)
+        base_tokens = frozenset((body_tokens | heading_tokens) - background)
         tokens, expanded = _expand_learning_synonyms(
             "\n".join([section.heading_text, section.own_text or section.text]),
-            tokens,
+            base_tokens,
             spoken_tokens,
         )
         tokens = frozenset(tokens - background)
@@ -1135,10 +1168,12 @@ def _align_pass(
         min_block = block_floor_by_pos[pos] if pass_slides else 0
         eligible = range(min_block, len(blocks))
         block_idx = max(eligible, key=lambda i: scores[i])
+        normal_min_score = _MIN_ANCHOR_SCORE if section.level <= 3 else _MIN_ANCHOR_SCORE_DEEP
         if expanded:
-            min_score = _MIN_EXPANDED_ANCHOR_SCORE
+            base_score = _overlap_score(base_tokens, scoring_blocks[block_idx])
+            min_score = normal_min_score if base_score >= normal_min_score else _MIN_EXPANDED_ANCHOR_SCORE
         else:
-            min_score = _MIN_ANCHOR_SCORE if section.level <= 3 else _MIN_ANCHOR_SCORE_DEEP
+            min_score = normal_min_score
         if scores[block_idx] >= min_score:
             candidates.append((pos, block_idx, scores[block_idx]))
 

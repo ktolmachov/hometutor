@@ -232,12 +232,25 @@ def sidecar_stale_reasons(sidecar: MediaSidecar, md_abs: str) -> list[str]:
             asr_params = expected_asr_params(video_abs)
         except (OSError, ValueError):
             media_sha = None
+    from app.media_alignment import ALIGNMENT_VERSION
+
+    alignment_version = (
+        ALIGNMENT_VERSION if sidecar.generated_by.alignment_version is not None else None
+    )
+
     # asr_params учитываем только если и sidecar, и segments-файл его знают:
     # ручные sidecar'ы (tool=manual) без fingerprint не должны стать stale задним числом.
     if asr_params is None or sidecar.generated_by.asr_params is None:
-        return sidecar.stale_reasons(konspekt_sha256=konspekt_sha, media_sha256=media_sha)
+        return sidecar.stale_reasons(
+            konspekt_sha256=konspekt_sha,
+            media_sha256=media_sha,
+            alignment_version=alignment_version,
+        )
     return sidecar.stale_reasons(
-        konspekt_sha256=konspekt_sha, media_sha256=media_sha, asr_params=asr_params
+        konspekt_sha256=konspekt_sha,
+        media_sha256=media_sha,
+        alignment_version=alignment_version,
+        asr_params=asr_params,
     )
 
 

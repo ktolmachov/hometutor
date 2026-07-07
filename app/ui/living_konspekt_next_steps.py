@@ -94,18 +94,84 @@ def graph_lens_items(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
     return items
 
 
+def video_semantic_moments(rows: list[dict[str, Any]], limit: int = 6) -> list[dict[str, Any]]:
+    """Смысловые блоки видео, пересекающиеся с разделами корзины.
+
+    Узлы смыслов видео для граф-линзы: детерминированная сегментация лекции
+    (``semantic_blocks`` sidecar-а) даёт границы тем и ключевые слова — линза
+    показывает, о чём лектор говорит в окрестности собранных фрагментов,
+    с точным таймкодом. Всё локально, без LLM.
+    """
+    from app.media_sidecar import load_media_sidecar_for_konspekt
+    from app.ui.living_konspekt_media import _media_section_for_row
+
+    moments: list[dict[str, Any]] = []
+    seen: set[tuple[str, float]] = set()
+    for row in rows:
+        md_abs = str(row.get("konspekt_md_abs") or "")
+        if not md_abs:
+            continue
+        try:
+            sidecar = load_media_sidecar_for_konspekt(Path(md_abs))
+        except Exception:  # noqa: BLE001 - линза опциональна, деградирует молча
+            continue
+        if sidecar is None or not sidecar.semantic_blocks:
+            continue
+        media_section = _media_section_for_row(sidecar, row)
+        if media_section is None or media_section.t_start is None:
+            continue
+        t_lo = media_section.t_start
+        t_hi = media_section.t_end if media_section.t_end is not None else t_lo + 60.0
+        for block in sidecar.semantic_blocks:
+            if block.t_end <= t_lo or block.t_start >= t_hi:
+                continue
+            key = (md_abs, block.t_start)
+            if key in seen:
+                continue
+            seen.add(key)
+            moments.append(
+                {
+                    "t_start": block.t_start,
+                    "t_end": block.t_end,
+                    "label": block.label or ", ".join(block.keywords[:3]),
+                    "keywords": list(block.keywords),
+                    "heading": str(row.get("heading_text") or ""),
+                    "source": Path(md_abs).name,
+                }
+            )
+            if len(moments) >= limit:
+                return moments
+    return moments
+
+
+def _fmt_moment_ts(seconds: float) -> str:
+    total = int(seconds)
+    h, rem = divmod(total, 3600)
+    m, s = divmod(rem, 60)
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+
+
 def render_graph_lens_panel(rows: list[dict[str, Any]]) -> None:
     items = graph_lens_items(rows)
-    if not items:
+    moments = video_semantic_moments(rows)
+    if not items and not moments:
         return
     st.markdown("### 🕸 Граф-линза")
-    st.caption("Что граф видит рядом с собранными фрагментами: недостающие prerequisites и соседние темы.")
+    st.caption("Что граф видит рядом с собранными фрагментами: недостающие prerequisites, соседние темы и смыслы видео.")
     missing = [item["label"] for item in items if item["kind"] == "missing"]
     nearby = [item["label"] for item in items if item["kind"] == "nearby"]
     if missing:
         st.markdown("**Стоит добавить/повторить:** " + ", ".join(missing))
     if nearby:
         st.markdown("**Рядом по графу:** " + ", ".join(nearby))
+    if moments:
+        st.markdown("**🎬 Смыслы видео рядом с фрагментами:**")
+        for moment in moments:
+            label = moment["label"] or "тема без названия"
+            st.markdown(
+                f"- `{_fmt_moment_ts(moment['t_start'])}–{_fmt_moment_ts(moment['t_end'])}` "
+                f"{label} · _{moment['heading'][:48]}_"
+            )
 
 
 def course_coverage_summary(rows: list[dict[str, Any]], active_scope: dict[str, Any] | None) -> dict[str, Any] | None:

@@ -257,8 +257,19 @@ timestamp не ниже порога. Stale, low-confidence, missing local media
 - HF Spaces demo-деплой работает на эфемерном FS контейнера: аккаунты и прогресс не персистентны
   между перезапусками Space.
 - Multimodal M0a/M0.3 — это metadata plumbing и media panel. M1 (ASR + автоматическое
-  создание sidecar) существует как offline maintainer-скрипты-прототипы
-  (`scripts/transcribe_media.py`, `scripts/build_media_sidecar.py`, `app/media_alignment.py`);
-  приложение их не вызывает, benchmark-spike из ADR 0002 не проведён — статус
-  «partially prototyped, not production-ready». VLM captions, timestamped source cards
-  и `media_progress` не являются runtime-возможностями.
+  создание sidecar) существует как offline maintainer-конвейер
+  (`scripts/transcribe_media.py`, `scripts/build_media_sidecar.py`, `app/media_alignment.py`,
+  пакетно `scripts/Run-MediaKonspektBatch.ps1`); приложение его не вызывает — статус
+  «offline-generated sidecar, читается runtime'ом». VLM captions и `media_progress` не
+  являются runtime-возможностями.
+- Выравнивание разделов ↔ таймкоды — `anchor-lis-v3` (`app/media_alignment.py`),
+  детерминированное, без LLM: (1) транскрипт режется на **смысловые блоки**
+  (TextTiling-подобная сегментация по провалам лексической связности — настоящие
+  границы темы и ключевые слова, пишутся в sidecar `semantic_blocks`); (2) канонизация
+  токенов (RU-стемминг + транслитерация латиницы конспекта в кириллицу ASR);
+  (3) **per-pass хронология** — LIS-отбор и монотонность внутри «прохода» конспекта
+  (H2-группа), а не единой глобальной цепочкой на весь документ (реальный конспект
+  несколько раз проходит одну лекцию: слайды → ключевые темы → примеры);
+  (4) `t_end` = начало следующего раздела прохода, у хвоста — конец смыслового блока.
+  Метрика «плейлист-готово» считает объединение интервалов confident-фрагментов
+  (проходы легитимно указывают на одни минуты — двойной счёт исключён).

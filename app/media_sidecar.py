@@ -82,6 +82,22 @@ class MediaSection:
 
 
 @dataclass(frozen=True)
+class MediaSemanticBlock:
+    """Смысловой блок видео: узел смысла с настоящими границами темы.
+
+    Пишется ``scripts/build_media_sidecar.py`` из детерминированной сегментации
+    транскрипта (:func:`app.media_alignment.build_semantic_blocks`). ``keywords``
+    — топ TF-IDF токенов блока; используется графом знаний (видео-моменты в
+    граф-линзе) и плейлистами.
+    """
+
+    t_start: float
+    t_end: float
+    keywords: tuple[str, ...] = ()
+    label: str | None = None
+
+
+@dataclass(frozen=True)
 class MediaSidecar:
     schema_version: int
     konspekt_sha256: str
@@ -90,6 +106,7 @@ class MediaSidecar:
     sections: tuple[MediaSection, ...]
     media_sha256: str | None = None
     videos: tuple[VideoSource, ...] = field(default_factory=tuple)
+    semantic_blocks: tuple[MediaSemanticBlock, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
         if not self.videos:
@@ -317,7 +334,15 @@ def parse_media_sidecar(payload: dict[str, Any], *, data_dir: Path | None = None
     _require_keys(payload, {"schema_version", "konspekt_sha256", "generated_by", "media", "sections"}, "sidecar")
     _reject_extra_keys(
         payload,
-        {"schema_version", "konspekt_sha256", "media_sha256", "generated_by", "media", "sections"},
+        {
+            "schema_version",
+            "konspekt_sha256",
+            "media_sha256",
+            "generated_by",
+            "media",
+            "sections",
+            "semantic_blocks",
+        },
         "sidecar",
     )
     schema_version = _expect_int(payload["schema_version"], "schema_version")
@@ -328,6 +353,12 @@ def parse_media_sidecar(payload: dict[str, Any], *, data_dir: Path | None = None
     generated_by = _parse_generated_by(payload["generated_by"])
     video, videos = _parse_media(payload["media"], data_dir=data_dir)
     sections = tuple(_parse_section(item, data_dir=data_dir) for item in _expect_list(payload["sections"], "sections"))
+    semantic_blocks: tuple[MediaSemanticBlock, ...] = ()
+    if "semantic_blocks" in payload:
+        semantic_blocks = tuple(
+            _parse_semantic_block(item)
+            for item in _expect_list(payload["semantic_blocks"], "semantic_blocks")
+        )
     return MediaSidecar(
         schema_version=schema_version,
         konspekt_sha256=konspekt_sha256,
@@ -336,6 +367,7 @@ def parse_media_sidecar(payload: dict[str, Any], *, data_dir: Path | None = None
         sections=sections,
         media_sha256=media_sha256,
         videos=videos,
+        semantic_blocks=semantic_blocks,
     )
 
 
@@ -551,11 +583,34 @@ def _optional_positive_int(value: Any, label: str) -> int | None:
     return parsed
 
 
+def _parse_semantic_block(value: Any) -> MediaSemanticBlock:
+    block = _expect_dict(value, "semantic_block")
+    _require_keys(block, {"t_start", "t_end"}, "semantic_block")
+    _reject_extra_keys(block, {"t_start", "t_end", "keywords", "label"}, "semantic_block")
+    t_start = _expect_number(block["t_start"], "semantic_block.t_start")
+    t_end = _expect_number(block["t_end"], "semantic_block.t_end")
+    if t_start < 0 or t_end < t_start:
+        raise ValueError("semantic_block time range is invalid")
+    keywords: tuple[str, ...] = ()
+    if "keywords" in block:
+        keywords = tuple(
+            _expect_str(item, "semantic_block.keywords[]")
+            for item in _expect_list(block["keywords"], "semantic_block.keywords")
+        )
+    return MediaSemanticBlock(
+        t_start=t_start,
+        t_end=t_end,
+        keywords=keywords,
+        label=_optional_str(block.get("label"), "semantic_block.label"),
+    )
+
+
 __all__ = [
     "GeneratedBy",
     "LocalVideoSource",
     "MediaImage",
     "MediaSection",
+    "MediaSemanticBlock",
     "MediaSidecar",
     "SCHEMA_VERSION",
     "UrlVideoSource",

@@ -91,6 +91,36 @@ def test_parse_valid_url_media_sidecar(tmp_path: Path):
     assert sidecar.video.canonical_url == "https://www.youtube.com/watch?v=abcDEF12345"
 
 
+def test_parse_semantic_blocks_optional_and_backward_compatible(tmp_path: Path):
+    """semantic_blocks — опциональные узлы смыслов видео; старые sidecar валидны."""
+    legacy = parse_media_sidecar(_payload(), data_dir=tmp_path)
+    assert legacy.semantic_blocks == ()
+
+    payload = _payload()
+    payload["semantic_blocks"] = [
+        {"t_start": 0.0, "t_end": 95.5, "keywords": ["токен", "модель"], "label": "токен, модель"},
+        {"t_start": 95.5, "t_end": 240.0},
+    ]
+    sidecar = parse_media_sidecar(payload, data_dir=tmp_path)
+    assert len(sidecar.semantic_blocks) == 2
+    assert sidecar.semantic_blocks[0].keywords == ("токен", "модель")
+    assert sidecar.semantic_blocks[0].label == "токен, модель"
+    assert sidecar.semantic_blocks[1].keywords == ()
+    assert sidecar.semantic_blocks[1].label is None
+
+
+def test_parse_semantic_blocks_rejects_invalid_ranges_and_keys(tmp_path: Path):
+    payload = _payload()
+    payload["semantic_blocks"] = [{"t_start": 100.0, "t_end": 50.0}]
+    with pytest.raises(ValueError):
+        parse_media_sidecar(payload, data_dir=tmp_path)
+
+    payload = _payload()
+    payload["semantic_blocks"] = [{"t_start": 0.0, "t_end": 10.0, "unexpected": 1}]
+    with pytest.raises(ValueError):
+        parse_media_sidecar(payload, data_dir=tmp_path)
+
+
 def test_parse_multiple_videos_with_titles_and_dedupes_primary(tmp_path: Path):
     payload = _payload()
     payload["media"]["video"]["title"] = "Local lecture"

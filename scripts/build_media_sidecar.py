@@ -2,8 +2,10 @@
 
 Берёт конспект (``.md`` в DATA_DIR), сегменты транскрипта (``.segments.json``
 из ``scripts/transcribe_media.py``) и data-relative путь к видео; выравнивает
-разделы по таймкодам (``app.media_alignment``, anchor-lis-v1) и пишет
-``<konspekt>.media.json`` по схеме ``app.media_sidecar`` (schema_version=1).
+разделы по таймкодам (``app.media_alignment``, anchor-lis-v3) и пишет
+``<konspekt>.media.json`` по схеме ``app.media_sidecar`` (schema_version=1),
+включая ``semantic_blocks`` — смысловые блоки лекции с границами тем и
+ключевыми словами (узлы смыслов видео для граф-линзы).
 
 Существующий sidecar не затирается вслепую: список видео (``media.videos``,
 включая YouTube-ссылки) и картинки разделов сохраняются; обновляются таймкоды,
@@ -29,6 +31,7 @@ from app.media_alignment import (  # noqa: E402
     ALIGNMENT_VERSION,
     AlignedSection,
     align_sections,
+    build_semantic_blocks,
     compute_section_id,
     load_segments_file,
 )
@@ -171,6 +174,22 @@ def build_payload(
             entry["images"] = preserved
         sections_payload.append(entry)
 
+    # Смысловые блоки лекции — узлы смыслов видео: настоящие границы тем и
+    # ключевые слова из детерминированной сегментации (без LLM). Их читают
+    # граф-линза Живого конспекта и будущие плейлисты.
+    semantic_blocks_payload = [
+        {
+            "t_start": round(block.t_start, 2),
+            "t_end": round(block.t_end, 2),
+            "keywords": list(block.keywords),
+            "label": ", ".join(block.keywords[:3]) if block.keywords else None,
+        }
+        for block in build_semantic_blocks(segments_file.segments)
+    ]
+    for entry in semantic_blocks_payload:
+        if entry["label"] is None:
+            del entry["label"]
+
     return (
         {
             "schema_version": 1,
@@ -186,6 +205,7 @@ def build_payload(
             },
             "media": {"video": video_entry, "videos": _preserved_videos(existing, video_entry)},
             "sections": sections_payload,
+            "semantic_blocks": semantic_blocks_payload,
         },
         aligned,
         media_duration,
@@ -222,12 +242,24 @@ def _coverage_metrics(
     anchored_n = sum(1 for a in aligned if a.anchored)
     interpolated_n = sum(1 for a in aligned if (not a.anchored) and a.t_start is not None)
     no_ts_n = sum(1 for a in aligned if a.t_start is None)
-    # «Мои 18 минут»: суммарная длительность confident-фрагментов (ставка W5.5/W6).
+    # «Мои 18 минут»: покрытие видео confident-фрагментами. Интервалы разных
+    # «проходов» конспекта (слайды/ключевые темы/примеры) легитимно указывают
+    # на одни и те же минуты лекции — складываем ОБЪЕДИНЕНИЕ интервалов, иначе
+    # плейлист «длиннее» самого видео.
+    intervals = sorted(
+        (float(s["t_start"]), float(s["t_end"]))
+        for s in confident
+        if s.get("t_start") is not None and s.get("t_end") is not None and s["t_end"] > s["t_start"]
+    )
     playlist_seconds = 0.0
-    for s in confident:
-        t0, t1 = s.get("t_start"), s.get("t_end")
-        if t0 is not None and t1 is not None and t1 > t0:
+    cursor: float | None = None
+    for t0, t1 in intervals:
+        if cursor is None or t0 > cursor:
             playlist_seconds += t1 - t0
+            cursor = t1
+        elif t1 > cursor:
+            playlist_seconds += t1 - cursor
+            cursor = t1
     return {
         "sections": len(sections),
         "with_timestamp": len(with_ts),

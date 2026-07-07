@@ -304,3 +304,35 @@ def test_resolve_local_images_caches_base64(tmp_path, monkeypatch):
     out2 = reader._resolve_local_images("![слайд](slide.png)", doc_dir=tmp_path)
     assert out1 == out2 and "data:image/png;base64," in out1
     assert encodes["n"] == 1, f"base64 должен кодироваться один раз, а не {encodes['n']}"
+
+
+def test_video_semantic_moments_surface_blocks_near_rows(tmp_path, monkeypatch):
+    """Граф-линза видит смысловые блоки видео, пересекающиеся с разделом корзины."""
+    from app.media_sidecar import MediaSemanticBlock
+    import app.media_sidecar as media_sidecar_module
+    from app.ui.living_konspekt_next_steps import video_semantic_moments
+
+    md = tmp_path / "konspekt.md"
+    md.write_text(_KONSPEKT, encoding="utf-8")
+    row = _rows_from_file(md)[0]
+    base = _sidecar_for_row(row, sha256_konspekt_file(md), confidence=0.9)
+    sidecar = MediaSidecar(
+        schema_version=base.schema_version,
+        konspekt_sha256=base.konspekt_sha256,
+        generated_by=base.generated_by,
+        video=base.video,
+        sections=base.sections,
+        semantic_blocks=(
+            MediaSemanticBlock(t_start=80.0, t_end=160.0, keywords=("токен", "логит"), label="токен, логит"),
+            MediaSemanticBlock(t_start=400.0, t_end=500.0, keywords=("прочее",), label="прочее"),
+        ),
+    )
+    monkeypatch.setattr(media_sidecar_module, "load_media_sidecar_for_konspekt", lambda p: sidecar)
+
+    moments = video_semantic_moments([row])
+
+    # Раздел [90..150] пересекается только с первым блоком [80..160].
+    assert len(moments) == 1, moments
+    assert moments[0]["label"] == "токен, логит"
+    assert moments[0]["t_start"] == 80.0
+    assert moments[0]["keywords"] == ["токен", "логит"]

@@ -4,36 +4,42 @@
 ``[{start, end, text}]`` (см. ``scripts/transcribe_media.py``). Выход — таймкоды
 ``t_start/t_end`` и ``confidence`` на раздел, детерминированно и без LLM.
 
-Алгоритм ``anchor-lis-v2`` (устойчив к видео 4–5 часов):
+Алгоритм ``anchor-lis-v3`` (устойчив к видео 4–5 часов):
 
-1. Сегменты группируются в блоки ~фиксированного лексического объёма.
+1. Транскрипт режется на **смысловые блоки** (:func:`build_semantic_blocks`) —
+   TextTiling-подобная сегментация по провалам лексической связности между
+   соседними окнами речи. У каждого блока настоящие границы темы
+   (``t_start``/``t_end``) и ключевые слова (топ TF-IDF) — блоки пишутся в
+   sidecar (``semantic_blocks``) и служат узлами смыслов видео для графа знаний.
    Токены скоринга (не ``compute_section_id``!) канонизируются: RU-стемминг
    словоформ («токенов»→«токен») + транслитерация латинских терминов
    конспекта в кириллицу ASR («skills»→«скиллс») — см. ``_tokenize_canon``.
 2. Slide-aware якорение: явное «слайд N» в речи или title-reading заголовка
    слайда/раздела по скользящему окну ~14 c транскрипта (``_build_windows`` —
    один ASR-сегмент, медианно 2 c/4 слова, для заголовка мал) → сильное
-   свидетельство (confidence 0.75–0.90); при отсутствии номеров в
-   транскрипте — order-rank по хронологии cue-моментов и порядку слайдов.
-3. Каждый содержательный раздел без slide-якоря получает блок-кандидат (argmax
-   лексического перекрытия канонизированных токенов заголовка И тела).
-4. Взвешенный LIS по (порядок раздела, индекс блока) отбрасывает якоря,
-   ломающие хронологию лекции.
-5. Разделы без якоря интерполируются между соседними якорями по их
-   уточнённым временам и помечаются низким confidence (< 0.70).
+   свидетельство (confidence 0.75–0.90).
+3. Конспект — несколько тематических «проходов» по одной лекции (слайды →
+   ключевые темы → примеры → эксперт): хронология монотонна **внутри прохода**
+   (H1/H2-группы, :func:`_split_passes`), между проходами независима. Каждый
+   содержательный раздел получает блок-кандидат (argmax лексического
+   перекрытия), взвешенный LIS и клампинг монотонности работают в пределах
+   своего прохода — recap-проходы больше не конкурируют со слайдами за одну
+   глобальную цепочку.
+4. Разделы без якоря интерполируются между соседними якорями прохода
+   пропорционально номерам строк и помечаются низким confidence (< 0.70).
+5. ``t_end`` раздела — начало следующего раздела прохода, а у последнего в
+   проходе — конец его смыслового блока (не конец медиа): «конец смысла» из
+   сегментации, а не административная граница файла.
 
-v1→v2: тот же контракт и та же (глобальная) модель хронологии — единственный
-монотонный проход по документу. Известное ограничение, вынесенное за скобки
-этой версии: реальные конспекты — несколько тематических «проходов» по одной
-лекции (слайды → ключевые темы → примеры), внутри которых глобальная
-монотонность неверна; это требует отдельного пересмотра LIS-модели и
-тест-сьюта, не входит в v2.
+v2→v3: per-pass хронология вместо глобальной, смысловые блоки вместо блоков
+фиксированного лексического объёма, честный ``t_end``.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,14 +47,24 @@ from pathlib import Path
 from app.knowledge_text import tokenize_filtered
 from app.section_index import ParsedSection
 
-ALIGNMENT_VERSION = "anchor-lis-v2"
+ALIGNMENT_VERSION = "anchor-lis-v3"
 SEGMENTS_SCHEMA_VERSION = 1
 
-_BLOCK_TOKEN_TARGET = 120  # лексический объём блока (≈30–60 сек речи)
 _MIN_SECTION_TOKENS = 8  # разделы короче не якорим — только интерполяция
 _MIN_ANCHOR_SCORE = 0.18  # ниже — совпадение считается шумом
+_MIN_ANCHOR_SCORE_DEEP = 0.25  # H4+: мелкие разделы с generic-лексикой ложатся на случайные блоки
+_LONE_ANCHOR_MIN_SCORE = 0.30  # единственный body-якорь прохода без LIS-проверки
 _INTERPOLATED_CONFIDENCE = 0.40  # < low_confidence-порога сайдкара (0.70)
 _MAX_ANCHOR_CONFIDENCE = 0.99
+_PASS_HEADING_LEVEL = 2  # H1/H2 начинают новый хронологический «проход» конспекта
+
+# Семантическая сегментация транскрипта (TextTiling-подобная)
+_TILE_WINDOW_SPAN = 45.0  # окно лексики слева/справа от границы-кандидата, сек
+_TILE_MIN_BLOCK = 90.0  # смысловой блок короче не бывает — шум ASR, не смена темы
+_TILE_MAX_BLOCK = 420.0  # длиннее — принудительное дробление по лучшему провалу
+_TILE_DEPTH_SIGMA = 0.25  # порог границы: µ + 0.25σ по depth (выше µ−σ/2 TextTiling —
+# разговорная речь с 2-секундными ASR-сегментами даёт рваную лексику и лишние провалы)
+_TILE_KEYWORDS = 6  # ключевых слов на блок (топ TF-IDF) — «имя смысла» для графа
 
 # Slide-aware anchoring
 _SLIDE_HEADING_NUM_RE = re.compile(
@@ -70,6 +86,7 @@ _SLIDE_ORDER_CONFIDENCE = 0.75
 _SLIDE_TITLE_STRONG_SCORE = 0.70
 _SLIDE_TITLE_MIN_SCORE = 0.55
 _SLIDE_TITLE_ORDER_MIN_SCORE = 0.40
+_SLIDE_TITLE_BODY_MIN_OVERLAP = 0.08  # дословная читка вне тематического блока = интро-упоминание
 _SLIDE_CUE_LIS_WEIGHT = 100.0
 _GENERIC_HEADING_TITLES = frozenset(
     {
@@ -235,35 +252,221 @@ def load_segments_file(path: Path) -> SegmentsFile:
     )
 
 
-# ── Блоки ────────────────────────────────────────────────────────────────
+# ── Смысловые блоки (TextTiling-подобная сегментация) ───────────────────
 
 
 @dataclass(frozen=True)
-class _Block:
+class SemanticBlock:
+    """Смысловой блок лекции: настоящие границы темы, не фиксированный объём.
+
+    ``keywords`` — топ TF-IDF токенов блока: детерминированное «имя смысла»
+    для sidecar (``semantic_blocks``) и узлов видео в графе знаний.
+    """
+
     t_start: float
     t_end: float
     tokens: frozenset[str]
     seg_lo: int  # индексы сегментов блока — для уточнения t_start внутри блока
     seg_hi: int
+    keywords: tuple[str, ...] = ()
 
 
-def _build_blocks(segments: tuple[TranscriptSegment, ...]) -> list[_Block]:
-    blocks: list[_Block] = []
-    tokens: set[str] = set()
-    t_start: float | None = None
-    t_end = 0.0
-    seg_lo = 0
-    for idx, seg in enumerate(segments):
-        if t_start is None:
-            t_start, seg_lo = seg.start, idx
-        tokens |= _tokenize_canon(seg.text)
-        t_end = seg.end
-        if len(tokens) >= _BLOCK_TOKEN_TARGET:
-            blocks.append(_Block(t_start=t_start, t_end=t_end, tokens=frozenset(tokens), seg_lo=seg_lo, seg_hi=idx))
-            tokens, t_start = set(), None
-    if t_start is not None and tokens:
+# Скоринг и slide-якорение работают с любым блоком этой формы.
+_Block = SemanticBlock
+
+
+def _gap_similarities(
+    segments: tuple[TranscriptSegment, ...],
+    seg_tokens: list[frozenset[str]],
+) -> list[float]:
+    """Лексическая связность на каждой границе сегментов i|i+1.
+
+    Косинус (на множествах) между токенами окна ``_TILE_WINDOW_SPAN`` слева и
+    справа от границы. Провал связности = смена темы лектором.
+    """
+    n = len(segments)
+    sims: list[float] = []
+    for i in range(n - 1):
+        boundary = segments[i].end
+        left: set[str] = set()
+        j = i
+        while j >= 0 and boundary - segments[j].start <= _TILE_WINDOW_SPAN:
+            left |= seg_tokens[j]
+            j -= 1
+        right: set[str] = set()
+        k = i + 1
+        while k < n and segments[k].start - boundary <= _TILE_WINDOW_SPAN:
+            right |= seg_tokens[k]
+            k += 1
+        if not left or not right:
+            sims.append(1.0)
+            continue
+        hit = len(left & right)
+        sims.append(hit / ((len(left) * len(right)) ** 0.5))
+    return sims
+
+
+def _depth_scores(sims: list[float]) -> list[float]:
+    """Глубина провала связности в каждой точке (классический TextTiling).
+
+    depth_i = (пик слева − sim_i) + (пик справа − sim_i): чем глубже долина
+    между двумя горами связности, тем увереннее граница темы.
+    """
+    n = len(sims)
+    depths = [0.0] * n
+    for i in range(n):
+        peak_left = sims[i]
+        for j in range(i - 1, -1, -1):
+            if sims[j] < peak_left:
+                break
+            peak_left = sims[j]
+        peak_right = sims[i]
+        for j in range(i + 1, n):
+            if sims[j] < peak_right:
+                break
+            peak_right = sims[j]
+        depths[i] = (peak_left - sims[i]) + (peak_right - sims[i])
+    return depths
+
+
+def _select_boundaries(
+    segments: tuple[TranscriptSegment, ...], depths: list[float]
+) -> list[int]:
+    """Индексы границ (после сегмента i) по depth-скорам.
+
+    Порог — классический µ−σ/2; границы не ближе ``_TILE_MIN_BLOCK`` друг к
+    другу (жадный отбор по убыванию depth); блоки длиннее ``_TILE_MAX_BLOCK``
+    дробятся по лучшему оставшемуся провалу — «конец смысла» не должен уезжать
+    на десятки минут даже в монотонной речи.
+    """
+    n = len(depths)
+    if n == 0:
+        return []
+    mean = sum(depths) / n
+    var = sum((d - mean) ** 2 for d in depths) / n
+    cutoff = mean + _TILE_DEPTH_SIGMA * (var**0.5)
+    candidates = sorted(
+        (i for i in range(n) if depths[i] > max(cutoff, 0.0)),
+        key=lambda i: depths[i],
+        reverse=True,
+    )
+    media_start = segments[0].start
+    media_end = segments[-1].end
+
+    def _far_enough(idx: int, chosen: list[int]) -> bool:
+        t = segments[idx].end
+        if t - media_start < _TILE_MIN_BLOCK or media_end - t < _TILE_MIN_BLOCK:
+            return False
+        return all(abs(t - segments[c].end) >= _TILE_MIN_BLOCK for c in chosen)
+
+    boundaries: list[int] = []
+    for idx in candidates:
+        if _far_enough(idx, boundaries):
+            boundaries.append(idx)
+    boundaries.sort()
+
+    # Принудительное дробление слишком длинных кусков по лучшему провалу внутри.
+    changed = True
+    while changed:
+        changed = False
+        edges = [-1, *boundaries, len(segments) - 1]
+        for lo, hi in zip(edges, edges[1:]):
+            span_start = segments[lo + 1].start if lo >= 0 else media_start
+            span_end = segments[hi].end
+            if span_end - span_start <= _TILE_MAX_BLOCK:
+                continue
+            inner = [
+                i
+                for i in range(lo + 1, min(hi, len(depths)))
+                if _far_enough(i, boundaries)
+            ]
+            if not inner:
+                continue
+            best = max(inner, key=lambda i: depths[i])
+            boundaries.append(best)
+            boundaries.sort()
+            changed = True
+            break
+    return boundaries
+
+
+def _block_keywords(
+    block_tokens: list[frozenset[str]],
+    all_blocks: list[frozenset[str]],
+    surface_by_canon: dict[str, str],
+) -> tuple[str, ...]:
+    """Топ-``_TILE_KEYWORDS`` токенов блока по TF·IDF (df — по блокам).
+
+    Ранжирование — по каноническим токенам (стемминг/транслитерация склеивают
+    словоформы), а показывается человекочитаемая исходная форма
+    (``surface_by_canon``): «лэмка», а не «лэмк».
+    """
+    n_blocks = len(all_blocks)
+    df: dict[str, int] = {}
+    for tokens in all_blocks:
+        for tok in tokens:
+            df[tok] = df.get(tok, 0) + 1
+    tf: dict[str, int] = {}
+    for tokens in block_tokens:
+        for tok in tokens:
+            tf[tok] = tf.get(tok, 0) + 1
+    scored = sorted(
+        tf,
+        key=lambda tok: (-tf[tok] * math.log((1 + n_blocks) / (1 + df.get(tok, 0))), tok),
+    )
+    return tuple(surface_by_canon.get(tok, tok) for tok in scored[:_TILE_KEYWORDS])
+
+
+def _surface_forms_by_canon(segments: tuple[TranscriptSegment, ...]) -> dict[str, str]:
+    """Канонический токен → его самая частая исходная словоформа (для показа).
+
+    Детерминированный tie-break: чаще → короче → лексикографически. Стемминг
+    нужен для матчинга, но пользователю в граф-линзе показываем живое слово.
+    """
+    counts: dict[str, dict[str, int]] = {}
+    for seg in segments:
+        for surface in tokenize_filtered(seg.text):
+            canon = _canon_token(surface)
+            bucket = counts.setdefault(canon, {})
+            bucket[surface] = bucket.get(surface, 0) + 1
+    result: dict[str, str] = {}
+    for canon, forms in counts.items():
+        result[canon] = min(forms, key=lambda s: (-forms[s], len(s), s))
+    return result
+
+
+def build_semantic_blocks(segments: tuple[TranscriptSegment, ...]) -> list[SemanticBlock]:
+    """Детерминированная сегментация транскрипта на смысловые блоки.
+
+    Ключ к точным таймкодам: у раздела конспекта появляются настоящие
+    «начало смысла» и «конец смысла» вместо произвольных границ блоков
+    фиксированного объёма. Блоки же — готовые узлы смыслов видео.
+    """
+    if not segments:
+        return []
+    seg_tokens = [_tokenize_canon(s.text) for s in segments]
+    sims = _gap_similarities(segments, seg_tokens)
+    depths = _depth_scores(sims)
+    boundaries = _select_boundaries(segments, depths)
+    surface_by_canon = _surface_forms_by_canon(segments)
+
+    edges = [-1, *boundaries, len(segments) - 1]
+    ranges = [(lo + 1, hi) for lo, hi in zip(edges, edges[1:]) if lo + 1 <= hi]
+    union_tokens = [
+        frozenset().union(*seg_tokens[lo : hi + 1]) if hi >= lo else frozenset()
+        for lo, hi in ranges
+    ]
+    blocks: list[SemanticBlock] = []
+    for (lo, hi), tokens in zip(ranges, union_tokens):
         blocks.append(
-            _Block(t_start=t_start, t_end=t_end, tokens=frozenset(tokens), seg_lo=seg_lo, seg_hi=len(segments) - 1)
+            SemanticBlock(
+                t_start=segments[lo].start,
+                t_end=segments[hi].end,
+                tokens=tokens,
+                seg_lo=lo,
+                seg_hi=hi,
+                keywords=_block_keywords(seg_tokens[lo : hi + 1], union_tokens, surface_by_canon),
+            )
         )
     return blocks
 
@@ -384,6 +587,23 @@ def _block_idx_for_seg(blocks: list[_Block], seg_idx: int) -> int:
     return max(0, len(blocks) - 1)
 
 
+def _idf_by_token(blocks: list[_Block]) -> dict[str, float]:
+    """IDF токенов по смысловым блокам — «редкость» слова в этой лекции."""
+    df: dict[str, int] = {}
+    for block in blocks:
+        for tok in block.tokens:
+            df[tok] = df.get(tok, 0) + 1
+    n = len(blocks)
+    return {tok: math.log((1 + n) / (1 + count)) for tok, count in df.items()}
+
+
+def _top_idf_token(tokens: tuple[str, ...], idf: dict[str, float]) -> str | None:
+    """Самый редкий (по IDF) токен заголовка — его различительное ядро."""
+    if not tokens:
+        return None
+    return max(tokens, key=lambda tok: (idf.get(tok, math.log(2)), tok))
+
+
 def _detect_spoken_slide_numbers(
     segments: tuple[TranscriptSegment, ...],
 ) -> dict[int, tuple[int, float]]:
@@ -406,30 +626,61 @@ class _SlideCue:
 
 
 def _detect_slide_title_cues(
+    sections: list[ParsedSection],
     segments: tuple[TranscriptSegment, ...],
     slide_sections: list[tuple[int, int, str]],
     windows: list[_Window],
     background: frozenset[str],
+    blocks: list[_Block],
 ) -> list[_SlideCue]:
-    """Title-reading: слайды по номеру, сегменты только вперёд по хронологии."""
+    """Title-reading слайдов: лучшее окно по рангу title + смысловой блок.
+
+    Прежний жадный курсор («только вперёд от последнего мэтча») каскадно
+    утаскивал все последующие слайды за одним ложным мэтчем. Теперь каждый
+    слайд получает argmax по всем окнам, ранжированный как
+    ``title_score + 0.5·body_overlap`` — дословное чтение заголовка там, где
+    и лексика тела раздела, отличает обсуждение от беглого упоминания.
+    Хронологию наводит LIS-фильтр (:func:`_filter_slide_anchors_by_lis`).
+    """
     cues: list[_SlideCue] = []
-    seg_cursor = 0
     for pos, slide_num, heading in sorted(slide_sections, key=lambda item: item[1]):
         title_tokens = _heading_title_tokens(_slide_title_from_heading(heading), background)
         if not title_tokens:
             continue
+        body_tokens = (
+            _tokenize_canon(sections[pos].own_text or sections[pos].text) - background
+        )
         best_idx = -1
+        best_rank = 0.0
         best_score = 0.0
-        for idx in range(seg_cursor, len(segments)):
+        strong_idx = -1  # самое раннее дословное чтение в тематически своём блоке
+        strong_score = 0.0
+        for idx in range(len(segments)):
             score = _title_read_score(title_tokens, windows[idx].tokens)
-            if score > best_score:
+            if score < _SLIDE_TITLE_MIN_SCORE:
+                continue
+            block = blocks[_block_idx_for_seg(blocks, idx)]
+            body_overlap = _overlap_score(body_tokens, block)
+            if (
+                strong_idx < 0
+                and score >= _SLIDE_TITLE_STRONG_SCORE
+                and body_overlap >= _SLIDE_TITLE_BODY_MIN_OVERLAP
+            ):
+                strong_idx = idx
+                strong_score = score
+            rank = score + 0.5 * body_overlap
+            if rank > best_rank:
+                best_rank = rank
                 best_score = score
                 best_idx = idx
-            if score >= _SLIDE_TITLE_STRONG_SCORE:
-                break
-        if best_idx < 0 or best_score < _SLIDE_TITLE_MIN_SCORE:
+        if strong_idx >= 0:
+            # Дословное чтение заголовка = анонс слайда: это момент НАЧАЛА
+            # обсуждения, поэтому самое раннее такое окно точнее, чем окно с
+            # максимальной плотностью лексики тела (пик обсуждения — позже).
+            # Требование body_overlap отсекает беглые упоминания темы в интро.
+            best_idx, best_score = strong_idx, strong_score
+        if best_idx < 0:
             continue
-        seg_cursor = best_idx + 1
         cues.append(
             _SlideCue(
                 slide_num=slide_num,
@@ -501,11 +752,17 @@ def _detect_windowed_heading_cues(
     windows: list[_Window],
     background: frozenset[str],
 ) -> dict[int, tuple[int, float, float]]:
-    """Title-reading в окне слайда, к которому тематически привязан раздел."""
+    """Title-reading в окне слайда, к которому тематически привязан раздел.
+
+    Обязателен top-IDF токен заголовка в окне: «Детерминизм: почему 100% не
+    будет» не должен якориться на «почему»+«будет» без слова «детерминизм» —
+    совпадение связок без различительного ядра всегда ложное.
+    """
     if len(anchors) < 2:
         return {}
     media_end = segments[-1].end if segments else float("inf")
     slide_windows = _slide_time_windows(slide_sections, anchors, media_end)
+    idf = _idf_by_token(blocks)
     heading_anchors: dict[int, tuple[int, float, float]] = {}
     for pos, section in enumerate(sections):
         if pos in anchors or _slide_number_from_heading(section.heading_text):
@@ -513,8 +770,12 @@ def _detect_windowed_heading_cues(
         if section.level >= 5:
             continue
         title_tokens = _heading_title_tokens(section.heading_text, background)
-        if len(title_tokens) < 2:
+        # H4-подзаголовки из двух слов («Важное ограничение») складываются из
+        # бытовой лексики в любом окне; надёжен только развёрнутый заголовок.
+        min_title_tokens = 2 if section.level <= 3 else 3
+        if len(title_tokens) < min_title_tokens:
             continue
+        top_token = _top_idf_token(title_tokens, idf)
         mapped = _best_slide_for_heading(section.heading_text, slide_sections, background)
         if mapped is None:
             t_lo, t_hi = 0.0, media_end
@@ -528,7 +789,15 @@ def _detect_windowed_heading_cues(
         for idx, seg in enumerate(segments):
             if not (t_lo <= seg.start <= t_hi):
                 continue
-            score = _title_read_score(title_tokens, windows[idx].tokens)
+            window_tokens = windows[idx].tokens
+            if top_token is not None and top_token not in window_tokens:
+                continue
+            # Одного совпавшего слова мало: у 2-токенного заголовка score 0.50 —
+            # это одинокое бытовое слово («минимальный», «практическое»)
+            # в случайном месте лекции, а не чтение заголовка.
+            if len(set(title_tokens) & window_tokens) < min(2, len(title_tokens)):
+                continue
+            score = _title_read_score(title_tokens, window_tokens)
             if score > best_score:
                 best_score = score
                 best_idx = idx
@@ -601,7 +870,7 @@ def _build_slide_anchors(
         return {}
 
     spoken_nums = _detect_spoken_slide_numbers(segments)
-    title_cues = _detect_slide_title_cues(segments, slide_sections, windows, background)
+    title_cues = _detect_slide_title_cues(sections, segments, slide_sections, windows, background, blocks)
     anchors: dict[int, tuple[int, float, float]] = {}
 
     for pos, slide_num, _heading in slide_sections:
@@ -701,11 +970,19 @@ def _filter_slide_anchors_by_lis(
     slide_anchor_by_pos: dict[int, tuple[int, float, float]],
     segments: tuple[TranscriptSegment, ...],
 ) -> dict[int, tuple[int, float, float]]:
-    """LIS по seg_idx: отбрасывает slide-cue, ломающие хронологию (recap, ASR-шум)."""
+    """LIS по seg_idx: отбрасывает slide-cue, ломающие хронологию (recap, ASR-шум).
+
+    Вес — confidence якоря, не константа: при конфликте немонотонных cue
+    выживает цепочка с бóльшим суммарным доверием, а не более длинная из слабых.
+    """
     if not slide_anchor_by_pos:
         return {}
     lis_input = [
-        (pos, _seg_idx_at_time(segments, slide_anchor_by_pos[pos][2]), _SLIDE_CUE_LIS_WEIGHT)
+        (
+            pos,
+            _seg_idx_at_time(segments, slide_anchor_by_pos[pos][2]),
+            _SLIDE_CUE_LIS_WEIGHT * slide_anchor_by_pos[pos][1],
+        )
         for pos in sorted(slide_anchor_by_pos)
     ]
     kept = _weighted_lis(lis_input, prefer_later_section_on_tie=True)
@@ -715,11 +992,150 @@ def _filter_slide_anchors_by_lis(
 # ── Публичное выравнивание ──────────────────────────────────────────────
 
 
+def _split_passes(sections: list[ParsedSection]) -> list[list[int]]:
+    """Хронологические «проходы» конспекта: H1/H2 начинает новый.
+
+    Реальный конспект несколько раз проходит одну лекцию (слайды → ключевые
+    темы → примеры → эксперт). Монотонность таймкодов верна внутри прохода,
+    между проходами — нет.
+    """
+    passes: list[list[int]] = []
+    for pos, section in enumerate(sections):
+        if section.level <= _PASS_HEADING_LEVEL or not passes:
+            passes.append([])
+        passes[-1].append(pos)
+    return passes
+
+
+@dataclass(frozen=True)
+class _PassAnchor:
+    t_start: float
+    confidence: float
+    block_idx: int
+    anchored: bool
+
+
+def _align_pass(
+    pass_positions: list[int],
+    sections: list[ParsedSection],
+    segments: tuple[TranscriptSegment, ...],
+    blocks: list[SemanticBlock],
+    scoring_blocks: list[SemanticBlock],
+    slide_anchor_all: dict[int, tuple[int, float, float]],
+    spoken_tokens: frozenset[str],
+    background: frozenset[str],
+) -> dict[int, _PassAnchor]:
+    """Якоря и интерполяция в пределах одного прохода конспекта."""
+    pass_slides = _filter_slide_anchors_by_lis(
+        {pos: slide_anchor_all[pos] for pos in pass_positions if pos in slide_anchor_all},
+        segments,
+    )
+
+    block_floor_by_pos: dict[int, int] = {}
+    floor = 0
+    for pos in pass_positions:
+        block_floor_by_pos[pos] = floor
+        if pos in pass_slides:
+            floor = pass_slides[pos][0]
+
+    section_tokens: dict[int, frozenset[str]] = {}
+    candidates: list[tuple[int, int, float]] = []
+    for pos in pass_positions:
+        if pos in pass_slides:
+            block_idx, _conf, _t = pass_slides[pos]
+            candidates.append((pos, block_idx, _SLIDE_CUE_LIS_WEIGHT))
+            continue
+        section = sections[pos]
+        body_tokens = _tokenize_canon(section.own_text or section.text)
+        heading_tokens = _tokenize_canon(section.heading_text) & spoken_tokens
+        tokens = frozenset((body_tokens | heading_tokens) - background)
+        if len(tokens) < _MIN_SECTION_TOKENS:
+            continue
+        section_tokens[pos] = tokens
+        scores = [_overlap_score(tokens, block) for block in scoring_blocks]
+        min_block = block_floor_by_pos[pos] if pass_slides else 0
+        eligible = range(min_block, len(blocks))
+        block_idx = max(eligible, key=lambda i: scores[i])
+        min_score = _MIN_ANCHOR_SCORE if section.level <= 3 else _MIN_ANCHOR_SCORE_DEEP
+        if scores[block_idx] >= min_score:
+            candidates.append((pos, block_idx, scores[block_idx]))
+
+    kept = _weighted_lis(candidates)
+    kept_body = [
+        (pos, blk, score) for pos, blk, score in candidates if pos in kept and pos not in pass_slides
+    ]
+    # Одинокий слабый body-якорь прохода: LIS его ничем не проверил (не с чем
+    # согласовываться), а слабый overlap на 2-часовой лекции — почти наверняка
+    # случайное совпадение лексики. Честное «нет таймкода» лучше промаха на час.
+    if (
+        len(kept_body) == 1
+        and not pass_slides
+        and kept_body[0][2] < _LONE_ANCHOR_MIN_SCORE
+    ):
+        kept.discard(kept_body[0][0])
+        kept_body = []
+
+    anchors: dict[int, _PassAnchor] = {}
+    for pos, blk, score in candidates:
+        if pos not in kept:
+            continue
+        if pos in pass_slides:
+            block_idx, confidence, t_start = pass_slides[pos]
+            anchors[pos] = _PassAnchor(
+                t_start=round(t_start, 2), confidence=confidence, block_idx=block_idx, anchored=True
+            )
+        else:
+            t_start = round(_refine_t_start(section_tokens[pos], blocks[blk], segments), 2)
+            anchors[pos] = _PassAnchor(
+                t_start=t_start, confidence=_anchor_confidence(score), block_idx=blk, anchored=True
+            )
+
+    # Интерполяция между якорями прохода — по номерам строк (объём контента),
+    # а не по порядковому номеру раздела: разделы сильно разного размера.
+    anchored_positions = sorted(anchors)
+    for pos in pass_positions:
+        if pos in anchors:
+            continue
+        prev_pos = max((p for p in anchored_positions if p < pos), default=None)
+        next_pos = min((p for p in anchored_positions if p > pos), default=None)
+        if prev_pos is None or next_pos is None:
+            continue  # край прохода без двух опор — честнее не выдумывать таймкод
+        l_prev = sections[prev_pos].line_start
+        l_next = sections[next_pos].line_start
+        frac = (
+            (sections[pos].line_start - l_prev) / (l_next - l_prev) if l_next > l_prev else 0.0
+        )
+        t_prev = anchors[prev_pos].t_start
+        t_next = anchors[next_pos].t_start
+        anchors[pos] = _PassAnchor(
+            t_start=round(t_prev + (t_next - t_prev) * frac, 2),
+            confidence=_INTERPOLATED_CONFIDENCE,
+            block_idx=anchors[prev_pos].block_idx,
+            anchored=False,
+        )
+
+    # Монотонность — внутри прохода.
+    floor_t: float | None = None
+    for pos in pass_positions:
+        anchor = anchors.get(pos)
+        if anchor is None:
+            continue
+        if floor_t is not None and anchor.t_start < floor_t:
+            anchors[pos] = _PassAnchor(
+                t_start=floor_t,
+                confidence=anchor.confidence,
+                block_idx=anchor.block_idx,
+                anchored=anchor.anchored,
+            )
+        floor_t = anchors[pos].t_start
+    return anchors
+
+
 def align_sections(
     sections: list[ParsedSection], segments: tuple[TranscriptSegment, ...]
 ) -> list[AlignedSection]:
     """Детерминированное выравнивание разделов по сегментам транскрипта."""
-    blocks = _build_blocks(segments)
+    blocks = build_semantic_blocks(segments)
     if not blocks:
         return [
             AlignedSection(section=s, t_start=None, t_end=None, confidence=0.0, anchored=False)
@@ -728,161 +1144,77 @@ def align_sections(
 
     background = _background_tokens(blocks)
     windows = _build_windows(segments)
-    slide_anchor_by_pos = _filter_slide_anchors_by_lis(
-        _build_slide_anchors(sections, segments, blocks, windows, background),
-        segments,
-    )
+    slide_anchor_all = _build_slide_anchors(sections, segments, blocks, windows, background)
 
     scoring_blocks = [
-        _Block(
+        SemanticBlock(
             t_start=b.t_start, t_end=b.t_end, tokens=frozenset(b.tokens - background),
-            seg_lo=b.seg_lo, seg_hi=b.seg_hi,
+            seg_lo=b.seg_lo, seg_hi=b.seg_hi, keywords=b.keywords,
         )
         for b in blocks
     ]
     spoken_tokens = frozenset().union(*[b.tokens for b in blocks]) if blocks else frozenset()
 
-    block_floor_by_pos: dict[int, int] = {}
-    floor = 0
-    for pos, _section in enumerate(sections):
-        block_floor_by_pos[pos] = floor
-        if pos in slide_anchor_by_pos:
-            floor = slide_anchor_by_pos[pos][0]
+    anchors: dict[int, _PassAnchor] = {}
+    passes = _split_passes(sections)
+    for pass_positions in passes:
+        anchors.update(
+            _align_pass(
+                pass_positions,
+                sections,
+                segments,
+                blocks,
+                scoring_blocks,
+                slide_anchor_all,
+                spoken_tokens,
+                background,
+            )
+        )
 
-    section_tokens: dict[int, frozenset[str]] = {}
-    candidates: list[tuple[int, int, float]] = []
-    for pos, section in enumerate(sections):
-        if pos in slide_anchor_by_pos:
-            block_idx, _conf, _t = slide_anchor_by_pos[pos]
-            candidates.append((pos, block_idx, _SLIDE_CUE_LIS_WEIGHT))
-            continue
-        body_tokens = _tokenize_canon(section.own_text or section.text)
-        heading_tokens = _tokenize_canon(section.heading_text) & spoken_tokens
-        tokens = frozenset((body_tokens | heading_tokens) - background)
-        if len(tokens) < _MIN_SECTION_TOKENS:
-            continue
-        section_tokens[pos] = tokens
-        scores = [_overlap_score(tokens, block) for block in scoring_blocks]
-        min_block = block_floor_by_pos[pos] if slide_anchor_by_pos else 0
-        eligible = range(min_block, len(blocks))
-        block_idx = max(eligible, key=lambda i: scores[i])
-        if scores[block_idx] >= _MIN_ANCHOR_SCORE:
-            candidates.append((pos, block_idx, scores[block_idx]))
-
-    kept = _weighted_lis(candidates)
-    anchor_by_pos: dict[int, tuple[int, float]] = {}
-    anchor_t_start: dict[int, float] = {}
-    for pos, blk, score in candidates:
-        if pos not in kept:
-            continue
-        if pos in slide_anchor_by_pos:
-            block_idx, confidence, t_start = slide_anchor_by_pos[pos]
-            anchor_by_pos[pos] = (block_idx, confidence)
-            anchor_t_start[pos] = round(t_start, 2)
-        else:
-            anchor_by_pos[pos] = (blk, score)
-    anchored_positions = sorted(anchor_by_pos)
-
-    for pos in anchored_positions:
-        if pos in anchor_t_start:
-            continue
-        block_idx, _score = anchor_by_pos[pos]
-        anchor_t_start[pos] = round(_refine_t_start(section_tokens[pos], blocks[block_idx], segments), 2)
-
+    t_end_by_pos = _pass_t_ends(passes, anchors, blocks)
     aligned: list[AlignedSection] = []
     for pos, section in enumerate(sections):
-        if pos in anchor_by_pos:
-            block_idx, score_or_conf = anchor_by_pos[pos]
-            block = blocks[block_idx]
-            if pos in slide_anchor_by_pos:
-                confidence = slide_anchor_by_pos[pos][1]
-            else:
-                confidence = _anchor_confidence(score_or_conf)
+        anchor = anchors.get(pos)
+        if anchor is None:
             aligned.append(
-                AlignedSection(
-                    section=section,
-                    t_start=anchor_t_start[pos],
-                    t_end=round(block.t_end, 2),
-                    confidence=confidence,
-                    anchored=True,
-                )
+                AlignedSection(section=section, t_start=None, t_end=None, confidence=0.0, anchored=False)
             )
             continue
-        t_interp = _interpolate(pos, anchored_positions, anchor_t_start)
         aligned.append(
             AlignedSection(
                 section=section,
-                t_start=t_interp,
-                t_end=None,
-                confidence=_INTERPOLATED_CONFIDENCE if t_interp is not None else 0.0,
-                anchored=False,
+                t_start=anchor.t_start,
+                t_end=t_end_by_pos.get(pos),
+                confidence=anchor.confidence,
+                anchored=anchor.anchored,
             )
         )
-
-    aligned = _clamp_monotonic(aligned)
-    return _stretch_ends(aligned, segments)
+    return aligned
 
 
-def _interpolate(
-    pos: int,
-    anchored_positions: list[int],
-    anchor_t_start: dict[int, float],
-) -> float | None:
-    prev_pos = max((p for p in anchored_positions if p < pos), default=None)
-    next_pos = min((p for p in anchored_positions if p > pos), default=None)
-    if prev_pos is None or next_pos is None:
-        return None  # край без обеих опор — честнее не выдумывать таймкод
-    t_prev = anchor_t_start[prev_pos]
-    t_next = anchor_t_start[next_pos]
-    frac = (pos - prev_pos) / (next_pos - prev_pos)
-    return round(t_prev + (t_next - t_prev) * frac, 2)
+def _pass_t_ends(
+    passes: list[list[int]],
+    anchors: dict[int, _PassAnchor],
+    blocks: list[SemanticBlock],
+) -> dict[int, float]:
+    """``t_end`` разделов: начало следующего в проходе, у хвоста — конец смысла.
 
-
-def _clamp_monotonic(aligned: list[AlignedSection]) -> list[AlignedSection]:
-    out: list[AlignedSection] = []
-    floor: float | None = None
-    for item in aligned:
-        if item.t_start is None:
-            out.append(item)
-            continue
-        t_start = item.t_start if floor is None else max(item.t_start, floor)
-        floor = t_start
-        if t_start == item.t_start:
-            out.append(item)
-        else:
-            out.append(
-                AlignedSection(
-                    section=item.section,
-                    t_start=t_start,
-                    t_end=item.t_end,
-                    confidence=item.confidence,
-                    anchored=item.anchored,
-                )
+    Прежний ``_stretch_ends`` дотягивал последний раздел до конца медиа —
+    «Практическое задание» получало 30-минутный интервал, а playlist_seconds
+    превышал длительность лекции. Конец смыслового блока — честная граница.
+    """
+    t_ends: dict[int, float] = {}
+    for pass_positions in passes:
+        timed = [pos for pos in pass_positions if pos in anchors]
+        for i, pos in enumerate(timed):
+            t_start = anchors[pos].t_start
+            next_start = next(
+                (anchors[p].t_start for p in timed[i + 1 :] if anchors[p].t_start > t_start),
+                None,
             )
-    return out
-
-
-def _stretch_ends(
-    aligned: list[AlignedSection], segments: tuple[TranscriptSegment, ...]
-) -> list[AlignedSection]:
-    media_end = segments[-1].end if segments else None
-    out: list[AlignedSection] = []
-    for i, item in enumerate(aligned):
-        if item.t_start is None:
-            out.append(item)
-            continue
-        next_start = next(
-            (a.t_start for a in aligned[i + 1 :] if a.t_start is not None and a.t_start > item.t_start),
-            None,
-        )
-        t_end = next_start if next_start is not None else (media_end or item.t_end)
-        out.append(
-            AlignedSection(
-                section=item.section,
-                t_start=item.t_start,
-                t_end=round(t_end, 2) if t_end is not None else None,
-                confidence=item.confidence,
-                anchored=item.anchored,
-            )
-        )
-    return out
+            if next_start is not None:
+                t_ends[pos] = round(next_start, 2)
+                continue
+            block_end = blocks[anchors[pos].block_idx].t_end
+            t_ends[pos] = round(max(block_end, t_start), 2)
+    return t_ends

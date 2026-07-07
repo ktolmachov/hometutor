@@ -231,13 +231,27 @@ AI/ML компоненты подключаются как gated enrichment/rera
 M0a/M0.3 мультимодального конспекта добавляют metadata contract и осторожный render в
 «Живом конспекте», без VLM, `media_progress` и новых LLM-вызовов. ASR-конвейер M1
 (`scripts/transcribe_media.py` → `app/media_alignment.py` → `scripts/build_media_sidecar.py`)
-существует как offline maintainer-прототип с юнит-тестами: приложение его не вызывает,
-benchmark-spike из `docs/adr/0002-asr-dependency-strategy.md` не проведён.
+существует как offline maintainer-конвейер с юнит-тестами: приложение его не вызывает,
+пакетный запуск — `scripts/Run-MediaKonspektBatch.ps1`.
+
+Выравнивание — `anchor-lis-v3` (`app/media_alignment.py`), детерминированное и без LLM:
+
+- **смысловые блоки** — TextTiling-подобная сегментация транскрипта по провалам
+  лексической связности; у блока настоящие границы темы (`t_start`/`t_end`) и
+  ключевые слова (топ TF-IDF); блоки пишутся в sidecar (`semantic_blocks`) как
+  узлы смыслов видео и питают граф-линзу Живого конспекта;
+- **канонизация токенов** — RU-стемминг словоформ + транслитерация латинских
+  терминов конспекта в кириллицу ASR («skills» ↔ «скиллс»);
+- **per-pass хронология** — конспект состоит из нескольких «проходов» по одной
+  лекции (H2-группы: слайды → ключевые темы → примеры); LIS-отбор якорей и
+  монотонность таймкодов действуют внутри прохода, между проходами — независимы;
+- `t_end` раздела — начало следующего раздела прохода, у последнего — конец его
+  смыслового блока (не конец медиа).
 
 Ключевые модули:
 
 - `app/media_sidecar.py` — dataclasses, parser/loader и lightweight internal validation
-  sidecar v1;
+  sidecar v1, включая опциональные `semantic_blocks`;
 - `app/media_urls.py` — нормализация внешних video URL, включая YouTube `watch`,
   `youtu.be`, `embed` и timestamp-параметры;
 - `app/path_safety.py` — единая проверка persisted `DATA_DIR`-relative paths.

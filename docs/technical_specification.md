@@ -196,9 +196,10 @@ ASR model и alignment version. `section_slug` предназначен для U
 ключом раздела остаётся `section_id`. `konspekt_sha256` игнорирует служебный frontmatter
 pointer `media_sidecar`, потому что это wiring metadata, а не содержательный дрейф конспекта.
 
-UI показывает уверенный timestamp action только если sidecar не stale и confidence section
-timestamp не ниже порога. Stale, low-confidence, missing local media и unsafe path отображаются
-как degraded state без падения страницы.
+UI показывает timestamp action и секционный player только если sidecar не stale и
+confidence section timestamp не ниже порога. Stale, low-confidence, missing local media
+и unsafe path отображаются как degraded state без падения страницы; low-confidence
+timestamp остаётся диагностическим кандидатом и не встраивает видео в раздел.
 
 ### Аутентификация
 

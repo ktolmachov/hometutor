@@ -54,7 +54,13 @@ def test_serialize_parse_manifest_roundtrip_preserves_rows_and_sidecars() -> Non
     assert manifest.type == "living-konspekt"
     assert manifest.manifest_version == 1
     assert manifest.artifact_id == "working-konspekt"
-    assert {key: value for key, value in manifest.rows[0].items() if key != "section_id"} == persisted[0]
+    # Portable rows shed ``text``/``own_text`` from the manifest (slim portable
+    # contract): these are re-read from the source on reassemble, so the persisted
+    # payload omits them rather than duplicating the lecture content.
+    slim_dropped = ("text", "own_text")
+    expected = {k: v for k, v in persisted[0].items() if k not in slim_dropped}
+    actual = {k: v for k, v in manifest.rows[0].items() if k != "section_id"}
+    assert actual == expected
     assert manifest.rows[0]["row_key"] == persisted[0]["row_key"]
     assert manifest.rows[0]["section_id"].startswith("sha256:")
     assert manifest.sidecar_pointers == [
@@ -122,7 +128,9 @@ def test_reassemble_rows_falls_back_to_non_portable_snapshot_when_source_missing
 
     assert rows[0]["portability_status"] == "non_portable"
     assert rows[0]["konspekt_md_abs"] == ""
-    assert rows[0]["text"] == "Текст раздела."
+    # Portable rows carry no text in the manifest (slim portable contract); when the
+    # source is missing at reassemble the non-portable snapshot cannot recover it.
+    assert rows[0]["text"] == ""
 
 
 def test_note_read_at_and_goal_survive_reassemble_and_resave() -> None:

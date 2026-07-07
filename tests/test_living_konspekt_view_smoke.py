@@ -205,6 +205,8 @@ class TestMediaPanelSmoke:
 
         assert not at.exception
         assert any("Материал раздела" in str(md.value) for md in at.markdown)
+        captions = [c.value for c in at.caption]
+        assert any("таймкод раздела: 1:15–2:00" in c for c in captions)
         link_buttons = at.get("link_button")
         assert any(button.label == "Открыть на YouTube с 1:15" for button in link_buttons)
         assert any("t=75s" in button.url for button in link_buttons)
@@ -255,12 +257,12 @@ class TestMediaPanelSmoke:
         assert not any("с 1:15" in button.label for button in link_buttons)
         assert any("Открыть на YouTube: Видео" in button.label for button in link_buttons)
 
-    def test_low_confidence_sidecar_still_seeks_but_flags_as_approximate(self, monkeypatch):
-        """Таймкод есть (пусть и низкой уверенности) — плеер обязан перемотать на него,
-        а не бросать пользователя на 0:00 целой лекции; неопределённость обозначается
-        подписью «(примерно)», а не отказом от перемотки."""
+    def test_low_confidence_sidecar_shows_candidate_without_video_action(self, monkeypatch):
+        """Низкий confidence — диагностический кандидат, а не видео раздела."""
         import app.ui.living_konspekt_media as view
 
+        iframe_calls: list[tuple[str, int]] = []
+        monkeypatch.setattr(view.components, "iframe", lambda src, height: iframe_calls.append((src, height)))
         monkeypatch.setattr(view, "load_media_sidecar_for_konspekt", lambda path: _media_sidecar(confidence=0.4))
         monkeypatch.setattr(view, "_sidecar_stale_reasons", lambda sc, md_abs: [])
 
@@ -271,9 +273,10 @@ class TestMediaPanelSmoke:
         assert not at.exception
         captions = [c.value for c in at.caption]
         assert any("confidence ниже порога" in c for c in captions)
-        assert any("примерно" in c for c in captions)
+        assert any("Кандидат таймкода: 1:15–2:00 (примерно)" in c for c in captions)
         link_buttons = at.get("link_button")
-        assert any("с 1:15" in button.label for button in link_buttons)
+        assert not any("с 1:15" in button.label for button in link_buttons)
+        assert not iframe_calls
 
 
 class TestMemoryPanelSmoke:

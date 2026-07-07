@@ -295,8 +295,10 @@ Stale detection работает по `schema_version`, `konspekt_sha256`, `medi
 по содержимому конспекта без собственной строки frontmatter `media_sidecar`, чтобы подключение
 sidecar не делало свежие таймкоды устаревшими.
 
-В UI timestamp action показывается только когда sidecar актуален, раздел найден и confidence
-не ниже порога. Для stale/low-confidence state остаётся обычная ссылка/предупреждение.
+В UI timestamp action и секционный player показываются только когда sidecar актуален,
+раздел найден и confidence не ниже порога. Для stale/low-confidence state остаётся
+degraded-предупреждение; low-confidence timestamp показывается как кандидат, но не как
+«видео раздела».
 
 ## Storage view
 

@@ -169,33 +169,37 @@ def _render_media_panel(row: dict[str, Any], is_first: bool = False, *, key_pref
         st.caption("🎬 Медиа есть, но для этого раздела таймкод не найден.")
         return
 
-    expander_label = "🎬 Видео раздела"
-    if media_section.t_start is not None:
-        expander_label += f" ({_format_timestamp(media_section.t_start)})"
+    trusted_timestamp = (
+        media_section.t_start is not None
+        and not stale_reasons
+        and not media_section.low_confidence
+    )
+    timestamp_label = _format_section_time_range(media_section)
+    expander_label = "🎬 Видео раздела" if trusted_timestamp else "🎬 Видео-кандидат"
+    if timestamp_label:
+        suffix = timestamp_label if trusted_timestamp else f"примерно {timestamp_label}"
+        expander_label += f" ({suffix})"
 
     with st.expander(expander_label, expanded=is_first):
         st.markdown("**🎬 Материал раздела**")
         if stale_reasons:
             st.caption("Таймкоды устарели: " + ", ".join(stale_reasons))
         if media_section.low_confidence:
-            st.caption("Таймкод примерный: confidence ниже порога.")
-
-        # has_timestamp: таймкод пригоден для перемотки (есть и sidecar не устарел).
-        # confident_timestamp: дополнительно требует low_confidence=False — для точной подписи.
-        has_timestamp = media_section.t_start is not None and not stale_reasons
-        confident_timestamp = has_timestamp and not media_section.low_confidence
-        timestamp_label = _format_timestamp(media_section.t_start)
+            st.caption("Видео не добавлено в раздел: confidence ниже порога.")
+            if timestamp_label:
+                st.caption(f"Кандидат таймкода: {timestamp_label} (примерно).")
+        if not trusted_timestamp:
+            return
 
         video = sidecar.video
         title = _video_title(video, 1)
+        st.caption(f"{title} · таймкод раздела: {timestamp_label}")
         if isinstance(video, UrlVideoSource):
-            _render_url_video_media(video, media_section, has_timestamp, confident_timestamp, timestamp_label, title)
+            _render_url_video_media(video, media_section, title)
         elif isinstance(video, LocalVideoSource):
             row_key = str(row.get("row_key") or f"{row.get('line_start')}_{row.get('heading_text')}")
             checkbox_key = f"lk_play_video_{key_prefix}_{row_key}"
-            _render_local_video_media(
-                video, media_section, has_timestamp, confident_timestamp, timestamp_label, title, checkbox_key
-            )
+            _render_local_video_media(video, media_section, title, checkbox_key)
 
 
 
@@ -209,6 +213,15 @@ def _video_title(video: LocalVideoSource | UrlVideoSource, idx: int) -> str:
     except ValueError:
         return f"Видео {idx}"
     return normalized.canonical_url
+
+
+def _format_section_time_range(media_section: MediaSection) -> str:
+    if media_section.t_start is None:
+        return ""
+    start = _format_timestamp(media_section.t_start)
+    if media_section.t_end is None or media_section.t_end <= media_section.t_start:
+        return start
+    return f"{start}–{_format_timestamp(media_section.t_end)}"
 
 
 def _render_youtube_video_player(normalized: NormalizedVideoUrl, *, start_time: int = 0) -> None:
@@ -241,31 +254,22 @@ def _render_url_video_player(video: UrlVideoSource, title: str, *, start_time: i
 def _render_url_video_media(
     video: UrlVideoSource,
     media_section: MediaSection,
-    has_timestamp: bool,
-    confident_timestamp: bool,
-    timestamp_label: str,
     title: str,
 ) -> None:
-    start_time = int(media_section.t_start or 0) if has_timestamp else 0
+    start_time = int(media_section.t_start or 0)
     _render_url_video_player(video, title, start_time=start_time)
-    if has_timestamp and start_time > 0:
+    if start_time > 0:
         try:
             normalized = normalize_video_url(video.canonical_url or video.url)
         except ValueError:
             return
         if normalized.is_youtube:
-            label = f"{title} · старт: {timestamp_label}"
-            if not confident_timestamp:
-                label += " (примерно)"
-            st.caption(label)
+            st.caption(f"{title} · старт: {_format_timestamp(start_time)}")
 
 
 def _render_local_video_media(
     video: LocalVideoSource,
     media_section: MediaSection,
-    has_timestamp: bool,
-    confident_timestamp: bool,
-    timestamp_label: str,
     title: str,
     checkbox_key: str,
 ) -> None:
@@ -273,13 +277,8 @@ def _render_local_video_media(
     # хэширует контент, чтобы определить file_id — кэша по mtime у него нет). При
     # 812 МБ-видео и 24 разделах на 2 вкладки это давало ~48 полных чтений файла за
     # rerun. Плеер поэтому рендерится только по явному клику, а не для каждой строки.
-    if has_timestamp:
-        label = f"{title} · старт: {timestamp_label}"
-        if not confident_timestamp:
-            label += " (примерно)"
-        st.caption(label)
     if st.checkbox("▶ Показать видео", key=checkbox_key):
-        start_time = int(media_section.t_start or 0) if has_timestamp else 0
+        start_time = int(media_section.t_start or 0)
         _render_local_video_player(video, title, start_time=start_time)
 
 
@@ -379,4 +378,3 @@ def _render_all_lesson_videos_panel(rows: list[dict[str, Any]]) -> None:
                         st.caption(f"📹 {title} (локальный файл: {video.path})")
                         if st.checkbox("Показать встроенный плеер", key=f"embed_all_v_{md_abs}_{idx}"):
                             _render_local_video_player(video, title)
-

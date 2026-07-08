@@ -1,6 +1,12 @@
 import json
+import shutil
+import sys
+import tempfile
+from pathlib import Path
 
-from app.config import DATA_DIR
+import pytest
+
+from app import obsidian_export, path_safety
 from app.living_konspekt_source_resolver import resolve_source_section
 from app.living_konspekt_video_citations import (
     resolve_source_video_citation,
@@ -9,13 +15,37 @@ from app.living_konspekt_video_citations import (
 from app.media_alignment import compute_section_id
 from app.media_sidecar import sha256_file
 
+_MODULE = sys.modules[__name__]
 
-ROOT = DATA_DIR / "_test_living_konspekt_video_citations"
-SRC = ROOT / "lesson.txt"
-MD = ROOT / "lesson.md"
-SIDECAR = ROOT / "lesson.media.json"
+# Isolated from the real DATA_DIR: these tests used to write fixtures directly
+# into the configured production data directory (leaking `_test_living_konspekt_
+# video_citations/` into the real corpus and knowledge-graph ingestion).
+ROOT: Path
+SRC: Path
+MD: Path
+SIDECAR: Path
 REL = "_test_living_konspekt_video_citations/lesson.txt"
 SIDECAR_REL = "_test_living_konspekt_video_citations/lesson.media.json"
+
+
+@pytest.fixture(autouse=True)
+def _isolated_data_dir(monkeypatch):
+    # `vault_root()` derives from ``DATA_DIR.parent / "data"`` — keep that
+    # coincidence intact so source and konspekt md resolve to the same tree.
+    home = Path(tempfile.mkdtemp(prefix="hometutor_test_video_citations_"))
+    base = home / "data"
+    base.mkdir()
+    monkeypatch.setattr(obsidian_export, "DATA_DIR", base)
+    monkeypatch.setattr(path_safety, "DATA_DIR", base)
+    root = base / "_test_living_konspekt_video_citations"
+    monkeypatch.setattr(_MODULE, "ROOT", root, raising=False)
+    monkeypatch.setattr(_MODULE, "SRC", root / "lesson.txt", raising=False)
+    monkeypatch.setattr(_MODULE, "MD", root / "lesson.md", raising=False)
+    monkeypatch.setattr(_MODULE, "SIDECAR", root / "lesson.media.json", raising=False)
+    try:
+        yield base
+    finally:
+        shutil.rmtree(home, ignore_errors=True)
 
 
 def _write_pair(markdown_body: str) -> None:

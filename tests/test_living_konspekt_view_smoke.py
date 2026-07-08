@@ -7,15 +7,43 @@
 
 from __future__ import annotations
 
+import shutil
+import sys
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from app.config import DATA_DIR
 from app.media_sidecar import GeneratedBy, MediaSection, MediaSidecar, UrlVideoSource
 from app.section_index import IndexedSection, section_to_row
+
+_MODULE = sys.modules[__name__]
+
+# Isolated from the real DATA_DIR: these tests used to write fixtures directly into
+# the configured production data directory (leaking `_test_view_smoke/` into the real
+# corpus and knowledge-graph ingestion). Each test gets a fresh temp dir instead, with
+# path_safety/obsidian_export DATA_DIR patched to match — workbench_service's
+# portability round-trip (persisted_row_from_runtime/runtime_row_from_persisted)
+# resolves konspekt_md_abs/source_abs against DATA_DIR and blanks them as
+# "non_portable" for anything outside it.
+_DATA_DIR: Path
+
+
+@pytest.fixture(autouse=True)
+def _isolated_data_dir(monkeypatch: pytest.MonkeyPatch):
+    import app.obsidian_export as obsidian_export
+    import app.path_safety as path_safety
+
+    base = Path(tempfile.mkdtemp(prefix="hometutor_test_view_smoke_"))
+    monkeypatch.setattr(path_safety, "DATA_DIR", base)
+    monkeypatch.setattr(obsidian_export, "DATA_DIR", base)
+    monkeypatch.setattr(_MODULE, "_DATA_DIR", base, raising=False)
+    try:
+        yield base
+    finally:
+        shutil.rmtree(base, ignore_errors=True)
 
 
 def _app() -> None:
@@ -32,14 +60,14 @@ def _row(heading: str = "Тема", line_start: int = 10, konspekt_md_abs: Path 
         line_start=line_start,
         line_end=line_start + 3,
         text="Текст раздела для сборки и промпта.",
-        source_abs=DATA_DIR / "_test_view_smoke" / "lecture.txt",
-        konspekt_md_abs=konspekt_md_abs or DATA_DIR / "_test_view_smoke" / "lecture.md",
+        source_abs=_DATA_DIR / "_test_view_smoke" / "lecture.txt",
+        konspekt_md_abs=konspekt_md_abs or _DATA_DIR / "_test_view_smoke" / "lecture.md",
     )
     return section_to_row(section)
 
 
 def _data_fixture_path(tmp_path: Path, name: str) -> Path:
-    path = DATA_DIR / "_test_view_smoke" / tmp_path.name / name
+    path = _DATA_DIR / "_test_view_smoke" / tmp_path.name / name
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
 

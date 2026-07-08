@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import shutil
+import sys
+import tempfile
 from pathlib import Path
 
 from dataclasses import replace
 
-from app import workbench_service
-from app.config import DATA_DIR
+import pytest
+
+from app import path_safety, workbench_service
 from app.konspekt_artifact import (
     _check_questions_block,
     build_videos_block_for_rows,
@@ -37,9 +41,31 @@ from app.ui.living_konspekt_workbench_panel import deletion_options
 from app.user_state_research import normalize_research_payload
 from app.ui.sidebar import apply_research_payload
 
-MD_A = DATA_DIR / "_test_workbench" / "lecture-a.md"
-MD_B = DATA_DIR / "_test_workbench" / "lecture-b.md"
-SRC_A = DATA_DIR / "_test_workbench" / "lecture-a.txt"
+_MODULE = sys.modules[__name__]
+
+# Isolated from the real DATA_DIR: these tests used to write fixtures directly into
+# the configured production data directory (leaking `_test_workbench/` into the real
+# corpus and knowledge-graph ingestion). Each test gets a fresh temp dir instead, with
+# path_safety.DATA_DIR patched to match — workbench_service's portability round-trip
+# resolves konspekt_md_abs/source_abs against it.
+DATA_DIR: Path
+MD_A: Path
+MD_B: Path
+SRC_A: Path
+
+
+@pytest.fixture(autouse=True)
+def _isolated_data_dir(monkeypatch: pytest.MonkeyPatch):
+    base = Path(tempfile.mkdtemp(prefix="hometutor_test_workbench_"))
+    monkeypatch.setattr(path_safety, "DATA_DIR", base)
+    monkeypatch.setattr(_MODULE, "DATA_DIR", base, raising=False)
+    monkeypatch.setattr(_MODULE, "MD_A", base / "_test_workbench" / "lecture-a.md", raising=False)
+    monkeypatch.setattr(_MODULE, "MD_B", base / "_test_workbench" / "lecture-b.md", raising=False)
+    monkeypatch.setattr(_MODULE, "SRC_A", base / "_test_workbench" / "lecture-a.txt", raising=False)
+    try:
+        yield base
+    finally:
+        shutil.rmtree(base, ignore_errors=True)
 
 
 def _section(md: Path, line_start: int, heading: str = "Раздел", text: str = "Текст.") -> IndexedSection:
@@ -517,6 +543,7 @@ class TestArtifactManifestSlim:
     def test_check_questions_distributed_across_documents(self):
         md1 = DATA_DIR / "_test_workbench" / "questions-a.md"
         md2 = DATA_DIR / "_test_workbench" / "questions-b.md"
+        md1.parent.mkdir(parents=True, exist_ok=True)
         md1.write_text("# A\n\n## ❓ Контрольные вопросы\n\n1. Q1a\n2. Q2a\n3. Q3a\n", encoding="utf-8")
         md2.write_text("# B\n\n## ❓ Контрольные вопросы\n\n1. Q1b\n2. Q2b\n", encoding="utf-8")
         try:

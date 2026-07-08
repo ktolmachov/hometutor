@@ -1,16 +1,36 @@
 from __future__ import annotations
 
+import shutil
+import sys
+import tempfile
 from pathlib import Path
 
 import pytest
 
-from app import konspekt_artifact, workbench_service
-from app.config import DATA_DIR
+from app import konspekt_artifact, path_safety, workbench_service
 from app.section_index import IndexedSection, section_to_row
 
+_MODULE = sys.modules[__name__]
 
-MD = DATA_DIR / "_test_artifact_manifest" / "lecture.md"
-SRC = DATA_DIR / "_test_artifact_manifest" / "lecture.txt"
+# Isolated from the real DATA_DIR: these tests used to write fixtures directly
+# into the configured production data directory (leaking `_test_artifact_manifest/`
+# into the real corpus and knowledge-graph ingestion). Each test gets a fresh temp
+# dir instead, with the consuming modules' DATA_DIR patched to match.
+MD: Path
+SRC: Path
+
+
+@pytest.fixture(autouse=True)
+def _isolated_data_dir(monkeypatch):
+    base = Path(tempfile.mkdtemp(prefix="hometutor_test_artifact_manifest_"))
+    monkeypatch.setattr(konspekt_artifact, "DATA_DIR", base)
+    monkeypatch.setattr(path_safety, "DATA_DIR", base)
+    monkeypatch.setattr(_MODULE, "MD", base / "_test_artifact_manifest" / "lecture.md", raising=False)
+    monkeypatch.setattr(_MODULE, "SRC", base / "_test_artifact_manifest" / "lecture.txt", raising=False)
+    try:
+        yield base
+    finally:
+        shutil.rmtree(base, ignore_errors=True)
 
 
 def _runtime_row(line_start: int = 10, heading: str = "Тема") -> dict:

@@ -344,8 +344,14 @@ def _merge_concepts(
             chunk_id = str(item.get("source_chunk_id") or "").strip()
             existing = _lookup_by_label(normalized) or _lookup_by_label(label)
             if existing and existing.concept_id != cid:
-                merge_conflicts.append(f"{label} vs {existing.label}")
-                continue
+                if existing.label.strip().lower() == label.strip().lower():
+                    # Same surface label, just an inconsistent normalized_label from this
+                    # doc's extraction — canonicalize onto the first-seen concept instead
+                    # of dropping this mention as an unresolved conflict.
+                    cid = existing.concept_id
+                else:
+                    merge_conflicts.append(f"{label} vs {existing.label}")
+                    continue
             if cid not in concepts:
                 concepts[cid] = _ConceptDraft(
                     concept_id=cid,

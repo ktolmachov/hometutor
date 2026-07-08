@@ -1,12 +1,38 @@
+import shutil
+import sys
+import tempfile
 from pathlib import Path
 
-from app.config import DATA_DIR
+import pytest
+
+from app import obsidian_export
 from app.living_konspekt_source_resolver import resolve_source_section
 
+_MODULE = sys.modules[__name__]
 
-ROOT = DATA_DIR / "_test_living_konspekt_source_resolver"
-SRC = ROOT / "lesson.txt"
-MD = ROOT / "lesson.md"
+# Isolated from the real DATA_DIR: these tests used to write fixtures directly
+# into the configured production data directory (leaking `_test_living_konspekt_
+# source_resolver/` into the real corpus and knowledge-graph ingestion).
+ROOT: Path
+SRC: Path
+MD: Path
+
+
+@pytest.fixture(autouse=True)
+def _isolated_data_dir(monkeypatch):
+    # `vault_root()` derives from ``DATA_DIR.parent / "data"`` — keep that
+    # coincidence intact so source and konspekt md resolve to the same tree.
+    home = Path(tempfile.mkdtemp(prefix="hometutor_test_source_resolver_"))
+    base = home / "data"
+    base.mkdir()
+    monkeypatch.setattr(obsidian_export, "DATA_DIR", base)
+    monkeypatch.setattr(_MODULE, "ROOT", base / "_test_living_konspekt_source_resolver", raising=False)
+    monkeypatch.setattr(_MODULE, "SRC", base / "_test_living_konspekt_source_resolver" / "lesson.txt", raising=False)
+    monkeypatch.setattr(_MODULE, "MD", base / "_test_living_konspekt_source_resolver" / "lesson.md", raising=False)
+    try:
+        yield base
+    finally:
+        shutil.rmtree(home, ignore_errors=True)
 
 
 def _write_pair(markdown: str) -> str:

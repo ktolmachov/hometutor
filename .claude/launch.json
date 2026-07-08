@@ -7,13 +7,6 @@
       "runtimeArgs": ["/c", ".venv\\Scripts\\python.exe -m streamlit run app/ui/main.py --server.port %PORT% --server.headless true"],
       "port": 8501,
       "autoPort": true
-    },
-    {
-      "name": "kg-preview-scratch",
-      "runtimeExecutable": "cmd",
-      "runtimeArgs": ["/c", "D:\\Projects\\hometutor\\.venv\\Scripts\\python.exe -m http.server %PORT% --directory C:\\Users\\Kostya\\AppData\\Local\\Temp\\claude\\D--Projects-hometutor\\4a0c3cf3-25a3-412e-8185-6409a7e22377\\scratchpad"],
-      "port": 8765,
-      "autoPort": true
     }
   ]
 }

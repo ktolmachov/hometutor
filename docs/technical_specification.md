@@ -245,6 +245,8 @@ promoted graph bundle из-за failed gate, read-path графа использ
 служебные `_test*`/`test-*`/cache/graph-artifact источники до compiler stage;
 если relation ссылается на документ, но указывает несуществующий chunk, compiler
 подставляет первый валидный chunk того же документа как локальный evidence fallback.
+Course/Knowledge Graph UI показывает publish read-path и последний failed staging
+report, чтобы distinguish published graph, previous fallback и diagnostic-only bundle.
 
 ## Наблюдаемость
 

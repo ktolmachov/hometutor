@@ -688,6 +688,56 @@ def _render_graph_quality_audit(audit: dict[str, object]) -> None:
         )
 
 
+def _render_graph_publish_status() -> None:
+    try:
+        from app.graph_publish_status import get_graph_publish_status
+
+        status = get_graph_publish_status()
+    except Exception:  # noqa: BLE001 - diagnostics only; graph tab must still render.
+        st.caption("Статус публикации graph bundle временно недоступен.")
+        return
+
+    active = status.get("active") if isinstance(status.get("active"), dict) else {}
+    reader_source = str(status.get("reader_source") or "legacy")
+    reader_generation = str(status.get("reader_generation_id") or "")
+    if reader_source == "active":
+        st.success(f"Published graph: active generation `{reader_generation}`.")
+    elif reader_source == "previous":
+        st.warning(
+            "Показан previous published graph "
+            f"`{reader_generation}`; для active generation "
+            f"`{active.get('generation_id') or 'unknown'}` promoted bundle не найден.",
+            icon="⚠️",
+        )
+    else:
+        st.warning(
+            "Published graph bundle не найден. Вкладка может показывать legacy/empty graph.",
+            icon="⚠️",
+        )
+
+    failed = status.get("latest_failed_staging")
+    if not isinstance(failed, dict):
+        return
+    report = failed.get("report") if isinstance(failed.get("report"), dict) else {}
+    fail_reasons = [str(item) for item in (report.get("fail_reasons") or []) if str(item).strip()]
+    metrics = report.get("metrics") if isinstance(report.get("metrics"), dict) else {}
+    with st.expander("Последний staging graph не опубликован", expanded=False):
+        st.caption(f"Bundle: `{failed.get('label')}`")
+        if metrics:
+            st.caption(
+                " · ".join(
+                    [
+                        f"concepts {metrics.get('concept_count', 0)}",
+                        f"relations {metrics.get('semantic_relation_count', 0)}",
+                        f"docs {round(float(metrics.get('docs_participating_pct') or 0), 1)}%",
+                        f"relation evidence {round(float(metrics.get('relations_with_evidence_pct') or 0), 1)}%",
+                    ]
+                )
+            )
+        for reason in fail_reasons[:6]:
+            st.caption(f"- {reason}")
+
+
 def _render_concept_actions(
     sel: str,
     knowledge_graph,
@@ -949,6 +999,7 @@ def _render_knowledge_graph_tab() -> None:
     )
 
     _render_tutor_orchestration_snapshot_expander(key_prefix="kg", show_focus_concept=True)
+    _render_graph_publish_status()
 
     if "tutor_learned_concepts" not in st.session_state:
         st.session_state["tutor_learned_concepts"] = []

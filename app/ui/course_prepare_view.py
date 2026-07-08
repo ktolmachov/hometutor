@@ -351,6 +351,80 @@ def _resolve_graph_status_for_scope(
     return view
 
 
+def _render_graph_publish_status(*, key_prefix: str) -> None:
+    """Show which graph bundle is actually published/read and why staging may be blocked."""
+    try:
+        from app.graph_publish_status import get_graph_publish_status
+
+        status = get_graph_publish_status()
+    except Exception:  # noqa: BLE001 - UI diagnostics must degrade, not block course prep.
+        st.caption("Статус публикации graph bundle временно недоступен.")
+        return
+
+    active = status.get("active") if isinstance(status.get("active"), dict) else {}
+    previous = status.get("previous") if isinstance(status.get("previous"), dict) else {}
+    reader_source = str(status.get("reader_source") or "legacy")
+    reader_generation = str(status.get("reader_generation_id") or "")
+
+    if reader_source == "active":
+        st.success(f"Graph read-path: опубликованный bundle active generation `{reader_generation}`.")
+    elif reader_source == "previous":
+        st.warning(
+            "Graph read-path использует previous published bundle: "
+            f"`{reader_generation}`. Для active generation "
+            f"`{active.get('generation_id') or 'unknown'}` promoted bundle не найден.",
+            icon="⚠️",
+        )
+    else:
+        st.warning(
+            "Graph read-path сейчас в legacy/empty режиме: promoted bundle для active generation не найден.",
+            icon="⚠️",
+        )
+
+    active_report = active.get("report") if isinstance(active.get("report"), dict) else None
+    if active.get("generation_id"):
+        state = "есть" if active.get("exists") else "нет"
+        st.caption(f"Active generation: `{active.get('generation_id')}` · promoted bundle: {state}")
+    if previous.get("generation_id") and reader_source != "active":
+        state = "есть" if previous.get("exists") else "нет"
+        st.caption(f"Previous generation: `{previous.get('generation_id')}` · promoted bundle: {state}")
+    if active_report:
+        st.caption(
+            "Active quality: "
+            f"gate={'pass' if active_report.get('gate_passed') else 'fail'} · "
+            f"published={bool(active_report.get('published'))}"
+        )
+
+    failed = status.get("latest_failed_staging")
+    if not isinstance(failed, dict):
+        return
+    report = failed.get("report") if isinstance(failed.get("report"), dict) else {}
+    fail_reasons = [str(item) for item in (report.get("fail_reasons") or []) if str(item).strip()]
+    with st.expander("Почему последний staging graph не опубликован", expanded=False):
+        st.caption(f"Staging bundle: `{failed.get('label')}`")
+        metrics = report.get("metrics") if isinstance(report.get("metrics"), dict) else {}
+        if metrics:
+            cols = st.columns(4)
+            with cols[0]:
+                st.metric("Concepts", int(metrics.get("concept_count") or 0))
+            with cols[1]:
+                st.metric("Relations", int(metrics.get("semantic_relation_count") or 0))
+            with cols[2]:
+                st.metric("Docs %", round(float(metrics.get("docs_participating_pct") or 0), 1))
+            with cols[3]:
+                st.metric("Evidence %", round(float(metrics.get("relations_with_evidence_pct") or 0), 1))
+        if fail_reasons:
+            st.markdown("**Блокеры publish**")
+            for reason in fail_reasons[:6]:
+                st.caption(f"- {reason}")
+            overflow = max(0, len(fail_reasons) - 6)
+            if overflow:
+                st.caption(f"И ещё {overflow}")
+        if st.button("Обновить статус публикации графа", key=f"{key_prefix}_refresh_publish_status"):
+            _clear_graph_caches()
+            st.rerun()
+
+
 def _render_graph_quality_report(
     *,
     scope: dict[str, Any],
@@ -361,6 +435,7 @@ def _render_graph_quality_report(
 ) -> None:
     """Quality report section — loading / empty / error / populated states."""
     st.markdown("##### Отчёт качества графа")
+    _render_graph_publish_status(key_prefix=key_prefix)
     current_scope_hash = course_scope_hash(documents)
     active_gen = _get_active_generation_id()
 

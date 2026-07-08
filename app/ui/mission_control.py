@@ -11,7 +11,7 @@ import streamlit as st
 
 from app.config import get_settings
 from app import user_state
-from app.course_cache import build_mission_control_course_options
+from app.course_cache import build_mission_control_course_options, is_user_course_folder_rel
 from app.smart_study_router import (
     SmartStudyRecommendation,
     SmartStudyRouterHintKind,
@@ -196,11 +196,15 @@ def _is_cold_user(due_count: int | None, index_stats: dict | None = None) -> boo
 def _course_options_from_index_stats(index_stats: dict | None) -> tuple[CourseOption, ...]:
     if not isinstance(index_stats, dict):
         return ()
-    folders = [str(x).strip() for x in index_stats.get("folder_rel_options") or [] if str(x).strip()]
+    folders = [
+        str(x).strip()
+        for x in index_stats.get("folder_rel_options") or []
+        if is_user_course_folder_rel(str(x).strip())
+    ]
     files = [str(x).strip() for x in index_stats.get("files") or [] if str(x).strip()]
     if not folders:
         inferred = sorted({path.split("/", 1)[0].split("\\", 1)[0] for path in files if path})
-        folders = [folder for folder in inferred if folder and folder != "."]
+        folders = [folder for folder in inferred if is_user_course_folder_rel(folder)]
     options: list[CourseOption] = []
     for folder in folders:
         prefix_slash = f"{folder}/"

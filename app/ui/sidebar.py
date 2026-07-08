@@ -8,6 +8,7 @@ import streamlit as st
 
 from app import user_state
 from app.config import get_settings
+from app.course_cache import is_user_course_folder_rel
 from app.ui_preferences import feature_visible_by_id, get_overrides, get_ui_level, feature_visible
 from app.ui.auth_gate import render_account_status_sidebar
 from app.ui.constants import _SIDEBAR_FILTER_FOLDER_ALL, _SIDEBAR_FILTER_TOPIC_ALL
@@ -528,7 +529,7 @@ def render_sidebar(index_stats: dict | None):
                 folder_quick_choices = [_SIDEBAR_FILTER_FOLDER_ALL]
                 for fr in (index_stats or {}).get("folder_rel_options") or []:
                     s = str(fr).strip()
-                    if s:
+                    if is_user_course_folder_rel(s):
                         folder_quick_choices.append(s)
                 st.caption(sidebar_fast_filters_caption_ru())
                 topic_quick = st.selectbox("Тема", topic_choices, key="qa_sidebar_topic")

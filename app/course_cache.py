@@ -18,6 +18,18 @@ _PROMISE_TTL_HOURS = 36
 
 # Документы курсов (эвристика кандидатов): см. ingestion / index_diff
 _COURSE_INGEST_EXTENSIONS = frozenset({".pdf", ".txt", ".md", ".docx", ".html"})
+_TECHNICAL_COURSE_FOLDER_PREFIXES = frozenset(("_", "test-", "tmp", "temp"))
+_TECHNICAL_COURSE_FOLDER_NAMES = frozenset({
+    ".cache",
+    ".chroma",
+    ".git",
+    "__pycache__",
+    "cache",
+    "chroma_db",
+    "graph_generations",
+    "logs",
+    "tmp",
+})
 
 GraphCourseStatus = Literal["ready", "pending", "unavailable"]
 
@@ -519,6 +531,19 @@ def build_mission_control_course_options(index_stats: dict | None) -> list[dict[
     return merged
 
 
+def is_user_course_folder_rel(folder_rel: str) -> bool:
+    """Return False for service/test folders that must not be shown as courses."""
+    normalized = str(folder_rel or "").strip().replace("\\", "/").strip("/")
+    if not normalized:
+        return False
+    first = normalized.split("/", 1)[0].strip().lower()
+    if not first:
+        return False
+    if first in _TECHNICAL_COURSE_FOLDER_NAMES:
+        return False
+    return not any(first.startswith(prefix) for prefix in _TECHNICAL_COURSE_FOLDER_PREFIXES)
+
+
 def list_course_candidates(
     *,
     docs_root: Path | None = None,
@@ -531,6 +556,8 @@ def list_course_candidates(
     candidates: list[dict[str, Any]] = []
     for child in sorted(root.iterdir()):
         if not child.is_dir():
+            continue
+        if not is_user_course_folder_rel(child.name):
             continue
         n = sum(
             1
@@ -859,11 +886,15 @@ def _course_options_from_index_stats(index_stats: dict | None) -> list[dict[str,
     """Mirror ``mission_control._course_options_from_index_stats`` without UI imports."""
     if not isinstance(index_stats, dict):
         return []
-    folders = [str(x).strip() for x in index_stats.get("folder_rel_options") or [] if str(x).strip()]
+    folders = [
+        str(x).strip()
+        for x in index_stats.get("folder_rel_options") or []
+        if is_user_course_folder_rel(str(x).strip())
+    ]
     files = [str(x).strip() for x in index_stats.get("files") or [] if str(x).strip()]
     if not folders:
         inferred = sorted({path.split("/", 1)[0].split("\\", 1)[0] for path in files if path})
-        folders = [folder for folder in inferred if folder and folder != "."]
+        folders = [folder for folder in inferred if is_user_course_folder_rel(folder)]
     options: list[dict[str, Any]] = []
     for folder in folders:
         prefix_slash = f"{folder}/"

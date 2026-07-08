@@ -198,8 +198,13 @@ flowchart LR
 - `app/index_registry.py`
 - `app/knowledge_graph_bundle.py`
 - `app/ui/dashboards_graph.py` — companion-панель Knowledge Graph: действия с
-  концептом, evidence ledger и deterministic alias/duplicate diagnostics поверх
-  активного graph bundle.
+  концептом, evidence ledger, graph quality audit и deterministic alias/duplicate
+  diagnostics поверх активного graph bundle.
+
+Graph bundle публикуется только после `gate_passed=true`. Если новая active
+index generation уже записана в registry, но graph bundle не promoted из-за
+failed gate, reader графа показывает последний существующий promoted bundle
+из `previous_generation`, а не пустой legacy-граф.
 
 ## Learning loop
 

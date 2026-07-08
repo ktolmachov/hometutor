@@ -4,7 +4,7 @@
 ``[{start, end, text}]`` (см. ``scripts/transcribe_media.py``). Выход — таймкоды
 ``t_start/t_end`` и ``confidence`` на раздел, детерминированно и без LLM.
 
-Алгоритм ``anchor-lis-v3.3`` (устойчив к видео 4–5 часов):
+Алгоритм ``anchor-lis-v3.4`` (устойчив к видео 4–5 часов):
 
 1. Транскрипт режется на **смысловые блоки** (:func:`build_semantic_blocks`) —
    TextTiling-подобная сегментация по провалам лексической связности между
@@ -14,28 +14,44 @@
    Токены скоринга (не ``compute_section_id``!) канонизируются: RU-стемминг
    словоформ («токенов»→«токен») + транслитерация латинских терминов
    конспекта в кириллицу ASR («skills»→«скиллс») — см. ``_tokenize_canon``.
-   Поверх этого работает локальная детерминированная синонимия L1 для учебных
-   речевых паттернов («практическое задание» ↔ «домашка/попробуйте сами»):
-   без LLM, без provider-вызовов, только как расширение скоринговых токенов.
-2. Slide-aware якорение: явное «слайд N» в речи или title-reading заголовка
+2. Каждый содержательный раздел сперва получает **обычный** блок-кандидат
+   (argmax перекрытия своих канонических токенов). Только если своей лексики
+   мало или ни один блок не набрал нормальный порог, включается локальная
+   детерминированная **синонимия L1** для учебных речевых паттернов
+   («практическое задание» ↔ «домашнее задание/попробуйте сами»): без LLM,
+   без provider-вызовов. Синонимия — честный fallback, а не замена обычного
+   пути — иначе случайное слово-триггер («например» → группа «пример») мог бы
+   перевести раздел с и так хорошим лексическим совпадением на более строгий и
+   рискованный expanded-путь. Якорь по синонимии обязан **заземлиться**: блок
+   обязан содержать ВСЕ токены хотя бы одной конкретной многословной фразы
+   вместе («домашн»+«задан» из «домашнее задание»), а не любые два слова из
+   разных фраз группы — RU-стемминг иногда схлопывает несвязанные слова в
+   общий корень («практически» наречие ≈ «практическое» прилагательное), и
+   без совместного вхождения якорь ложится на первое случайное совпадение.
+3. Slide-aware якорение: явное «слайд N» в речи или title-reading заголовка
    слайда/раздела по скользящему окну ~14 c транскрипта (``_build_windows`` —
    один ASR-сегмент, медианно 2 c/4 слова, для заголовка мал) → сильное
    свидетельство (confidence 0.75–0.90).
-3. Конспект — несколько тематических «проходов» по одной лекции (слайды →
+4. Конспект — несколько тематических «проходов» по одной лекции (слайды →
    ключевые темы → примеры → эксперт): хронология монотонна **внутри прохода**
    (H1/H2-группы, :func:`_split_passes`), между проходами независима. Каждый
    содержательный раздел получает блок-кандидат (argmax лексического
    перекрытия), взвешенный LIS и клампинг монотонности работают в пределах
    своего прохода — recap-проходы больше не конкурируют со слайдами за одну
    глобальную цепочку.
-4. Разделы без якоря интерполируются между соседними якорями прохода
+5. Разделы без якоря интерполируются между соседними якорями прохода
    пропорционально номерам строк и помечаются низким confidence (< 0.70).
-5. ``t_end`` раздела — начало следующего раздела прохода, а у последнего в
+6. ``t_end`` раздела — начало следующего раздела прохода, а у последнего в
    проходе — конец его смыслового блока (не конец медиа): «конец смысла» из
    сегментации, а не административная граница файла.
 
 v2→v3: per-pass хронология вместо глобальной, смысловые блоки вместо блоков
 фиксированного лексического объёма, честный ``t_end``.
+v3.3→v3.4: L1-синонимия переведена с «всегда впереди нормального пути» на
+честный fallback + фразовое (не однословное) заземление якоря — иначе она
+портила уже исправно работающие соседние разделы и путала «домашнее задание»
+(реальное обсуждение) со случайной ранней оговоркой лектора («часть домашки,
+кстати» — не про это задание).
 """
 
 from __future__ import annotations
@@ -50,14 +66,17 @@ from pathlib import Path
 from app.knowledge_text import tokenize_filtered
 from app.section_index import ParsedSection
 
-ALIGNMENT_VERSION = "anchor-lis-v3.3"
+ALIGNMENT_VERSION = "anchor-lis-v3.4"
 SEGMENTS_SCHEMA_VERSION = 1
 
 _MIN_SECTION_TOKENS = 8  # разделы короче не якорим — только интерполяция
 _MIN_EXPANDED_SECTION_TOKENS = 3  # L1-семантика: мало слов, но они должны прозвучать
 _MIN_ANCHOR_SCORE = 0.18  # ниже — совпадение считается шумом
 _MIN_ANCHOR_SCORE_DEEP = 0.25  # H4+: мелкие разделы с generic-лексикой ложатся на случайные блоки
-_MIN_EXPANDED_ANCHOR_SCORE = 0.45  # строгий порог для якоря без прямой лексики
+_MIN_EXPANDED_ANCHOR_SCORE = 0.15  # ниже обычного: фразовое заземление (см. _align_pass)
+# уже страхует от случайных совпадений, поэтому порог не обязан быть высоким — на
+# реальных лекциях синоним-блок содержит всего 2-3 совпавших слова из маленького
+# расширенного набора (пример: «в домашнем задании» → score 0.167)
 _LONE_ANCHOR_MIN_SCORE = 0.30  # единственный body-якорь прохода без LIS-проверки
 _INTERPOLATED_CONFIDENCE = 0.40  # < low_confidence-порога сайдкара (0.70)
 _MAX_ANCHOR_CONFIDENCE = 0.99
@@ -242,7 +261,7 @@ def _expand_learning_synonyms(
     text: str | None,
     tokens: frozenset[str],
     spoken_tokens: frozenset[str],
-) -> tuple[frozenset[str], bool]:
+) -> tuple[frozenset[str], tuple[frozenset[str], ...]]:
     """Локальная L1-синонимия для учебных речевых паттернов.
 
     Это намеренно не общий тезаурус. Расширяем только маленький набор
@@ -250,10 +269,18 @@ def _expand_learning_synonyms(
     добавляем лишь те канонические токены, которые реально прозвучали в ASR.
     Так раздел без прямого лексического пересечения получает шанс на якорь, но
     не превращается в произвольный semantic search.
+
+    Возвращает также ``phrase_tokensets`` — токены каждой отдельной МНОГОсловной
+    фразы группы (не объединение всей группы): при отдельном стемминге
+    несвязанные слова могут случайно схлопнуться в общий корень («практически»
+    наречие ≈ «практическое» прилагательное → «практическ»), и один
+    совпавший токен где угодно в лекции ничего не доказывает. Совпадение
+    нескольких токенов ОДНОЙ фразы вместе — то самое различительное
+    свидетельство, которое требуется для заземления якоря (см. ``_align_pass``).
     """
     base_text_tokens = _tokenize_canon(text)
     expanded = set(tokens)
-    matched = False
+    phrase_tokensets: list[frozenset[str]] = []
     for group in _SYNONYM_PHRASE_GROUPS:
         phrase_tokens = [_tokenize_canon(phrase) for phrase in group]
         if not any(phrase and phrase <= base_text_tokens for phrase in phrase_tokens):
@@ -262,8 +289,8 @@ def _expand_learning_synonyms(
         spoken_group_tokens = group_tokens & spoken_tokens
         if spoken_group_tokens - tokens:
             expanded.update(spoken_group_tokens)
-            matched = True
-    return frozenset(expanded), matched
+            phrase_tokensets.extend(pt for pt in phrase_tokens if len(pt) >= 2)
+    return frozenset(expanded), tuple(phrase_tokensets)
 
 
 def _anchor_confidence(score: float) -> float:
@@ -1154,27 +1181,51 @@ def _align_pass(
         body_tokens = _tokenize_canon(section.own_text or section.text)
         heading_tokens = _tokenize_canon(section.heading_text) & spoken_tokens
         base_tokens = frozenset((body_tokens | heading_tokens) - background)
-        tokens, expanded = _expand_learning_synonyms(
+        normal_min_score = _MIN_ANCHOR_SCORE if section.level <= 3 else _MIN_ANCHOR_SCORE_DEEP
+        min_block = block_floor_by_pos[pos] if pass_slides else 0
+        eligible_normal = range(min_block, len(blocks))
+
+        # Путь 1 — обычный лексический матчинг. L1-синонимия НЕ участвует
+        # здесь ни в выборе блока, ни в скоринге: раздел со случайным словом
+        # из группы-синонима где-то в теле («например» → группа «пример»)
+        # не обязан идти по более строгому/рискованному expanded-пути, если
+        # у него и так достаточно своей лексики для честного якоря.
+        if len(base_tokens) >= _MIN_SECTION_TOKENS:
+            scores = [_overlap_score(base_tokens, block) for block in scoring_blocks]
+            block_idx = max(eligible_normal, key=lambda i: scores[i])
+            if scores[block_idx] >= normal_min_score:
+                section_tokens[pos] = base_tokens
+                candidates.append((pos, block_idx, scores[block_idx]))
+                continue
+
+        # Путь 2 — L1-синонимия, только если обычный путь не дал якоря
+        # (мало своей лексики или ни один блок не набрал нормальный порог).
+        tokens, phrase_tokensets = _expand_learning_synonyms(
             "\n".join([section.heading_text, section.own_text or section.text]),
             base_tokens,
             spoken_tokens,
         )
-        tokens = frozenset(tokens - background)
-        min_tokens = _MIN_EXPANDED_SECTION_TOKENS if expanded else _MIN_SECTION_TOKENS
-        if len(tokens) < min_tokens:
+        if not phrase_tokensets:
             continue
-        section_tokens[pos] = tokens
+        tokens = frozenset(tokens - background)
+        if len(tokens) < _MIN_EXPANDED_SECTION_TOKENS:
+            continue
         scores = [_overlap_score(tokens, block) for block in scoring_blocks]
-        min_block = block_floor_by_pos[pos] if pass_slides else 0
-        eligible = range(min_block, len(blocks))
-        block_idx = max(eligible, key=lambda i: scores[i])
-        normal_min_score = _MIN_ANCHOR_SCORE if section.level <= 3 else _MIN_ANCHOR_SCORE_DEEP
-        if expanded:
-            base_score = _overlap_score(base_tokens, scoring_blocks[block_idx])
-            min_score = normal_min_score if base_score >= normal_min_score else _MIN_EXPANDED_ANCHOR_SCORE
-        else:
-            min_score = normal_min_score
-        if scores[block_idx] >= min_score:
+        # Заземление: выигравший блок обязан содержать ВСЕ токены хотя бы
+        # ОДНОЙ конкретной многословной фразы-синонима вместе («домашн»+
+        # «задан» из «домашнее задание»), а не любые два слова из разных
+        # фраз группы. Один совпавший токен где угодно ничего не значит —
+        # RU-стемминг иногда схлопывает несвязанные слова в общий корень
+        # («практически» наречие ≈ «практическое» прилагательное), и без
+        # этого требования якорь ложится на первое случайное совпадение.
+        grounded = [
+            i for i in eligible_normal if any(pt <= scoring_blocks[i].tokens for pt in phrase_tokensets)
+        ]
+        if not grounded:
+            continue
+        block_idx = max(grounded, key=lambda i: scores[i])
+        if scores[block_idx] >= _MIN_EXPANDED_ANCHOR_SCORE:
+            section_tokens[pos] = tokens
             candidates.append((pos, block_idx, scores[block_idx]))
 
     kept = _weighted_lis(candidates)

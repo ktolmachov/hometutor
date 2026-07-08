@@ -950,6 +950,32 @@ def invalidate_knowledge_graph_singleton() -> None:
     _kg_generation = None
 
 
+def _active_graph_bundle_target() -> tuple[str, Path]:
+    """Resolve active graph bundle, falling back to the last promoted bundle."""
+    from app.graph_generation_paths import generation_bundle_dir
+    from app.index_registry import get_active_generation_view, load_registry
+
+    active_gid = get_active_generation_view().generation_id
+    active_dir = generation_bundle_dir(active_gid)
+    if (active_dir / "kg.sqlite").exists():
+        return active_gid, active_dir
+
+    registry = load_registry()
+    previous = registry.get("previous_generation") or {}
+    previous_gid = str(previous.get("generation_id") or "").strip()
+    if previous_gid and previous_gid != active_gid:
+        previous_dir = generation_bundle_dir(previous_gid)
+        if (previous_dir / "kg.sqlite").exists():
+            logger.warning(
+                "active_knowledge_graph_bundle_missing_use_previous | active_generation=%s | previous_generation=%s",
+                active_gid,
+                previous_gid,
+            )
+            return f"{active_gid}|fallback:{previous_gid}", previous_dir
+
+    return active_gid, active_dir
+
+
 def get_graph_prerequisites_health() -> Dict[str, Any]:
     """
     Сводка по графу prerequisites для API и learning-plan path: циклы и успех топосортировки.
@@ -982,19 +1008,16 @@ def get_graph_prerequisites_health() -> Dict[str, Any]:
 def get_active_knowledge_graph() -> JsonKnowledgeGraph:
     """Активный граф по ``generation_id`` из registry (bundle SQLite или legacy JSON)."""
     global _kg_singleton, _kg_generation
-    from app.graph_generation_paths import generation_bundle_dir
-    from app.index_registry import get_active_generation_view
 
-    gid = get_active_generation_view().generation_id
-    if _kg_singleton is not None and _kg_generation == gid:
+    cache_key, bundle_dir = _active_graph_bundle_target()
+    if _kg_singleton is not None and _kg_generation == cache_key:
         return _kg_singleton
-    bundle_dir = generation_bundle_dir(gid)
     sqlite_path = bundle_dir / "kg.sqlite"
     if sqlite_path.exists():
         _kg_singleton = SqliteBundleKnowledgeGraph(bundle_dir)
     else:
         _kg_singleton = JsonKnowledgeGraph(DATA_DIR / "concept_graph.json")
-    _kg_generation = gid
+    _kg_generation = cache_key
     return _kg_singleton
 
 

@@ -447,6 +447,247 @@ def _render_alias_duplicate_suspects(suspects: list[dict[str, object]]) -> None:
         )
 
 
+def _concept_related_paths(concept_id: str, info: dict) -> list[str]:
+    raw_paths = [
+        *(info.get("related_documents") or []),
+        *(info.get("documents") or []),
+    ]
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in raw_paths:
+        path = str(raw or "").strip().replace("\\", "/")
+        if path and path not in seen:
+            seen.add(path)
+            out.append(path)
+    if not out and concept_id.startswith("lesson:"):
+        out.append(concept_id.removeprefix("lesson:"))
+    return out
+
+
+def _is_test_artifact_path(path: str) -> bool:
+    normalized = str(path or "").strip().replace("\\", "/").lower()
+    if not normalized:
+        return False
+    first = normalized.split("/", 1)[0]
+    return first.startswith("_test") or first.startswith("test-")
+
+
+def _is_lesson_concept(concept_id: str, info: dict) -> bool:
+    return concept_id.startswith("lesson:") or str(info.get("level") or "") == "lesson"
+
+
+def _is_test_artifact_concept(concept_id: str, info: dict) -> bool:
+    if concept_id.startswith("lesson:test-"):
+        return True
+    return any(_is_test_artifact_path(path) for path in _concept_related_paths(concept_id, info))
+
+
+def _graph_duplicate_pairs(concepts: dict, *, limit: int = 12) -> list[dict[str, object]]:
+    pairs: list[dict[str, object]] = []
+    seen: set[tuple[str, str]] = set()
+    for cid in sorted(concepts):
+        raw = concepts.get(cid)
+        if not isinstance(raw, dict):
+            continue
+        if _is_test_artifact_concept(str(cid), raw):
+            continue
+        for suspect in _alias_duplicate_suspects(str(cid), concepts, limit=3):
+            other = str(suspect.get("concept_id") or "")
+            other_raw = concepts.get(other)
+            if not isinstance(other_raw, dict):
+                continue
+            if _is_test_artifact_concept(other, other_raw):
+                continue
+            if _is_lesson_concept(str(cid), raw) or _is_lesson_concept(other, other_raw):
+                continue
+            key = tuple(sorted((str(cid), other)))
+            if not other or key in seen:
+                continue
+            seen.add(key)
+            pairs.append(
+                {
+                    "source": str(cid),
+                    "target": other,
+                    "score": suspect.get("score"),
+                    "reason": suspect.get("reason"),
+                    "match": suspect.get("match"),
+                }
+            )
+    pairs.sort(
+        key=lambda item: (
+            -float(item.get("score") or 0.0),
+            str(item["source"]),
+            str(item["target"]),
+        )
+    )
+    return pairs[:limit]
+
+
+def _relation_has_evidence(relation: dict) -> bool:
+    doc_id = str(relation.get("evidence_doc_id") or "").strip()
+    chunk_id = str(relation.get("evidence_chunk_id") or "").strip()
+    if "evidence_doc_id" in relation or "evidence_chunk_id" in relation:
+        return bool(doc_id and chunk_id)
+
+    source_doc = str(relation.get("source_document") or "").strip()
+    source_chunk = str(relation.get("source_chunk") or "").strip()
+    if "source_document" in relation or "source_chunk" in relation:
+        return bool(source_doc and source_chunk)
+
+    return bool(str(relation.get("evidence") or "").strip())
+
+
+def _graph_quality_audit(
+    concepts: dict,
+    payload: dict,
+    typed_relations: list[dict] | None = None,
+    *,
+    finding_limit: int = 8,
+) -> dict[str, object]:
+    nodes = [n for n in payload.get("nodes", []) if isinstance(n, dict)]
+    health = payload.get("health") if isinstance(payload.get("health"), dict) else {}
+    duplicate_pairs = _graph_duplicate_pairs(concepts)
+    test_artifacts = [
+        str(n.get("id"))
+        for n in nodes
+        if _is_test_artifact_concept(str(n.get("id") or ""), concepts.get(str(n.get("id") or ""), {}))
+    ]
+    test_artifact_set = set(test_artifacts)
+    auditable_nodes = [n for n in nodes if str(n.get("id")) not in test_artifact_set]
+    no_docs = [str(n.get("id")) for n in auditable_nodes if not n.get("related")]
+    no_sections = [
+        str(n.get("id"))
+        for n in auditable_nodes
+        if n.get("related")
+        and not any(
+            isinstance(card, dict) and card.get("sections")
+            for card in n.get("related") or []
+        )
+    ]
+    no_description = [
+        str(n.get("id"))
+        for n in auditable_nodes
+        if not str(n.get("desc") or "").strip()
+    ]
+    relation_evidence_missing = [
+        relation
+        for relation in (typed_relations or [])
+        if isinstance(relation, dict) and not _relation_has_evidence(relation)
+    ]
+    orphan_nodes = [str(item) for item in (health.get("orphans") or [])]
+
+    penalty = (
+        len(no_docs) * 3
+        + len(no_sections) * 4
+        + len(duplicate_pairs) * 5
+        + len(relation_evidence_missing) * 2
+        + len(orphan_nodes) * 4
+        + len(no_description)
+        + len(test_artifacts) * 2
+    )
+    base_score = int(health.get("score") or 100)
+    score = max(0, min(100, base_score - penalty))
+
+    findings: list[dict[str, object]] = []
+    if test_artifacts:
+        findings.append(
+            {
+                "severity": "P1",
+                "kind": "test_artifacts",
+                "title": f"Тестовые артефакты попали в граф: {len(test_artifacts)}",
+                "detail": ", ".join(test_artifacts[:5]),
+            }
+        )
+    for pair in duplicate_pairs[:finding_limit]:
+        findings.append(
+            {
+                "severity": "P1",
+                "kind": "duplicate",
+                "title": f"Возможный дубль: {pair['source']} ↔ {pair['target']}",
+                "detail": f"{pair.get('reason')} · {pair.get('match')}",
+            }
+        )
+    for cid in no_sections[: max(0, finding_limit - len(findings))]:
+        findings.append(
+            {
+                "severity": "P2",
+                "kind": "no_sections",
+                "title": f"Нет точных разделов для {cid}",
+                "detail": "Документы связаны, но section evidence не найден.",
+            }
+        )
+    for cid in no_docs[: max(0, finding_limit - len(findings))]:
+        findings.append(
+            {
+                "severity": "P2",
+                "kind": "no_docs",
+                "title": f"Нет связанных документов для {cid}",
+                "detail": "Узел есть в графе, но не ведёт к учебному материалу.",
+            }
+        )
+    for relation in relation_evidence_missing[: max(0, finding_limit - len(findings))]:
+        src = relation.get("source_concept_id") or relation.get("source") or "?"
+        tgt = relation.get("target_concept_id") or relation.get("target") or "?"
+        findings.append(
+            {
+                "severity": "P2",
+                "kind": "relation_evidence",
+                "title": f"Связь без evidence: {src} → {tgt}",
+                "detail": str(relation.get("relation_type") or "relation"),
+            }
+        )
+
+    return {
+        "score": score,
+        "counters": {
+            "concepts": len(nodes),
+            "orphans": len(orphan_nodes),
+            "duplicates": len(duplicate_pairs),
+            "no_docs": len(no_docs),
+            "no_sections": len(no_sections),
+            "no_description": len(no_description),
+            "test_artifacts": len(test_artifacts),
+            "relations_without_evidence": len(relation_evidence_missing),
+        },
+        "findings": findings[:finding_limit],
+    }
+
+
+def _render_graph_quality_audit(audit: dict[str, object]) -> None:
+    counters = audit.get("counters") if isinstance(audit.get("counters"), dict) else {}
+    score = int(audit.get("score") or 0)
+    cols = st.columns(4)
+    with cols[0]:
+        st.metric("Quality", f"{score}/100")
+    with cols[1]:
+        st.metric("Дубли", int(counters.get("duplicates") or 0))
+    with cols[2]:
+        st.metric("Без разделов", int(counters.get("no_sections") or 0))
+    with cols[3]:
+        st.metric("Без evidence", int(counters.get("relations_without_evidence") or 0))
+
+    compact = (
+        f"концептов {counters.get('concepts', 0)} · "
+        f"orphan {counters.get('orphans', 0)} · "
+        f"без документов {counters.get('no_docs', 0)} · "
+        f"без описания {counters.get('no_description', 0)} · "
+        f"test artifacts {counters.get('test_artifacts', 0)}"
+    )
+    st.caption(compact)
+
+    findings = audit.get("findings")
+    if not isinstance(findings, list) or not findings:
+        st.success("Критичных findings не найдено.")
+        return
+    st.markdown("**Что чинить первым**")
+    for item in findings:
+        if not isinstance(item, dict):
+            continue
+        st.caption(
+            f"{item.get('severity')} · {item.get('title')} — {item.get('detail')}"
+        )
+
+
 def _render_concept_actions(
     sel: str,
     knowledge_graph,
@@ -764,6 +1005,11 @@ def _render_knowledge_graph_tab() -> None:
         f"{stats.get('learned', 0)} освоено · {stats.get('frontier', 0)} готово учить · "
         f"{stats.get('clusters', 0)} кластеров"
     )
+
+    with st.expander("🔬 Качество графа", expanded=False):
+        _render_graph_quality_audit(
+            _graph_quality_audit(concepts, payload, list(typed_relations or []))
+        )
 
     node_ids = [n["id"] for n in payload.get("nodes", [])]
 

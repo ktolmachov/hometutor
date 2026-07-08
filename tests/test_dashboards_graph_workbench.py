@@ -15,6 +15,7 @@ from app.ui.dashboards_graph import (
     _alias_duplicate_suspects,
     _collect_concept_sections_to_workbench,
     _concept_evidence_ledger,
+    _graph_quality_audit,
 )
 
 MD_A = Path("D:/vault/lecture_a.md")
@@ -182,3 +183,121 @@ class TestConceptEvidenceLedger:
 
         assert [item["concept_id"] for item in suspects] == ["model-call"]
         assert suspects[0]["score"] >= 0.74
+
+
+class TestGraphQualityAudit:
+    def test_audit_counts_duplicates_missing_sections_docs_and_relation_evidence(self):
+        concepts = {
+            "llm-call": {
+                "label": "LLM call",
+                "aliases": ["model call"],
+                "description": "Вызов модели.",
+            },
+            "model-call": {
+                "label": "Model call",
+                "aliases": ["LLM вызов"],
+                "description": "Похожий термин.",
+            },
+            "orphan": {"label": "Orphan"},
+            "with-doc-no-section": {
+                "label": "With doc",
+                "description": "Документ есть, но секций нет.",
+            },
+        }
+        payload = {
+            "nodes": [
+                {
+                    "id": "llm-call",
+                    "desc": "Вызов модели.",
+                    "related": [{"path": "a.md", "sections": [{"heading": "LLM call"}]}],
+                },
+                {
+                    "id": "model-call",
+                    "desc": "Похожий термин.",
+                    "related": [{"path": "b.md", "sections": [{"heading": "Model call"}]}],
+                },
+                {"id": "orphan", "desc": "", "related": []},
+                {
+                    "id": "with-doc-no-section",
+                    "desc": "Документ есть.",
+                    "related": [{"path": "c.md", "sections": []}],
+                },
+            ],
+            "health": {"score": 100, "orphans": ["orphan"]},
+        }
+        typed_relations = [
+            {
+                "source_concept_id": "llm-call",
+                "target_concept_id": "model-call",
+                "relation_type": "related",
+            },
+            {
+                "source_concept_id": "llm-call",
+                "target_concept_id": "with-doc-no-section",
+                "relation_type": "uses",
+                "evidence_doc_id": "doc-1",
+            },
+            {
+                "source_concept_id": "model-call",
+                "target_concept_id": "with-doc-no-section",
+                "relation_type": "uses",
+                "evidence_doc_id": "doc-1",
+                "evidence_chunk_id": "chunk-1",
+            },
+        ]
+
+        audit = _graph_quality_audit(concepts, payload, typed_relations)
+
+        assert audit["score"] < 100
+        counters = audit["counters"]
+        assert counters["duplicates"] == 1
+        assert counters["no_docs"] == 1
+        assert counters["no_sections"] == 1
+        assert counters["no_description"] == 1
+        assert counters["relations_without_evidence"] == 2
+        titles = [item["title"] for item in audit["findings"]]
+        assert any("Возможный дубль" in title for title in titles)
+        assert any("Нет точных разделов" in title for title in titles)
+
+    def test_audit_separates_test_artifacts_and_lesson_anchor_pairs(self):
+        concepts = {
+            "lesson:course-lecture-md": {
+                "label": "Lecture",
+                "level": "lesson",
+                "related_documents": ["course/lecture.md"],
+            },
+            "lesson:course-lecture-txt": {
+                "label": "Lecture",
+                "level": "lesson",
+                "related_documents": ["course/lecture.txt"],
+            },
+            "lesson:test-fixture-lecture-md": {
+                "label": "lecture",
+                "level": "lesson",
+                "related_documents": ["_test_fixture/lecture.md"],
+            },
+            "course-lecture": {
+                "label": "Lecture",
+                "description": "Semantic concept with a lesson-like title.",
+            },
+            "ai-agent": {"label": "AI Agent", "aliases": ["LLM agent"], "description": "Агент."},
+            "llm-agent": {"label": "LLM Agent", "aliases": ["AI Agent"], "description": "Агент."},
+        }
+        payload = {
+            "nodes": [
+                {"id": cid, "desc": raw.get("description", raw.get("label")), "related": [{"sections": [{"heading": "H"}]}]}
+                for cid, raw in concepts.items()
+            ],
+            "health": {"score": 100, "orphans": []},
+        }
+
+        audit = _graph_quality_audit(concepts, payload, [])
+
+        counters = audit["counters"]
+        assert counters["test_artifacts"] == 1
+        assert counters["duplicates"] == 1
+        titles = [item["title"] for item in audit["findings"]]
+        assert any("Тестовые артефакты" in title for title in titles)
+        assert any("ai-agent ↔ llm-agent" in title for title in titles)
+        assert not any("course-lecture-md ↔ lesson:course-lecture-txt" in title for title in titles)
+        assert not any("course-lecture" in title and "lesson:" in title for title in titles)

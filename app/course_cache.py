@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable, Literal
 
 from app.config import DATA_DIR, get_settings
+from app.course_folder_filter import is_user_course_folder_rel
 from app.pace_engine import DEFAULT_PACE_MODE, normalize_pace_mode
 
 COURSE_PREPARE_PROMPT_VERSION = "course_prepare_v1"
@@ -18,18 +19,6 @@ _PROMISE_TTL_HOURS = 36
 
 # Документы курсов (эвристика кандидатов): см. ingestion / index_diff
 _COURSE_INGEST_EXTENSIONS = frozenset({".pdf", ".txt", ".md", ".docx", ".html"})
-_TECHNICAL_COURSE_FOLDER_PREFIXES = frozenset(("_", "test-", "tmp", "temp"))
-_TECHNICAL_COURSE_FOLDER_NAMES = frozenset({
-    ".cache",
-    ".chroma",
-    ".git",
-    "__pycache__",
-    "cache",
-    "chroma_db",
-    "graph_generations",
-    "logs",
-    "tmp",
-})
 
 GraphCourseStatus = Literal["ready", "pending", "unavailable"]
 
@@ -529,19 +518,6 @@ def build_mission_control_course_options(index_stats: dict | None) -> list[dict[
             }
         )
     return merged
-
-
-def is_user_course_folder_rel(folder_rel: str) -> bool:
-    """Return False for service/test folders that must not be shown as courses."""
-    normalized = str(folder_rel or "").strip().replace("\\", "/").strip("/")
-    if not normalized:
-        return False
-    first = normalized.split("/", 1)[0].strip().lower()
-    if not first:
-        return False
-    if first in _TECHNICAL_COURSE_FOLDER_NAMES:
-        return False
-    return not any(first.startswith(prefix) for prefix in _TECHNICAL_COURSE_FOLDER_PREFIXES)
 
 
 def list_course_candidates(

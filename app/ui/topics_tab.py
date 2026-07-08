@@ -135,7 +135,7 @@ def render_topics_tab(index_stats: dict | None = None) -> None:
         logging.getLogger(__name__).debug("! caught exception: %s", _exc)
         topic_states = {}
     quiz_active = topic_scope_quiz_is_active(selected_topic)
-    column_weights = [0.55, 2.45] if quiz_active else [0.95, 1.35]
+    column_weights = [0.55, 2.45] if quiz_active else [0.7, 1.85]
     left, right = st.columns(column_weights, gap="medium" if quiz_active else "large")
     with left:
         render_topics_left_column(

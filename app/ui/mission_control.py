@@ -11,7 +11,8 @@ import streamlit as st
 
 from app.config import get_settings
 from app import user_state
-from app.course_cache import build_mission_control_course_options, is_user_course_folder_rel
+from app.course_cache import build_mission_control_course_options
+from app.course_folder_filter import is_user_course_folder_rel
 from app.smart_study_router import (
     SmartStudyRecommendation,
     SmartStudyRouterHintKind,

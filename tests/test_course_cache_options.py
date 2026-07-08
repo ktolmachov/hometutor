@@ -1,4 +1,5 @@
-from app.course_cache import build_mission_control_course_options, is_user_course_folder_rel
+from app.course_cache import build_mission_control_course_options
+from app.course_folder_filter import is_user_course_folder_rel
 
 
 def test_user_course_folder_filter_hides_technical_roots():

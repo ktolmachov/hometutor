@@ -310,6 +310,7 @@ def render_topics_right_column(
                 _render_obsidian_export_button(title, key=f"obs_export_{tid_cur}_{idx}")
             with col_read:
                 _render_obsidian_read_button(title, key=f"obs_read_{tid_cur}_{idx}")
+            _render_obsidian_reader_panel(title, key=f"obs_read_{tid_cur}_{idx}")
     return list(selected_documents)
 
 
@@ -419,7 +420,7 @@ def _vault_status_badge(rel_path: str) -> str:
 
 
 def _render_obsidian_read_button(rel_path: str, *, key: str) -> None:
-    """Кнопка «👁 Читать» — показывает готовый конспект прямо в Streamlit."""
+    """Кнопка «👁 Читать» — toggles готовый конспект; panel renders full-width."""
     try:
         from app.obsidian_export import resolve_source, vault_target
         src = resolve_source(rel_path)
@@ -440,6 +441,19 @@ def _render_obsidian_read_button(rel_path: str, *, key: str) -> None:
         st.session_state[toggle_key] = not is_open
         st.rerun()
 
+
+def _render_obsidian_reader_panel(rel_path: str, *, key: str) -> None:
+    """Full-width reader panel for an opened Obsidian-ready Markdown note."""
+    toggle_key = f"{key}_open"
+    if not st.session_state.get(toggle_key):
+        return
+    try:
+        from app.obsidian_export import resolve_source, vault_target
+        src = resolve_source(rel_path)
+        md_path = vault_target(src) if src is not None else None
+    except Exception:  # noqa: BLE001 — vault lookup failure is shown as unavailable reader, not a crash
+        md_path = None
+
     if st.session_state.get(toggle_key) and md_path is not None:
         try:
             text = md_path.read_text(encoding="utf-8")
@@ -452,6 +466,8 @@ def _render_obsidian_read_button(rel_path: str, *, key: str) -> None:
                 st.markdown(text, unsafe_allow_html=False)
         except Exception as exc:  # noqa: BLE001 — konspekt read failure shown to user, must not crash the whole panel
             st.error(f"Не удалось прочитать конспект: {exc}")
+    else:
+        st.warning("Конспект недоступен. Подготовьте документ для Obsidian ещё раз.")
 
 def _render_obsidian_batch_button(documents: list[dict], *, key: str) -> None:
     """Батч-кнопка «Подготовить ВСЕ документы темы для Obsidian»."""

@@ -64,6 +64,16 @@ def _render_course_obsidian_button(topics_catalog: dict | None) -> None:
         )
 
 
+def _use_full_width_topic_workspace(
+    *,
+    active_scope: dict | None,
+    filtered_topics: list,
+    quiz_active: bool,
+) -> bool:
+    """Avoid wasting a navigation column when active course scope has one topic."""
+    return bool(active_scope and len(filtered_topics) == 1 and not quiz_active)
+
+
 def render_topics_tab(index_stats: dict | None = None) -> None:
     if index_stats is None:
         index_stats = load_index_stats()
@@ -135,21 +145,33 @@ def render_topics_tab(index_stats: dict | None = None) -> None:
         logging.getLogger(__name__).debug("! caught exception: %s", _exc)
         topic_states = {}
     quiz_active = topic_scope_quiz_is_active(selected_topic)
-    column_weights = [0.55, 2.45] if quiz_active else [0.7, 1.85]
-    left, right = st.columns(column_weights, gap="medium" if quiz_active else "large")
-    with left:
-        render_topics_left_column(
-            filtered_topics=filtered_topics,
-            selected_topic=selected_topic,
-            topic_states=topic_states,
-        )
-    with right:
+    if _use_full_width_topic_workspace(
+        active_scope=active_scope,
+        filtered_topics=filtered_topics,
+        quiz_active=quiz_active,
+    ):
         selected_documents = render_topics_right_column(
             selected_topic=selected_topic,
             topic_states=topic_states,
             iv=iv,
             index_stats=index_stats,
         )
+    else:
+        column_weights = [0.55, 2.45] if quiz_active else [0.7, 1.85]
+        left, right = st.columns(column_weights, gap="medium" if quiz_active else "large")
+        with left:
+            render_topics_left_column(
+                filtered_topics=filtered_topics,
+                selected_topic=selected_topic,
+                topic_states=topic_states,
+            )
+        with right:
+            selected_documents = render_topics_right_column(
+                selected_topic=selected_topic,
+                topic_states=topic_states,
+                iv=iv,
+                index_stats=index_stats,
+            )
     render_topic_scope_quiz_panel(selected_topic)
     st.markdown("---")
     result_tabs = st.tabs(["Конспект", "План обучения"])

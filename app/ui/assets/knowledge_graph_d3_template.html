@@ -22,8 +22,13 @@
   .tool-btn{display:flex;align-items:center;gap:3px;padding:5px 9px;background:var(--glass);border:1px solid var(--border);border-radius:8px;color:var(--txt2);font:inherit;font-size:11px;cursor:pointer;transition:all .18s;white-space:nowrap;}
   .tool-btn:hover{background:rgba(255,255,255,0.07);color:var(--txt);}
   .tool-btn.on{border-color:var(--acc);background:rgba(139,92,246,0.14);color:var(--txt);}
+  /* course filter */
+  .coursef{margin-left:auto;}
+  .coursef select{padding:6px 10px;background:var(--glass);border:1px solid var(--border);border-radius:8px;color:var(--txt);font:inherit;font-size:11px;outline:none;cursor:pointer;transition:border-color .2s;max-width:170px;}
+  .coursef select:focus{border-color:var(--acc);}
+  .coursef select option{background:#1a1a2e;}
   /* search */
-  .search{position:relative;margin-left:auto;width:210px;}
+  .search{position:relative;width:210px;}
   .search input{width:100%;padding:6px 10px 6px 28px;background:var(--glass);border:1px solid var(--border);border-radius:8px;color:var(--txt);font:inherit;font-size:11px;outline:none;transition:border-color .2s;}
   .search input:focus{border-color:var(--acc);}
   .search::before{content:'🔍';position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:11px;pointer-events:none;}
@@ -186,6 +191,7 @@
       <button class="tool-btn" id="expbtn" title="Скачать SVG">⬇ SVG</button>
       <button class="tool-btn" id="linkbtn" title="Скопировать ссылку">🔗</button>
     </div>
+    <div class="coursef"><select id="coursef"><option value="">Все курсы</option></select></div>
     <div class="search"><input id="q" type="text" placeholder="Поиск... (/)" autocomplete="off"><div class="search-drop" id="qd"></div></div>
   </div>
   <div class="stats" id="stats"></div>
@@ -310,6 +316,14 @@ document.getElementById('stats').innerHTML=
 const hiddenLevels=new Set();
 const hiddenRelationTypes=new Set();
 let selectedEdgeId=null;
+
+// ── course filter ──
+let activeCourse='';
+const courseSel=document.getElementById('coursef');
+const allCourses=[...new Set(NODES.flatMap(n=>n.courses||[]))].sort();
+allCourses.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;courseSel.appendChild(o);});
+function courseHidden(n){return!!activeCourse&&!((n&&n.courses)||[]).includes(activeCourse);}
+courseSel.addEventListener('change',()=>{activeCourse=courseSel.value;if(activeMode==='all')applyFilters();else applyMode(activeMode);});
 function edgeKey(e){return`${e.source}${'→'}${e.target}`;}
 function relStyle(rt){return RELATION_STYLES[rt]||RELATION_STYLES.unknown;}
 function relCounts(){
@@ -338,7 +352,7 @@ document.querySelectorAll('.lg-row[data-rel]').forEach(el=>el.addEventListener('
 function linkHidden(l){
   const s=nodeMap.get(l.source.id||l.source),t=nodeMap.get(l.target.id||l.target);
   const rt=l.relation_type||'prerequisite';
-  return hiddenLevels.has(s?.level)||hiddenLevels.has(t?.level)||hiddenRelationTypes.has(rt);
+  return hiddenLevels.has(s?.level)||hiddenLevels.has(t?.level)||hiddenRelationTypes.has(rt)||courseHidden(s)||courseHidden(t);
 }
 function styleLink(sel){
   sel.attr('stroke',l=>relStyle(l.relation_type||'prerequisite').color)
@@ -348,8 +362,8 @@ function styleLink(sel){
     .attr('marker-end',l=>{const m=relStyle(l.relation_type||'prerequisite').marker;return m?`url(#${m})`:null;});
 }
 function applyFilters(){
-  nodeSel.select('.core').attr('fill-opacity',n=>hiddenLevels.has(n.level)?0.05:0.9);
-  nodeSel.select('text').attr('fill',n=>hiddenLevels.has(n.level)?'rgba(255,255,255,0.04)':'rgba(255,255,255,0.55)');
+  nodeSel.select('.core').attr('fill-opacity',n=>hiddenLevels.has(n.level)||courseHidden(n)?0.05:0.9);
+  nodeSel.select('text').attr('fill',n=>hiddenLevels.has(n.level)||courseHidden(n)?'rgba(255,255,255,0.04)':'rgba(255,255,255,0.55)');
   styleLink(link);
   styleLink(linkHit);
 }
@@ -536,8 +550,8 @@ function highlight(d){
 }
 function resetHL(){
   if(selectedEdgeId)return;
-  nodeSel.select('.core').attr('fill-opacity',n=>hiddenLevels.has(n.level)?0.05:0.9);
-  nodeSel.select('text').attr('fill',n=>hiddenLevels.has(n.level)?'rgba(255,255,255,0.04)':'rgba(255,255,255,0.55)');
+  nodeSel.select('.core').attr('fill-opacity',n=>hiddenLevels.has(n.level)||courseHidden(n)?0.05:0.9);
+  nodeSel.select('text').attr('fill',n=>hiddenLevels.has(n.level)||courseHidden(n)?'rgba(255,255,255,0.04)':'rgba(255,255,255,0.55)');
   styleLink(link);
   if(activeMode!=='all')applyMode(activeMode,true);
 }
@@ -918,13 +932,13 @@ function applyMode(k,keepLinks){
   if(k==='next')test=n=>n.frontier;
   else if(k==='gaps')test=n=>(n.missing&&n.missing.length)||(n.mastery>0&&n.mastery<50);
   else test=()=>true; // progress: show all but scale opacity by mastery
-  nodeSel.select('.core').attr('fill-opacity',n=>{if(k==='progress')return 0.2+0.8*(n.mastery/100);return test(n)?1:0.06;});
-  nodeSel.select('text').attr('fill',n=>{if(k==='progress')return'rgba(255,255,255,0.6)';return test(n)?'rgba(255,255,255,0.95)':'rgba(255,255,255,0.04)';});
+  nodeSel.select('.core').attr('fill-opacity',n=>{if(courseHidden(n))return 0.05;if(k==='progress')return 0.2+0.8*(n.mastery/100);return test(n)?1:0.06;});
+  nodeSel.select('text').attr('fill',n=>{if(courseHidden(n))return'rgba(255,255,255,0.04)';if(k==='progress')return'rgba(255,255,255,0.6)';return test(n)?'rgba(255,255,255,0.95)':'rgba(255,255,255,0.04)';});
   if(!keepLinks)link.attr('stroke','rgba(255,255,255,0.04)').attr('stroke-width',0.7).attr('stroke-opacity',1);
 }
 function resetModeVisual(){
-  nodeSel.select('.core').attr('fill-opacity',n=>hiddenLevels.has(n.level)?0.05:0.9);
-  nodeSel.select('text').attr('fill',n=>hiddenLevels.has(n.level)?'rgba(255,255,255,0.04)':'rgba(255,255,255,0.55)');
+  nodeSel.select('.core').attr('fill-opacity',n=>hiddenLevels.has(n.level)||courseHidden(n)?0.05:0.9);
+  nodeSel.select('text').attr('fill',n=>hiddenLevels.has(n.level)||courseHidden(n)?'rgba(255,255,255,0.04)':'rgba(255,255,255,0.55)');
   styleLink(link);
 }
 
@@ -934,7 +948,7 @@ const q=document.getElementById('q'),qd=document.getElementById('qd');
 q.addEventListener('input',()=>{
   const v=q.value.toLowerCase().trim();
   if(!v){qd.classList.remove('show');results=[];resetHL();return;}
-  results=simNodes.filter(n=>n.label.toLowerCase().includes(v)||(n.desc||'').toLowerCase().includes(v)).slice(0,12);
+  results=simNodes.filter(n=>!courseHidden(n)&&(n.label.toLowerCase().includes(v)||(n.desc||'').toLowerCase().includes(v))).slice(0,12);
   ri=-1;renderDrop();
   const ms=new Set(results.map(n=>n.id));
   nodeSel.select('.core').attr('fill-opacity',n=>ms.has(n.id)?0.95:0.06);

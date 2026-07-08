@@ -323,6 +323,11 @@ def build_kg_payload(
         frontier = (not is_learned) and m < 80.0 and prereqs_ready
 
         related = list(data.get("related_documents") or data.get("documents") or [])
+        courses = sorted({
+            str(rp).replace("\\", "/").split("/", 1)[0]
+            for rp in related
+            if "/" in str(rp).replace("\\", "/")
+        })
         related_cards = []
         for rp in related[:12]:
             meta = doc_index.get(str(rp), {}) if isinstance(doc_index, Mapping) else {}
@@ -364,6 +369,7 @@ def build_kg_payload(
             "reach": reach[cid],
             "centrality": round(reach[cid] / max_reach, 4) if max_reach else 0.0,
             "cluster": clusters.get(cid, 0),
+            "courses": courses,
             "related": related_cards,
             # KG-06: forgetting decay — null when no SRS record exists yet
             "decay": decay_vector.get(cid),

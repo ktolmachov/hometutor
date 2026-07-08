@@ -205,6 +205,9 @@ Graph bundle публикуется только после `gate_passed=true`. 
 index generation уже записана в registry, но graph bundle не promoted из-за
 failed gate, reader графа показывает последний существующий promoted bundle
 из `previous_generation`, а не пустой legacy-граф.
+Full/partial ingestion перед сборкой graph bundle исключает служебные source
+roots (`_test*`, `test-*`, cache/graph artifacts), а compiler восстанавливает
+битый `evidence_chunk_id` первым валидным chunk того же документа.
 
 ## Learning loop
 

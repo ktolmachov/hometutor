@@ -27,3 +27,8 @@ def is_user_course_folder_rel(folder_rel: str) -> bool:
     if first in _TECHNICAL_COURSE_FOLDER_NAMES:
         return False
     return not any(first.startswith(prefix) for prefix in _TECHNICAL_COURSE_FOLDER_PREFIXES)
+
+
+def is_user_source_path(path: str) -> bool:
+    """Return False for indexed service/test source paths that should not feed course UX or graph scope."""
+    return is_user_course_folder_rel(path)

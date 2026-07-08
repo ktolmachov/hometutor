@@ -241,7 +241,10 @@ local evidence ledger, deterministic alias/duplicate candidates и graph quality
 Alias-кандидаты и audit не мутируют graph bundle; это диагностический
 quality-сигнал для следующей пересборки. Если active generation не получила
 promoted graph bundle из-за failed gate, read-path графа использует последний
-существующий bundle `previous_generation`.
+существующий bundle `previous_generation`. Graph build scope фильтрует
+служебные `_test*`/`test-*`/cache/graph-artifact источники до compiler stage;
+если relation ссылается на документ, но указывает несуществующий chunk, compiler
+подставляет первый валидный chunk того же документа как локальный evidence fallback.
 
 ## Наблюдаемость
 

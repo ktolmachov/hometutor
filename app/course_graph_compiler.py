@@ -262,6 +262,11 @@ def _valid_chunk_ids_by_doc(
     }
 
 
+def _first_valid_chunk_id(valid_chunk_ids: dict[str, set[str]], doc_id: str) -> str:
+    chunks = sorted(valid_chunk_ids.get(doc_id) or [])
+    return chunks[0] if chunks else ""
+
+
 def _parse_extraction_json(raw: str) -> dict[str, Any]:
     text = str(raw or "").strip()
     if text.startswith("```"):
@@ -388,7 +393,7 @@ def _assemble_relations(
             evidence_doc_id = str(item.get("evidence_doc_id") or doc_id).strip()
             evidence_chunk_id = str(item.get("evidence_chunk_id") or "").strip()
             if evidence_chunk_id not in valid_chunk_ids.get(evidence_doc_id, set()):
-                evidence_chunk_id = ""
+                evidence_chunk_id = _first_valid_chunk_id(valid_chunk_ids, evidence_doc_id)
             relations.append(
                 _RelationDraft(
                     source_id=source_id,
@@ -405,7 +410,10 @@ def _assemble_relations(
         if not rel.evidence_doc_id:
             for doc_id, _payload in extractions:
                 rel.evidence_doc_id = doc_id
+                rel.evidence_chunk_id = _first_valid_chunk_id(valid_chunk_ids, doc_id)
                 break
+        elif not rel.evidence_chunk_id:
+            rel.evidence_chunk_id = _first_valid_chunk_id(valid_chunk_ids, rel.evidence_doc_id)
     return relations
 
 

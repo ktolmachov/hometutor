@@ -11,6 +11,7 @@ from llama_index.vector_stores.chroma import ChromaVectorStore
 
 import app.ingestion as ing
 from app import ingestion_support as ing_sup
+from app.course_folder_filter import is_user_source_path
 from app.ingestion_content_state import (
     build_file_manifest,
     can_skip_ingest_without_parsing,
@@ -230,8 +231,13 @@ def _build_index_activation_phase(
     """Активация staging или reset-поколение, обновление knowledge graph."""
     graph_refresh: dict[str, object] = {"ok": False, "error": None, "gate_passed": False, "published": False}
     activated_index_state = None
-    source_paths = sorted(current_hashes)
-    source_content_hashes = sorted(set(current_hashes.values()))
+    graph_hashes = {
+        path: content_hash
+        for path, content_hash in current_hashes.items()
+        if is_user_source_path(path)
+    }
+    source_paths = sorted(graph_hashes)
+    source_content_hashes = sorted(set(graph_hashes.values()))
     if build_to_staging:
         try:
             graph_stats = write_staging_knowledge_graph_bundle(

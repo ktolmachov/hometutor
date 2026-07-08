@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 from app.config import DATA_DIR
+from app.course_folder_filter import is_user_source_path
 from app.knowledge_graph_bundle import (
     KnowledgeGraphBundleError,
     load_graph_snapshot_payload,
@@ -890,6 +891,41 @@ def get_mastery_vector(
     return out
 
 
+def _graph_source_path_for_document(doc: Any) -> str:
+    metadata = dict(getattr(doc, "metadata", None) or {})
+    return str(
+        metadata.get("relative_path")
+        or metadata.get("doc_id")
+        or metadata.get("file_path")
+        or metadata.get("file_name")
+        or ""
+    ).strip()
+
+
+def _filter_graph_source_scope(
+    documents: List[Any],
+    *,
+    source_paths: list[str] | None,
+    source_content_hashes: list[str] | None,
+) -> tuple[List[Any], list[str] | None, list[str] | None]:
+    filtered_documents = [
+        doc
+        for doc in documents
+        if is_user_source_path(_graph_source_path_for_document(doc))
+    ]
+    if source_paths is None:
+        filtered_paths = None
+    else:
+        filtered_paths = sorted(
+            dict.fromkeys(
+                str(path).strip()
+                for path in source_paths
+                if is_user_source_path(str(path).strip())
+            )
+        )
+    return filtered_documents, filtered_paths, source_content_hashes
+
+
 def write_staging_knowledge_graph_bundle(
     documents: List[Any],
     staging_chunks_collection: str,
@@ -902,6 +938,11 @@ def write_staging_knowledge_graph_bundle(
     from app.course_cache import graph_llm_probe_ok
     from app.knowledge_graph_bundle import write_bundle_for_staging
 
+    documents, source_paths, source_content_hashes = _filter_graph_source_scope(
+        documents,
+        source_paths=source_paths,
+        source_content_hashes=source_content_hashes,
+    )
     existing = get_active_knowledge_graph().get_concepts()
     use_compiler = graph_llm_probe_ok()
     return write_bundle_for_staging(
@@ -928,6 +969,11 @@ def write_generation_knowledge_graph_bundle(
     from app.course_cache import graph_llm_probe_ok
     from app.knowledge_graph_bundle import write_bundle_for_generation
 
+    documents, source_paths, source_content_hashes = _filter_graph_source_scope(
+        documents,
+        source_paths=source_paths,
+        source_content_hashes=source_content_hashes,
+    )
     use_compiler = graph_llm_probe_ok()
     return write_bundle_for_generation(
         documents,

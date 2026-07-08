@@ -11,6 +11,7 @@ from llama_index.vector_stores.chroma import ChromaVectorStore
 
 import app.ingestion as ing
 from app import ingestion_support as ing_sup
+from app.course_folder_filter import is_user_source_path
 from app.ingestion_content_state import (
     apply_merge_metadata_to_documents,
     build_file_manifest,
@@ -168,12 +169,17 @@ def _partial_graph_refresh_phase(
 ) -> dict[str, object]:
     """Graph refresh phase: write staging knowledge graph (best-effort)."""
     graph_refresh: dict[str, object] = {"ok": False, "error": None, "gate_passed": False, "published": False}
+    graph_hashes = {
+        path: content_hash
+        for path, content_hash in current_hashes.items()
+        if is_user_source_path(path)
+    }
     try:
         graph_stats = write_staging_knowledge_graph_bundle(
             all_docs_graph,
             target_collection_name,
-            source_paths=sorted(current_hashes),
-            source_content_hashes=sorted(set(current_hashes.values())),
+            source_paths=sorted(graph_hashes),
+            source_content_hashes=sorted(set(graph_hashes.values())),
         )
         graph_refresh = {"ok": True, **graph_stats}
     except Exception as exc:  # noqa: BLE001 - graph refresh is best-effort during partial reindex.

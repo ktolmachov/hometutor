@@ -4,6 +4,7 @@ from app.ui.mission_control import (
     _has_indexed_materials,
     _is_cold_user,
     _tile_definitions,
+    _tile_rows_for_grid,
 )
 
 
@@ -19,6 +20,21 @@ def test_cold_user_sees_exactly_three_tiles() -> None:
     assert "quick_question" in _COLD_USER_TILE_IDS
     assert "tutor" in _COLD_USER_TILE_IDS
     assert "quiz" in _COLD_USER_TILE_IDS
+
+
+def test_full_mission_control_does_not_duplicate_knowledge_graph_tile() -> None:
+    tiles = {tile.tile_id: tile for tile in _tile_definitions(due_count=0)}
+
+    assert "knowledge_graph" not in tiles
+
+
+def test_tile_rows_keep_all_tiles() -> None:
+    tiles = _tile_definitions(due_count=0)
+    rows = _tile_rows_for_grid(tiles)
+    flattened = tuple(tile for row in rows for tile in row)
+
+    assert flattened == tiles
+    assert [len(row) for row in rows] == [4, 3]
 
 
 def test_has_indexed_materials_recognises_each_shape() -> None:

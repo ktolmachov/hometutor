@@ -39,7 +39,7 @@ FEATURES: Final[tuple[FeatureSpec, ...]] = (
         fallback_hint_ru="Активируйте курс на Mission Control или во вкладке «Темы».",
     ),
     FeatureSpec("view:adaptive_plan", "Адаптивный план", 3, "nav", "Адаптивный план"),
-    FeatureSpec("view:knowledge_graph", "Knowledge Graph", 3, "nav", "Knowledge Graph"),
+    FeatureSpec("view:knowledge_graph", "Граф знаний", 3, "nav", "Knowledge Graph"),
     FeatureSpec("view:living_konspekt", "Живой конспект", 3, "nav", "Живой конспект"),
     FeatureSpec("view:history", "История запросов", 3, "nav", "История"),
     FeatureSpec("view:metrics", "Метрики качества и стоимости", 4, "nav", "Метрики"),

@@ -150,8 +150,11 @@ Flashcards — это human-in-the-loop генерация:
 
 Если новый graph bundle не опубликован, панели курса и Knowledge Graph показывают
 реальный read-path: active published bundle, fallback на previous published bundle
-или legacy/empty режим. В раскрытии staging-статуса видны причины, почему последний
-graph build не прошёл publish gate.
+или legacy/empty режим. Если published bundle отсутствует, но последний staging
+содержит граф, вкладка Knowledge Graph показывает его как read-only preview:
+такой граф виден для диагностики, но не используется в RAG/плане до прохождения
+publish gate. В раскрытии staging-статуса видны причины, почему последний graph
+build не прошёл publish gate.
 
 Граф знаний — не только карта концептов. У каждого концепта в панели документов показываются **точные разделы** конспекта, где он разобран (до трёх мест: тема, антипаттерны, термины):
 

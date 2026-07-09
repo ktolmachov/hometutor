@@ -32,9 +32,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     from app.config import CHROMA_DIR, DATA_DIR, get_settings
+    from app.course_folder_filter import is_user_source_path
+    from app.graph_generation_paths import generation_bundle_dir
     from app.index_registry import get_active_generation_view
     from app.ingestion_content_state import build_file_manifest, compute_doc_content_hashes
     import app.ingestion as ing
+    from app.knowledge_graph_audit import write_graph_audit_report
     from app.knowledge_graph import (
         get_active_knowledge_graph,
         invalidate_knowledge_graph_singleton,
@@ -66,14 +69,21 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     current_hashes = compute_doc_content_hashes(documents)
-    source_paths = sorted(current_hashes)
-    source_content_hashes = sorted(set(current_hashes.values()))
+    graph_hashes = {
+        path: content_hash
+        for path, content_hash in current_hashes.items()
+        if is_user_source_path(path)
+    }
+    source_paths = sorted(graph_hashes)
+    source_content_hashes = sorted(set(graph_hashes.values()))
     existing_concepts = get_active_knowledge_graph().get_concepts()
 
     plan = {
         "generation_id": generation_id,
         "documents_fragments": len(documents),
+        "indexed_source_paths": len(current_hashes),
         "source_paths": len(source_paths),
+        "excluded_source_paths": len(current_hashes) - len(source_paths),
         "existing_concepts": len(existing_concepts),
         "data_dir": str(DATA_DIR),
         "registry_path": str(settings.index_registry_path),
@@ -94,6 +104,8 @@ def main(argv: list[str] | None = None) -> int:
     invalidate_knowledge_graph_singleton()
     ing.logger.info("rebuild_knowledge_graph | stats=%s", stats)
     print(json.dumps(stats, ensure_ascii=False, indent=2, default=str))
+    audit = write_graph_audit_report(generation_bundle_dir(generation_id))
+    print(json.dumps({"post_rebuild_audit": audit}, ensure_ascii=False, indent=2, default=str))
     concepts = int(stats.get("concept_count") or stats.get("concepts") or 0)
     if concepts <= 0:
         print("WARN: graph bundle has zero concepts — check graph LLM or logs.", file=sys.stderr)

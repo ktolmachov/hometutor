@@ -247,6 +247,9 @@ promoted graph bundle из-за failed gate, read-path графа использ
 подставляет первый валидный chunk того же документа как локальный evidence fallback.
 Course/Knowledge Graph UI показывает publish read-path и последний failed staging
 report, чтобы distinguish published graph, previous fallback и diagnostic-only bundle.
+Операционная graph-only пересборка выполняется `scripts/rebuild_knowledge_graph.py`:
+она не re-embed-ит Chroma chunks, фильтрует служебные source roots и сохраняет
+`graph_audit_report.json/.md` рядом с generation bundle.
 
 ## Наблюдаемость
 

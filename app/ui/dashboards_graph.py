@@ -13,6 +13,8 @@ expander as a fallback and for click-to-select interaction.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import streamlit as st
 
 from app.knowledge_text import tokenize_filtered
@@ -688,14 +690,14 @@ def _render_graph_quality_audit(audit: dict[str, object]) -> None:
         )
 
 
-def _render_graph_publish_status() -> None:
+def _render_graph_publish_status() -> dict | None:
     try:
         from app.graph_publish_status import get_graph_publish_status
 
         status = get_graph_publish_status()
     except Exception:  # noqa: BLE001 - diagnostics only; graph tab must still render.
         st.caption("Статус публикации graph bundle временно недоступен.")
-        return
+        return None
 
     active = status.get("active") if isinstance(status.get("active"), dict) else {}
     reader_source = str(status.get("reader_source") or "legacy")
@@ -717,7 +719,7 @@ def _render_graph_publish_status() -> None:
 
     failed = status.get("latest_failed_staging")
     if not isinstance(failed, dict):
-        return
+        return status
     report = failed.get("report") if isinstance(failed.get("report"), dict) else {}
     fail_reasons = [str(item) for item in (report.get("fail_reasons") or []) if str(item).strip()]
     metrics = report.get("metrics") if isinstance(report.get("metrics"), dict) else {}
@@ -736,6 +738,29 @@ def _render_graph_publish_status() -> None:
             )
         for reason in fail_reasons[:6]:
             st.caption(f"- {reason}")
+    return status
+
+
+def _load_staging_preview_graph(status: dict | None):
+    """Load latest failed staging graph for read-only UI preview, never for publish/runtime use."""
+    if not isinstance(status, dict):
+        return None, None
+    failed = status.get("latest_failed_staging")
+    if not isinstance(failed, dict) or not failed.get("exists"):
+        return None, None
+    raw_bundle_dir = str(failed.get("bundle_dir") or "").strip()
+    if not raw_bundle_dir:
+        return None, None
+    bundle_dir = Path(raw_bundle_dir)
+    try:
+        from app.knowledge_graph import SqliteBundleKnowledgeGraph
+
+        graph = SqliteBundleKnowledgeGraph(bundle_dir)
+        if graph.get_concepts():
+            return graph, failed
+    except Exception:  # noqa: BLE001 - staging preview must not break the published graph tab.
+        return None, None
+    return None, None
 
 
 def _render_concept_actions(
@@ -989,7 +1014,7 @@ def _render_classic_agraph(knowledge_graph, learned_set: set[str]) -> None:
 def _render_knowledge_graph_tab() -> None:
     """Beautiful D3 knowledge graph + concept actions + classic fallback."""
     from app.knowledge_service import get_mastery_vector
-    from app.knowledge_service import knowledge_graph
+    from app.knowledge_service import knowledge_graph as active_knowledge_graph
 
     st.markdown('<div class="panel">', unsafe_allow_html=True)
     _render_panel_header(
@@ -999,13 +1024,24 @@ def _render_knowledge_graph_tab() -> None:
     )
 
     _render_tutor_orchestration_snapshot_expander(key_prefix="kg", show_focus_concept=True)
-    _render_graph_publish_status()
+    publish_status = _render_graph_publish_status()
 
     if "tutor_learned_concepts" not in st.session_state:
         st.session_state["tutor_learned_concepts"] = []
 
+    knowledge_graph = active_knowledge_graph
     concepts = knowledge_graph.get_concepts()
     typed_relations = knowledge_graph.get_typed_relations()
+    preview_graph, preview_info = _load_staging_preview_graph(publish_status)
+    if not concepts and preview_graph is not None:
+        knowledge_graph = preview_graph
+        concepts = knowledge_graph.get_concepts()
+        typed_relations = knowledge_graph.get_typed_relations()
+        label = str((preview_info or {}).get("label") or "latest staging")
+        st.warning(
+            f"Показан preview staging graph `{label}`. Он не опубликован и не используется в RAG/плане, пока gate не пройден.",
+            icon="⚠️",
+        )
     learned_set = _collect_learned_set(concepts)
 
     if not concepts:

@@ -10,11 +10,14 @@ def _compact_report(report: dict[str, Any] | None) -> dict[str, Any] | None:
     if not isinstance(report, dict):
         return None
     metrics = report.get("metrics") if isinstance(report.get("metrics"), dict) else {}
-    fail_reasons = [
-        str(reason)
-        for reason in (report.get("fail_reasons") or [])
-        if str(reason).strip()
-    ]
+    fail_reasons: list[str] = []
+    seen: set[str] = set()
+    for reason in report.get("fail_reasons") or []:
+        text = str(reason).strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        fail_reasons.append(text)
     return {
         "gate_passed": bool(report.get("gate_passed")),
         "published": bool(report.get("published")),

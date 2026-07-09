@@ -58,7 +58,7 @@ HINT_TO_TILE: Final[dict[str, str]] = {
 
 
 MORE_TOOLS: Final[tuple[tuple[str, str, str], ...]] = (
-    ("Knowledge Graph", "Knowledge Graph", ":material/account_tree:"),
+    ("Граф знаний", "Knowledge Graph", ":material/account_tree:"),
     ("История", "История", ":material/history:"),
     ("Поиск материалов", "Найти материалы", ":material/search:"),
     ("Метрики", "Метрики", ":material/analytics:"),
@@ -441,6 +441,16 @@ def tile_feature_visible(tile_id: str, *, level: str | None = None, overrides: d
     return feature_visible(spec, level=level or get_ui_level(), overrides=overrides if overrides is not None else get_overrides())
 
 
+def _tile_rows_for_grid(tiles: tuple[MissionTile, ...]) -> tuple[tuple[MissionTile, ...], ...]:
+    """Return Mission Control tile rows without dropping overflow tiles."""
+    if len(tiles) <= 4:
+        return (tiles,)
+    rows: list[tuple[MissionTile, ...]] = [tiles[:4]]
+    for start in range(4, len(tiles), 4):
+        rows.append(tiles[start : start + 4])
+    return tuple(rows)
+
+
 def _render_tile_grid(
     *,
     rec: SmartStudyRecommendation,
@@ -470,14 +480,11 @@ def _render_tile_grid(
             st.caption("Все плитки скрыты точными настройками интерфейса.")
             return
         st.markdown('<div class="hero-grid hero-grid--4-3">', unsafe_allow_html=True)
-        row1 = st.columns(4, gap="medium")
-        for col, tile in zip(row1, tiles[:4]):
-            with col:
-                _render_tile(tile, recommended_tile=recommended_tile, due_count=due_count)
-        row2 = st.columns(3, gap="medium")
-        for col, tile in zip(row2, tiles[4:]):
-            with col:
-                _render_tile(tile, recommended_tile=recommended_tile, due_count=due_count)
+        for row_tiles in _tile_rows_for_grid(tiles):
+            cols = st.columns(len(row_tiles), gap="medium")
+            for col, tile in zip(cols, row_tiles):
+                with col:
+                    _render_tile(tile, recommended_tile=recommended_tile, due_count=due_count)
         st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -719,7 +726,7 @@ def render_kg_mission_card() -> None:
         f'<div class="kg-mc-header">'
         f'<span class="kg-mc-icon">🕸</span>'
         f'<div class="kg-mc-titles">'
-        f'<div class="kg-mc-title">Knowledge Graph</div>'
+        f'<div class="kg-mc-title">Граф знаний</div>'
         f'<div class="kg-mc-subtitle">Визуальная карта знаний курса — клик по узлу открывает детали</div>'
         f'</div></div>'
         f'<div class="kg-mc-preview">{mini_svg}</div>'
@@ -735,7 +742,7 @@ def render_kg_mission_card() -> None:
         f'</div></div>'
     )
     st.button(
-        "Открыть Knowledge Graph →",
+        "Открыть граф знаний →",
         key="mc_kg_open_btn",
         width="stretch",
         on_click=_set_navigation_state,

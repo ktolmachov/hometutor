@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from app.graph_publish_status import get_graph_publish_status
+from app.graph_publish_status import _compact_report, get_graph_publish_status
 
 
 def _write_registry(path: Path, *, active_gid: str, previous_gid: str | None = None) -> None:
@@ -94,3 +94,14 @@ def test_publish_status_prefers_active_bundle_when_present(tmp_path, monkeypatch
     assert status["reader_source"] == "active"
     assert status["reader_generation_id"] == "active-gen"
     assert status["active"]["report"]["gate_passed"] is True
+
+
+def test_compact_report_dedupes_fail_reasons() -> None:
+    report = _compact_report(
+        {
+            "gate_passed": False,
+            "fail_reasons": ["Конфликт alias: LLM vs LLM", "Конфликт alias: LLM vs LLM", "  "],
+        }
+    )
+
+    assert report["fail_reasons"] == ["Конфликт alias: LLM vs LLM"]

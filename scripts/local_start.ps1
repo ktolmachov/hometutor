@@ -24,8 +24,8 @@ $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $Root
 
-# Data root: HOME_RAG_HOME env or default D:\AI\app
-$DataRoot = if ($env:HOME_RAG_HOME) { $env:HOME_RAG_HOME } else { "D:\AI\app" }
+# Data root: HOME_RAG_HOME env or repository root.
+$DataRoot = if ($env:HOME_RAG_HOME) { $env:HOME_RAG_HOME } else { $Root }
 if (-not (Test-Path $DataRoot)) { Write-Host "[!] Data root not found: $DataRoot" -ForegroundColor Yellow }
 $env:HOME_RAG_HOME = $DataRoot
 

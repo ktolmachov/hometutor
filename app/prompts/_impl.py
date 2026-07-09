@@ -897,7 +897,7 @@ ORCHESTRATOR_DEPTH_TO_ANSWER: dict[str, str] = {
     "advanced": "deep",
 }
 
-ORCHESTRATOR_SYSTEM_PROMPT = """Ты — Pedagogical Orchestrator Home RAG Tutor (уровень 19.5).
+ORCHESTRATOR_SYSTEM_PROMPT = """Ты — Pedagogical Orchestrator Hometutor (уровень 19.5).
 Ты — мозг персонального AI-репетитора, который принимает решения на основе науки обучения
 (active recall, scaffolding, desirable difficulties, Bloom's taxonomy, growth mindset).
 

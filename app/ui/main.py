@@ -1,4 +1,4 @@
-"""Home RAG Tutor — main UI entry point (thin router).
+"""Hometutor — main UI entry point (thin router).
 
 All tab/panel implementations live in dedicated modules under app/ui/:
   tutor_chat, interactive_quiz, dashboards, data_views, home_hub, fragments.
@@ -79,7 +79,7 @@ from app.ui.fragments import (
 # Page config, init, hero, sidebar, view router
 # ---------------------------------------------------------------------------
 
-st.set_page_config(page_title="Home RAG Tutor", page_icon="🎓", layout="wide")
+st.set_page_config(page_title="Hometutor", page_icon="🎓", layout="wide")
 inject_yandex_metrika()
 init_otel_if_enabled()
 _inject_styles()

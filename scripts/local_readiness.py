@@ -65,13 +65,13 @@ def read_dotenv(path: Path) -> dict[str, str]:
 
 
 def _data_root(root: Path) -> Path:
-    return Path(os.environ.get("HOME_RAG_HOME", "D:/AI/app"))
+    return Path(os.environ.get("HOME_RAG_HOME", str(root)))
 
 
 def read_runtime_env(root: Path) -> dict[str, str]:
     """Read runtime defaults the same way app/config.py does: config.env, then .env overrides."""
     values = read_dotenv(root / "config.env")
-    values.update(read_dotenv(_data_root(root) / ".env"))
+    values.update(read_dotenv(root / ".env"))
     return values
 
 
@@ -145,7 +145,7 @@ def check_python(root: Path) -> CheckResult:
 
 
 def check_env(root: Path, values: dict[str, str]) -> list[CheckResult]:
-    env_path = _data_root(root) / ".env"
+    env_path = root / ".env"
     if not env_path.is_file():
         return [
             _result(

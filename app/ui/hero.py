@@ -81,7 +81,7 @@ def render_hero(
     st.markdown(
         f"""
         <div class="hero">
-            <div class="kicker">Home RAG Tutor</div>
+            <div class="kicker">Hometutor</div>
             <h1>Личная база знаний</h1>
             <p>
                 Ответы по вашим файлам и режим обучения с тьютором.

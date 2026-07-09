@@ -73,7 +73,7 @@ def _render_onboarding() -> None:
     st.markdown(
         "<h1 style='text-align:center;background:linear-gradient(90deg,#667eea,#764ba2);"
         "-webkit-background-clip:text;background-clip:text;color:transparent;'>"
-        "🎓 Home RAG Tutor</h1>",
+        "🎓 Hometutor</h1>",
         unsafe_allow_html=True,
     )
     st.markdown("### Добро пожаловать! Сначала дадим первый ответ")

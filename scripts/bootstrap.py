@@ -27,21 +27,16 @@ def main() -> int:
     errors: list[str] = []
     warnings: list[str] = []
 
-    data_root = Path(os.getenv("HOME_RAG_HOME", "D:/AI/app"))
-    env_path = data_root / ".env"
+    data_root = Path(os.getenv("HOME_RAG_HOME", str(root)))
+    env_path = root / ".env"
     env_example = root / ".env.example"
+    data_dir = data_root / "data"
+    chroma_dir = data_root / "chroma_db"
+    logs_dir = data_root / "logs"
     if not env_path.is_file():
-        errors.append(f"Нет файла {env_path} — скопируйте из {env_example.name} в {data_root}: copy .env.example {data_root}\\.env")
+        errors.append(f"Нет файла {env_path} — скопируйте из {env_example.name} в корень проекта: copy .env.example .env")
     elif not env_path.stat().st_size:
         errors.append(f"{env_path} пустой — задайте переменные (см. {env_example.name}).")
-
-    for name, path in (("data", data_root / "data"), ("chroma_db", data_root / "chroma_db")):
-        if path.is_dir():
-            continue
-        try:
-            path.mkdir(parents=True, exist_ok=True)
-        except OSError as e:
-            errors.append(f"Не удалось создать каталог {name}/ ({path}): {e}")
 
     # Загрузка настроек после смены cwd
     sys.path.insert(0, str(root))
@@ -49,7 +44,11 @@ def main() -> int:
         from dotenv import load_dotenv
 
         load_dotenv(env_path if env_path.is_file() else None)
-        from app.config import get_settings, reset_settings_cache
+        from app.config import CHROMA_DIR, DATA_DIR, LOG_DIR, get_settings, reset_settings_cache
+
+        data_dir = DATA_DIR
+        chroma_dir = CHROMA_DIR
+        logs_dir = LOG_DIR
 
         reset_settings_cache()
         key = (get_settings().openai_api_key or "").strip()
@@ -61,12 +60,17 @@ def main() -> int:
     except Exception as e:
         errors.append(f"Не удалось прочитать настройки: {e}")
 
-    logs_dir = data_root / "logs"
-    if not logs_dir.is_dir():
+    for name, path in (("data", data_dir), ("chroma_db", chroma_dir), ("logs", logs_dir)):
+        if path.is_dir():
+            continue
         try:
-            logs_dir.mkdir(parents=True, exist_ok=True)
+            path.mkdir(parents=True, exist_ok=True)
         except OSError as e:
-            warnings.append(f"Каталог logs/: {e}")
+            target = "logs/" if name == "logs" else f"{name}/"
+            if name == "logs":
+                warnings.append(f"Каталог {target} ({path}): {e}")
+            else:
+                errors.append(f"Не удалось создать каталог {target} ({path}): {e}")
 
     for w in warnings:
         print(f"warning: {w}", file=sys.stderr)

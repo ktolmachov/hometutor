@@ -98,7 +98,7 @@ def _apply_token_response(data: dict) -> None:
 
 def render_auth_gate() -> None:
     """Полноэкранная форма входа/регистрации. Вызывающий код должен сделать st.stop() после."""
-    st.title("🎓 Home RAG Tutor")
+    st.title("🎓 Hometutor")
     st.caption("Войдите или зарегистрируйтесь, чтобы продолжить.")
     tab_login, tab_register = st.tabs(["Вход", "Регистрация"])
 

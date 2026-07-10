@@ -18,6 +18,7 @@ from app.agent.scenarios import (
     STUDY_SESSION_SCENARIO,
     build_study_session_answer,
 )
+from app.agent.stop_controller import RunState
 from app.agent.tool_registry import ToolRegistry, build_default_registry
 from app.models import QueryOptions
 from app.prompts._impl import AGENT_STUDY_SESSION_SYSTEM_PROMPT
@@ -34,6 +35,16 @@ class _QueryArgs(ToolArgModel):
 
 class _MasteryArgs(ToolArgModel):
     topic: str | None = None
+
+
+class _QuizArgs(ToolArgModel):
+    topic: str
+    learning_mode: str | None = None
+
+
+class _CardsArgs(ToolArgModel):
+    topic: str | None = None
+    context: str | None = None
 
 
 def _scripted_decide_fn(decisions, captured_messages=None):
@@ -98,10 +109,42 @@ def _study_registry(captured_ctx=None) -> ToolRegistry:
             {"weak_concepts": ["conditional probability"]}
         ),
     )
+    reg.register(
+        ToolSpec(
+            name="quiz.generate",
+            description="quiz",
+            when_to_use="check",
+            args_schema=_QuizArgs,
+        ),
+        lambda ctx, args: ToolResult.success(
+            {
+                "questions": [
+                    {"question": "What does Bayes rule update?"},
+                    {"question": "What is evidence in Bayes rule?"},
+                ]
+            }
+        ),
+    )
+    reg.register(
+        ToolSpec(
+            name="cards.propose",
+            description="cards",
+            when_to_use="reinforce",
+            args_schema=_CardsArgs,
+        ),
+        lambda ctx, args: ToolResult.success(
+            {
+                "candidates": [
+                    {"front": "What does Bayes rule update?"},
+                    {"front": "Define conditional probability."},
+                ]
+            }
+        ),
+    )
     return reg
 
 
-def test_study_session_happy_path_uses_tools_and_returns_contract():
+def test_study_session_happy_path_uses_richer_tools_and_returns_contract():
     captured_messages = []
     decisions = [
         DecisionResult(
@@ -120,18 +163,33 @@ def test_study_session_happy_path_uses_tools_and_returns_contract():
             tool_args={"topic": "Bayes rule"},
         ),
         DecisionResult(
+            action="tool_call",
+            tool_name="quiz.generate",
+            tool_args={"topic": "Bayes rule"},
+        ),
+        DecisionResult(
+            action="tool_call",
+            tool_name="cards.propose",
+            tool_args={
+                "topic": "Bayes rule",
+                "context": "Bayes rule updates a hypothesis after evidence.",
+            },
+        ),
+        DecisionResult(
             action="final_answer",
             final_answer=(
                 "## Диагностика\nПрофиль начальный, есть пробелы.\n\n"
                 "## Что изучать сейчас\n- Формулу Байеса [bayes.md]\n\n"
                 "## План на 10–20 минут\n1. Разберите гипотезу и свидетельство.\n\n"
                 "## Проверочные вопросы\n1. Что обновляет правило Байеса?\n2. Что такое свидетельство?\n\n"
+                "## Карточки-кандидаты\n- Draft: What does Bayes rule update?\n\n"
                 "## Следующие шаги\nПовторите условную вероятность."
             ),
         ),
     ]
     runner = AgentRunner(
         _study_registry(),
+        run_state=RunState(max_steps=7),
         decide_fn=_scripted_decide_fn(decisions, captured_messages),
         system_prompt=STUDY_SESSION_SCENARIO.system_prompt,
         finalize_answer=STUDY_SESSION_SCENARIO.finalize_answer,
@@ -152,6 +210,8 @@ def test_study_session_happy_path_uses_tools_and_returns_contract():
         "learner.get_profile",
         "rag.search",
         "progress.get_mastery",
+        "quiz.generate",
+        "cards.propose",
     ]
     assert captured_messages[0][0].content == AGENT_STUDY_SESSION_SYSTEM_PROMPT
     for heading in (
@@ -159,6 +219,7 @@ def test_study_session_happy_path_uses_tools_and_returns_contract():
         "## Что изучать сейчас",
         "## План на 10–20 минут",
         "## Проверочные вопросы",
+        "## Карточки-кандидаты",
         "## Следующие шаги",
         "## Источники",
     ):

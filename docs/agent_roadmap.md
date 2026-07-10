@@ -1,7 +1,8 @@
 # AI-агент в hometutor: архитектура и волновая дорожная карта
 
 Актуализировано: 2026-07-10.
-Статус: Wave 1A MVP (`study_session`) реализован поверх Wave 1 Foundation.
+Статус: Wave 1A–1C MVP (`study_session`, `graph_gap_finder`,
+`living_konspekt_coach`) реализованы поверх Wave 1 Foundation.
 Это **канонический**
 документ; внешний session-plan `d-ai-app-data-4-noble-pine.md` (вне этого
 репозитория) устарел и не является источником истины.
@@ -255,18 +256,18 @@ DoD: `query_mode="agent"` отвечает на 10 технических сце
 Зависит от Wave 1. Цель: не «универсальный агент», а короткая учебная сессия
 по теме: объяснение → проверка → кандидаты на закрепление.
 
-Статус MVP (2026-07-10): `query_mode="agent"` маршрутизируется в сценарий
-`study_session`; сценарий использует read-only agent loop, специализированный
-prompt и финальный контракт поверх tool trace. Wave 1A не добавляет persistence,
-роутеры, UI или write-tools.
+Статус MVP (2026-07-10): `query_mode="agent"` по умолчанию маршрутизируется в
+сценарий `study_session`; сценарий использует read-only agent loop,
+специализированный prompt и финальный контракт поверх tool trace. Wave 1A не
+добавляет persistence, роутеры, UI или write-tools.
 
 - Сценарий `study_session`: вход — тема/вопрос + текущий курс; агент вызывает
   `learner.get_profile`, `rag.search`/`rag.answer`, при необходимости
-  `progress.get_mastery`; `quiz.generate` и `cards.propose` остаются
-  read-only/draft инструментами для следующих итераций сценария.
+  `progress.get_mastery`, `quiz.generate`, `cards.propose`.
 - Выходной контракт MVP: `## Диагностика`, `## Что изучать сейчас`,
-  `## План на 10–20 минут`, `## Проверочные вопросы`, `## Следующие шаги`,
-  плюс `## Источники`, если использовался RAG.
+  `## План на 10–20 минут`, `## Проверочные вопросы`,
+  `## Карточки-кандидаты`, `## Следующие шаги`, плюс `## Источники`, если
+  использовался RAG.
 - UI-поверхность: CTA в Mission Control / Tutor chat «Собрать учебную сессию»
   за `agent_enabled`; результат отображается как draft, без записи в базы.
 - Evals: 8–10 golden-сценариев на разные темы; checks: есть источники, quiz
@@ -281,11 +282,15 @@ candidate не сохраняется без явного будущего HITL.
 Зависит от Wave 1A. Цель: сделать граф знаний навигационной картой, а не только
 визуализацией.
 
+Статус MVP (2026-07-10): сценарный роутер распознаёт graph/prerequisite/gap
+запросы и выбирает `graph_gap_finder` до дефолтного `study_session`. Сценарий
+read-only, без записи графа, user_state, quiz-result или карточек.
+
 - Сценарий `graph_gap_finder`: агент читает `graph.inspect`,
   `progress.get_mastery`, `learner.get_profile`, при необходимости `rag.search`.
-- Выходной контракт `GraphGapReport`: 3–5 пробелов, prerequisite-chain,
-  почему это мешает текущей теме, рекомендуемый порядок изучения, ссылки на
-  узлы/источники, optional quiz/card candidates.
+- Выходной контракт MVP: `## Карта пробелов`, `## Цепочка prerequisites`,
+  `## Почему это мешает`, `## Рекомендуемый порядок`,
+  `## Практическая проверка`, плюс `## Источники`, если использовался RAG.
 - Граф не мутируется: новые связи и исправления узлов выводятся как
   `proposed_graph_edits` для будущего approve-flow, но не пишутся в bundle.
 - Evals: граф с изолированным узлом, слабым prerequisite, ложной связью,
@@ -299,11 +304,16 @@ Non-goals: автоматическое редактирование графа,
 Зависит от Wave 1B. Цель: превратить Живой конспект в активную учебную
 поверхность: что добавить, что повторить, что проверить.
 
+Статус MVP (2026-07-10): сценарный роутер распознаёт konspekt/workbench/конспект
+запросы и выбирает `living_konspekt_coach` до graph/study сценариев. Сценарий
+read-only, без записи workbench, конспекта, карточек, quiz-result или графа.
+
 - Сценарий `living_konspekt_coach`: агент читает `konspekt.inspect`,
   `rag.search`, `quiz.generate`, `cards.propose`, `graph.inspect`.
-- Выходной контракт `KonspektCoachDraft`: summary текущей корзины, missing
-  sections, stale/непрочитанные фрагменты, scoped quiz, card candidates,
-  suggested outline update.
+- Выходной контракт MVP: `## Состояние конспекта`,
+  `## Что добавить или уточнить`, `## Что повторить`,
+  `## Проверка понимания`, `## Draft-карточки`, `## Следующий шаг`,
+  плюс `## Источники`, если использовался RAG.
 - Все изменения конспекта — только draft: добавление разделов, сохранение
   артефакта, заметки и карточки остаются ручными до Wave 5/HITL.
 - Evals: пустой workbench, перегруженный workbench, workbench без цели,
@@ -457,7 +467,8 @@ golden set (A/B через eval_baseline).
 3. **Wave 1A–1C:** scenario golden sets:
    `agent_study_session`, `agent_graph_gap_finder`,
    `agent_living_konspekt_coach`; checks на read-only режим, источники,
-   отсутствие скрытых writes и корректный output-contract.
+   отсутствие скрытых writes и корректный output-contract. MVP-набор Wave 1A–1C
+   лежит в `eval_data/agent_scenarios_golden_v1.json`.
 4. **Wave 2:** kill между шагами → resume восстанавливает run;
    `GET /agent/runs/{run_id}` возвращает полную траекторию.
 5. **Wave 4:** `scripts/agent_gate_v1.py` зелёный; pass^k ≥ порога;

@@ -1,0 +1,86 @@
+[
+  {
+    "id": "agent_study_session_bayes",
+    "scenario_id": "study_session",
+    "question": "Собери учебную сессию по правилу Байеса",
+    "required_tools_any_order": [
+      "learner.get_profile",
+      "rag.search"
+    ],
+    "optional_tools": [
+      "progress.get_mastery",
+      "quiz.generate",
+      "cards.propose"
+    ],
+    "required_sections": [
+      "## Диагностика",
+      "## Что изучать сейчас",
+      "## План на 10–20 минут",
+      "## Проверочные вопросы",
+      "## Следующие шаги"
+    ],
+    "requires_read_only": true
+  },
+  {
+    "id": "agent_study_session_weak_sources",
+    "scenario_id": "study_session",
+    "question": "Собери учебную сессию по неизвестной теме",
+    "required_tools_any_order": [
+      "learner.get_profile",
+      "rag.search"
+    ],
+    "required_sections": [
+      "## Диагностика",
+      "## Что изучать сейчас",
+      "## План на 10–20 минут",
+      "## Проверочные вопросы",
+      "## Следующие шаги"
+    ],
+    "expected_weak_data": true,
+    "requires_read_only": true
+  },
+  {
+    "id": "agent_graph_gap_bayes",
+    "scenario_id": "graph_gap_finder",
+    "question": "Найди пробелы в графе знаний по правилу Байеса",
+    "required_tools_any_order": [
+      "learner.get_profile",
+      "graph.inspect",
+      "progress.get_mastery"
+    ],
+    "optional_tools": [
+      "rag.search"
+    ],
+    "required_sections": [
+      "## Карта пробелов",
+      "## Цепочка prerequisites",
+      "## Почему это мешает",
+      "## Рекомендуемый порядок",
+      "## Практическая проверка"
+    ],
+    "requires_read_only": true
+  },
+  {
+    "id": "agent_living_konspekt_bayes",
+    "scenario_id": "living_konspekt_coach",
+    "question": "Проверь живой конспект по правилу Байеса и что добавить",
+    "required_tools_any_order": [
+      "konspekt.inspect"
+    ],
+    "optional_tools": [
+      "rag.search",
+      "graph.inspect",
+      "quiz.generate",
+      "cards.propose"
+    ],
+    "required_sections": [
+      "## Состояние конспекта",
+      "## Что добавить или уточнить",
+      "## Что повторить",
+      "## Проверка понимания",
+      "## Draft-карточки",
+      "## Следующий шаг"
+    ],
+    "requires_read_only": true
+  }
+]

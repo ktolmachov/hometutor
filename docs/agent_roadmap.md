@@ -404,12 +404,12 @@ golden set (A/B через eval_baseline).
 
 ## 8. Правки после код-аудита (2026-07-10)
 
-Проверено по коду и учтено в разделах выше:
+Проверено по коду и учтено в разделах выше (найденные проблемы переведены в статус решённых или спроектированных):
 
-Блокеры:
-- **Feature flag** (§2.2): `requires=("agent_enabled",)` требовал ветку в
-  `requirement_context_ok` (`feature_registry.py:128`); ветка добавлена, чтобы
-  будущая UI-фича не скрывалась навсегда.
+Решённые блокеры:
+- **Feature flag** (§2.2): требование `requires=("agent_enabled",)` нуждалось в поддержке внутри `requirement_context_ok` (`feature_registry.py:128`). **Решено кодом**: соответствующая ветка добавлена в Feature Registry и покрыта тестами.
+
+Учтённые в проекте блокеры (спроектировано):
 - **Оценка токенов** (§2.4): править оценку input-токенов в provider-layer
   (`provider_openai.py:233`), а не `check_input_tokens` (тот берёт готовое число).
 - **Cache-bypass** (§2.4): `_hash_request` (`request_cache.py:109`) игнорирует
@@ -419,6 +419,7 @@ golden set (A/B через eval_baseline).
   через retrieval-only adapter.
 - **`rag.answer`** (§2.1/§2.3): принудительно non-agent путь — иначе рекурсия
   agent → tool → agent.
+
 
 Серьёзные:
 - **Agent trace** (§2.1/Wave 2): `get_pipeline_trace` читает

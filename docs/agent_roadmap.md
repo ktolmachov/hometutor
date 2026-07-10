@@ -144,7 +144,7 @@ app/agent/
 | Инструмент | Обёртка над | access |
 |---|---|---|
 | `rag.search` | **retrieval-only adapter**: `retriever.retrieve(QueryBundle)` напрямую (как в extractive-ветке `query_rag_execution.py:165`), НЕ `execute_rag_query` (тот запускает генерацию) | read |
-| `rag.answer` | non-agent main-flow (`_answer_question_main_flow` с `query_mode≠agent`) как «умный инструмент» | read |
+| `rag.answer` | non-agent полный pipeline: `answer_question(sub_question, QueryOptions(query_mode=None))` (повторно проходит guardrails/classify/condense/rewrite, но без ветки agent) либо приватный RAG-helper; как «умный инструмент» | read |
 | `learner.get_profile` | `learner_model_service` + `app/tutor_orchestrator.py::build_tutor_session_state` | read |
 | `cards.get_due` | `user_state_flashcards.get_due_flashcards` | read |
 | `progress.get_mastery` | обёртка над существующими mastery-readers: `quiz_adaptive.py::list_quiz_mastery_state` / `get_weak_concepts` / `get_all_mastery_levels` + `learner_state_scope.get_quiz_mastery_rows_for_kg` + `analytics_service.get_advanced_analytics` | read |

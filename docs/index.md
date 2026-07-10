@@ -30,6 +30,7 @@
 | [conventions_architecture.md](conventions_architecture.md) | архитектурные соглашения по слоям |
 | [conventions_reference.md](conventions_reference.md) | справочник по API, ошибкам, тестам и документации |
 | [AI_DEVELOPMENT.md](AI_DEVELOPMENT.md) | как ИИ использовался на этапах планирования/дизайна/разработки/деплоя, примеры промптов |
+| [agent_roadmap.md](agent_roadmap.md) | архитектура и волновая дорожная карта внедрения AI-агента (tool-loop, stop controller, evals, HITL) |
 | [multimodal_konspekt_plan.md](multimodal_konspekt_plan.md) | handoff-план мультимодального конспекта, ASR/VLM, sidecar, US/CJM и DoD |
 | [living_konspekt_next_waves_plan.md](living_konspekt_next_waves_plan.md) | анализ упущений «Живого конспекта» и волны W4–W8 (сервис-слой, методология, жизненный цикл артефакта) |
 | [adr/0001-multimodal-media-contract.md](adr/0001-multimodal-media-contract.md) | ADR по контракту multimodal sidecar и безопасным media paths |

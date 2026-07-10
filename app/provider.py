@@ -323,6 +323,19 @@ def _build_role_llm(settings, *, model: str, api_base: str | None = None):
     )
 
 
+def build_probe_llm(*, model: str, api_base: str, timeout: float = 60.0, max_retries: int = 0):
+    """Build a diagnostic OpenAI-compatible chat LLM for scripts/agent_toolcall_probe.py."""
+    s = get_settings()
+    return OpenAI(
+        model=model,
+        api_key=s.openai_api_key or "lm-studio",
+        api_base=normalize_openai_compatible_api_base(api_base),
+        max_retries=max_retries,
+        timeout=timeout,
+        reuse_client=False,
+    )
+
+
 def get_llm_fallback():
     """Запасная модель при ``enable_llm_fallback`` + ``llm_fallback_model`` (один вызов — см. llm_resilience)."""
     s = get_settings()

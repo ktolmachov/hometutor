@@ -178,17 +178,13 @@ class ModelProbeResult:
 
 def _build_llm(model: str, api_base: str) -> Any:
     """Build an OpenAI-compatible LLM client via the provider layer."""
-    from app.config import get_settings
-    from app.provider import OpenAI
+    from app.provider import build_probe_llm
 
-    s = get_settings()
-    return OpenAI(
+    return build_probe_llm(
         model=model,
-        api_key=s.openai_api_key or "lm-studio",
         api_base=api_base,
         max_retries=0,
         timeout=60.0,
-        reuse_client=False,
     )
 
 

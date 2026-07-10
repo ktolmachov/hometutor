@@ -22,6 +22,7 @@ from app.provider_openai import (
     _estimate_structured_kwargs_tokens,
     _has_structured_or_tool_kwargs,
 )
+from app.request_cache import RequestCache
 
 _MODEL = "gpt-4o-mini"
 _TOOLS = [
@@ -216,13 +217,18 @@ def test_guard_sees_schema_tokens(monkeypatch) -> None:
     llm = _make_llm()
     msgs = _messages("short question")
 
-    _, _, _, _ = llm._guarded_message_dicts(msgs, {})
+    _, input_plain, _, stats_plain = llm._guarded_message_dicts(msgs, {})
     tokens_plain = captured["tokens"]
 
-    _, _, _, _ = llm._guarded_message_dicts(msgs, {"tools": _TOOLS})
+    _, input_with_tools, _, stats_with_tools = llm._guarded_message_dicts(msgs, {"tools": _TOOLS})
     tokens_with_tools = captured["tokens"]
 
     assert tokens_with_tools > tokens_plain
+    assert input_with_tools > input_plain
+    assert stats_plain["structured_kwargs_tokens_estimate"] == 0
+    assert stats_with_tools["structured_kwargs_tokens_estimate"] > 0
+    assert stats_with_tools["input_tokens_estimate"] == input_with_tools
+    assert stats_with_tools["message_tokens_estimate"] == stats_plain["message_tokens_estimate"]
 
 
 # ── payload passthrough + cache bypass (async) ─────────────────────────────
@@ -262,6 +268,17 @@ def test_cache_used_for_plain_kwargs_async(monkeypatch) -> None:
     assert cache.get_calls == 2
     assert cache.set_calls == 1
     assert client.chat.completions.create.call_count == 1
+
+
+def test_real_request_cache_distinguishes_plain_kwargs() -> None:
+    cache = RequestCache(maxsize=10, ttl_seconds=60, persist=False)
+    messages = [{"role": "user", "content": "hello"}]
+    response = object()
+
+    cache.set(_MODEL, messages, response, temperature=0.0)
+
+    assert cache.get(_MODEL, messages, temperature=0.0) is response
+    assert cache.get(_MODEL, messages, temperature=1.0) is None
 
 
 # ── AGENT_* config defaults + validation ───────────────────────────────────

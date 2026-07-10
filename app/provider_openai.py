@@ -186,6 +186,8 @@ class OpenAI(LlamaIndexOpenAI):
         return {
             "messages_count": len(message_dicts_list),
             "input_tokens_estimate": input_tokens,
+            "message_tokens_estimate": estimate_messages_tokens(message_dicts_list, model=self.model),
+            "structured_kwargs_tokens_estimate": _estimate_structured_kwargs_tokens(kwargs, self.model),
             "total_chars": total_chars,
             "chars_per_token_estimate": round(total_chars / max(input_tokens, 1), 3),
             "max_message_chars": max_message_chars,
@@ -319,11 +321,13 @@ class OpenAI(LlamaIndexOpenAI):
             },
         )
 
-        message_dicts_list, input_tokens = TokenValidator.validate_and_trim(
+        message_dicts_list, message_tokens = TokenValidator.validate_and_trim(
             message_dicts_list,
             model=self.model,
             auto_trim=True,
         )
+        input_tokens = message_tokens + schema_tokens
+        prompt_stats = self._build_prompt_stats(message_dicts_list, input_tokens, kwargs)
         fingerprint = request_fingerprint(self.model, message_dicts_list, kwargs)
         try:
             check_no_recent_error(fingerprint)

@@ -937,6 +937,15 @@ def answer_question(question: str, options: QueryOptions):
 
     def _budgeted_answer():
         try:
+            if (options.query_mode or "").strip().lower() == "agent" and get_settings().agent_enabled:
+                from app.agent import run_agent_flow
+
+                return run_agent_flow(
+                    question,
+                    options,
+                    ctx,
+                    started_at=started_at,
+                )
             return _answer_question_main_flow(
                 question=question,
                 options=options,

@@ -285,6 +285,8 @@ PROMPT_VERSIONS = {
     "synthesis_partial": "2.1",
     "learning_plan": "2.1",
     "keyword": "2.1",
+    "agent_system": "1.0",
+    "agent_decision": "1.0",
 }
 
 HOMEWORK_ASSISTANCE_RULES = {
@@ -1384,6 +1386,82 @@ def get_smart_lecture_konspekt_universal_prompt(prompt_path: str | Path | None =
     if not path.is_absolute():
         path = Path(__file__).resolve().parents[2] / path
     return path.read_text(encoding="utf-8")
+
+# ─────────────────────────────────────────────────────────────
+# AI-агент (Wave 1): JSON-decision ReAct system prompt + templates.
+# См. docs/agent_roadmap.md §2.2, §Wave 1.
+# Wave 1 — read-only single agent; JSON-decision первым, native за флагом.
+# ─────────────────────────────────────────────────────────────
+
+AGENT_SYSTEM_PROMPT = """\
+Ты — учебный агент-ассистент над личной базой знаний пользователя. У тебя есть \
+доступ только к read-only инструментам (поиск, профиль ученика, прогресс, квизы, \
+карточки, граф знаний, конспект). Ты не можешь ничего сохранять или изменять.
+
+Твой цикл работы (ReAct):
+1. Подумай, какой инструмент нужен на этом шаге (или достаточно ли данных для ответа).
+2. Вызови ОДИН инструмент либо дай финальный ответ.
+3. Анализируй результат и повторяй, пока не сможешь дать обоснованный ответ.
+
+Правила ответа:
+- Отвечай на языке вопроса пользователя.
+- Используй ТОЛЬКО информацию из инструментов (поиск по базе, профиль, прогресс). \
+Не добавляй факты из общих знаний модели, если их нет в источниках.
+- При ссылке на источник указывай имя файла в формате [имя_файла].
+- Если данных недостаточно — честно скажи об этом и предложи переформулировать вопрос.
+- Будь краток и по делу.
+
+Формат вывода — ТОЛЬКО валидный JSON (без markdown, без текста вокруг):
+Если нужен вызов инструмента:
+{"thought": "краткое рассуждение зачем этот инструмент", "action": "tool_call", "tool": "имя.инструмента", "args": {"параметр": "значение"}}
+Если данных достаточно для ответа:
+{"thought": "краткое рассуждение", "action": "final_answer", "answer": "текст ответа"}
+
+Всегда выбирай ровно одно действие за шаг. Имя инструмента и имена параметров должны \
+точно совпадать с описанием инструментов ниже. Не придумывай несуществующие инструменты \
+или параметры. Не передавай user_id или session_id — они не нужны.
+"""
+
+AGENT_DECISION_USER_TEMPLATE = """Доступные инструменты:
+{tools}
+
+Вопрос пользователя:
+{question}
+
+История шагов:
+{history}
+
+Прими решение: вызвать инструмент или дать финальный ответ. Верни только JSON.
+"""
+
+AGENT_REPAIR_MESSAGE = """\
+Предыдущий вызов инструмента содержал невалидные аргументы.
+Имя инструмента: {tool_name}
+Ошибка валидации: {error}
+
+Повтори вызов с корректными аргументами по схеме. Верни только JSON с action=tool_call.
+"""
+
+
+def build_agent_decision_messages(
+    *,
+    question: str,
+    tools_description: str,
+    history: str,
+) -> list:
+    """Собрать [system, user] сообщения для JSON-decision (Урок 2: structured output)."""
+    return [
+        ChatMessage(role=MessageRole.SYSTEM, content=AGENT_SYSTEM_PROMPT),
+        ChatMessage(
+            role=MessageRole.USER,
+            content=AGENT_DECISION_USER_TEMPLATE.format(
+                tools=tools_description,
+                question=str(question or "").strip(),
+                history=history or "(шагов пока нет)",
+            ),
+        ),
+    ]
+
 
 # ─────────────────────────────────────────────────────────────
 # Tutor logic functions (migrated from tutor_prompts.py)

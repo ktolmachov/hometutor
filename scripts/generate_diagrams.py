@@ -386,6 +386,25 @@ def render_agent_roadmap_section() -> str:
             "ReAct-цикла.",
         ),
         (
+            "Wave 1A",
+            "`study_session` собирает объяснение, mini-quiz и flashcard-кандидаты "
+            "как draft без записи в базы.",
+            "Это первый полезный пользовательский сценарий поверх read-only "
+            "агента.",
+        ),
+        (
+            "Wave 1B",
+            "`graph_gap_finder` находит пробелы и prerequisite-chain по графу "
+            "знаний + mastery без изменения graph bundle.",
+            "Граф становится учебной навигацией, а не только визуализацией.",
+        ),
+        (
+            "Wave 1C",
+            "`living_konspekt_coach` предлагает, что добавить/повторить/проверить "
+            "в Живом конспекте, но не меняет workbench.",
+            "Конспект становится активной учебной поверхностью без ранних writes.",
+        ),
+        (
             "Wave 2",
             "Run полностью реконструируется из `agent_runs`/`agent_steps`; "
             "`run_id` есть в span/log/Langfuse/cost; recovery-resume отделён "
@@ -443,6 +462,7 @@ def render_agent_roadmap_section() -> str:
         '    main["current RAG"]',
         '    runner["runner FSM"]',
         '    decision["decision"]',
+        '    scenarios["W1A-C scenarios"]',
         '    tools["read tools"]',
         '    stop["stop controller"]',
         '    state["W2 state"]',
@@ -452,7 +472,7 @@ def render_agent_roadmap_section() -> str:
         "    ask --> prep --> budget --> branch",
         "    branch -- no --> main",
         "    branch -- yes --> runner",
-        "    runner --> decision --> tools",
+        "    runner --> decision --> scenarios --> tools",
         "    runner --> stop",
         "    runner -. Wave 2 .-> state",
         "    runner -. Wave 2 .-> obs",
@@ -465,12 +485,15 @@ def render_agent_roadmap_section() -> str:
         "flowchart TB",
         '    W0["W0<br/>provider"]',
         '    W1["W1<br/>read-only"]',
+        '    W1A["W1A<br/>study"]',
+        '    W1B["W1B<br/>graph gaps"]',
+        '    W1C["W1C<br/>konspekt"]',
         '    W2["W2<br/>state + obs"]',
         '    W3["W3<br/>context"]',
         '    W4["W4<br/>eval gate"]',
         '    W5["W5<br/>writes + HITL"]',
         '    W6["W6<br/>plan + memory"]',
-        "    W0 --> W1 --> W2 --> W3 --> W4 --> W5 --> W6",
+        "    W0 --> W1 --> W1A --> W1B --> W1C --> W2 --> W3 --> W4 --> W5 --> W6",
         "    W4 -. blocks writes .-> W5",
         "    W4 -. proves ceiling .-> W6",
         "```",

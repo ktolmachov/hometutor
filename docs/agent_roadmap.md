@@ -139,7 +139,7 @@ app/agent/
   `requirement_context_ok` уже добавлена; неизвестные требования по-прежнему
   возвращают `False`.
 
-### 2.3 Стартовый набор инструментов (5–7, read-only в Wave 1)
+### 2.3 Стартовый набор инструментов (read-only в Wave 1 / 1A–1C)
 
 | Инструмент | Обёртка над | access |
 |---|---|---|
@@ -147,8 +147,11 @@ app/agent/
 | `rag.answer` | non-agent полный pipeline: `answer_question(sub_question, QueryOptions(query_mode=None))` (повторно проходит guardrails/classify/condense/rewrite, но без ветки agent) либо приватный RAG-helper; как «умный инструмент» | read |
 | `learner.get_profile` | `learner_model_service` + `app/tutor_orchestrator.py::build_tutor_session_state` | read |
 | `cards.get_due` | `user_state_flashcards.get_due_flashcards` | read |
+| `cards.propose` | кандидатные flashcards/cloze из ответа, конспекта или quiz-контекста; **без сохранения** до Wave 5 | read/draft |
 | `progress.get_mastery` | обёртка над существующими mastery-readers: `quiz_adaptive.py::list_quiz_mastery_state` / `get_weak_concepts` / `get_all_mastery_levels` + `learner_state_scope.get_quiz_mastery_rows_for_kg` + `analytics_service.get_advanced_analytics` | read |
 | `quiz.generate` | `quiz_service.generate_topic_quiz` (без записи) | read |
+| `graph.inspect` | read-only adapter над active knowledge graph / mastery-вектором: узлы, соседние связи, prerequisites, слабые/изолированные концепты | read |
+| `konspekt.inspect` | `workbench_service.load_rows` / `normalize_runtime_rows` + helpers Living Konspekt для coverage/selected rows; без изменения корзины | read |
 | Wave 5: `cards.save_deck`, `sr.update_card`, `quiz.record_result` | flashcard_service / `update_flashcard_sr` | write + idempotency-key + HITL |
 
 Примечания к адаптерам (из аудита):
@@ -243,8 +246,64 @@ Non-goals: сам цикл, роутер, состояние.
 - Тесты `tests/agent/`: каждый тип стопа, валидность схем реестра, runner с
   фейковым LLM (happy-path / loop-stop / repair), интеграционный с mock-provider.
 
-DoD: `query_mode="agent"` отвечает на 10 сценариев; флаг off → поведение
+DoD: `query_mode="agent"` отвечает на 10 технических сценариев; флаг off → поведение
 идентично main-flow. Non-goals: write-tools, персистентность, native, компакция.
+
+### Wave 1A — Agent Study Session (первый продуктовый сценарий)
+
+Зависит от Wave 1. Цель: не «универсальный агент», а короткая учебная сессия
+по теме: объяснение → проверка → кандидаты на закрепление.
+
+- Сценарий `study_session`: вход — тема/вопрос + текущий курс; агент вызывает
+  `learner.get_profile`, `progress.get_mastery`, `rag.search`/`rag.answer`,
+  `quiz.generate`, `cards.propose`.
+- Выходной контракт `StudySessionDraft`: краткое объяснение с источниками,
+  2–4 ключевых пробела, mini-quiz, 3–7 flashcard-кандидатов, следующий шаг.
+- UI-поверхность: CTA в Mission Control / Tutor chat «Собрать учебную сессию»
+  за `agent_enabled`; результат отображается как draft, без записи в базы.
+- Evals: 8–10 golden-сценариев на разные темы; checks: есть источники, quiz
+  соответствует теме, карточки не сохраняются, stop_reason корректен.
+
+DoD: пользователь получает цельную read-only сессию за один запуск; ни один
+candidate не сохраняется без явного будущего HITL. Non-goals: автосохранение
+карточек, запись quiz-result, долгий multi-session plan.
+
+### Wave 1B — Graph Gap Finder
+
+Зависит от Wave 1A. Цель: сделать граф знаний навигационной картой, а не только
+визуализацией.
+
+- Сценарий `graph_gap_finder`: агент читает `graph.inspect`,
+  `progress.get_mastery`, `learner.get_profile`, при необходимости `rag.search`.
+- Выходной контракт `GraphGapReport`: 3–5 пробелов, prerequisite-chain,
+  почему это мешает текущей теме, рекомендуемый порядок изучения, ссылки на
+  узлы/источники, optional quiz/card candidates.
+- Граф не мутируется: новые связи и исправления узлов выводятся как
+  `proposed_graph_edits` для будущего approve-flow, но не пишутся в bundle.
+- Evals: граф с изолированным узлом, слабым prerequisite, ложной связью,
+  отсутствующим mastery; checks: нет write, порядок prerequisites разумный.
+
+DoD: агент объясняет «что учить дальше и почему» по графу + прогрессу.
+Non-goals: автоматическое редактирование графа, promotion graph bundle.
+
+### Wave 1C — Living Konspekt Coach
+
+Зависит от Wave 1B. Цель: превратить Живой конспект в активную учебную
+поверхность: что добавить, что повторить, что проверить.
+
+- Сценарий `living_konspekt_coach`: агент читает `konspekt.inspect`,
+  `rag.search`, `quiz.generate`, `cards.propose`, `graph.inspect`.
+- Выходной контракт `KonspektCoachDraft`: summary текущей корзины, missing
+  sections, stale/непрочитанные фрагменты, scoped quiz, card candidates,
+  suggested outline update.
+- Все изменения конспекта — только draft: добавление разделов, сохранение
+  артефакта, заметки и карточки остаются ручными до Wave 5/HITL.
+- Evals: пустой workbench, перегруженный workbench, workbench без цели,
+  конспект с видео-citation; checks: использованы только выбранные rows,
+  output ссылается на источники, нет скрытой записи в `workbench_service`.
+
+DoD: агент даёт полезный план улучшения конспекта и scoped-проверку без
+изменения состояния. Non-goals: auto-save конспекта, auto-add sections.
 
 ### Wave 2 — Персистентность run + наблюдаемость
 
@@ -264,6 +323,9 @@ DoD: `query_mode="agent"` отвечает на 10 сценариев; флаг 
 - `app/routers/agent.py`: `GET /agent/runs/{run_id}` (реконструкция траектории
   из `agent_runs`/`agent_steps` — это и есть источник агентного trace, отдельно
   от старого `debug.pipeline_trace`).
+- Persisted run хранит `scenario_id` (`generic`, `study_session`,
+  `graph_gap_finder`, `living_konspekt_coach`) и summary output-контракта,
+  чтобы сценарные evals можно было связывать с реальными прод-прогонами.
 - **Recovery-resume** (после сбоя процесса) — внутренний, в `state.py`: по
   последнему persisted шагу. Это НЕ HITL-approval resume (тот — Wave 5).
 - Doc sync: `docs/api_reference.md`, `docs/architecture.md`.
@@ -370,6 +432,7 @@ golden set (A/B через eval_baseline).
 | Пробитие 20k лимита | компакция + offloading + учёт схем в guards; стоп max_tokens как страховка |
 | Кэш возвращает промежуточный шаг как финал | cache-bypass в Wave 0, до первого запуска цикла |
 | Injection через RAG-чанки/ToolResult | guardrails на выводы инструментов; red-team в golden set; user_id только от harness |
+| Scope creep первых сценариев | Wave 1A/1B/1C независимы, read-only, каждый имеет свой output-контракт и eval; write переносится в Wave 5 |
 | Двойная запись при retry/resume | idempotency-key UNIQUE; generate→validate→execute; HITL |
 | Латентность мультишага на локальной модели | max_steps=6; executor на дешёвой модели; latency budget уже обвязан |
 | Отравление памяти | confidence/TTL/source_run_id обязательны; memory.recall — инструмент; A/B через eval_baseline |
@@ -383,17 +446,22 @@ golden set (A/B через eval_baseline).
    token-estimate для схем) + затронутые config-тесты. `tests/agent/` ещё нет.
 2. **Wave 1+:** `pytest tests/agent/`; smoke `/ask` с `query_mode="agent"` при
    `AGENT_ENABLED=true`; при `false` — ответ идентичен main-flow.
-3. **Wave 2:** kill между шагами → resume восстанавливает run;
+3. **Wave 1A–1C:** scenario golden sets:
+   `agent_study_session`, `agent_graph_gap_finder`,
+   `agent_living_konspekt_coach`; checks на read-only режим, источники,
+   отсутствие скрытых writes и корректный output-contract.
+4. **Wave 2:** kill между шагами → resume восстанавливает run;
    `GET /agent/runs/{run_id}` возвращает полную траекторию.
-4. **Wave 4:** `scripts/agent_gate_v1.py` зелёный; pass^k ≥ порога;
+5. **Wave 4:** `scripts/agent_gate_v1.py` зелёный; pass^k ≥ порога;
    injection-кейсы дают `guardrail_triggered`.
-5. **Всегда:** `scripts/home_rag_integration_gate_v1.py` /
+6. **Всегда:** `scripts/home_rag_integration_gate_v1.py` /
    `home_rag_product_baseline_v1.py` не деградируют.
 
 ## 7. Traceability: лекции → волны
 
 - Урок 1 (ReAct/Plan-Execute, harness, stop conditions, start simple) →
-  Wave 1 (ReAct), Wave 6 (Plan-Execute), stop_controller везде.
+  Wave 1 (ReAct), Wave 1A–1C (малые продуктовые сценарии), Wave 6
+  (Plan-Execute), stop_controller везде.
 - Урок 2 (tools=контракты, read-only first, context engineering, structured
   output) → Wave 0/1/3.
 - Урок 3 (память/стейт, FSM, idempotency, checkpointing, retrieve≠read) →
@@ -404,7 +472,8 @@ golden set (A/B через eval_baseline).
   мультиагентность только при потолке, Supervisor, merge) → Wave 5/6.
 - Deep 3/4 (датасеты, eval-методология, baseline, конфигурации) → Wave 4.
 - Deep 5/6 (vector DB, GraphRAG) → уже покрыто существующим retrieval
-  (hybrid+rerank+graph) — переиспользуется как инструменты.
+  (hybrid+rerank+graph) — переиспользуется как инструменты; Wave 1B делает
+  graph-навигацию первым отдельным сценарным продуктом.
 - Deep 8 (context engineering, offloading, subagents) → Wave 3/6.
 
 ---

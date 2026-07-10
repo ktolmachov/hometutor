@@ -620,6 +620,7 @@ flowchart TB
     main["current RAG"]
     runner["runner FSM"]
     decision["decision"]
+    scenarios["W1A-C scenarios"]
     tools["read tools"]
     stop["stop controller"]
     state["W2 state"]
@@ -629,7 +630,7 @@ flowchart TB
     ask --> prep --> budget --> branch
     branch -- no --> main
     branch -- yes --> runner
-    runner --> decision --> tools
+    runner --> decision --> scenarios --> tools
     runner --> stop
     runner -. Wave 2 .-> state
     runner -. Wave 2 .-> obs
@@ -642,12 +643,15 @@ flowchart TB
 flowchart TB
     W0["W0<br/>provider"]
     W1["W1<br/>read-only"]
+    W1A["W1A<br/>study"]
+    W1B["W1B<br/>graph gaps"]
+    W1C["W1C<br/>konspekt"]
     W2["W2<br/>state + obs"]
     W3["W3<br/>context"]
     W4["W4<br/>eval gate"]
     W5["W5<br/>writes + HITL"]
     W6["W6<br/>plan + memory"]
-    W0 --> W1 --> W2 --> W3 --> W4 --> W5 --> W6
+    W0 --> W1 --> W1A --> W1B --> W1C --> W2 --> W3 --> W4 --> W5 --> W6
     W4 -. blocks writes .-> W5
     W4 -. proves ceiling .-> W6
 ```
@@ -658,6 +662,9 @@ flowchart TB
 |---|---|---|
 | Wave 0 | Mock-тест доказывает, что `tools`/`tool_choice`/`response_format` доходят до OpenAI payload; structured/tool kwargs обходят cache; схемы инструментов учтены в input-token estimate. | Без этого agent-loop может зависнуть на cache-hit или пробить guard ещё до первого tool-вызова. |
 | Wave 1 | Только read-only tools; `rag.answer` принудительно non-agent; каждый stop reason покрыт тестом runner'а. | Это удерживает MVP от рекурсии, записей в state и бесконтрольного ReAct-цикла. |
+| Wave 1A | `study_session` собирает объяснение, mini-quiz и flashcard-кандидаты как draft без записи в базы. | Это первый полезный пользовательский сценарий поверх read-only агента. |
+| Wave 1B | `graph_gap_finder` находит пробелы и prerequisite-chain по графу знаний + mastery без изменения graph bundle. | Граф становится учебной навигацией, а не только визуализацией. |
+| Wave 1C | `living_konspekt_coach` предлагает, что добавить/повторить/проверить в Живом конспекте, но не меняет workbench. | Конспект становится активной учебной поверхностью без ранних writes. |
 | Wave 2 | Run полностью реконструируется из `agent_runs`/`agent_steps`; `run_id` есть в span/log/Langfuse/cost; recovery-resume отделён от HITL-resume. | Без наблюдаемой траектории agent невозможно отлаживать и превращать prod-fail в eval. |
 | Wave 3 | Стабильный static prefix; ToolResult offload; 10+ шагов не пробивают hard token limit. | Native tools и длинные runs безопасны только при дисциплине контекста. |
 | Wave 4 | `scripts/agent_gate_v1.py` зелёный: trajectory checks, injection cases, pass^k, baseline без деградации. | Это обязательный предохранитель перед write-инструментами. |

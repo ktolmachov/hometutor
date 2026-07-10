@@ -36,6 +36,7 @@ def test_run_agent_flow_uses_current_auth_user_id():
             QueryOptions(query_mode="agent", session_id="s1"),
             SimpleNamespace(trace={}),
             runner=runner,
+            persist_history=False,
         )
     finally:
         reset_current_user_id(token)
@@ -53,10 +54,12 @@ def test_run_agent_flow_response_validates_against_public_ask_response():
         QueryOptions(query_mode="agent", session_id="s1"),
         SimpleNamespace(trace={}),
         runner=runner,
+        persist_history=False,
     )
 
     parsed = AskResponse.model_validate(response)
     assert parsed.answer_status == "grounded"
+    assert response["debug"]["agent_trace"]["run_id"]
 
 
 def test_learner_profile_tool_passes_user_and_session(monkeypatch):

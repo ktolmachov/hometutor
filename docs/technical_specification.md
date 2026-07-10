@@ -91,7 +91,7 @@ metadata-контракт sidecar v1 и section media panel в `Живом ко�
 |---|---|
 | `data/` | исходные документы и `user_state.db` |
 | `data/**/*.media.json` | multimodal sidecar v1 для runtime-конспекта; схема: `docs/schemas/media_sidecar_v1.schema.json` |
-| `data/user_state.db` | learner state, quiz, flashcards, SRS, sync |
+| `data/user_state.db` | learner state, quiz, flashcards, SRS, sync, compact agent runs |
 | `chroma_db/` | persistent Chroma и retrieval cache data |
 | `data/graph_generations/` | graph bundles по поколениям индекса |
 | `index_registry.json` | active index generation pointer |
@@ -166,6 +166,7 @@ Agent Coach не имеет отдельного endpoint: он идёт чер�
 - `app/agent/tools_quiz.py`
 - `app/agent/tools_flashcards.py`
 - `app/agent/scenarios.py`
+- `app/user_state_agent_runs.py`
 - prompts: `agent_system`, `agent_decision`, `agent_study_session`,
   `agent_graph_gap_finder`, `agent_living_konspekt_coach` in
   `app/prompts/_impl.py`
@@ -180,7 +181,9 @@ Agent Coach не имеет отдельного endpoint: он идёт чер�
 
 Все agent tools в текущем MVP read-only. `cards.propose` возвращает draft, но
 не сохраняет карточки. `quiz.generate` не записывает результат. `konspekt.inspect`
-и `graph.inspect` не мутируют workbench или graph bundle.
+и `graph.inspect` не мутируют workbench или graph bundle. Единственная запись в
+agent mode — compact observability: `agent_runs` / `agent_steps` с `run_id`,
+scenario, status, stop reason, tool calls и усечёнными step summaries.
 
 ### Quiz, flashcards, progress
 
@@ -295,6 +298,7 @@ report, чтобы distinguish published graph, previous fallback и diagnostic-
 - cost logs;
 - quality/educational/mastery metrics;
 - pipeline trace;
+- compact agent run trace (`agent_runs` / `agent_steps`, `debug.agent_trace.run_id`);
 - optional OpenTelemetry;
 - SSR LLM profiling в `logs/ssr_llm_profiles/`.
 

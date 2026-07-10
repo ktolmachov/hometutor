@@ -193,10 +193,11 @@ pipeline-step. Она включается только при `query_mode="agen
   `living_konspekt_coach`.
 
 Agent tools получают `user_id` и `session_id` только через `ToolContext` из
-harness; модель не передаёт эти поля в args. В текущем MVP agent mode не пишет
-`user_state`, не создаёт `agent_runs/agent_steps`, не сохраняет карточки,
-quiz-result, graph edits или workbench changes. Траектория доступна в
-`debug.agent_trace`, а выбранный сценарий — в `debug.answer_path.scenario_id`.
+harness; модель не передаёт эти поля в args. Agent mode пишет только compact
+observability в per-user `user_state.db`: `agent_runs` и `agent_steps` через
+`app/user_state_agent_runs.py`. Он не сохраняет карточки, quiz-result, graph
+edits или workbench changes. `run_id` доступен в `debug.agent_trace` и
+`debug.answer_path`, выбранный сценарий — в `debug.answer_path.scenario_id`.
 
 ## Indexing
 

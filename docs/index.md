@@ -1,6 +1,6 @@
 # Навигатор документации hometutor
 
-Актуализировано: 2026-07-03.
+Актуализировано: 2026-07-10.
 
 `hometutor` — runtime-репозиторий локального учебного RAG-приложения. Здесь живут приложение, API, UI, запуск, deployment и эксплуатационная документация. Demo screenshots сохранены в `docs/screenshots/final/`; исходные сценарные манифесты, генератор demo-документа, backlog, user stories и процессные материалы вынесены в `hometutor-studio`.
 
@@ -51,6 +51,7 @@
 | уровни видимости UI | `app/ui/feature_registry.py`, `app/ui_preferences.py`, `app/ui/navigation_visibility.py` |
 | flashcards | `app/flashcard_service.py`, `app/routers/flashcards.py` |
 | Smart Study Router | `app/smart_study_*.py`, `app/ssr_*.py` |
+| AI Agent Coach | `app/agent/*`, `app/prompts/_impl.py`, [agent_roadmap.md](agent_roadmap.md) |
 | аутентификация | `app/auth_*.py`, `app/routers/auth.py`, `app/api_auth.py::auth_scope`, `data/auth.db` |
 | CI/CD | `.github/workflows/ci.yml`, `.github/workflows/deploy.yml` |
 
@@ -58,6 +59,11 @@
 
 - 2026-07-03: добавлена модель видимости UI по уровням опыта, панель управления
   интерфейсом, онбординг-выбор режима и sync-перенос настроек через `app_kv`.
+- 2026-07-10: синхронизация после Wave 1A–1C AI Agent Coach MVP и первого
+  Wave 2 persistence slice: read-only `/ask query_mode="agent"` сценарии
+  `study_session`, `graph_gap_finder`, `living_konspekt_coach`, compact
+  `agent_runs`/`agent_steps` observability; обновлены user guide, quickstart,
+  API reference, architecture и technical specification.
 - 2026-06-30: синхронизация после добавления опциональной аутентификации (JWT + bcrypt,
   per-user state isolation), CI/CD (`.github/workflows/`), Яндекс.Метрики и opt-in
   `RAG_CONTEXT_TOKEN_BUDGET`. Обновлены `api_reference.md`, `architecture.md`,

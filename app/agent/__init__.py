@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
 from typing import Any
 
 from app.agent.contracts import AgentRunResult, ToolContext
@@ -36,6 +37,7 @@ def run_agent_flow(
     registry: ToolRegistry | None = None,
     runner: AgentRunner | None = None,
     started_at: float | None = None,
+    persist_history: bool = True,
 ) -> dict[str, Any]:
     """Run the read-only agent loop and return a query-service-compatible dict.
 
@@ -54,10 +56,12 @@ def run_agent_flow(
     if mode in ("native", "auto"):
         logger.warning(_NATIVE_NOT_SUPPORTED_MSG, mode)
 
+    run_id = uuid.uuid4().hex
     active_registry = registry or build_default_registry()
     from app.agent.scenarios import get_agent_scenario
 
     scenario = get_agent_scenario(question)
+    scenario_id = scenario.scenario_id if scenario else "generic"
     user_id = (get_current_user_id() or "").strip() or "local"
     tool_ctx = ToolContext(
         user_id=user_id,
@@ -77,12 +81,20 @@ def run_agent_flow(
 
     result: AgentRunResult = runner.run(question=question, tool_ctx=tool_ctx)
     answer_status = _answer_status_for_agent_result(result)
+    _persist_agent_run_best_effort(
+        enabled=persist_history,
+        run_id=run_id,
+        scenario_id=scenario_id,
+        question=question,
+        answer_status=answer_status,
+        result=result,
+    )
 
     if ctx is not None:
         try:
             ctx.trace["agent"] = dict(result.trace)
-            if scenario:
-                ctx.trace["agent"]["scenario_id"] = scenario.scenario_id
+            ctx.trace["agent"]["run_id"] = run_id
+            ctx.trace["agent"]["scenario_id"] = scenario_id
             ctx.trace["agent"]["steps"] = [
                 {
                     "step_index": s.step_index,
@@ -106,15 +118,42 @@ def run_agent_flow(
             "total_answer_ms": round(total_ms, 3),
             "agent_trace": {
                 **dict(result.trace),
-                **({"scenario_id": scenario.scenario_id} if scenario else {}),
+                "run_id": run_id,
+                "scenario_id": scenario_id,
             },
             "answer_path": {
                 "mode": "agent",
-                **({"scenario_id": scenario.scenario_id} if scenario else {}),
+                "run_id": run_id,
+                "scenario_id": scenario_id,
             },
         },
         "answer_status": answer_status,
     }
+
+
+def _persist_agent_run_best_effort(
+    *,
+    enabled: bool,
+    run_id: str,
+    scenario_id: str,
+    question: str,
+    answer_status: str,
+    result: AgentRunResult,
+) -> None:
+    if not enabled:
+        return
+    try:
+        from app.user_state_agent_runs import persist_agent_run
+
+        persist_agent_run(
+            run_id=run_id,
+            scenario_id=scenario_id,
+            question=question,
+            answer_status=answer_status,
+            result=result,
+        )
+    except Exception as exc:  # noqa: BLE001 - observability must not break /ask
+        logger.warning("agent run persistence failed: %s", exc)
 
 
 def _answer_status_for_agent_result(result: AgentRunResult) -> str:

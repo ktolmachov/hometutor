@@ -296,6 +296,7 @@ def test_run_agent_flow_wires_konspekt_scenario(monkeypatch):
         "проверь конспект",
         QueryOptions(query_mode="agent"),
         SimpleNamespace(trace={}),
+        persist_history=False,
     )
 
     assert captured["system_prompt"] == AGENT_LIVING_KONSPEKT_COACH_SYSTEM_PROMPT

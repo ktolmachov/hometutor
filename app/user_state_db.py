@@ -586,6 +586,52 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS agent_runs (
+            run_id TEXT PRIMARY KEY,
+            scenario_id TEXT NOT NULL,
+            question TEXT NOT NULL,
+            answer_status TEXT NOT NULL,
+            stop_reason TEXT NOT NULL,
+            state TEXT NOT NULL,
+            tool_calls_json TEXT NOT NULL,
+            summary_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            completed_at TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_agent_runs_created
+        ON agent_runs(created_at DESC)
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS agent_steps (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id TEXT NOT NULL REFERENCES agent_runs(run_id) ON DELETE CASCADE,
+            step_index INTEGER NOT NULL,
+            state TEXT NOT NULL,
+            tool_name TEXT,
+            tool_args_json TEXT,
+            tool_ok INTEGER,
+            tool_error TEXT,
+            result_summary_json TEXT,
+            repair_attempt INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            UNIQUE(run_id, step_index)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_agent_steps_run
+        ON agent_steps(run_id, step_index)
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS ssr_recommendation_feedback (
             id                     INTEGER PRIMARY KEY AUTOINCREMENT,
             action                 TEXT    NOT NULL,

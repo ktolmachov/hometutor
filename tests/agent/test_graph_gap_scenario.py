@@ -227,6 +227,7 @@ def test_run_agent_flow_wires_graph_gap_scenario(monkeypatch):
         "найди пробелы в графе по теме",
         QueryOptions(query_mode="agent"),
         SimpleNamespace(trace={}),
+        persist_history=False,
     )
 
     assert captured["system_prompt"] == AGENT_GRAPH_GAP_FINDER_SYSTEM_PROMPT

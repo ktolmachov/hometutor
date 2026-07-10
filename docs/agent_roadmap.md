@@ -2,7 +2,8 @@
 
 Актуализировано: 2026-07-10.
 Статус: Wave 1A–1C MVP (`study_session`, `graph_gap_finder`,
-`living_konspekt_coach`) реализованы поверх Wave 1 Foundation.
+`living_konspekt_coach`) реализованы поверх Wave 1 Foundation; Wave 2
+получила первый persistence/observability slice для `agent_runs`/`agent_steps`.
 Это **канонический**
 документ; внешний session-plan `d-ai-app-data-4-noble-pine.md` (вне этого
 репозитория) устарел и не является источником истины.
@@ -92,9 +93,10 @@ agent → tool → agent.
 
 Важно про trace: `history_service.get_pipeline_trace(request_id)` читает
 `debug.pipeline_trace` из history JSONL (`app/history_service.py:204`) — агентная
-траектория туда сама не попадёт. Нужно либо писать `debug.agent_trace` в ту же
-history-запись, либо (Wave 2) отдельный `GET /agent/runs/{run_id}` из таблиц
-`agent_runs`/`agent_steps`. Старый pipeline-trace не ломается.
+траектория туда сама не попадает. Текущий Wave 2 slice пишет компактный
+`debug.agent_trace.run_id` и append-only записи `agent_runs`/`agent_steps`;
+публичный `GET /agent/runs/{run_id}` остаётся следующим observability-шагом.
+Старый pipeline-trace не ломается.
 
 ### 2.2 Пакет `app/agent/`
 
@@ -132,10 +134,10 @@ app/agent/
   `agent_max_run_tokens`, `agent_max_run_cost_usd`, `agent_max_run_seconds`.
   Эти флаги уже заведены в `app/config.py`, `.env.example` и `config.env`;
   дальнейшие настройки добавлять во все три места одновременно.
-- Роутер `app/routers/agent.py`: `GET /agent/runs/{run_id}`, `GET /agent/runs`
-  (интроспекция, Wave 2) и `POST /agent/runs/{run_id}/resume` (**HITL-approval,
-  Wave 5** — не путать с recovery-resume внутри `state.py`); регистрация в
-  `app/api.py` с `_protected_dependencies`.
+- Будущий роутер `app/routers/agent.py`: `GET /agent/runs/{run_id}`,
+  `GET /agent/runs` (интроспекция) и `POST /agent/runs/{run_id}/resume`
+  (**HITL-approval, Wave 5** — не путать с recovery-resume внутри `state.py`);
+  регистрация в `app/api.py` с `_protected_dependencies`.
 - UI-фича: `FeatureSpec` в `app/ui/feature_registry.py` с
   `requires=("agent_enabled",)`. Ветка `agent_enabled` в
   `requirement_context_ok` уже добавлена; неизвестные требования по-прежнему
@@ -258,8 +260,8 @@ DoD: `query_mode="agent"` отвечает на 10 технических сце
 
 Статус MVP (2026-07-10): `query_mode="agent"` по умолчанию маршрутизируется в
 сценарий `study_session`; сценарий использует read-only agent loop,
-специализированный prompt и финальный контракт поверх tool trace. Wave 1A не
-добавляет persistence, роутеры, UI или write-tools.
+специализированный prompt и финальный контракт поверх tool trace. Persistence
+появляется отдельно в Wave 2; Wave 1A не добавляет роутеры, UI или write-tools.
 
 - Сценарий `study_session`: вход — тема/вопрос + текущий курс; агент вызывает
   `learner.get_profile`, `rag.search`/`rag.answer`, при необходимости
@@ -328,19 +330,24 @@ DoD: агент даёт полезный план улучшения консп
 Принципы: Урок 3 (state, run_id+step_id, append-only, recovery),
 Урок 4 (observability: единица наблюдения = траектория).
 
-- Таблицы `agent_runs` / `agent_steps` (append-only, idempotency_key UNIQUE) в
-  `_ensure_schema`; модуль `app/user_state_agent_runs.py`; checkpoint/recovery
-  в `app/agent/state.py`.
-- `run_id` — не только ContextVar рядом с `request_id`
-  (`logging_config.py:14` сейчас несёт только request_id), но и:
+- Статус slice (2026-07-10): `run_agent_flow` генерирует `run_id`, возвращает
+  его в `debug.agent_trace` / `debug.answer_path` и best-effort сохраняет
+  компактную историю в per-user SQLite через `app/user_state_agent_runs.py`.
+- Таблицы `agent_runs` / `agent_steps` созданы в `_ensure_schema`.
+  Сохраняются `scenario_id`, question preview, `answer_status`, `stop_reason`,
+  state, tool calls и compact step summaries; raw `user_id`/`session_id` и
+  длинные tool payloads не сохраняются.
+- Следующий слой: checkpoint/recovery в `app/agent/state.py`, idempotency key
+  для retry/resume, и публичная интроспекция.
+- `run_id` дальше должен пойти не только в debug payload, но и:
   расширить `trace_tool_span` (`otel_tracing.py:138`) параметром `run_id`,
   добавить `run_id` в Langfuse-атрибуты и в logging-context filter.
   usage/cost на шаг (`stage=agent_step_{n}`).
 - Метрики: `stops_by_reason`, `tool_error_rate`, `cost_per_run`, `steps_per_run`
   в metrics_storage; SLO-хук.
-- `app/routers/agent.py`: `GET /agent/runs/{run_id}` (реконструкция траектории
-  из `agent_runs`/`agent_steps` — это и есть источник агентного trace, отдельно
-  от старого `debug.pipeline_trace`).
+- Future `app/routers/agent.py`: `GET /agent/runs/{run_id}` (реконструкция
+  траектории из `agent_runs`/`agent_steps` — это источник агентного trace,
+  отдельно от старого `debug.pipeline_trace`).
 - Persisted run хранит `scenario_id` (`generic`, `study_session`,
   `graph_gap_finder`, `living_konspekt_coach`) и summary output-контракта,
   чтобы сценарные evals можно было связывать с реальными прод-прогонами.
@@ -348,9 +355,11 @@ DoD: агент даёт полезный план улучшения консп
   последнему persisted шагу. Это НЕ HITL-approval resume (тот — Wave 5).
 - Doc sync: `docs/api_reference.md`, `docs/architecture.md`.
 
-DoD: run полностью реконструируем из SQLite; тест recovery (kill между шагами →
-внутренний resume восстанавливает run). Non-goals: HITL-approval resume
-(`POST .../resume {approve|reject}`) и дашборд UI — Wave 5.
+DoD slice: run реконструируем из SQLite на уровне helper-API; `run_id`
+проброшен в `/ask` debug; тесты покрывают compact trace, per-user isolation и
+ветку `AGENT_ENABLED=false` без записи. Full DoD ещё включает recovery (kill
+между шагами → внутренний resume) и публичный read-only router. Non-goals:
+HITL-approval resume (`POST .../resume {approve|reject}`) и дашборд UI — Wave 5.
 
 ### Wave 3 — Контекстная дисциплина + native tools + роутинг моделей
 
@@ -435,7 +444,7 @@ golden set (A/B через eval_baseline).
 |---|---|---|
 | Native tools vs JSON-decision | Два бэкенда; **JSON первым**, native за `agent_tool_call_mode=auto` | Транспорт для native проходим, но качество tool-calling локальной модели не подтверждено; JSON-паттерн проверен боем в tutor_orchestrator |
 | Где живёт цикл | Параллельный поток рядом с `_answer_question_main_flow` (`query_mode="agent"`) | Pipeline-контракт линеен; RAG становится инструментом; бесплатный реюз guardrails/budget/AskResponse |
-| Где живёт состояние | SQLite через паттерн user_state (`user_state_agent_runs.py`) | Local-first single-user; конвенция репо; append-only + idempotency |
+| Где живёт состояние | SQLite через паттерн user_state (`user_state_agent_runs.py`) | Local-first / per-user isolation; конвенция репо; append-only compact trace |
 | Лимит 20k токенов | Пересборка контекста из state + offload результатов (ref_id) + компакция при >12k | Накопительная история пробьёт hard-limit к 5–7 шагу |
 | Роутинг моделей | Role-геттеры planner/executor в provider.py | Паттерн `_build_role_llm` уже есть; planner → сильная (cloud при consent), executor → дешёвая локальная |
 | Дедуп-кэш | Bypass при `tools`/`tool_choice`/`response_format` в kwargs | Кэш-хит промежуточного шага = «зависший» агент |
@@ -469,8 +478,10 @@ golden set (A/B через eval_baseline).
    `agent_living_konspekt_coach`; checks на read-only режим, источники,
    отсутствие скрытых writes и корректный output-contract. MVP-набор Wave 1A–1C
    лежит в `eval_data/agent_scenarios_golden_v1.json`.
-4. **Wave 2:** kill между шагами → resume восстанавливает run;
-   `GET /agent/runs/{run_id}` возвращает полную траекторию.
+4. **Wave 2:** текущий slice — `tests/agent/test_agent_persistence.py`
+   покрывает compact SQLite trace, `run_id` в debug и per-user isolation.
+   Следующий gate: kill между шагами → resume восстанавливает run;
+   `GET /agent/runs/{run_id}` возвращает траекторию.
 5. **Wave 4:** `scripts/agent_gate_v1.py` зелёный; pass^k ≥ порога;
    injection-кейсы дают `guardrail_triggered`.
 6. **Всегда:** `scripts/home_rag_integration_gate_v1.py` /
@@ -518,14 +529,14 @@ golden set (A/B через eval_baseline).
 
 Серьёзные:
 - **Agent trace** (§2.1/Wave 2): `get_pipeline_trace` читает
-  `debug.pipeline_trace`; агентная траектория идёт в `agent_runs`/`agent_steps`
-  (+ опц. `debug.agent_trace`), не «бесплатно».
+  `debug.pipeline_trace`; агентная траектория идёт в compact
+  `agent_runs`/`agent_steps` (+ `debug.agent_trace.run_id`), не «бесплатно».
 - **Resume** (§2.2/Wave 2/Wave 5): разведены recovery-resume (после сбоя, Wave 2)
   и HITL-approval resume (Wave 5).
 - **Doc-sync настроек** (§2.2/Wave 0): `.env.example` + `config.env` вместе с
   `config.py`.
-- **run_id observability** (Wave 2): проброс в `trace_tool_span`/Langfuse/logging,
-  не только ContextVar.
+- **run_id observability** (Wave 2): `debug.agent_trace.run_id` уже есть;
+  проброс в `trace_tool_span`/Langfuse/logging остаётся следующим шагом.
 - **Cloud consent** (§2.4): enforced кодом в agent role getters, не по model id.
 
 Мелкие:

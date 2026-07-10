@@ -130,9 +130,10 @@ Invoke-RestMethod `
   -Body $body
 ```
 
-В ответе проверьте `answer_status`, `debug.answer_path.scenario_id` и
-`debug.agent_trace.tool_calls`. Agent-сценарии read-only: они не сохраняют
-карточки, quiz-result, правки графа или Живого конспекта.
+В ответе проверьте `answer_status`, `debug.answer_path.scenario_id`,
+`debug.agent_trace.run_id` и `debug.agent_trace.tool_calls`. Agent-сценарии
+read-only: кроме compact run trace они не сохраняют карточки, quiz-result,
+правки графа или Живого конспекта.
 
 Опциональный прогрев retrieval после старта API:
 

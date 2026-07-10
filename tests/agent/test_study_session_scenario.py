@@ -306,6 +306,7 @@ def test_run_agent_flow_wires_study_session_scenario(monkeypatch):
         "объясни тему",
         QueryOptions(query_mode="agent"),
         SimpleNamespace(trace={}),
+        persist_history=False,
     )
 
     assert captured["system_prompt"] == AGENT_STUDY_SESSION_SYSTEM_PROMPT

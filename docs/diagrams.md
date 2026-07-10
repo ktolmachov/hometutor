@@ -1,13 +1,14 @@
-# Диаграммы hometutor (генерируются из кода)
+# Диаграммы hometutor (генерируются из кода и roadmap)
 
 > **НЕ РЕДАКТИРОВАТЬ РУКАМИ.** Файл целиком генерируется скриптом
-> `scripts/generate_diagrams.py` из исходников. Обновление:
+> `scripts/generate_diagrams.py` из исходников и `docs/agent_roadmap.md`.
+> Обновление:
 > `python scripts/generate_diagrams.py`; проверка актуальности: `--check`.
 > Концептуальные (рукописные) диаграммы живут в [architecture.md](architecture.md).
 
 ## 1. Карта HTTP API
 
-Всего маршрутов: **98** в **17** роутерах (источник: `app/routers/*.py`).
+Всего маршрутов: **99** в **17** роутерах (источник: `app/routers/*.py`).
 
 ```mermaid
 flowchart LR
@@ -24,6 +25,7 @@ flowchart LR
     API --> quiz["quiz<br/>3 routes"]
     API --> sync["sync<br/>3 routes"]
     API --> files["files<br/>2 routes"]
+    API --> living_konspekt["living_konspekt<br/>2 routes"]
     API --> feedback["feedback<br/>1 routes"]
     API --> query["query<br/>1 routes"]
     API --> review["review<br/>1 routes"]
@@ -144,6 +146,13 @@ flowchart LR
 | PUT | `/learner/goal-snapshot` |
 | DELETE | `/learner/goal-snapshot` |
 
+### `living_konspekt` (2)
+
+| Метод | Путь |
+|---|---|
+| GET | `/living-konspekt/workbench/status` |
+| GET | `/living-konspekt/video-citation/open` |
+
 ### `metrics` (15)
 
 | Метод | Путь |
@@ -224,28 +233,29 @@ flowchart TD
     state["State (SQLite)"]
     provider["Провайдер LLM"]
     config["Конфиг"]
-    ui -->|102| services
-    services -->|58| config
-    retrieval -->|39| services
-    routers -->|35| services
+    ui -->|115| services
+    services -->|53| config
+    retrieval -->|47| services
+    routers -->|37| services
+    services -->|25| retrieval
     routers -->|25| apiapp
     services -->|21| state
-    services -->|19| retrieval
     apiapp -->|18| services
     services -->|18| prompts
     apiapp -->|17| routers
     services -->|16| graph
-    retrieval -->|13| config
+    ui -->|14| config
     services -->|13| provider
-    ui -->|13| config
+    retrieval -->|10| config
+    graph -->|8| services
     state -->|8| services
     provider -->|7| services
     apiapp -->|6| retrieval
-    graph -->|6| services
-    routers -->|6| config
+    ui -->|6| retrieval
     apiapp -->|5| config
     retrieval -->|5| graph
     ui -->|5| state
+    routers -->|5| config
     retrieval -->|4| provider
     routers -->|4| state
     state -->|3| config
@@ -260,14 +270,11 @@ flowchart TD
     retrieval -->|1| state
     routers -->|1| provider
     ui -->|1| prompts
-    ui -->|1| retrieval
 ```
 
 ### Импорты UI из backend-слоёв (включая ленивые)
 
-⚠️ Нарушения границы «backend не знает про UI»:
-
-- `app/rag_runtime_preferences.py:494` → `app.ui.auth_gate`
+Нарушений нет ✅
 
 ## 3. Схемы хранилищ (SQLite)
 
@@ -572,7 +579,7 @@ flowchart TB
     subgraph T3["Уровень 3"]
         view_course["Курс и Course Cockpit<br/><i>nav</i>"]
         view_adaptive_plan["Адаптивный план<br/><i>nav</i>"]
-        view_knowledge_graph["Knowledge Graph<br/><i>nav</i>"]
+        view_knowledge_graph["Граф знаний<br/><i>nav</i>"]
         view_living_konspekt["Живой конспект<br/><i>nav</i>"]
         view_history["История запросов<br/><i>nav</i>"]
         sidebar_research_sessions["Research-сессии<br/><i>sidebar</i>"]
@@ -595,3 +602,64 @@ flowchart TB
     T3 --> T4
     T4 --> T5
 ```
+
+## 5. AI-агент: целевой flow и gates
+
+Плановый overlay по `docs/agent_roadmap.md`. Узлы `app/agent/*`, `agent_runs` и agent-router появляются по волнам; это не утверждение, что они уже есть в runtime-коде.
+
+### Runtime-встраивание
+
+Компактная схема намеренно избегает широких subgraph-контейнеров: детали контрактов и DoD вынесены в gates ниже, чтобы Mermaid не обрезался в preview.
+
+```mermaid
+flowchart TB
+    ask["/ask"]
+    prep["prepare ctx"]
+    budget["budget"]
+    branch{"agent?"}
+    main["current RAG"]
+    runner["runner FSM"]
+    decision["decision"]
+    tools["read tools"]
+    stop["stop controller"]
+    state["W2 state"]
+    obs["W2 observability"]
+    hitl["W5 HITL"]
+    write["W5 write tools"]
+    ask --> prep --> budget --> branch
+    branch -- no --> main
+    branch -- yes --> runner
+    runner --> decision --> tools
+    runner --> stop
+    runner -. Wave 2 .-> state
+    runner -. Wave 2 .-> obs
+    runner -. Wave 5 .-> hitl --> write
+```
+
+### Зависимости волн
+
+```mermaid
+flowchart TB
+    W0["W0<br/>provider"]
+    W1["W1<br/>read-only"]
+    W2["W2<br/>state + obs"]
+    W3["W3<br/>context"]
+    W4["W4<br/>eval gate"]
+    W5["W5<br/>writes + HITL"]
+    W6["W6<br/>plan + memory"]
+    W0 --> W1 --> W2 --> W3 --> W4 --> W5 --> W6
+    W4 -. blocks writes .-> W5
+    W4 -. proves ceiling .-> W6
+```
+
+### Release gates
+
+| Волна | Блокирующий gate | Почему это критично |
+|---|---|---|
+| Wave 0 | Mock-тест доказывает, что `tools`/`tool_choice`/`response_format` доходят до OpenAI payload; structured/tool kwargs обходят cache; схемы инструментов учтены в input-token estimate. | Без этого agent-loop может зависнуть на cache-hit или пробить guard ещё до первого tool-вызова. |
+| Wave 1 | Только read-only tools; `rag.answer` принудительно non-agent; каждый stop reason покрыт тестом runner'а. | Это удерживает MVP от рекурсии, записей в state и бесконтрольного ReAct-цикла. |
+| Wave 2 | Run полностью реконструируется из `agent_runs`/`agent_steps`; `run_id` есть в span/log/Langfuse/cost; recovery-resume отделён от HITL-resume. | Без наблюдаемой траектории agent невозможно отлаживать и превращать prod-fail в eval. |
+| Wave 3 | Стабильный static prefix; ToolResult offload; 10+ шагов не пробивают hard token limit. | Native tools и длинные runs безопасны только при дисциплине контекста. |
+| Wave 4 | `scripts/agent_gate_v1.py` зелёный: trajectory checks, injection cases, pass^k, baseline без деградации. | Это обязательный предохранитель перед write-инструментами. |
+| Wave 5 | Нулевая запись без approve; idempotency-key UNIQUE; approve/reject/double-resume/timeout покрыты eval и тестами. | Write tools должны быть обратимы по смыслу, наблюдаемы и защищены от retry-дублей. |
+| Wave 6 | Планировщик и memory проходят A/B через eval_baseline; supervisor разрешён только при доказанном потолке single-agent. | Иначе plan-execute/memory/supervisor добавят сложность без измеримой пользы. |

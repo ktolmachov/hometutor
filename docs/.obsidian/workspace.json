@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "living_konspekt_masterpiece_council.md",
+                "file": "diagrams.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "living_konspekt_masterpiece_council"
+              "title": "diagrams"
             }
           }
         ]
@@ -182,8 +182,8 @@
   },
   "active": "3dca82099ed27268",
   "lastOpenFiles": [
-    "living_konspekt_next_move_prompt.md",
     "living_konspekt_masterpiece_council.md",
+    "living_konspekt_next_move_prompt.md",
     "living_konspekt_masterpiece_council.md.tmp.25480.724342a51071",
     "living_konspekt_next_move_prompt.md.tmp.25480.24eb125645a3",
     "living_konspekt_masterpiece_council.md.tmp.42604.0a273830db9f",

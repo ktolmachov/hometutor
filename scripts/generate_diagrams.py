@@ -7,13 +7,16 @@
 2. Граф слоёв          — из module-level импортов (AST) app/**, агрегировано по слоям
 3. ER-схемы SQLite     — из ``CREATE TABLE`` DDL в app/*.py (+ REFERENCES → связи)
 4. Фичи UI по уровням  — из FEATURES в app/ui/feature_registry.py (AST, без импорта streamlit)
+5. Agent roadmap       — generated overlay по docs/agent_roadmap.md:
+                         целевой flow, зависимости волн и release gates
 
 Использование:
     python scripts/generate_diagrams.py            # перегенерировать docs/diagrams.md
     python scripts/generate_diagrams.py --check    # exit 1, если файл устарел (для CI/guards)
 
 Рукописные концептуальные диаграммы (context/containers/pipeline/learning loop)
-остаются в docs/architecture.md — их семантика не выводима из кода.
+остаются в docs/architecture.md. Planned overlay агента держим здесь, чтобы
+канонический roadmap и диаграммы не расходились при релизных проверках.
 """
 
 from __future__ import annotations
@@ -29,10 +32,11 @@ APP_DIR = ROOT / "app"
 OUTPUT = ROOT / "docs" / "diagrams.md"
 
 HEADER = """\
-# Диаграммы hometutor (генерируются из кода)
+# Диаграммы hometutor (генерируются из кода и roadmap)
 
 > **НЕ РЕДАКТИРОВАТЬ РУКАМИ.** Файл целиком генерируется скриптом
-> `scripts/generate_diagrams.py` из исходников. Обновление:
+> `scripts/generate_diagrams.py` из исходников и `docs/agent_roadmap.md`.
+> Обновление:
 > `python scripts/generate_diagrams.py`; проверка актуальности: `--check`.
 > Концептуальные (рукописные) диаграммы живут в [architecture.md](architecture.md).
 """
@@ -360,6 +364,127 @@ def render_features_section(features: list[tuple[str, str, int, str]]) -> str:
     return "\n".join(lines)
 
 
+# ── 5. Planned agent roadmap overlay ────────────────────────────────────
+
+
+def render_agent_roadmap_section() -> str:
+    gates = [
+        (
+            "Wave 0",
+            "Mock-тест доказывает, что `tools`/`tool_choice`/"
+            "`response_format` доходят до OpenAI payload; structured/tool "
+            "kwargs обходят cache; схемы инструментов учтены в input-token "
+            "estimate.",
+            "Без этого agent-loop может зависнуть на cache-hit или пробить "
+            "guard ещё до первого tool-вызова.",
+        ),
+        (
+            "Wave 1",
+            "Только read-only tools; `rag.answer` принудительно non-agent; "
+            "каждый stop reason покрыт тестом runner'а.",
+            "Это удерживает MVP от рекурсии, записей в state и бесконтрольного "
+            "ReAct-цикла.",
+        ),
+        (
+            "Wave 2",
+            "Run полностью реконструируется из `agent_runs`/`agent_steps`; "
+            "`run_id` есть в span/log/Langfuse/cost; recovery-resume отделён "
+            "от HITL-resume.",
+            "Без наблюдаемой траектории agent невозможно отлаживать и превращать "
+            "prod-fail в eval.",
+        ),
+        (
+            "Wave 3",
+            "Стабильный static prefix; ToolResult offload; 10+ шагов не "
+            "пробивают hard token limit.",
+            "Native tools и длинные runs безопасны только при дисциплине "
+            "контекста.",
+        ),
+        (
+            "Wave 4",
+            "`scripts/agent_gate_v1.py` зелёный: trajectory checks, injection "
+            "cases, pass^k, baseline без деградации.",
+            "Это обязательный предохранитель перед write-инструментами.",
+        ),
+        (
+            "Wave 5",
+            "Нулевая запись без approve; idempotency-key UNIQUE; "
+            "approve/reject/double-resume/timeout покрыты eval и тестами.",
+            "Write tools должны быть обратимы по смыслу, наблюдаемы и защищены "
+            "от retry-дублей.",
+        ),
+        (
+            "Wave 6",
+            "Планировщик и memory проходят A/B через eval_baseline; supervisor "
+            "разрешён только при доказанном потолке single-agent.",
+            "Иначе plan-execute/memory/supervisor добавят сложность без "
+            "измеримой пользы.",
+        ),
+    ]
+    lines = [
+        "## 5. AI-агент: целевой flow и gates",
+        "",
+        "Плановый overlay по `docs/agent_roadmap.md`. Узлы `app/agent/*`, "
+        "`agent_runs` и agent-router появляются по волнам; это не утверждение, "
+        "что они уже есть в runtime-коде.",
+        "",
+        "### Runtime-встраивание",
+        "",
+        "Компактная схема намеренно избегает широких subgraph-контейнеров: "
+        "детали контрактов и DoD вынесены в gates ниже, чтобы Mermaid не "
+        "обрезался в preview.",
+        "",
+        "```mermaid",
+        "flowchart TB",
+        '    ask["/ask"]',
+        '    prep["prepare ctx"]',
+        '    budget["budget"]',
+        '    branch{"agent?"}',
+        '    main["current RAG"]',
+        '    runner["runner FSM"]',
+        '    decision["decision"]',
+        '    tools["read tools"]',
+        '    stop["stop controller"]',
+        '    state["W2 state"]',
+        '    obs["W2 observability"]',
+        '    hitl["W5 HITL"]',
+        '    write["W5 write tools"]',
+        "    ask --> prep --> budget --> branch",
+        "    branch -- no --> main",
+        "    branch -- yes --> runner",
+        "    runner --> decision --> tools",
+        "    runner --> stop",
+        "    runner -. Wave 2 .-> state",
+        "    runner -. Wave 2 .-> obs",
+        "    runner -. Wave 5 .-> hitl --> write",
+        "```",
+        "",
+        "### Зависимости волн",
+        "",
+        "```mermaid",
+        "flowchart TB",
+        '    W0["W0<br/>provider"]',
+        '    W1["W1<br/>read-only"]',
+        '    W2["W2<br/>state + obs"]',
+        '    W3["W3<br/>context"]',
+        '    W4["W4<br/>eval gate"]',
+        '    W5["W5<br/>writes + HITL"]',
+        '    W6["W6<br/>plan + memory"]',
+        "    W0 --> W1 --> W2 --> W3 --> W4 --> W5 --> W6",
+        "    W4 -. blocks writes .-> W5",
+        "    W4 -. proves ceiling .-> W6",
+        "```",
+        "",
+        "### Release gates",
+        "",
+        "| Волна | Блокирующий gate | Почему это критично |",
+        "|---|---|---|",
+    ]
+    for wave, gate, why in gates:
+        lines.append(f"| {wave} | {gate} | {why} |")
+    return "\n".join(lines)
+
+
 # ── Сборка / режимы ─────────────────────────────────────────────────────
 
 
@@ -371,6 +496,7 @@ def generate() -> str:
         render_layers_section(layer_edges, ui_violations),
         render_er_section(collect_er_models()),
         render_features_section(collect_features()),
+        render_agent_roadmap_section(),
     ]
     return "\n\n".join(s.rstrip() for s in sections) + "\n"
 

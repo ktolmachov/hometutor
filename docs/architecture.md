@@ -1,6 +1,6 @@
 # Архитектура hometutor
 
-Актуализировано по runtime-коду: 2026-07-07.
+Актуализировано по runtime-коду: 2026-07-10.
 
 ## Контекст
 
@@ -172,6 +172,31 @@ Tutor route — это вариант `/ask`, а не отдельный HTTP en
 - `app/tutor_learner_contract.py`
 - `app/tutor_personalization_policy.py`
 - `app/query_tutor_context.py`
+
+## AI Agent Coach
+
+Agent Coach — параллельная ветка внутри `/ask`, а не новый router и не
+pipeline-step. Она включается только при `query_mode="agent"` и
+`AGENT_ENABLED=true`; при выключенном флаге `/ask` идёт по обычному main-flow.
+
+Пакет `app/agent/` содержит read-only ReAct loop:
+
+- `contracts.py` — strict Pydantic tool args, `ToolContext`, `ToolResult`,
+  stop reasons;
+- `tool_registry.py` — registry read-only инструментов и OpenAI-compatible
+  name mapping;
+- `runner.py` — FSM, stop controller, output guardrails и scenario finalizer;
+- `decision.py` — JSON-decision backend; native tools остаются будущей волной;
+- `tools_*.py` — адаптеры `rag.*`, `learner.*`, `progress.*`, `graph.inspect`,
+  `konspekt.inspect`, `quiz.generate`, `cards.propose`;
+- `scenarios.py` — продуктовые сценарии `study_session`, `graph_gap_finder`,
+  `living_konspekt_coach`.
+
+Agent tools получают `user_id` и `session_id` только через `ToolContext` из
+harness; модель не передаёт эти поля в args. В текущем MVP agent mode не пишет
+`user_state`, не создаёт `agent_runs/agent_steps`, не сохраняет карточки,
+quiz-result, graph edits или workbench changes. Траектория доступна в
+`debug.agent_trace`, а выбранный сценарий — в `debug.answer_path.scenario_id`.
 
 ## Indexing
 

@@ -76,6 +76,7 @@ def run_agent_flow(
         )
 
     result: AgentRunResult = runner.run(question=question, tool_ctx=tool_ctx)
+    answer_status = _answer_status_for_agent_result(result)
 
     if ctx is not None:
         try:
@@ -112,8 +113,19 @@ def run_agent_flow(
                 **({"scenario_id": scenario.scenario_id} if scenario else {}),
             },
         },
-        "answer_status": "agent" if result.is_success else f"agent_stopped:{result.stop_reason.value}",
+        "answer_status": answer_status,
     }
+
+
+def _answer_status_for_agent_result(result: AgentRunResult) -> str:
+    """Map agent stop reasons to the public ``AskResponse.answer_status`` enum."""
+    from app.agent.contracts import StopReason
+
+    if result.stop_reason is StopReason.GUARDRAIL_TRIGGERED:
+        return "guardrails_fallback"
+    if result.is_success:
+        return "grounded"
+    return "abstain"
 
 
 def _resolve_llm() -> Any:

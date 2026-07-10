@@ -1,6 +1,6 @@
 # HTTP API
 
-Актуализировано по `app/api.py` и `app/routers/*`: 2026-07-06.
+Актуализировано по `app/api.py` и `app/routers/*`: 2026-07-10.
 
 Живая схема API доступна после запуска сервера:
 
@@ -74,11 +74,11 @@
 
 ## Query: `POST /ask`
 
-Главный endpoint для Q&A, tutor и multi-turn.
+Главный endpoint для Q&A, tutor, agent-сценариев и multi-turn.
 
 | Method | Path | Назначение |
 |---|---|---|
-| POST | `/ask` | Q&A, tutor route, multi-turn и RAG profile selection |
+| POST | `/ask` | Q&A, tutor route, agent scenarios, multi-turn и RAG profile selection |
 
 Основные поля:
 
@@ -96,19 +96,50 @@
 Особенности:
 
 - `query_mode="tutor"` включает tutor route.
+- `query_mode="agent"` включает read-only agent loop, если `AGENT_ENABLED=true`.
+  Если флаг выключен, запрос идёт по обычному `/ask` main-flow.
 - `session_id` включает persisted multi-turn.
 - `profile` валидируется как public RAG profile; raw `retrieval_mode` не является публичным параметром `/ask`.
 - Незаполненные `tutor_goal_*` могут быть дополнены из learner goal snapshot.
+
+Agent-сценарии выбираются внутри `app/agent/scenarios.py`:
+
+| `scenario_id` | Как выбрать | Read-only инструменты |
+|---|---|---|
+| `study_session` | дефолт для непустого `query_mode="agent"` вопроса | `learner.get_profile`, `rag.search`/`rag.answer`, optional `progress.get_mastery`, `quiz.generate`, `cards.propose` |
+| `graph_gap_finder` | запросы про graph/gap/prerequisites/пробелы | `learner.get_profile`, `graph.inspect`, `progress.get_mastery`, optional `rag.search` |
+| `living_konspekt_coach` | запросы про konspekt/workbench/конспект/корзину | `konspekt.inspect`, optional `rag.search`, `graph.inspect`, `quiz.generate`, `cards.propose` |
+
+Agent mode не создаёт `agent_runs`, не пишет `agent_steps`, не сохраняет карточки,
+quiz-result, graph edits или workbench changes. Эти write/HITL возможности
+отложены на будущие волны.
+
+Пример agent-запроса:
+
+```json
+{
+  "question": "Найди пробелы в графе знаний по правилу Байеса",
+  "query_mode": "agent",
+  "session_id": "agent-demo-1"
+}
+```
 
 Ключевые поля ответа:
 
 - `answer`
 - `sources`
 - `confidence`
+- `answer_status`: публичный enum `grounded | abstain | guardrails_fallback`
 - `tutor` и `tutor_answer`, если включён tutor path
 - `debug`
 
-В `debug` могут быть timings, usage/cost, retrieval trace, routing, guardrails, pipeline trace и request id.
+В `debug` могут быть timings, usage/cost, retrieval trace, routing, guardrails,
+pipeline trace и request id. Для agent mode дополнительно используются:
+
+- `debug.answer_path.scenario_id`
+- `debug.agent_trace.stop_reason`
+- `debug.agent_trace.tool_calls`
+- `debug.agent_trace.step_count`
 
 ## Auth
 

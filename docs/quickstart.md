@@ -1,6 +1,6 @@
 # Быстрый старт
 
-Актуализировано: 2026-07-06.
+Актуализировано: 2026-07-10.
 
 Цель этого документа: поднять `hometutor` локально, проиндексировать материалы и пройти первый учебный цикл: вопрос -> ответ с источниками -> тьютор -> quiz/flashcards -> прогресс -> живой конспект.
 
@@ -107,6 +107,32 @@ $env:HOME_RAG_HOME = (Get-Location).Path
 - Streamlit UI: http://127.0.0.1:8501
 - API health: http://127.0.0.1:8000/health
 - OpenAPI: http://127.0.0.1:8000/docs
+
+Опционально: включите read-only agent-сценарии в `.env` или `config.env`:
+
+```env
+AGENT_ENABLED=true
+```
+
+Smoke-проверка agent mode через API:
+
+```powershell
+$body = @{
+  question = "Собери короткую учебную сессию по теме из моих материалов"
+  query_mode = "agent"
+  session_id = "agent-smoke"
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://127.0.0.1:8000/ask" `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+В ответе проверьте `answer_status`, `debug.answer_path.scenario_id` и
+`debug.agent_trace.tool_calls`. Agent-сценарии read-only: они не сохраняют
+карточки, quiz-result, правки графа или Живого конспекта.
 
 Опциональный прогрев retrieval после старта API:
 

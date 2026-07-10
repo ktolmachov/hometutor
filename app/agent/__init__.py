@@ -46,6 +46,7 @@ def run_agent_flow(
     Parameters ``registry`` and ``runner`` are injection seams for tests.
     """
     from app.models import QueryOptions
+    from app.auth_context import get_current_user_id
 
     started = started_at if started_at is not None else time.perf_counter()
 
@@ -54,8 +55,9 @@ def run_agent_flow(
         logger.warning(_NATIVE_NOT_SUPPORTED_MSG, mode)
 
     active_registry = registry or build_default_registry()
+    user_id = (get_current_user_id() or "").strip() or "local"
     tool_ctx = ToolContext(
-        user_id="local",
+        user_id=user_id,
         question=question,
         query_options=options if isinstance(options, QueryOptions) else QueryOptions(),
         session_id=getattr(options, "session_id", None),

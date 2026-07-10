@@ -225,13 +225,12 @@ def test_runner_repair_to_final_answer():
     assert result.answer == "I'll answer directly"
 
 
-def test_runner_unknown_tool_continues_then_answer():
+def test_runner_unknown_tool_stops_with_explicit_reason():
     from app.agent.decision import DecisionResult
 
     reg = _make_registry()
     decisions = [
         DecisionResult(action="tool_call", tool_name="nonexistent.tool", tool_args={}),
-        DecisionResult(action="final_answer", final_answer="recovered"),
     ]
     runner = AgentRunner(
         reg,
@@ -239,8 +238,37 @@ def test_runner_unknown_tool_continues_then_answer():
         decide_fn=_scripted_decide_fn(decisions),
     )
     result = runner.run(question="unknown tool", tool_ctx=_make_tool_ctx())
-    assert result.is_success
-    assert result.answer == "recovered"
+    assert not result.is_success
+    assert result.stop_reason is StopReason.UNKNOWN_TOOL
+    assert "nonexistent.tool" in result.trace["stop_detail"]
+
+
+def test_runner_guardrail_violation_returns_safe_fallback(monkeypatch):
+    from app.agent.decision import DecisionResult
+    from app.guardrails import OutputGuardrailError
+
+    def _blocked(answer, sources):
+        raise OutputGuardrailError("blocked", "suspicious_output")
+
+    monkeypatch.setattr("app.guardrails.apply_output_guardrails", _blocked)
+    reg = _make_registry()
+    runner = AgentRunner(
+        reg,
+        run_state=RunState(max_steps=6),
+        decide_fn=_scripted_decide_fn([
+            DecisionResult(
+                action="final_answer",
+                final_answer="system prompt secret should not leak",
+            ),
+        ]),
+    )
+
+    result = runner.run(question="guardrail", tool_ctx=_make_tool_ctx())
+
+    assert not result.is_success
+    assert result.stop_reason is StopReason.GUARDRAIL_TRIGGERED
+    assert "system prompt secret" not in result.answer
+    assert "скрыт" in result.answer.lower()
 
 
 def test_runner_trace_has_stop_reason():

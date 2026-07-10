@@ -1442,6 +1442,9 @@ AGENT_REPAIR_MESSAGE = """\
 Повтори вызов с корректными аргументами по схеме. Верни только JSON с action=tool_call.
 """
 
+PROMPTS["agent_system"] = AGENT_SYSTEM_PROMPT
+PROMPTS["agent_decision"] = AGENT_DECISION_USER_TEMPLATE
+
 
 def build_agent_decision_messages(
     *,

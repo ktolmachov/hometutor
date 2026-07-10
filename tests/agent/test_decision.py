@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 
 from app.agent.decision import DecisionResult, decide_native, normalize_decision
+from app.prompts._impl import AGENT_SYSTEM_PROMPT
 
 
 def test_normalize_tool_call():
@@ -64,6 +65,7 @@ def test_decide_native_raises_not_implemented():
 
 def test_build_messages_has_system_and_user():
     from app.agent.decision import build_messages
+    from app.prompts._impl import PROMPTS
 
     msgs = build_messages(
         question="What is RAG?",
@@ -71,7 +73,8 @@ def test_build_messages_has_system_and_user():
         history="(none)",
     )
     assert len(msgs) == 2
-    assert "AGENT_SYSTEM_PROMPT" or "агент" in str(msgs[0].content).lower() or "агент" in msgs[0].content.lower()
+    assert msgs[0].content == AGENT_SYSTEM_PROMPT
+    assert PROMPTS["agent_system"] == AGENT_SYSTEM_PROMPT
     assert "What is RAG?" in msgs[1].content
 
 

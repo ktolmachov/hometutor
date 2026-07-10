@@ -30,16 +30,25 @@ class RagAnswerArgs(ToolArgModel):
 
 def _format_node(node: Any, index: int) -> dict[str, Any]:
     """Compact dict from a llama-index NodeWithScore for the agent context."""
+    inner = getattr(node, "node", None) or node
     text = ""
     try:
-        text = str(node.get_content() or node.text or "")
+        get_content = getattr(inner, "get_content", None)
+        if callable(get_content):
+            text = str(get_content() or "")
+        if not text:
+            text = str(getattr(inner, "text", "") or getattr(node, "text", "") or "")
     except Exception:  # noqa: BLE001 - node shape varies across llama-index versions
         text = ""
     if len(text) > _MAX_CHUNK_CHARS:
         text = text[:_MAX_CHUNK_CHARS] + "…"
     meta = {}
     try:
-        meta = dict(getattr(node, "metadata", {}) or {})
+        meta = dict(
+            getattr(node, "metadata", None)
+            or getattr(inner, "metadata", None)
+            or {}
+        )
     except Exception:  # noqa: BLE001
         meta = {}
     score = None
@@ -49,7 +58,7 @@ def _format_node(node: Any, index: int) -> dict[str, Any]:
         score = None
     node_id = ""
     try:
-        node_id = str(getattr(getattr(node, "node", None), "node_id", "") or "")
+        node_id = str(getattr(inner, "node_id", "") or "")
     except Exception:  # noqa: BLE001
         node_id = ""
     return {

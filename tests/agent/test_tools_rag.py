@@ -10,7 +10,7 @@ import dataclasses
 from unittest.mock import patch
 
 from app.agent.contracts import ToolContext
-from app.agent.tools_rag import RagAnswerArgs, _rag_answer_handler
+from app.agent.tools_rag import RagAnswerArgs, _format_node, _rag_answer_handler
 from app.models import QueryOptions
 
 
@@ -91,3 +91,19 @@ def test_rag_answer_error_returns_failure(monkeypatch):
     result = _rag_answer_handler(ctx, RagAnswerArgs(query="sub"))
     assert not result.ok
     assert "failed" in (result.error or "")
+
+
+def test_format_node_extracts_text_and_metadata_from_node_with_score():
+    from llama_index.core.schema import NodeWithScore, TextNode
+
+    node = NodeWithScore(
+        node=TextNode(text="grounded chunk", metadata={"file_name": "lesson.md"}),
+        score=0.75,
+    )
+
+    formatted = _format_node(node, 1)
+
+    assert formatted["text"] == "grounded chunk"
+    assert formatted["file"] == "lesson.md"
+    assert formatted["score"] == 0.75
+    assert formatted["node_id"]

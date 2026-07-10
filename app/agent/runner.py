@@ -126,7 +126,17 @@ class AgentRunner:
                 answer = decision.final_answer or ""
                 answer, guardrail_redacted = self._apply_guardrails(answer, sources)
                 if self._state.guardrail_triggered:
-                    continue
+                    return self._build_result(
+                        answer=answer,
+                        sources=sources,
+                        steps=steps,
+                        reason=StopReason.GUARDRAIL_TRIGGERED,
+                        detail="output guardrail rejected final answer",
+                        extra_trace={
+                            "guardrail_redacted": guardrail_redacted,
+                            "fallback_decision": decision.fallback,
+                        },
+                    )
                 return self._build_result(
                     answer=answer,
                     sources=sources,
@@ -143,13 +153,18 @@ class AgentRunner:
             step.tool_name = tool_name
             spec = self._registry.get_spec(tool_name)
             if spec is None:
-                step.state = AgentState.RUNNING
+                step.state = AgentState.STOPPED
                 step.error = f"unknown tool: {tool_name!r}"
-                history_parts.append(
-                    f"Step {self._state.step_count}: tried unknown tool "
-                    f"{tool_name!r}. Available: {', '.join(self._registry.tool_names)}"
+                return self._build_result(
+                    answer=answer or _FALLBACK_STOP_ANSWER,
+                    sources=sources,
+                    steps=steps,
+                    reason=StopReason.UNKNOWN_TOOL,
+                    detail=(
+                        f"tool={tool_name!r}; "
+                        f"available={', '.join(self._registry.tool_names)}"
+                    ),
                 )
-                continue
 
             step.tool_args = decision.tool_args
             args_model, validation_error = self._validate_args(
@@ -172,7 +187,17 @@ class AgentRunner:
                             answer, sources
                         )
                         if self._state.guardrail_triggered:
-                            continue
+                            return self._build_result(
+                                answer=answer,
+                                sources=sources,
+                                steps=steps,
+                                reason=StopReason.GUARDRAIL_TRIGGERED,
+                                detail="output guardrail rejected repaired final answer",
+                                extra_trace={
+                                    "guardrail_redacted": guardrail_redacted,
+                                    "recovered_via_repair": True,
+                                },
+                            )
                         return self._build_result(
                             answer=answer,
                             sources=sources,
@@ -315,7 +340,12 @@ class AgentRunner:
             if code in ("empty_answer",):
                 return SAFE_FALLBACK_MESSAGES.get("empty_answer", str(answer)), False
             self._state.guardrail_triggered = True
-            return str(answer), False
+            fallback = (
+                SAFE_FALLBACK_MESSAGES.get(code)
+                or SAFE_FALLBACK_MESSAGES.get("suspicious_output")
+                or _FALLBACK_STOP_ANSWER
+            )
+            return fallback, False
 
     def _accumulate_usage(self, usage: dict[str, int] | None) -> None:
         if not usage:

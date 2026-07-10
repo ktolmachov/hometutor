@@ -44,7 +44,10 @@ def _learner_get_profile_handler(ctx: ToolContext, args: ToolArgModel) -> ToolRe
     try:
         from app.learner_model_service import get_personalized_learner_profile
 
-        model = get_personalized_learner_profile(user_id=ctx.user_id)
+        model = get_personalized_learner_profile(
+            user_id=ctx.user_id,
+            session_id=ctx.session_id,
+        )
         data = model.model_dump(mode="json") if hasattr(model, "model_dump") else dict(model)
         return ToolResult.success(data=_truncate_dict(data, _MAX_PROFILE_CHARS))
     except Exception as exc:  # noqa: BLE001

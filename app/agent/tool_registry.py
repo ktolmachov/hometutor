@@ -21,6 +21,7 @@ class ToolRegistry:
     def __init__(self) -> None:
         self._specs: dict[str, ToolSpec] = {}
         self._handlers: dict[str, ToolHandler] = {}
+        self._openai_name_to_tool_name: dict[str, str] = {}
 
     def register(self, spec: ToolSpec, handler: ToolHandler) -> None:
         if spec.access is ToolAccess.WRITE:
@@ -63,15 +64,24 @@ class ToolRegistry:
         for spec in self._specs.values():
             schema = spec.args_schema.model_json_schema()
             schema = _strip_title_from_schema(schema)
+            openai_name = openai_tool_name(spec.name)
+            self._openai_name_to_tool_name[openai_name] = spec.name
             tools.append({
                 "type": "function",
                 "function": {
-                    "name": spec.name,
+                    "name": openai_name,
                     "description": f"{spec.description}\n\nWhen to use: {spec.when_to_use}",
                     "parameters": schema,
                 },
             })
         return tools
+
+    def from_openai_tool_name(self, name: str) -> str:
+        """Map native function names back to canonical dotted tool ids."""
+        if name in self._openai_name_to_tool_name:
+            return self._openai_name_to_tool_name[name]
+        domain, sep, action = name.partition("_")
+        return f"{domain}.{action}" if sep else name
 
     def describe_tools_for_prompt(self) -> str:
         """Compact text listing of tools for the JSON-decision user prompt."""
@@ -110,6 +120,11 @@ def _strip_title_from_schema(schema: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def openai_tool_name(name: str) -> str:
+    """Return an OpenAI-compatible function name for a canonical tool id."""
+    return name.replace(".", "_")
+
+
 def build_default_registry() -> ToolRegistry:
     """Build the Wave 1 read-only tool registry from all tool modules."""
     from app.agent.tools_flashcards import get_flashcards_tool_specs
@@ -131,4 +146,5 @@ def build_default_registry() -> ToolRegistry:
 __all__ = [
     "ToolRegistry",
     "build_default_registry",
+    "openai_tool_name",
 ]

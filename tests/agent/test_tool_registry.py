@@ -106,6 +106,15 @@ def test_to_openai_tools_format():
         assert "description" in fn
         assert "parameters" in fn
         assert isinstance(fn["parameters"], dict)
+        assert "." not in fn["name"]
+        assert reg.from_openai_tool_name(fn["name"]) in reg.tool_names
+
+
+def test_openai_tool_name_round_trip_preserves_action_underscores():
+    reg = build_default_registry()
+    reg.to_openai_tools()
+    assert reg.from_openai_tool_name("learner_get_profile") == "learner.get_profile"
+    assert reg.from_openai_tool_name("progress_get_mastery") == "progress.get_mastery"
 
 
 def test_describe_tools_for_prompt_is_nonempty():

@@ -31,6 +31,7 @@ from app.agent.tool_registry import ToolRegistry
 logger = logging.getLogger(__name__)
 
 DecideFn = Callable[[list[Any]], tuple[DecisionResult, dict[str, int] | None]]
+FinalizeAnswerFn = Callable[[str, list[dict[str, Any]], list[AgentStep]], str]
 
 _MAX_HISTORY_RESULT_CHARS = 1500
 _FALLBACK_STOP_ANSWER = (
@@ -71,11 +72,15 @@ class AgentRunner:
         run_state: RunState | None = None,
         decide_fn: DecideFn | None = None,
         llm: Any = None,
+        system_prompt: str | None = None,
+        finalize_answer: FinalizeAnswerFn | None = None,
     ) -> None:
         self._registry = registry
         self._state = run_state or RunState()
         self._decide_fn = decide_fn
         self._llm = llm
+        self._system_prompt = system_prompt
+        self._finalize_answer = finalize_answer
 
     @property
     def run_state(self) -> RunState:
@@ -108,6 +113,7 @@ class AgentRunner:
                 question=question,
                 tools_description=tools_description,
                 history="\n".join(history_parts),
+                system_prompt=self._system_prompt,
             )
 
             step = AgentStep(
@@ -124,6 +130,7 @@ class AgentRunner:
             if decision.action == "final_answer":
                 step.state = AgentState.COMPLETED
                 answer = decision.final_answer or ""
+                answer = self._format_final_answer(answer, sources, steps)
                 answer, guardrail_redacted = self._apply_guardrails(answer, sources)
                 if self._state.guardrail_triggered:
                     return self._build_result(
@@ -183,6 +190,7 @@ class AgentRunner:
                 if handled is not None:
                     if handled.get("final_answer") is not None:
                         answer = handled["final_answer"]
+                        answer = self._format_final_answer(answer, sources, steps)
                         answer, guardrail_redacted = self._apply_guardrails(
                             answer, sources
                         )
@@ -295,6 +303,7 @@ class AgentRunner:
             history="\n".join(history_parts),
             tool_name=tool_name,
             error=validation_error[:500],
+            system_prompt=self._system_prompt,
         )
         repaired_decision, usage = self._call_decide(repair_messages)
         self._accumulate_usage(usage)
@@ -352,6 +361,20 @@ class AgentRunner:
             return
         self._state.total_tokens += int(usage.get("total_tokens") or 0)
 
+    def _format_final_answer(
+        self,
+        answer: str,
+        sources: list[dict[str, Any]],
+        steps: list[AgentStep],
+    ) -> str:
+        if self._finalize_answer is None:
+            return answer
+        try:
+            return self._finalize_answer(answer, sources, steps)
+        except Exception as exc:  # noqa: BLE001 - scenario formatting must not crash the loop
+            logger.debug("agent.finalize_answer_failed: %s", exc)
+            return answer
+
     def _build_result(
         self,
         *,
@@ -388,4 +411,5 @@ class AgentRunner:
 __all__ = [
     "AgentRunner",
     "DecideFn",
+    "FinalizeAnswerFn",
 ]

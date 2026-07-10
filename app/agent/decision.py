@@ -164,12 +164,18 @@ def build_messages(
     question: str,
     tools_description: str,
     history: str,
+    system_prompt: str | None = None,
 ) -> list[ChatMessage]:
-    """Build [system, user] messages for the JSON-decision call."""
+    """Build [system, user] messages for the JSON-decision call.
+
+    ``system_prompt`` overrides ``AGENT_SYSTEM_PROMPT`` for scenario-specific
+    prompts (Wave 1A: study session). ``None`` preserves Wave 1 behavior.
+    """
     return build_agent_decision_messages(
         question=question,
         tools_description=tools_description,
         history=history,
+        system_prompt=system_prompt,
     )
 
 
@@ -180,6 +186,7 @@ def build_repair_messages(
     history: str,
     tool_name: str,
     error: str,
+    system_prompt: str | None = None,
 ) -> list[ChatMessage]:
     """Build messages with a repair instruction appended for invalid args."""
     from app.prompts._impl import AGENT_REPAIR_MESSAGE
@@ -188,6 +195,7 @@ def build_repair_messages(
         question=question,
         tools_description=tools_description,
         history=history,
+        system_prompt=system_prompt,
     )
     base.append(
         ChatMessage(

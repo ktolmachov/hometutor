@@ -55,6 +55,9 @@ def run_agent_flow(
         logger.warning(_NATIVE_NOT_SUPPORTED_MSG, mode)
 
     active_registry = registry or build_default_registry()
+    from app.agent.scenarios import get_agent_scenario
+
+    scenario = get_agent_scenario(question)
     user_id = (get_current_user_id() or "").strip() or "local"
     tool_ctx = ToolContext(
         user_id=user_id,
@@ -68,6 +71,8 @@ def run_agent_flow(
             active_registry,
             run_state=make_run_state_from_settings(),
             llm=_resolve_llm(),
+            system_prompt=scenario.system_prompt if scenario else None,
+            finalize_answer=scenario.finalize_answer if scenario else None,
         )
 
     result: AgentRunResult = runner.run(question=question, tool_ctx=tool_ctx)
@@ -75,6 +80,8 @@ def run_agent_flow(
     if ctx is not None:
         try:
             ctx.trace["agent"] = dict(result.trace)
+            if scenario:
+                ctx.trace["agent"]["scenario_id"] = scenario.scenario_id
             ctx.trace["agent"]["steps"] = [
                 {
                     "step_index": s.step_index,
@@ -96,8 +103,14 @@ def run_agent_flow(
         "debug": {
             "cache_hit": False,
             "total_answer_ms": round(total_ms, 3),
-            "agent_trace": dict(result.trace),
-            "answer_path": {"mode": "agent"},
+            "agent_trace": {
+                **dict(result.trace),
+                **({"scenario_id": scenario.scenario_id} if scenario else {}),
+            },
+            "answer_path": {
+                "mode": "agent",
+                **({"scenario_id": scenario.scenario_id} if scenario else {}),
+            },
         },
         "answer_status": "agent" if result.is_success else f"agent_stopped:{result.stop_reason.value}",
     }

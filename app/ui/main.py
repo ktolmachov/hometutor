@@ -99,6 +99,15 @@ try:
 except Exception as exc:  # noqa: BLE001 - корзина опциональна, не блокируем старт UI
     logger.debug("Workbench hydration skipped: %s", exc)
 
+try:
+    from app.ui.study_scope import restore_scope_from_app_kv
+
+    _scope_restore_notice = restore_scope_from_app_kv()
+    if _scope_restore_notice:
+        st.info(_scope_restore_notice)
+except Exception as exc:  # noqa: BLE001 - restore активного курса опционален, не блокируем старт UI
+    logger.debug("Study scope restore skipped: %s", exc)
+
 
 @st.dialog("Начало работы")
 def _render_onboarding_dialog() -> None:

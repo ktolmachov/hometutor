@@ -2,6 +2,7 @@
 
 """Centralized construction of LLM and embedding clients from settings."""
 
+import json
 import logging
 import re
 import time
@@ -24,7 +25,7 @@ from app.usage_cost import (
     record_llm_chat_message_roles,
     record_llm_generation_call_ms,
 )
-from app.token_utils import TokenValidator, estimate_messages_tokens
+from app.token_utils import TokenValidator, estimate_messages_tokens, estimate_tokens
 from app.request_cache import get_request_cache
 from app.llm_guards import (
     BlockedModelError,
@@ -68,6 +69,44 @@ def _raise_for_empty_openai_chat_choices(response: object) -> None:
         suffix = f" [{code}] {detail}" if code is not None else f" {detail}"
         msg = f"{msg}:{suffix}"
     raise RuntimeError(msg)
+
+
+_STRUCTURED_KWARG_KEYS = ("tools", "tool_choice", "response_format")
+
+
+def _has_structured_or_tool_kwargs(kwargs: dict[str, Any]) -> bool:
+    """Detect kwargs that make a request non-cacheable (structured output / tool calling).
+
+    ``request_cache._hash_request`` hashes only model/messages/temperature/max_tokens/top_p
+    and ignores ``tools``/``tool_choice``/``response_format``. Two requests differing only by
+    these kwargs would collide, returning a stale intermediate step of an agent loop as a cache
+    hit. Bypass the cache entirely for such requests.
+    """
+    for key in _STRUCTURED_KWARG_KEYS:
+        if kwargs.get(key) is not None:
+            return True
+    return False
+
+
+def _estimate_structured_kwargs_tokens(kwargs: dict[str, Any], model: str) -> int:
+    """Estimate the token overhead of tools/tool_choice/response_format schemas.
+
+    These payloads travel alongside the messages array but are not counted by
+    ``estimate_messages_tokens``. Without this, large tool schemas could silently push a
+    request past ``HARD_TOKEN_LIMIT`` while the input-token guard sees only the messages.
+    A best-effort JSON-serialization estimate is sufficient for the local hard-limit guard.
+    """
+    extra = 0
+    for key in _STRUCTURED_KWARG_KEYS:
+        value = kwargs.get(key)
+        if value is None:
+            continue
+        try:
+            blob = json.dumps(value, default=str, ensure_ascii=False)
+        except (TypeError, ValueError):
+            blob = str(value)
+        extra += estimate_tokens(blob, model)
+    return extra
 
 
 def _llamaindex_model_alias(model: str | None) -> str:
@@ -231,7 +270,9 @@ class OpenAI(LlamaIndexOpenAI):
             raise
 
         message_dicts_list = list(to_openai_message_dicts(messages, model=self.model))
-        input_tokens = estimate_messages_tokens(message_dicts_list, model=self.model)
+        message_tokens = estimate_messages_tokens(message_dicts_list, model=self.model)
+        schema_tokens = _estimate_structured_kwargs_tokens(kwargs, self.model)
+        input_tokens = message_tokens + schema_tokens
         prompt_stats = self._build_prompt_stats(message_dicts_list, input_tokens, kwargs)
         guards_applied.append("hard_limit_check")
 
@@ -398,7 +439,8 @@ class OpenAI(LlamaIndexOpenAI):
         )
         record_llm_chat_message_roles([str(m.get("role") or "") for m in message_dicts_list])
         cache = get_request_cache()
-        cached_response = cache.get(self.model, message_dicts_list, **kwargs)
+        bypass_cache = _has_structured_or_tool_kwargs(kwargs)
+        cached_response = None if bypass_cache else cache.get(self.model, message_dicts_list, **kwargs)
         if cached_response is not None:
             logger.info(
                 "Returning cached response (deduplication)",
@@ -451,13 +493,14 @@ class OpenAI(LlamaIndexOpenAI):
         chat_response = self._chat_response_from_openai_response(response)
         self._log_success_cost(response, input_tokens, kwargs, prompt_stats=prompt_stats)
 
-        try:
-            cache.set(self.model, message_dicts_list, chat_response, **kwargs)
-        except Exception as exc:  # noqa: BLE001 - cache failures must not break LLM responses.
-            logger.warning(
-                "Failed to cache response",
-                extra={"model": self.model, "error": str(exc)},
-            )
+        if not bypass_cache:
+            try:
+                cache.set(self.model, message_dicts_list, chat_response, **kwargs)
+            except Exception as exc:  # noqa: BLE001 - cache failures must not break LLM responses.
+                logger.warning(
+                    "Failed to cache response",
+                    extra={"model": self.model, "error": str(exc)},
+                )
 
         return chat_response
 
@@ -473,7 +516,8 @@ class OpenAI(LlamaIndexOpenAI):
         )
         record_llm_chat_message_roles([str(m.get("role") or "") for m in message_dicts_list])
         cache = get_request_cache()
-        cached_response = cache.get(self.model, message_dicts_list, **kwargs)
+        bypass_cache = _has_structured_or_tool_kwargs(kwargs)
+        cached_response = None if bypass_cache else cache.get(self.model, message_dicts_list, **kwargs)
         if cached_response is not None:
             self._log_success_cost(
                 cached_response.raw,
@@ -519,13 +563,14 @@ class OpenAI(LlamaIndexOpenAI):
         chat_response = self._chat_response_from_openai_response(response)
         self._log_success_cost(response, input_tokens, kwargs, prompt_stats=prompt_stats)
 
-        try:
-            cache.set(self.model, message_dicts_list, chat_response, **kwargs)
-        except Exception as exc:  # noqa: BLE001 - cache failures must not break LLM responses.
-            logger.warning(
-                "Failed to cache response",
-                extra={"model": self.model, "error": str(exc)},
-            )
+        if not bypass_cache:
+            try:
+                cache.set(self.model, message_dicts_list, chat_response, **kwargs)
+            except Exception as exc:  # noqa: BLE001 - cache failures must not break LLM responses.
+                logger.warning(
+                    "Failed to cache response",
+                    extra={"model": self.model, "error": str(exc)},
+                )
 
         return chat_response
 

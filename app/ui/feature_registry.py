@@ -151,6 +151,14 @@ def requirement_context_ok(requires: tuple[str, ...]) -> bool:
                     return False
             except Exception:  # noqa: BLE001
                 return False
+        elif requirement == "agent_enabled":
+            try:
+                from app.config import get_settings
+
+                if not get_settings().agent_enabled:
+                    return False
+            except Exception:  # noqa: BLE001
+                return False
         else:
             return False
     return True

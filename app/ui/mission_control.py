@@ -824,8 +824,72 @@ def render_living_konspekt_mission_card() -> None:
     )
 
 
+def build_context_row_segments(
+    *, scope: dict[str, Any] | None, snapshot: dict[str, Any] | None
+) -> list[str]:
+    """Pure builder for the Mission Control context row (active course + XP/streak).
+
+    Returns zero, one or two plain-text segments (no HTML) — the caller escapes
+    them when rendering. Missing scope/snapshot just omits that segment.
+    """
+    segments: list[str] = []
+    if scope:
+        title = str(scope.get("title") or scope.get("folder_rel") or "Курс")
+        segments.append(f"🎯 Курс: {title}")
+    if snapshot:
+        streak = int(snapshot.get("daily_streak") or 0)
+        level_title = str(snapshot.get("level_title") or "?")
+        level = snapshot.get("level") or "?"
+        total_xp = int(snapshot.get("total_xp") or 0)
+        cur = int(snapshot.get("xp_in_level") or 0)
+        span = int(snapshot.get("xp_for_level_span") or 1000)
+        segments.append(
+            f"🔥 Стрик {streak} дн. · {level_title} (ур. {level}) · "
+            f"XP {total_xp} ({cur}/{span})"
+        )
+    return segments
+
+
+def _render_context_row() -> None:
+    """Compact one-line context above the SSR hero: active course + XP/streak.
+
+    Best-effort: a missing gamification snapshot or active scope just drops that
+    segment; the row never crashes Mission Control.
+    """
+    snapshot: dict[str, Any] | None = None
+    try:
+        from app.gamification_service import get_snapshot
+
+        snapshot = get_snapshot()
+    except Exception:  # noqa: BLE001 - context row is optional, never block the home screen
+        snapshot = None
+    segments = build_context_row_segments(scope=get_active_scope(), snapshot=snapshot)
+    if not segments:
+        return
+    body = "".join(f"<span>{_safe(seg)}</span>" for seg in segments)
+    st.html(
+        f'<div class="mc-context-row" data-testid="mc-context-row" '
+        f'style="display:flex;gap:1rem;flex-wrap:wrap;align-items:center;'
+        f'color:#94a3b8;font-size:0.9em;padding:0.2rem 0;">{body}</div>'
+    )
+
+
+def _render_configure_ui_button() -> None:
+    if st.button("⚙️ Настроить интерфейс", key="mission_control_configure_ui"):
+        from app.ui.control_panel import render_control_panel_dialog
+
+        render_control_panel_dialog()
+
+
 def render_mission_control(index_stats: dict | None = None) -> None:
-    """Render the single home hero with SSR and seven destination tiles."""
+    """Render the home screen.
+
+    Non-cold users see, above the fold: a compact context row (active course +
+    XP/streak), one SSR hero CTA, and at most two resume cards (Knowledge Graph +
+    Living Konspekt). The full tile grid is collapsed under «Ещё режимы» so every
+    entry point remains reachable without cluttering the hero. Cold users keep the
+    focused 3-tile flow unchanged.
+    """
     poll_reindex_status()
     preflight_status = render_preflight_card()
     if preflight_status == "api_down":
@@ -874,16 +938,20 @@ def render_mission_control(index_stats: dict | None = None) -> None:
         )
     _apply_e2e_delight_completion()
     render_delight_progress_rail(st.session_state.get("delight_loop_completed_steps"))
-    if not cold:
+    if cold:
+        _render_tile_grid(rec=rec, due_count=due_count, cold_user=True)
+        _render_configure_ui_button()
+    else:
+        _render_context_row()
         _render_ssr_banner(rec, index_stats=index_stats)
-    _render_tile_grid(rec=rec, due_count=due_count, cold_user=cold)
-    if st.button("⚙️ Настроить интерфейс", key="mission_control_configure_ui"):
-        from app.ui.control_panel import render_control_panel_dialog
-
-        render_control_panel_dialog()
-    if not cold:
         render_kg_mission_card()
         render_living_konspekt_mission_card()
+        with st.expander("Ещё режимы", expanded=False):
+            st.caption(
+                "Все режимы обучения: тьютор, quiz, flashcards, темы, курс и адаптивный план."
+            )
+            _render_tile_grid(rec=rec, due_count=due_count, cold_user=False)
+            _render_configure_ui_button()
 
 
 def assert_hint_mapping_complete() -> None:

@@ -5,6 +5,7 @@ from app.ui.mission_control import (
     _is_cold_user,
     _tile_definitions,
     _tile_rows_for_grid,
+    build_context_row_segments,
 )
 
 
@@ -58,3 +59,34 @@ def test_indexed_base_without_activity_is_not_cold() -> None:
 
 def test_due_cards_alone_keep_user_warm() -> None:
     assert _is_cold_user(3, None) is False
+
+
+def test_context_row_segments_combine_course_and_xp() -> None:
+    segments = build_context_row_segments(
+        scope={"title": "Курс: ИИ", "folder_rel": "ai-agents"},
+        snapshot={
+            "daily_streak": 4,
+            "level_title": "Исследователь",
+            "level": 2,
+            "total_xp": 1200,
+            "xp_in_level": 200,
+            "xp_for_level_span": 1000,
+        },
+    )
+    assert len(segments) == 2
+    assert "Курс: ИИ" in segments[0]
+    assert "Стрик 4" in segments[1]
+    assert "Исследователь" in segments[1]
+    assert "XP 1200 (200/1000)" in segments[1]
+
+
+def test_context_row_segments_degrade_when_missing() -> None:
+    assert build_context_row_segments(scope=None, snapshot=None) == []
+    # active course present, gamification missing → only the course segment
+    only_course = build_context_row_segments(scope={"folder_rel": "ai-agents"}, snapshot=None)
+    assert len(only_course) == 1
+    assert "ai-agents" in only_course[0]
+    # no course, gamification present → only the xp/streak segment
+    only_xp = build_context_row_segments(scope=None, snapshot={"daily_streak": 1})
+    assert len(only_xp) == 1
+    assert "Стрик 1" in only_xp[0]

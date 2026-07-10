@@ -283,9 +283,23 @@ def test_real_request_cache_distinguishes_plain_kwargs() -> None:
 
 # ── AGENT_* config defaults + validation ───────────────────────────────────
 
+_AGENT_ENV_VARS = (
+    "AGENT_ENABLED",
+    "AGENT_TOOL_CALL_MODE",
+    "AGENT_MAX_STEPS",
+    "AGENT_MAX_RUN_TOKENS",
+    "AGENT_MAX_RUN_COST_USD",
+    "AGENT_MAX_RUN_SECONDS",
+)
 
-def test_agent_settings_defaults() -> None:
-    s = Settings()
+
+def test_agent_settings_defaults(monkeypatch) -> None:
+    # app.config calls load_dotenv(config.env) at import, so the tracked config.env
+    # values shadow the code-level defaults in both os.environ and the dotenv file
+    # source. Clear the vars and skip the dotenv file to assert the real defaults.
+    for var in _AGENT_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
+    s = Settings(_env_file=())
     assert s.agent_enabled is False
     assert s.agent_tool_call_mode == "json"
     assert s.agent_max_steps == 6

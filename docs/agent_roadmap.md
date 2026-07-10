@@ -387,3 +387,41 @@ golden set (A/B через eval_baseline).
 - Deep 5/6 (vector DB, GraphRAG) → уже покрыто существующим retrieval
   (hybrid+rerank+graph) — переиспользуется как инструменты.
 - Deep 8 (context engineering, offloading, subagents) → Wave 3/6.
+
+---
+
+## 8. Правки после код-аудита (2026-07-10)
+
+Проверено по коду и учтено в разделах выше:
+
+Блокеры:
+- **Feature flag** (§2.2): `requires=("agent_enabled",)` не сработает без новой
+  ветки в `requirement_context_ok` (`feature_registry.py:128`) — иначе фича
+  скрыта навсегда.
+- **Оценка токенов** (§2.4): править оценку input-токенов в provider-layer
+  (`provider_openai.py:233`), а не `check_input_tokens` (тот берёт готовое число).
+- **Cache-bypass** (§2.4): `_hash_request` (`request_cache.py:109`) игнорирует
+  `tools`/`tool_choice`/`response_format` → bypass нужен в обеих ветках
+  (`_chat`/`_achat`).
+- **`rag.search`** (§2.3): не через `execute_rag_query` (запускает генерацию), а
+  через retrieval-only adapter.
+- **`rag.answer`** (§2.1/§2.3): принудительно non-agent путь — иначе рекурсия
+  agent → tool → agent.
+
+Серьёзные:
+- **Agent trace** (§2.1/Wave 2): `get_pipeline_trace` читает
+  `debug.pipeline_trace`; агентная траектория идёт в `agent_runs`/`agent_steps`
+  (+ опц. `debug.agent_trace`), не «бесплатно».
+- **Resume** (§2.2/Wave 2/Wave 5): разведены recovery-resume (после сбоя, Wave 2)
+  и HITL-approval resume (Wave 5).
+- **Doc-sync настроек** (§2.2/Wave 0): `.env.example` + `config.env` вместе с
+  `config.py`.
+- **run_id observability** (Wave 2): проброс в `trace_tool_span`/Langfuse/logging,
+  не только ContextVar.
+- **Cloud consent** (§2.4): enforced кодом в agent role getters, не по model id.
+
+Мелкие:
+- Локальная модель именуется как `LLM_MODEL`, не хардкод конкретного id.
+- `progress.get_mastery`: нужен тонкий read-helper над таблицей `quiz_mastery`.
+- Wave 0 тесты ссылаются на конкретные `tests/test_provider_*.py`;
+  `tests/agent/` заводится в Wave 1.

@@ -515,6 +515,45 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("LLM_LOCAL_CB_WINDOW_SEC"),
     )
 
+    # ── AI-агент (agentic loop + tools) ────────────────────────────────────
+    # См. docs/agent_roadmap.md. Всё выключено по умолчанию: главный /ask-flow
+    # не меняется, пока AGENT_ENABLED=false. Wave 0 вводит только флаги/бюджеты.
+    agent_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("AGENT_ENABLED"),
+        description="Включает ветку query_mode=agent в answer_question (по умолчанию off).",
+    )
+    agent_tool_call_mode: str = Field(
+        default="json",
+        validation_alias=AliasChoices("AGENT_TOOL_CALL_MODE"),
+        description="json | native | auto — как агент вызывает инструменты (см. probe Wave 0).",
+    )
+    agent_max_steps: int = Field(
+        default=6,
+        ge=1,
+        le=64,
+        validation_alias=AliasChoices("AGENT_MAX_STEPS"),
+        description="Ресурсный stop: макс. число шагов агентного цикла.",
+    )
+    agent_max_run_tokens: int = Field(
+        default=60_000,
+        ge=0,
+        validation_alias=AliasChoices("AGENT_MAX_RUN_TOKENS"),
+        description="Ресурсный stop: суммарный бюджет токенов на run (0 = без лимита).",
+    )
+    agent_max_run_cost_usd: float = Field(
+        default=0.0,
+        ge=0.0,
+        validation_alias=AliasChoices("AGENT_MAX_RUN_COST_USD"),
+        description="Ресурсный stop: бюджет стоимости на run в USD (0 = без лимита).",
+    )
+    agent_max_run_seconds: float = Field(
+        default=120.0,
+        ge=0.0,
+        validation_alias=AliasChoices("AGENT_MAX_RUN_SECONDS"),
+        description="Ресурсный stop: макс. wall-time на run в секундах (0 = без лимита).",
+    )
+
     # Streamlit UI: базовый URL HTTP API (тот же хост/порт, что и `uvicorn app.api:app`)
     ui_api_base_url: str = "http://127.0.0.1:8000"
     # Streamlit «Чат с тьютором»: сырой шаблон QUIZ_PROMPT и кнопка превью (только для разработки)
@@ -576,6 +615,19 @@ class Settings(BaseSettings):
                 sorted(allowed),
             )
             return "balanced"
+        return raw
+
+    @field_validator("agent_tool_call_mode", mode="before")
+    @classmethod
+    def normalize_agent_tool_call_mode(cls, value: object) -> str:
+        raw = str(value or "json").strip().lower().replace("-", "_")
+        allowed = frozenset({"json", "native", "auto"})
+        if raw not in allowed:
+            logger.warning(
+                "AGENT_TOOL_CALL_MODE=%r неизвестен (ожидается json|native|auto), используется json",
+                value,
+            )
+            return "json"
         return raw
 
     @field_validator("home_rag_data_mode", mode="before")

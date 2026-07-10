@@ -160,8 +160,9 @@ app/agent/
    `response_format` в kwargs — **в обеих ветках** (sync `_chat` ~`:400`,
    async `_achat` ~`:475`). Причина: `request_cache._hash_request`
    (`request_cache.py:109`) хэширует только `model/messages/temperature/
-   max_tokens/top_p` и полностью игнорирует `tools`, поэтому два разных tool-шага
-   с одинаковыми messages дали бы cache-hit → «зависший» агент.
+   max_tokens/top_p` и полностью игнорирует `tools`/`tool_choice`/
+   `response_format`, поэтому два разных structured/tool-шага с одинаковыми
+   messages дали бы cache-hit → «зависший» агент.
 2. Учёт токенов схем инструментов при оценке `input_tokens` **в provider-layer**
    (`provider_openai.py` ~`:233`, там где считаются токены перед
    `llm_guards.check_input_tokens`) — сам `check_input_tokens` принимает уже
@@ -196,14 +197,15 @@ app/agent/
   модели (`LLM_MODEL` на llama.cpp) и OpenRouter; метрики: валидность JSON-args,
   выбор инструмента, галлюцинации имён. Отчёт → выбор режима для
   `agent_tool_call_mode`.
-- `provider_openai.py`: cache-bypass при `tools` (обе ветки); учёт токенов схем
-  в оценке input-токенов.
+- `provider_openai.py`: cache-bypass при `tools`/`tool_choice`/
+  `response_format` (обе ветки); учёт токенов схем в оценке input-токенов.
 - `config.py` + `.env.example` + `config.env`: флаги + бюджеты (doc-sync
   обязателен: настройка не должна существовать только в config.py).
 - Тесты — конкретные файлы (директории `tests/agent/` ещё нет): расширить/создать
-  `tests/test_provider_*.py` — `tools=`/`tool_choice=` доходят до payload
-  `chat.completions.create` (mock-клиент), кэш пропускается при `tools`,
-  токены схем учтены. `tests/agent/` заводится в Wave 1.
+  `tests/test_provider_*.py` — `tools=`/`tool_choice=`/`response_format=`
+  доходят до payload `chat.completions.create` (mock-клиент), кэш
+  пропускается при structured/tool kwargs, токены схем учтены. `tests/agent/`
+  заводится в Wave 1.
 
 DoD: отчёт probe с рекомендацией; тесты зелёные; main-flow не тронут.
 Non-goals: сам цикл, роутер, состояние.
@@ -341,7 +343,7 @@ golden set (A/B через eval_baseline).
 | Где живёт состояние | SQLite через паттерн user_state (`user_state_agent_runs.py`) | Local-first single-user; конвенция репо; append-only + idempotency |
 | Лимит 20k токенов | Пересборка контекста из state + offload результатов (ref_id) + компакция при >12k | Накопительная история пробьёт hard-limit к 5–7 шагу |
 | Роутинг моделей | Role-геттеры planner/executor в provider.py | Паттерн `_build_role_llm` уже есть; planner → сильная (cloud при consent), executor → дешёвая локальная |
-| Дедуп-кэш | Bypass при `tools` в kwargs | Кэш-хит промежуточного шага = «зависший» агент |
+| Дедуп-кэш | Bypass при `tools`/`tool_choice`/`response_format` в kwargs | Кэш-хит промежуточного шага = «зависший» агент |
 | run_id | ContextVar + проброс в `trace_tool_span`/Langfuse-атрибуты/logging-filter | request_id — на HTTP-запрос, run_id — на весь прогон; одного ContextVar мало для span/трейсинга |
 
 ## 5. Риски и митигации
@@ -361,7 +363,9 @@ golden set (A/B через eval_baseline).
 ## 6. Верификация
 
 1. **Wave 0:** `scripts/agent_toolcall_probe.py` против локального llama.cpp и
-   OpenRouter; `pytest tests/agent/` (tools в payload, cache-bypass).
+   OpenRouter; targeted provider/config tests: `tests/test_provider_*.py`
+   (payload `tools`/`tool_choice`/`response_format`, cache-bypass,
+   token-estimate для схем) + затронутые config-тесты. `tests/agent/` ещё нет.
 2. **Wave 1+:** `pytest tests/agent/`; smoke `/ask` с `query_mode="agent"` при
    `AGENT_ENABLED=true`; при `false` — ответ идентичен main-flow.
 3. **Wave 2:** kill между шагами → resume восстанавливает run;

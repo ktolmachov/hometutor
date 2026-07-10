@@ -605,7 +605,9 @@ flowchart TB
 
 ## 5. AI-агент: целевой flow и gates
 
-Плановый overlay по `docs/agent_roadmap.md`. Узлы `app/agent/*`, `agent_runs` и agent-router появляются по волнам; это не утверждение, что они уже есть в runtime-коде.
+Overlay по `docs/agent_roadmap.md`. `app/agent/*` и compact `agent_runs` /
+`agent_steps` уже есть в runtime-коде; agent-router, recovery-resume и HITL
+остаются будущими волнами.
 
 ### Runtime-встраивание
 
@@ -623,8 +625,8 @@ flowchart TB
     scenarios["W1A-C scenarios"]
     tools["read tools"]
     stop["stop controller"]
-    state["W2 state"]
-    obs["W2 observability"]
+    state["W2 compact state"]
+    obs["W2 debug run_id"]
     hitl["W5 HITL"]
     write["W5 write tools"]
     ask --> prep --> budget --> branch
@@ -665,7 +667,7 @@ flowchart TB
 | Wave 1A | `study_session` собирает объяснение, mini-quiz и flashcard-кандидаты как draft без записи в базы. | Это первый полезный пользовательский сценарий поверх read-only агента. |
 | Wave 1B | `graph_gap_finder` находит пробелы и prerequisite-chain по графу знаний + mastery без изменения graph bundle. | Граф становится учебной навигацией, а не только визуализацией. |
 | Wave 1C | `living_konspekt_coach` предлагает, что добавить/повторить/проверить в Живом конспекте, но не меняет workbench. | Конспект становится активной учебной поверхностью без ранних writes. |
-| Wave 2 | Run полностью реконструируется из `agent_runs`/`agent_steps`; `run_id` есть в span/log/Langfuse/cost; recovery-resume отделён от HITL-resume. | Без наблюдаемой траектории agent невозможно отлаживать и превращать prod-fail в eval. |
+| Wave 2 | Текущий slice сохраняет compact `agent_runs`/`agent_steps` и отдаёт `run_id` в `/ask` debug; полный gate добавит span/log/Langfuse/cost, recovery-resume и read-only introspection router. | Без наблюдаемой траектории agent невозможно отлаживать и превращать prod-fail в eval. |
 | Wave 3 | Стабильный static prefix; ToolResult offload; 10+ шагов не пробивают hard token limit. | Native tools и длинные runs безопасны только при дисциплине контекста. |
 | Wave 4 | `scripts/agent_gate_v1.py` зелёный: trajectory checks, injection cases, pass^k, baseline без деградации. | Это обязательный предохранитель перед write-инструментами. |
 | Wave 5 | Нулевая запись без approve; idempotency-key UNIQUE; approve/reject/double-resume/timeout покрыты eval и тестами. | Write tools должны быть обратимы по смыслу, наблюдаемы и защищены от retry-дублей. |

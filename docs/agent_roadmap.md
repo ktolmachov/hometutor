@@ -74,7 +74,7 @@ main-flow, чтобы бесплатно переиспользовать latenc
 ```python
 def _budgeted_answer():
     if options.query_mode == "agent" and settings.agent_enabled:
-        return run_agent_flow(question, options, ctx, ...)   # app/agent/runner.py
+        return run_agent_flow(question, options, ctx, ...)   # app/agent/__init__.py (facade)
     return _answer_question_main_flow(...)
 budget = with_budget(surface, _budgeted_answer)
 ```
@@ -105,18 +105,26 @@ app/agent/
   __init__.py          # фасад: run_agent_flow(...)
   contracts.py         # ToolSpec (name, when_to_use, args: Pydantic strict, limits,
                        #   access: read|write, idempotent) + ToolResult {ok, data, error, meta}
+                       #   + AgentState (running/tool_call/repairing/stopped/completed)
   tool_registry.py     # реестр rag.* / learner.* / quiz.* / cards.*; to_openai_tools()
-  tools_rag.py         # адаптеры над execute_rag_query / query_service
-  tools_learner.py     # learner_model_service, analytics_service
+  tools_rag.py         # rag.search (retrieval-only) / rag.answer (non-agent full pipeline)
+  tools_learner.py     # learner.get_profile, progress.get_mastery, graph.inspect,
+                       #   konspekt.inspect — learner_model_service, quiz_adaptive,
+                       #   knowledge_graph, workbench_service
   tools_quiz.py        # quiz_service
-  tools_flashcards.py  # flashcard_service, user_state_flashcards (write — Wave 5)
+  tools_flashcards.py  # cards.get_due / cards.propose; write tools — Wave 5
+  scenarios.py         # Wave 1A–1C: intent-роутер (konspekt → graph_gap →
+                       #   study_session) + сценарные промпты/output-контракты
   decision.py          # два бэкенда: JSON-decision + native tools; repair <= 1
-  runner.py            # AgentRunner: FSM running/tool_call/repairing/guarded/
-                       #   stopped/completed/needs_human; переход = запись + reason
+  runner.py            # AgentRunner: FSM running/tool_call/repairing/stopped/completed;
+                       #   переход = запись + reason (guardrail-стоп = STOPPED +
+                       #   StopReason.GUARDRAIL_TRIGGERED, отдельного guarded-состояния нет)
   stop_controller.py   # resource/tool/quality/control-стопы -> StopDecision(reason)
+
+  # Ещё не созданы (план, см. Wave 2/3/5):
   context_builder.py   # KV-cache дисциплина: статичный префикс, компакция, offloading
   state.py             # обёртка над user_state_agent_runs (run_id, step_id,
-                       #   checkpoint/recovery, idempotency keys)
+                       #   checkpoint/recovery, idempotency keys) + needs_human FSM (Wave 5)
   tracing.py           # span на шаг через otel_tracing.trace_tool_span; run_id; usage/cost
 ```
 
@@ -125,9 +133,12 @@ app/agent/
 - `app/user_state_agent_runs.py` — таблицы `agent_runs`, `agent_steps`
   (+ позже `agent_memory`) в `_ensure_schema` (`app/user_state_db.py`);
   state только через `user_state*.py`.
-- Промпты агента (`AGENT_SYSTEM_PROMPT`, `AGENT_DECISION_PROMPT`) —
-  в `app/prompts/_impl.py` рядом с `ORCHESTRATOR_SYSTEM_PROMPT`,
-  с записью в `PROMPTS`/`PROMPT_VERSIONS`.
+- Промпты агента (`AGENT_SYSTEM_PROMPT`, `AGENT_DECISION_USER_TEMPLATE`) —
+  в `app/prompts/_impl.py` рядом с `ORCHESTRATOR_SYSTEM_PROMPT`, зарегистрированы
+  в `PROMPTS`/`PROMPT_VERSIONS` под ключами `"agent_system"` / `"agent_decision"`.
+  Сценарные промпты Wave 1A–1C зарегистрированы там же под ключами
+  `"agent_study_session"`, `"agent_graph_gap_finder"`,
+  `"agent_living_konspekt_coach"`.
 - Флаги — только через `get_settings()` (`app/config.py`): `agent_enabled=False`,
   `agent_tool_call_mode: json|native|auto` (`auto` = native для cloud-путей при
   consent, JSON-decision для локальной модели), `agent_max_steps=6`,
@@ -138,10 +149,12 @@ app/agent/
   `GET /agent/runs` (интроспекция) и `POST /agent/runs/{run_id}/resume`
   (**HITL-approval, Wave 5** — не путать с recovery-resume внутри `state.py`);
   регистрация в `app/api.py` с `_protected_dependencies`.
-- UI-фича: `FeatureSpec` в `app/ui/feature_registry.py` с
-  `requires=("agent_enabled",)`. Ветка `agent_enabled` в
-  `requirement_context_ok` уже добавлена; неизвестные требования по-прежнему
-  возвращают `False`.
+- UI-фича: низкоуровневая поддержка готова — ветка `agent_enabled` в
+  `requirement_context_ok` (`feature_registry.py:128`) уже добавлена и
+  покрыта тестами (`tests/test_feature_registry.py`); неизвестные требования
+  по-прежнему возвращают `False`. Но ни один `FeatureSpec` в `FEATURES` пока
+  не объявлен с `requires=("agent_enabled",)` — конкретной UI-фичи (кнопки/CTA),
+  подключённой к этому флагу, в коде ещё нет.
 
 ### 2.3 Стартовый набор инструментов (read-only в Wave 1 / 1A–1C)
 
@@ -149,10 +162,10 @@ app/agent/
 |---|---|---|
 | `rag.search` | **retrieval-only adapter**: `retriever.retrieve(QueryBundle)` напрямую (как в extractive-ветке `query_rag_execution.py:165`), НЕ `execute_rag_query` (тот запускает генерацию) | read |
 | `rag.answer` | non-agent полный pipeline: `answer_question(sub_question, QueryOptions(query_mode=None))` (повторно проходит guardrails/classify/condense/rewrite, но без ветки agent) либо приватный RAG-helper; как «умный инструмент» | read |
-| `learner.get_profile` | `learner_model_service` + `app/tutor_orchestrator.py::build_tutor_session_state` | read |
+| `learner.get_profile` | `learner_model_service.get_personalized_learner_profile` (реализовано; `build_tutor_session_state` пока не используется этим tool'ом) | read |
 | `cards.get_due` | `user_state_flashcards.get_due_flashcards` | read |
 | `cards.propose` | кандидатные flashcards/cloze из ответа, конспекта или quiz-контекста; **без сохранения** до Wave 5 | read/draft |
-| `progress.get_mastery` | обёртка над существующими mastery-readers: `quiz_adaptive.py::list_quiz_mastery_state` / `get_weak_concepts` / `get_all_mastery_levels` + `learner_state_scope.get_quiz_mastery_rows_for_kg` + `analytics_service.get_advanced_analytics` | read |
+| `progress.get_mastery` | обёртка над `quiz_adaptive.py::list_quiz_mastery_state` / `get_weak_concepts` / `get_all_mastery_levels` (реализовано в `tools_learner.py`); `learner_state_scope.get_quiz_mastery_rows_for_kg` и `analytics_service.get_advanced_analytics` существуют в коде, но этим tool'ом пока не используются | read |
 | `quiz.generate` | `quiz_service.generate_topic_quiz` (без записи) | read |
 | `graph.inspect` | read-only adapter над active knowledge graph / mastery-вектором: узлы, соседние связи, prerequisites, слабые/изолированные концепты | read |
 | `konspekt.inspect` | `workbench_service.load_rows` / `normalize_runtime_rows` + helpers Living Konspekt для coverage/selected rows; без изменения корзины | read |
@@ -177,18 +190,25 @@ app/agent/
 
 ### 2.4 Правки provider-слоя (точечные)
 
-1. `provider_openai.py`: **bypass дедуп-кэша** при наличии `tools`/`tool_choice`/
-   `response_format` в kwargs — **в обеих ветках** (sync `_chat` ~`:400`,
-   async `_achat` ~`:475`). Причина: `request_cache._hash_request`
-   (`request_cache.py:109`) хэширует только `model/messages/temperature/
-   max_tokens/top_p` и полностью игнорирует `tools`/`tool_choice`/
-   `response_format`, поэтому два разных structured/tool-шага с одинаковыми
-   messages дали бы cache-hit → «зависший» агент.
-2. Учёт токенов схем инструментов при оценке `input_tokens` **в provider-layer**
-   (`provider_openai.py` ~`:233`, там где считаются токены перед
-   `llm_guards.check_input_tokens`) — сам `check_input_tokens` принимает уже
-   готовое число, поэтому править надо оценку, а не guard.
-3. Роль-геттеры в `app/provider.py` по образцу `_build_role_llm`:
+1. **Сделано.** `provider_openai.py`: **bypass дедуп-кэша** при наличии
+   `tools`/`tool_choice`/`response_format` в kwargs — **в обеих ветках**:
+   `_has_structured_or_tool_kwargs()` (`provider_openai.py:74-88`), используется
+   в sync `_chat` (`:433`, bypass-флаг `:446`, пропуск `cache.set` `:500`) и в
+   async `_achat` (`:511`, флаг `:523-524`, пропуск `cache.set` `:570`). Причина:
+   `request_cache._hash_request` (`request_cache.py:109`) хэширует только
+   `model/messages/temperature/max_tokens/top_p` и полностью игнорирует
+   `tools`/`tool_choice`/`response_format`, поэтому два разных structured/tool-шага
+   с одинаковыми messages дали бы cache-hit → «зависший» агент. Покрыто тестами
+   в `tests/test_provider_openai_structured.py`.
+2. **Сделано.** Учёт токенов схем инструментов при оценке `input_tokens` **в
+   provider-layer**: `_estimate_structured_kwargs_tokens()`
+   (`provider_openai.py:91-109`), используется на `:276-277`
+   (`schema_tokens = _estimate_structured_kwargs_tokens(kwargs, self.model)`,
+   сложение с `message_tokens` перед `llm_guards.check_input_tokens` на `:282`)
+   — сам `check_input_tokens` принимает уже готовое число, поэтому правка идёт в
+   оценку, а не в guard. Покрыто тестами в
+   `tests/test_provider_openai_structured.py`.
+3. **Не сделано (план, Wave 3).** Роль-геттеры в `app/provider.py` по образцу `_build_role_llm`:
    `get_agent_planner_llm()` (сильная модель), `get_agent_executor_llm()`
    (дешёвая/локальная для компакции). **Consent enforced кодом**: cloud-модель
    для planner допускается только при `home_rag_llm_cloud_consent` (проверка в
@@ -220,6 +240,9 @@ app/agent/
   `agent_tool_call_mode`.
 - `provider_openai.py`: cache-bypass при `tools`/`tool_choice`/
   `response_format` (обе ветки); учёт токенов схем в оценке input-токенов.
+  **Статус: сделано** (см. §2.4 — `_has_structured_or_tool_kwargs`,
+  `_estimate_structured_kwargs_tokens`, тесты в
+  `tests/test_provider_openai_structured.py`).
 - `config.py` + `.env.example` + `config.env`: флаги + бюджеты уже заведены;
   Wave 0 остаётся закрепить это targeted-тестами и сохранять doc-sync для
   новых настроек.
@@ -263,16 +286,22 @@ DoD: `query_mode="agent"` отвечает на 10 технических сце
 специализированный prompt и финальный контракт поверх tool trace. Persistence
 появляется отдельно в Wave 2; Wave 1A не добавляет роутеры, UI или write-tools.
 
-- Сценарий `study_session`: вход — тема/вопрос + текущий курс; агент вызывает
-  `learner.get_profile`, `rag.search`/`rag.answer`, при необходимости
-  `progress.get_mastery`, `quiz.generate`, `cards.propose`.
-- Выходной контракт MVP: `## Диагностика`, `## Что изучать сейчас`,
-  `## План на 10–20 минут`, `## Проверочные вопросы`,
-  `## Карточки-кандидаты`, `## Следующие шаги`, плюс `## Источники`, если
-  использовался RAG.
-- UI-поверхность: CTA в Mission Control / Tutor chat «Собрать учебную сессию»
-  за `agent_enabled`; результат отображается как draft, без записи в базы.
-- Evals: 8–10 golden-сценариев на разные темы; checks: есть источники, quiz
+- Сценарий `study_session` — **реализовано** (`app/agent/scenarios.py`): вход —
+  тема/вопрос + текущий курс; агент вызывает `learner.get_profile`,
+  `rag.search`/`rag.answer`, при необходимости `progress.get_mastery`,
+  `quiz.generate`, `cards.propose`.
+- Выходной контракт MVP — **реализовано, заголовки секций совпадают с кодом**:
+  `## Диагностика`, `## Что изучать сейчас`, `## План на 10–20 минут`,
+  `## Проверочные вопросы`, `## Карточки-кандидаты`, `## Следующие шаги`, плюс
+  `## Источники`, если использовался RAG.
+- UI-поверхность — **не реализовано** (backlog, не в этом MVP-слайсе): CTA в
+  Mission Control / Tutor chat «Собрать учебную сессию» за `agent_enabled`;
+  результат должен отображаться как draft, без записи в базы. Строка
+  «Собрать учебную сессию» пока не встречается ни в одном UI-модуле.
+- Evals — **частично**: golden-набор существует
+  (`eval_data/agent_scenarios_golden_v1.json`, покрыт
+  `tests/agent/test_agent_golden_cases.py`), но на дату аудита содержит 2
+  study_session-кейса, а не целевые 8–10; checks: есть источники, quiz
   соответствует теме, карточки не сохраняются, stop_reason корректен.
 
 DoD: пользователь получает цельную read-only сессию за один запуск; ни один
@@ -295,8 +324,10 @@ read-only, без записи графа, user_state, quiz-result или кар
   `## Практическая проверка`, плюс `## Источники`, если использовался RAG.
 - Граф не мутируется: новые связи и исправления узлов выводятся как
   `proposed_graph_edits` для будущего approve-flow, но не пишутся в bundle.
-- Evals: граф с изолированным узлом, слабым prerequisite, ложной связью,
-  отсутствующим mastery; checks: нет write, порядок prerequisites разумный.
+- Evals — **частично**: golden-набор на дату аудита содержит 1
+  graph_gap_finder-кейс, а не целевые 4 (изолированный узел, слабый
+  prerequisite, ложная связь, отсутствующий mastery); checks: нет write,
+  порядок prerequisites разумный.
 
 DoD: агент объясняет «что учить дальше и почему» по графу + прогрессу.
 Non-goals: автоматическое редактирование графа, promotion graph bundle.
@@ -318,9 +349,11 @@ read-only, без записи workbench, конспекта, карточек, 
   плюс `## Источники`, если использовался RAG.
 - Все изменения конспекта — только draft: добавление разделов, сохранение
   артефакта, заметки и карточки остаются ручными до Wave 5/HITL.
-- Evals: пустой workbench, перегруженный workbench, workbench без цели,
-  конспект с видео-citation; checks: использованы только выбранные rows,
-  output ссылается на источники, нет скрытой записи в `workbench_service`.
+- Evals — **частично**: golden-набор на дату аудита содержит 1
+  living_konspekt_coach-кейс, а не целевые 4 (пустой workbench, перегруженный
+  workbench, workbench без цели, конспект с видео-citation); checks:
+  использованы только выбранные rows, output ссылается на источники, нет
+  скрытой записи в `workbench_service`.
 
 DoD: агент даёт полезный план улучшения конспекта и scoped-проверку без
 изменения состояния. Non-goals: auto-save конспекта, auto-add sections.
@@ -468,9 +501,11 @@ golden set (A/B через eval_baseline).
 ## 6. Верификация
 
 1. **Wave 0:** `scripts/agent_toolcall_probe.py` против локального llama.cpp и
-   OpenRouter; targeted provider/config tests: `tests/test_provider_*.py`
+   OpenRouter; targeted provider/config tests: `tests/test_provider_openai_structured.py`
    (payload `tools`/`tool_choice`/`response_format`, cache-bypass,
-   token-estimate для схем) + затронутые config-тесты. `tests/agent/` ещё нет.
+   token-estimate для схем) + затронутые config-тесты. На момент Wave 0
+   `tests/agent/` ещё не было — сейчас (после Wave 1–2) каталог существует
+   (12 тестовых модулей, см. § ниже).
 2. **Wave 1+:** `pytest tests/agent/`; smoke `/ask` с `query_mode="agent"` при
    `AGENT_ENABLED=true`; при `false` — ответ идентичен main-flow.
 3. **Wave 1A–1C:** scenario golden sets:
@@ -513,18 +548,35 @@ golden set (A/B через eval_baseline).
 Проверено по коду и учтено в разделах выше (найденные проблемы переведены в статус решённых или спроектированных):
 
 Решённые блокеры:
-- **Feature flag** (§2.2): требование `requires=("agent_enabled",)` нуждалось в поддержке внутри `requirement_context_ok` (`feature_registry.py:128`). **Решено кодом**: соответствующая ветка добавлена в Feature Registry и покрыта тестами.
-
-Учтённые в проекте блокеры (спроектировано):
-- **Оценка токенов** (§2.4): править оценку input-токенов в provider-layer
-  (`provider_openai.py:233`), а не `check_input_tokens` (тот берёт готовое число).
+- **Feature flag** (§2.2): низкоуровневая ветка `agent_enabled` внутри
+  `requirement_context_ok` (`feature_registry.py:128`) **решена кодом** и покрыта
+  тестами (`tests/test_feature_registry.py`). **Но** ни один `FeatureSpec` в
+  `FEATURES` пока не объявлен с `requires=("agent_enabled",)` — конкретной
+  UI-фичи, подключённой к флагу, ещё нет; это остаётся открытым для Wave 1A.
+- **Оценка токенов** (§2.4): input-токены схем инструментов оцениваются в
+  provider-layer через `_estimate_structured_kwargs_tokens()`
+  (`provider_openai.py:91-109`, вызов на `:276-277`), а не в
+  `check_input_tokens` (тот берёт уже готовое число). **Решено кодом и тестами**
+  (`tests/test_provider_openai_structured.py`).
 - **Cache-bypass** (§2.4): `_hash_request` (`request_cache.py:109`) игнорирует
-  `tools`/`tool_choice`/`response_format` → bypass нужен в обеих ветках
-  (`_chat`/`_achat`).
+  `tools`/`tool_choice`/`response_format` → bypass реализован в обеих ветках
+  через `_has_structured_or_tool_kwargs()` (`provider_openai.py:74-88`; `_chat`
+  `:433/446/500`, `_achat` `:511/523-524/570`). **Решено кодом и тестами**
+  (`tests/test_provider_openai_structured.py`).
 - **`rag.search`** (§2.3): не через `execute_rag_query` (запускает генерацию), а
-  через retrieval-only adapter.
+  через retrieval-only adapter (`app/agent/tools_rag.py:73-99`). Решено кодом.
 - **`rag.answer`** (§2.1/§2.3): принудительно non-agent путь — иначе рекурсия
-  agent → tool → agent.
+  agent → tool → agent (`app/agent/tools_rag.py:102-125`, `query_mode=None`).
+  Решено кодом.
+
+Учтённые в проекте блокеры (спроектировано, ещё не реализовано):
+- **Роль-геттеры provider'а** (§2.4 п.3): `get_agent_planner_llm()` /
+  `get_agent_executor_llm()` в `app/provider.py` — Wave 3, в коде пока нет.
+- **`context_builder.py` / `state.py` / `tracing.py`** (§2.2): три модуля пакета
+  `app/agent/` пока не созданы — компакция контекста (Wave 3), checkpoint/recovery
+  и idempotency (Wave 2/5), проброс `run_id` в `trace_tool_span` (Wave 2).
+- **Wave 1A UI CTA** («Собрать учебную сессию» в Mission Control/Tutor chat) —
+  в коде не найден; текст в §3 Wave 1A описывает целевое, а не текущее состояние.
 
 
 Серьёзные:
@@ -537,14 +589,37 @@ golden set (A/B через eval_baseline).
   `config.py`.
 - **run_id observability** (Wave 2): `debug.agent_trace.run_id` уже есть;
   проброс в `trace_tool_span`/Langfuse/logging остаётся следующим шагом.
-- **Cloud consent** (§2.4): enforced кодом в agent role getters, не по model id.
+- **Cloud consent** (§2.4): дизайн-решение — enforced кодом внутри будущих
+  agent role getters, не по одному лишь model id; сами getters ещё не
+  реализованы (см. Wave 3 выше), поэтому проверку consent пока негде вызывать.
 
 Мелкие:
 - Локальная модель именуется как `LLM_MODEL`, не хардкод конкретного id.
 - `progress.get_mastery`: read-API уже существует (`quiz_adaptive.py`,
-  `learner_state_scope.py`); нужен тонкий агрегирующий helper, без ad hoc SQL
-  в tool-коде.
+  `learner_state_scope.py`, `analytics_service.py`); фактически tool в
+  `tools_learner.py` использует только три функции `quiz_adaptive.py`, а
+  `learner_state_scope.get_quiz_mastery_rows_for_kg` и
+  `analytics_service.get_advanced_analytics` пока не подключены — нужен тонкий
+  агрегирующий helper, без ad hoc SQL в tool-коде.
 - Wave 0 тесты ссылаются на конкретные `tests/test_provider_*.py`;
-  `tests/agent/` заводится в Wave 1.
+  `tests/agent/` заводится в Wave 1 (и уже существует — 12 тестовых модулей на
+  дату аудита, включая `test_agent_persistence.py`, `test_runner.py`,
+  `test_study_session_scenario.py` и т.д.).
 - Agent settings (`AGENT_*`) уже заведены в `config.py`, `.env.example` и
   `config.env`; Wave 0 больше не должен описывать это как невыполненную работу.
+- `app/agent/__init__.py` описан выше как «фасад: `run_agent_flow(...)`» — этот
+  файл реализует и модуль-инвентарь §2.2 корректен по месту, но сам roadmap
+  ранее (до этого аудита) ошибочно указывал `run_agent_flow` в `runner.py` —
+  исправлено в §2.1/§2.2.
+- `AgentState` (`app/agent/contracts.py`) содержит только
+  `running/tool_call/repairing/stopped/completed` — состояний `guarded` и
+  `needs_human` из более раннего текста §2.2 в коде нет; guardrail-стоп
+  выражается как `stopped` + `StopReason.GUARDRAIL_TRIGGERED`, `needs_human`
+  запланирован на Wave 5 (см. `state.py` выше).
+- `app/agent/scenarios.py` (роутер Wave 1A–1C + сценарные промпты/output-контракты)
+  ранее отсутствовал в инвентаре §2.2 — добавлен.
+- Eval-покрытие Wave 1A–1C (§3, §6): текст описывает целевое число кейсов
+  (8–10 study_session + по 4 для graph_gap/konspekt); фактический
+  `eval_data/agent_scenarios_golden_v1.json` на дату аудита содержит 4 кейса
+  (2 study_session, 1 graph_gap_finder, 1 living_konspekt_coach) — целевые числа
+  в §3 нужно читать как backlog, не как факт.

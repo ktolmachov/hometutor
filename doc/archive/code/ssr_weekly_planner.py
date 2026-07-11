@@ -1,3 +1,11 @@
+"""
+ARCHIVED — C2: ghost surface, 0 external callers.
+
+Originally ``app/ssr_weekly_planner.py``.
+Moved to archive 2026-07-11 as part of C2 cleanup
+(learning_plan_single_source_plan.md).
+"""
+
 """Baseline 7-day SSR weekly planner (rule-based, pre-L3 optimization).
 
 **C2 status:** SSRL3 evaluation baseline / offline fixture generator.
@@ -68,7 +76,6 @@ def _compute_pool_minutes(profile: WeeklyPlannerProfile) -> dict[str, float]:
     recovery = float(len(profile.weak_concepts)) * float(profile.minutes_per_weak_concept)
     if profile.quiz_failure_active:
         recovery += float(profile.quiz_failure_recovery_min)
-    # Continuation / new learning demand scales with gap to mastery and explicit queue.
     gap = max(0.0, 1.0 - float(profile.mastery_avg))
     continuation = float(profile.continuation_queue_min) + gap * 120.0
     return {"retention": retention, "recovery": recovery, "continuation": continuation}
@@ -79,7 +86,6 @@ def _router_signal_from_pools(pools: dict[str, float]) -> RouterSignal:
     best = max(r, v, c)
     if best <= 0:
         return "new_learning_or_continuation"
-    # Tie-break: retention > recovery > continuation (per backlog / US-20.9 intent).
     if r >= best and r > 0:
         return "retention_debt"
     if v >= best and v > 0:

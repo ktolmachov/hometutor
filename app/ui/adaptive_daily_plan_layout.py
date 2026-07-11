@@ -235,13 +235,13 @@ def render_adaptive_daily_plan(
     st.markdown('<div class="home-dash-card">', unsafe_allow_html=True)
     if compact:
         st.markdown(
-            f'<div class="{head_cls}"><h4 style="margin:0;">🎯 Adaptive Daily Plan</h4>'
+            f'<div class="{head_cls}"><h4 style="margin:0;">📅 План на сегодня</h4>'
             f'<span style="opacity:0.9;font-size:0.85rem;"> · {plan.get("date", "—")}</span></div>',
             unsafe_allow_html=True,
         )
     else:
         st.markdown(
-            f'<div class="{head_cls}"><h3>🎯 Adaptive Daily Plan</h3></div>',
+            f'<div class="{head_cls}"><h3>📅 План на сегодня</h3></div>',
             unsafe_allow_html=True,
         )
 

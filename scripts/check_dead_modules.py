@@ -21,7 +21,7 @@ CANDIDATES = {
     "app.eval_uplift",
     "app.eval_retrieval_comparison",
     "app.ssr_pregeneration",
-    "app.ssr_weekly_planner",
+    # "app.ssr_weekly_planner",  # archived C2 2026-07-11 → doc/archive/code/
     "app.ssr_graph_routing",
     "app.ssr_llm_profile_summary",
     "app.session_analytics_parser",
@@ -39,7 +39,7 @@ KEEP_REASONS = {
     "app.eval_uplift": "offline retrieval uplift analysis",
     "app.eval_retrieval_comparison": "offline retrieval comparison tool",
     "app.ssr_pregeneration": "future async SSR pre-generation hook",
-    "app.ssr_weekly_planner": "weekly SSR planning domain module",
+    # "app.ssr_weekly_planner": "archived C2 2026-07-11 → doc/archive/code/",
     "app.ssr_graph_routing": "SSR graph-routing experiment module",
     "app.ssr_llm_profile_summary": "SSR profiling summary utility",
     "app.session_analytics_parser": "session analytics parser for exported traces",

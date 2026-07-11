@@ -285,7 +285,11 @@ selected_view = st.selectbox(
     key="current_view",
     label_visibility="collapsed",
 )
-if _hidden_nav_views:
+
+
+def _render_hidden_nav_expander() -> None:
+    if not _hidden_nav_views:
+        return
     with st.expander("Ещё разделы", expanded=False):
         for _view in ALL_VIEWS:
             if _view not in _hidden_nav_views:
@@ -297,6 +301,10 @@ if _hidden_nav_views:
             from app.ui.control_panel import render_control_panel_dialog
 
             render_control_panel_dialog()
+
+
+if selected_view != HOME_VIEW:
+    _render_hidden_nav_expander()
 _session_tape_id = str(st.session_state.get("_session_tape_id") or "").strip()
 if _session_tape_id and get_settings().session_tape_full_events_enabled:
     ensure_session_started(
@@ -313,6 +321,7 @@ if selected_view == HOME_VIEW:
     # Mission Control SSR: см. app/ui/mission_control.py — баннер primary + текст «почему не тьютор/quiz/карточки/прогресс»
     render_mission_control(index_stats)
     render_e2e_demo_scene_for_view(selected_view)
+    _render_hidden_nav_expander()
 elif selected_view == "Быстрый ответ":
     _render_quick_answer_tab(folder, folder_rel, file_name, relative_path, topic_quick, folder_quick)
 elif selected_view == "Чат с тьютором":

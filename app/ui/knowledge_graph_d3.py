@@ -299,6 +299,8 @@ def _frontier_state(
     """
     m = _mastery_pct(cid, data, mastery_vector, learned)
     is_learned = cid in learned or bool(data.get("learned")) or m >= 80.0
+    if _is_lesson_node(cid, data):
+        return m, is_learned, False
     prereqs_ready = all(
         (p in mastery_vector and mastery_vector[p] * 100 >= 80)
         or p in learned
@@ -321,10 +323,12 @@ def _kg_counters_from_skeleton(
     identical numbers for the same graph.
 
     ``total_concepts`` excludes lesson nodes (detected via :func:`_is_lesson_node`:
-    ``lesson:`` id prefix OR ``level == "lesson"``); ``avg_mastery`` divides by ALL
-    nodes (concepts + lessons) intentionally — lesson nodes carry aggregate mastery in
-    the bundle and both screens historically used the full node set as the denominator.
-    Keeping it preserves the existing mastery calibration.
+    ``lesson:`` id prefix OR ``level == "lesson"``). ``learned`` and ``frontier`` are
+    concept-only counters so labels like "готово учить" never include curriculum-anchor
+    lessons. ``avg_mastery`` still divides by ALL nodes (concepts + lessons)
+    intentionally — lesson nodes carry aggregate mastery in the bundle and both screens
+    historically used the full node set as the denominator. Keeping it preserves the
+    existing mastery calibration.
     """
     total = len(skel.valid)
     total_concepts = 0
@@ -334,7 +338,8 @@ def _kg_counters_from_skeleton(
     missing_count = 0
     mastery_sum = 0.0
     for cid, data in skel.valid.items():
-        if _is_lesson_node(cid, data):
+        is_lesson = _is_lesson_node(cid, data)
+        if is_lesson:
             total_lessons += 1
         else:
             total_concepts += 1
@@ -343,9 +348,9 @@ def _kg_counters_from_skeleton(
             mastery_vector, learned, skel.id_set, skel.valid,
         )
         mastery_sum += m
-        if is_learned:
+        if is_learned and not is_lesson:
             learned_count += 1
-        if is_frontier:
+        if is_frontier and not is_lesson:
             frontier_count += 1
         if skel.missing_map.get(cid):
             missing_count += 1
@@ -376,7 +381,7 @@ def compute_kg_counters(
     the Knowledge Graph screen both derive their visible counters from this math.
 
     Returns ``total``/``total_nodes`` (all nodes), ``total_concepts`` (without lesson
-    nodes), ``total_lessons``, ``frontier`` (recomputed), ``learned``, ``avg_mastery``,
+    nodes), ``total_lessons``, concept-only ``frontier``/``learned``, ``avg_mastery``,
     ``clusters`` and ``edges``.
     """
     skel = _build_kg_skeleton(concepts, typed_relations)

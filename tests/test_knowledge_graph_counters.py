@@ -117,6 +117,28 @@ class TestComputeKgCounters:
         assert counters["total_concepts"] == 1
         assert counters["total_lessons"] == 1
 
+    def test_lesson_nodes_do_not_count_as_ready_to_learn(self):
+        concepts = {
+            "a": {"label": "A"},
+            "lesson:lec-1": {"label": "Lec 1", "level": "lesson"},
+        }
+        counters = compute_kg_counters(concepts)
+
+        assert counters["total_concepts"] == 1
+        assert counters["total_lessons"] == 1
+        assert counters["frontier"] == 1
+
+    def test_lesson_nodes_do_not_count_as_learned_concepts(self):
+        concepts = {
+            "a": {"label": "A", "learned": True},
+            "lesson:lec-1": {"label": "Lec 1", "level": "lesson", "learned": True},
+        }
+        counters = compute_kg_counters(concepts)
+
+        assert counters["total_concepts"] == 1
+        assert counters["total_lessons"] == 1
+        assert counters["learned"] == 1
+
 
 class TestCollectLearnedSet:
     def test_combines_session_learned_and_bundle_flags(self, monkeypatch):

@@ -270,13 +270,15 @@ $backend = Start-Process -FilePath $Py -ArgumentList $uvicornArgs `
     -WorkingDirectory $Root -PassThru -NoNewWindow
 
 try {
-    # Wait for uvicorn to accept connections (up to 30 s) instead of a fixed sleep.
-    # This eliminates the race condition where Streamlit hit port 8000 before FastAPI
-    # finished initializing the Chroma index (~9 s on a typical cold start).
+    # Wait for the real FastAPI route, not just an open TCP socket. Uvicorn can bind the
+    # port before lifespan startup finishes; launching Streamlit at that moment lets the
+    # UI cache 404s for /ui/bootstrap and /health/deep.
     $maxWaitSec = 30
     $waited = 0
     $apiReady = $false
-    Write-Host "  Waiting for API on port 8000..." -ForegroundColor DarkCyan -NoNewline
+    $healthUrl = "http://127.0.0.1:8000/health"
+    $lastHealthError = ""
+    Write-Host "  Waiting for API /health..." -ForegroundColor DarkCyan -NoNewline
     while ($waited -lt $maxWaitSec) {
         if ($backend.HasExited) {
             Write-Host " [FAILED]" -ForegroundColor Red
@@ -284,19 +286,23 @@ try {
             exit $backend.ExitCode
         }
         try {
-            $tcp = New-Object System.Net.Sockets.TcpClient
-            $tcp.Connect('127.0.0.1', 8000)
-            $tcp.Close()
-            $apiReady = $true
-            break
+            $health = Invoke-RestMethod -Uri $healthUrl -Method Get -TimeoutSec 2 -ErrorAction Stop
+            if ($health.status -eq "ok") {
+                $apiReady = $true
+                break
+            }
+            $lastHealthError = "unexpected health payload: $($health | ConvertTo-Json -Compress)"
+            Start-Sleep -Milliseconds 500
+            $waited += 1
         } catch {
+            $lastHealthError = $_.Exception.Message
             Start-Sleep -Milliseconds 500
             $waited += 1
         }
     }
     if (-not $apiReady) {
         Write-Host " [TIMEOUT]" -ForegroundColor Red
-        throw "API did not respond on port 8000 within ${maxWaitSec}s. Streamlit launch aborted."
+        throw "API /health did not return ok within ${maxWaitSec}s. Last error: $lastHealthError. Streamlit launch aborted."
     } else {
         Write-Host " ready (${waited}x500ms)" -ForegroundColor Green
     }

@@ -18,6 +18,35 @@ def test_preflight_rows_payload_none() -> None:
     assert rows == [("API", "❌", "API недоступен — запустите main.py (см. quickstart.md).")]
 
 
+def test_preflight_rows_explains_http_404(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.ui.preflight.get_settings",
+        lambda: SimpleNamespace(
+            llm_model="local-model",
+            llm_api_base="http://127.0.0.1:1234/v1",
+            ui_api_base_url="http://127.0.0.1:8000",
+        ),
+    )
+
+    rows = preflight_rows(
+        {
+            "status": "api_error",
+            "components": {
+                "api": {
+                    "status": "http_error",
+                    "status_code": 404,
+                    "url": "http://127.0.0.1:8000/health/deep",
+                }
+            },
+        }
+    )
+
+    text = " ".join(row[2] for row in rows)
+    assert "API отвечает 404" in text
+    assert "не HomeTutor API" in text
+    assert "/health/deep" in text
+
+
 def test_preflight_rows_status_matrix(monkeypatch) -> None:
     monkeypatch.setattr(
         "app.ui.preflight.get_settings",
@@ -43,6 +72,53 @@ def test_preflight_rows_status_matrix(monkeypatch) -> None:
             assert "Traceback" not in text
             if llm_status != "ok":
                 assert "local-model" in text
+
+
+def test_preflight_check_again_clears_all_ui_api_caches(monkeypatch) -> None:
+    import app.ui.preflight as preflight
+
+    class FakeCachedHealth:
+        cleared = 0
+
+        def __call__(self, _api_base: str):
+            return None
+
+        def clear(self) -> None:
+            self.cleared += 1
+
+    fake_health = FakeCachedHealth()
+    cleared = {"ui": 0}
+
+    monkeypatch.setattr(
+        preflight,
+        "get_settings",
+        lambda: SimpleNamespace(ui_api_base_url="http://127.0.0.1:8000"),
+    )
+    monkeypatch.setattr(preflight, "_cached_health_deep", fake_health)
+    monkeypatch.setattr(
+        preflight,
+        "clear_ui_api_caches",
+        lambda: cleared.__setitem__("ui", cleared["ui"] + 1),
+    )
+    monkeypatch.setattr(preflight.st, "session_state", {"_preflight_status_tracked": True})
+    monkeypatch.setattr(preflight.st, "warning", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(preflight.st, "button", lambda *_args, **_kwargs: True)
+
+    def _rerun() -> None:
+        raise RuntimeError("rerun")
+
+    monkeypatch.setattr(preflight.st, "rerun", _rerun)
+
+    try:
+        preflight.render_preflight_card()
+    except RuntimeError as exc:
+        assert str(exc) == "rerun"
+    else:
+        raise AssertionError("render_preflight_card should rerun after Check again")
+
+    assert fake_health.cleared == 1
+    assert cleared["ui"] == 1
+    assert "_preflight_status_tracked" not in preflight.st.session_state
 
 
 def test_build_seed_questions_priority_artifact_topics_files() -> None:

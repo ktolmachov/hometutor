@@ -368,11 +368,9 @@ def _render_ssr_banner(rec: SmartStudyRecommendation, *, index_stats: dict | Non
         btn_label,
         key="mission_control_ssr_primary",
         type="primary",
+        width="stretch",
         on_click=_apply_primary_navigation,
         args=(rec,),
-    )
-    st.caption(
-        "Можно выбрать и другой режим: быстрый ответ, тьютор, quiz, flashcards и прогресс остаются рядом."
     )
 
 
@@ -990,7 +988,7 @@ def render_mission_control(index_stats: dict | None = None) -> None:
     focused 3-tile flow unchanged.
     """
     poll_reindex_status()
-    preflight_status = render_preflight_card()
+    preflight_status = render_preflight_card(quiet_ok=True)
     if preflight_status == "api_down":
         return
     if render_empty_index_hero(index_stats):

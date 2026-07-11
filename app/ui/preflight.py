@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+import requests
 import streamlit as st
 
 from app.config import get_settings
-from app.ui_client import fetch_json
+from app.ui_client import clear_ui_api_caches, fetch_json
 
 
 def _short_error(value: object) -> str:
@@ -22,6 +23,21 @@ def _cached_health_deep(api_base: str) -> dict | None:
     _ = api_base
     try:
         return fetch_json("GET", "/health/deep", timeout=8)
+    except requests.HTTPError as exc:
+        response = exc.response
+        status_code = response.status_code if response is not None else None
+        url = response.url if response is not None else f"{api_base}/health/deep"
+        return {
+            "status": "api_error",
+            "components": {
+                "api": {
+                    "status": "http_error",
+                    "status_code": status_code,
+                    "url": url,
+                    "error": str(exc),
+                }
+            },
+        }
     except Exception:  # noqa: BLE001 - preflight must degrade without breaking UI.
         return None
 
@@ -64,7 +80,21 @@ def preflight_rows(payload: dict | None) -> list[tuple[str, str, str]]:
 
     api = components.get("api") if isinstance(components.get("api"), dict) else {}
     api_status = str(api.get("status") or "").strip().lower()
-    rows.append(("API", "✅" if api_status == "ok" else "⚠️", "API отвечает" if api_status == "ok" else "API отвечает нестабильно"))
+    if api_status == "ok":
+        rows.append(("API", "✅", "API отвечает"))
+    elif api_status == "http_error":
+        status_code = api.get("status_code")
+        url = str(api.get("url") or settings.ui_api_base_url).strip()
+        if status_code == 404:
+            hint = (
+                f"API отвечает 404 на {url}. На порту {settings.ui_api_base_url} запущен "
+                "не HomeTutor API или старая версия без /health/deep; перезапустите FastAPI из этого репозитория."
+            )
+        else:
+            hint = f"API вернул HTTP {status_code or '?'} на {url}: {_short_error(api.get('error'))}"
+        rows.append(("API", "❌", hint))
+    else:
+        rows.append(("API", "⚠️", "API отвечает нестабильно"))
     return rows
 
 
@@ -97,5 +127,7 @@ def render_preflight_card(*, quiet_ok: bool = False) -> str:
     st.warning("\n\n".join(lines))
     if st.button("Проверить снова", key="preflight_check_again", type="secondary"):
         _cached_health_deep.clear()
+        clear_ui_api_caches()
+        st.session_state.pop("_preflight_status_tracked", None)
         st.rerun()
     return overall

@@ -308,7 +308,7 @@ document.getElementById('stats').innerHTML=
   `<div class="st"><b>${STATS.total}</b><span>концептов</span></div>`+
   `<div class="st"><b>${STATS.avg_mastery}%</b><span>ср. mastery</span></div>`+
   `<div class="st" style="color:#86efac"><b>${STATS.learned}</b><span>освоено</span></div>`+
-  `<div class="st" style="color:#fcd34d"><b>${STATS.frontier}</b><span>готово учить</span></div>`+
+  `<div class="st" style="color:#fcd34d"><b>${STATS.frontier}</b><span>доступно</span></div>`+
   (STATS.missing?`<div class="st" style="color:#fca5a5"><b>${STATS.missing}</b><span>с пробелами</span></div>`:'')+
   `<div class="st"><b>${STATS.clusters}</b><span>кластеров</span></div>`;
 
@@ -587,7 +587,7 @@ function _kgBridgeConceptToStreamlit(conceptId){
 function openPanel(d){
   current=d;
   const lv=LEVELS[d.level]||LEVELS.unknown;
-  const badges=(d.frontier?'<span class="badge bdg-frontier">✦ готово учить</span>':'')+
+  const badges=(d.frontier?'<span class="badge bdg-frontier">✦ доступно</span>':'')+
     (d.learned?'<span class="badge bdg-learned">✓ освоено</span>':'')+
     (d.missing&&d.missing.length?`<span class="badge bdg-missing">⚠ ${d.missing.length} пробел(ов)</span>`:'');
   // Tutor CTA — visible hint to scroll down in Streamlit after clicking

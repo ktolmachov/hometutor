@@ -78,6 +78,37 @@ function Repair-UvStylePyvenvIfBroken {
 
 Repair-UvStylePyvenvIfBroken -RepoRoot $Root
 
+function Write-StreamlitWinSockHelp {
+    Write-Host ""
+    Write-Host "Streamlit не смог создать локальный asyncio/socket event loop." -ForegroundColor Red
+    Write-Host "На Windows это обычно WinError 10055: исчерпан/переполнен Winsock socket buffer или очередь." -ForegroundColor Yellow
+    Write-Host "Что сделать:" -ForegroundColor Yellow
+    Write-Host "  1. Закройте лишние python.exe, streamlit.exe, uvicorn.exe и вкладки с localhost." -ForegroundColor DarkYellow
+    Write-Host "  2. Перезапустите терминал и повторите: .\scripts\local_start.ps1 -SkipPip" -ForegroundColor DarkYellow
+    Write-Host "  3. Если повторяется, выполните от администратора: netsh winsock reset" -ForegroundColor DarkYellow
+    Write-Host "     Затем перезагрузите Windows и запустите стек снова." -ForegroundColor DarkYellow
+    Write-Host ""
+}
+
+function Test-StreamlitAsyncioSocketReadiness {
+    param([string]$PythonExe)
+
+    if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
+        return
+    }
+
+    $probeCode = "import asyncio; p=getattr(asyncio,'WindowsSelectorEventLoopPolicy',None); p and asyncio.set_event_loop_policy(p()); loop=asyncio.new_event_loop(); loop.close()"
+    $probeOutput = & $PythonExe -c $probeCode 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Streamlit asyncio readiness probe failed before starting API." -ForegroundColor Red
+        if ($probeOutput) {
+            Write-Host ($probeOutput -join "`n") -ForegroundColor DarkRed
+        }
+        Write-StreamlitWinSockHelp
+        exit $LASTEXITCODE
+    }
+}
+
 $Py = Join-Path $Root ".venv\Scripts\python.exe"
 if (-not (Test-Path $Py)) {
     Write-Host "Не найден интерпретатор: $Py" -ForegroundColor Red
@@ -90,6 +121,8 @@ if (-not (Test-Path $Py)) {
 # Windows user) cause "SRE module mismatch" / wrong stdlib errors.
 $env:PYTHONHOME = $null
 $env:PYTHONPATH = $null
+
+Test-StreamlitAsyncioSocketReadiness -PythonExe $Py
 
 if (-not $SkipPip) {
     Write-Host "pip install -r requirements.txt ..." -ForegroundColor Cyan
@@ -336,6 +369,13 @@ try {
         "--browser.gatherUsageStats", "false"
     )
     & $Py @streamlitArgs
+    $streamlitExitCode = $LASTEXITCODE
+    if ($streamlitExitCode -ne 0) {
+        Write-Host ""
+        Write-Host "Streamlit завершился с кодом $streamlitExitCode." -ForegroundColor Red
+        Write-StreamlitWinSockHelp
+        exit $streamlitExitCode
+    }
 } finally {
     if ($backend -and -not $backend.HasExited) {
         Stop-Process -Id $backend.Id -Force -ErrorAction SilentlyContinue

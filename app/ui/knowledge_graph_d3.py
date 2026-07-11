@@ -324,7 +324,7 @@ def _kg_counters_from_skeleton(
 
     ``total_concepts`` excludes lesson nodes (detected via :func:`_is_lesson_node`:
     ``lesson:`` id prefix OR ``level == "lesson"``). ``learned`` and ``frontier`` are
-    concept-only counters so labels like "готово учить" never include curriculum-anchor
+    concept-only counters so labels like "доступно" never include curriculum-anchor
     lessons. ``avg_mastery`` still divides by ALL nodes (concepts + lessons)
     intentionally — lesson nodes carry aggregate mastery in the bundle and both screens
     historically used the full node set as the denominator. Keeping it preserves the

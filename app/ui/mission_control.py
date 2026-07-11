@@ -340,8 +340,6 @@ def _render_ssr_banner(rec: SmartStudyRecommendation, *, index_stats: dict | Non
             "</div>"
         )
 
-    primary_label = _safe(rec.primary_label_ru)
-
     banner_html = (
         f'<section class="ssr-banner" data-testid="mission-control-ssr-banner" '
         f'data-router-hint="{hint_attr}" role="region" aria-labelledby="{title_id}">'
@@ -349,7 +347,6 @@ def _render_ssr_banner(rec: SmartStudyRecommendation, *, index_stats: dict | Non
         f'<div class="ssr-hero">'
         f'<div class="ssr-kicker">🧭 Подсказка по учебному маршруту</div>'
         f'<h2 id="{title_id}">С чего можно продолжить</h2>'
-        f'<p class="ssr-primary-label">{primary_label}</p>'
         f'<p class="ssr-why-inline"><span class="ssr-why-label">Почему это подходит:</span> {why_now_inline}</p>'
         f"</div>"
         # ── Детали: раскрываются по клику (нативный <details>) ──
@@ -778,7 +775,7 @@ def render_kg_mission_card() -> None:
             f'<div class="kg-mc-stat"><span class="kg-mc-num">{counters["total_lessons"]}</span>'
             '<span class="kg-mc-lbl">лекций</span></div>'
             f'<div class="kg-mc-stat"><span class="kg-mc-num">{counters["frontier"]}</span>'
-            '<span class="kg-mc-lbl">готово учить</span></div>'
+            '<span class="kg-mc-lbl">доступно</span></div>'
             f'<div class="kg-mc-stat"><span class="kg-mc-num">{counters["avg_mastery"]}%</span>'
             '<span class="kg-mc-lbl">mastery</span></div>'
             '</div>'

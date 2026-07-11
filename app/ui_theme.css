@@ -958,7 +958,7 @@ div[data-testid="stChatMessage"] .stButton > button[kind="secondary"] {
 .ssr-banner {
     position: relative;
     padding: 1.35rem 1.6rem 1.4rem;
-    margin: 0 0 1.4rem;
+    margin: 0 0 0.1rem;
     border-radius: 20px;
     /* Light cool gradient: soft sky → teal → slate */
     background:
@@ -1034,16 +1034,20 @@ div[data-testid="stChatMessage"] .stButton > button[kind="secondary"] {
     line-height: 1.22;
     color: #1a2e3b !important;
     font-weight: 800;
-    letter-spacing: -0.025em;
+    letter-spacing: 0;
 }
 
-.ssr-primary-label {
-    font-size: 1.0rem !important;
-    font-weight: 700 !important;
-    color: #1e3d52 !important;
-    margin: 0 0 0.55rem !important;
-    letter-spacing: -0.01em;
-    line-height: 1.35;
+.st-key-mission_control_ssr_primary {
+    margin-top: -0.9rem;
+    margin-bottom: 1.55rem;
+}
+
+.st-key-mission_control_ssr_primary button {
+    min-height: 3rem;
+    border-radius: 12px !important;
+    font-weight: 800 !important;
+    letter-spacing: 0 !important;
+    box-shadow: 0 10px 22px rgba(185, 86, 49, 0.18) !important;
 }
 
 /* Inline "Почему это подходит" — compact single line */
@@ -1289,7 +1293,6 @@ div[data-testid="stButton"] > button:focus-visible {
 @media (max-width: 900px) {
     .ssr-banner { padding: 1.2rem 1.3rem 1.3rem; border-radius: 16px; }
     .ssr-banner h2 { font-size: 1.12rem; }
-    .ssr-primary-label { font-size: 0.95rem !important; }
     .hero-grid--4-3 .mission-tile { min-height: 132px; }
 }
 

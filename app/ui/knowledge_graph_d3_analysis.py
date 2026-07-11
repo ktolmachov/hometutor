@@ -52,7 +52,7 @@ def build_weekly_plan(
                 "days_overdue": days,
             })
 
-    # 2 — frontier (ready to learn)
+    # 2 — frontier (available: prerequisites are satisfied)
     for node in nodes:
         if len(plan) >= n:
             break
@@ -61,7 +61,7 @@ def build_weekly_plan(
             plan.append({
                 "concept": node["id"],
                 "reason": "frontier",
-                "reason_label": "✦ готово учить",
+                "reason_label": "✦ доступно",
                 "mastery": node["mastery"],
                 "days_overdue": 0,
             })

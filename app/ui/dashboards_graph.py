@@ -1011,7 +1011,7 @@ def _render_knowledge_graph_tab() -> None:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
     _render_panel_header(
         "Knowledge Graph",
-        "Заливка — уровень • кольцо — mastery % • пульсация — готово учить • "
+        "Заливка — уровень • кольцо — mastery % • пульсация — доступно • "
         "клик по узлу — детали, prerequisites и документы",
     )
 
@@ -1083,7 +1083,7 @@ def _render_knowledge_graph_tab() -> None:
     # Control KG card shows, both sourced from compute_kg_counters / build_kg_payload.
     st.caption(
         f"📊 {stats.get('total_concepts', stats.get('total', 0))} концептов · {stats.get('avg_mastery', 0)}% ср. mastery · "
-        f"{stats.get('learned', 0)} освоено · {stats.get('frontier', 0)} готово учить · "
+        f"{stats.get('learned', 0)} освоено · {stats.get('frontier', 0)} доступно · "
         f"{stats.get('clusters', 0)} кластеров"
     )
 

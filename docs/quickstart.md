@@ -181,6 +181,7 @@ docker compose -f docker-compose.yml -f docker-compose.llamacpp.yml up --build
 |---|---|
 | API не стартует | порт `8000`, `.env`, `OPENAI_API_KEY`, доступность LLM endpoint |
 | UI не открывается | порт `8501`, запущен ли `main.py`, значение `UI_API_BASE_URL` |
+| Streamlit падает с `WinError 10055` / `socketpair` | закройте лишние `python.exe`/Streamlit/localhost-вкладки и перезапустите терминал; если повторяется — выполните `netsh winsock reset` от администратора, перезагрузите Windows и снова запустите `.\scripts\local_start.ps1 -SkipPip` |
 | нет источников | был ли выполнен `ingest.py`, есть ли файлы в `data/`, не пуст ли `chroma_db/` |
 | Knowledge Graph пустой | graph LLM / `graph_quality_report.json` в `data/graph_generations/`; graph-only пересборка без re-embed: `scripts/rebuild_knowledge_graph.py` пишет `graph_audit_report.json/.md` рядом с bundle |
 | проверить graph LLM перед сменой модели | `scripts/probe_graph_llm.py --live-doc --no-cache` → отчёт в `logs/graph_llm_probe_report.json` |

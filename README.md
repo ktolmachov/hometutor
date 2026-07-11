@@ -3,9 +3,8 @@ title: hometutor — ИИ-тьютор с RAG
 emoji: 🎓
 colorFrom: blue
 colorTo: purple
-sdk: gradio
-python_version: "3.10"
-app_file: app.py
+sdk: docker
+app_port: 8501
 pinned: false
 ---
 

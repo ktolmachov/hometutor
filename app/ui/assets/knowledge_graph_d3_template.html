@@ -576,7 +576,7 @@ function _kgBridgeConceptToStreamlit(conceptId){
     try{window.parent.postMessage({type:'hometutor:kg-select',concept:conceptId},'*');}catch(_){}
   }
   try{
-    if(window.parent===window.top){
+    if(window.parent!==window&&window.parent===window.top){
       const pu=new URL(window.top.location.href);
       pu.searchParams.set('_kgc',conceptId);
       window.top.location.assign(pu.toString());

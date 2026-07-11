@@ -90,3 +90,24 @@ def test_context_row_segments_degrade_when_missing() -> None:
     only_xp = build_context_row_segments(scope=None, snapshot={"daily_streak": 1})
     assert len(only_xp) == 1
     assert "Стрик 1" in only_xp[0]
+
+
+def test_non_cold_hero_cards_at_most_two() -> None:
+    """A2 DoD: at most two resume cards above «Ещё режимы» for non-cold users."""
+    from app.ui.mission_control import _NON_COLD_HERO_CARDS
+
+    assert len(_NON_COLD_HERO_CARDS) <= 2
+
+
+def test_non_cold_hero_cards_are_kg_and_living_konspekt() -> None:
+    """Pin which cards render above the fold so a future card can't sneak in silently."""
+    from app.ui.mission_control import (
+        _NON_COLD_HERO_CARDS,
+        render_kg_mission_card,
+        render_living_konspekt_mission_card,
+    )
+
+    assert set(_NON_COLD_HERO_CARDS) == {
+        render_kg_mission_card,
+        render_living_konspekt_mission_card,
+    }

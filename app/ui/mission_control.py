@@ -5,7 +5,7 @@ import html
 import math
 import random
 from dataclasses import dataclass
-from typing import Any, Final, get_args
+from typing import Any, Callable, Final, get_args
 
 import streamlit as st
 
@@ -881,6 +881,38 @@ def _render_configure_ui_button() -> None:
         render_control_panel_dialog()
 
 
+# A2: resume/secondary cards shown above «Ещё режимы» for non-cold users.
+# Kept as an explicit tuple so a regression test can guard the "≤2" invariant —
+# a future card added here without updating the test will fail it.
+_NON_COLD_HERO_CARDS: Final[tuple[Callable[[], None], ...]] = (
+    render_kg_mission_card,
+    render_living_konspekt_mission_card,
+)
+
+
+def _render_home_secondary_surfaces(index_stats: dict | None) -> None:
+    """First-session hero / seed-question chips / delight rail — secondary CTAs.
+
+    For cold users these lead the focused 3-tile view; for non-cold users they
+    render *below* the SSR hero + resume cards so the hero stays the first
+    learning block (A2 DoD: above the fold = context row + one hero CTA + ≤2 cards).
+    """
+    first_session_rendered = render_first_session_hero(
+        index_stats,
+        navigate_to_question=_prefill_and_navigate_to_quick_answer,
+    )
+    if not first_session_rendered:
+        render_seed_question_chips(
+            key_prefix="mission_control",
+            navigate_to_question=_prefill_and_navigate_to_quick_answer,
+            index_stats=index_stats,
+            topics_catalog=st.session_state.get("topics_catalog"),
+            first_session_artifact=None,
+        )
+    _apply_e2e_delight_completion()
+    render_delight_progress_rail(st.session_state.get("delight_loop_completed_steps"))
+
+
 def render_mission_control(index_stats: dict | None = None) -> None:
     """Render the home screen.
 
@@ -924,28 +956,20 @@ def render_mission_control(index_stats: dict | None = None) -> None:
     rec = _build_recommendation(index_stats)
     due_count = _flashcards_due_count()
     cold = _is_cold_user(due_count, index_stats)
-    first_session_rendered = render_first_session_hero(
-        index_stats,
-        navigate_to_question=_prefill_and_navigate_to_quick_answer,
-    )
-    if not first_session_rendered:
-        render_seed_question_chips(
-            key_prefix="mission_control",
-            navigate_to_question=_prefill_and_navigate_to_quick_answer,
-            index_stats=index_stats,
-            topics_catalog=st.session_state.get("topics_catalog"),
-            first_session_artifact=None,
-        )
-    _apply_e2e_delight_completion()
-    render_delight_progress_rail(st.session_state.get("delight_loop_completed_steps"))
     if cold:
+        # Cold user: focused 3-tile view; secondary CTAs lead, then tiles + settings.
+        _render_home_secondary_surfaces(index_stats)
         _render_tile_grid(rec=rec, due_count=due_count, cold_user=True)
         _render_configure_ui_button()
     else:
+        # Non-cold: the SSR hero must be the first learning block (A2 DoD), so the
+        # context row + hero + ≤2 resume cards come before secondary CTAs and the
+        # collapsed «Ещё режимы» grid (every entry point stays reachable).
         _render_context_row()
         _render_ssr_banner(rec, index_stats=index_stats)
-        render_kg_mission_card()
-        render_living_konspekt_mission_card()
+        for card_renderer in _NON_COLD_HERO_CARDS:
+            card_renderer()
+        _render_home_secondary_surfaces(index_stats)
         with st.expander("Ещё режимы", expanded=False):
             st.caption(
                 "Все режимы обучения: тьютор, quiz, flashcards, темы, курс и адаптивный план."

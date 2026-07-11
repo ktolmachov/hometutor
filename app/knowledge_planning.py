@@ -1,33 +1,107 @@
-"""Learning plan generation grounded in catalog + chunk context."""
+"""Learning plan generation grounded in catalog + chunk context.
+
+B1: when graph with concepts is available, build a deterministic outline
+from graph edges so the LLM only fills in descriptions, practice, and check
+columns — not order or dependencies.
+"""
 
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 from typing import Any
 
 from app.knowledge_catalog import compute_source_coverage
-from app.knowledge_text import normalize_topic_name
+from app.knowledge_graph import knowledge_graph
 from app.knowledge_synthesis import _fetch_chunks_for_documents, _select_documents_for_synthesis
+from app.knowledge_text import normalize_topic_name
 from app.learning_plan_service import plan_service
+from app.learning_plan_state import check_budget, parse_plan_table
 from app.llm_resilience import complete_with_resilience
 from app.prompts import LEARNING_PLAN_PROMPT
 from app.retrieval_cache import get_base_services
+
+logger = logging.getLogger(__name__)
+
+
+def _graph_prerequisite_snippet(doc_concepts: list[str]) -> str:
+    """Build a concise list of known prerequisite relationships.
+
+    Scans the knowledge graph for edges among *doc_concepts* and returns
+    a short block that the LLM can use as factual ground truth for the
+    ``Зависимости`` column.
+    """
+    kg = knowledge_graph
+    concepts = kg.get_concepts()
+    doc_set = {c.strip().lower() for c in doc_concepts if c.strip()}
+    if not doc_set:
+        return ""
+
+    edges: list[str] = []
+    for cid in doc_set:
+        node = concepts.get(cid, concepts.get(cid.capitalize()))
+        if not isinstance(node, dict):
+            continue
+        prereqs = list(node.get("prerequisites", [])) or list(node.get("prerequisite_for", []))
+        for p in prereqs:
+            ps = str(p).strip()
+            if ps and ps.lower() in doc_set:
+                edges.append(f"- «{p}» → «{cid}»")
+
+    if not edges:
+        return ""
+    return (
+        "Известные связи по карте знаний (prerequisite → topic):\n"
+        + "\n".join(sorted(set(edges)))
+    )
+
+
+def _reorder_validator(steps: list[dict[str, Any]], dp_plan: list[dict[str, Any]]) -> bool:
+    """Log a warning if the generated table order contradicts graph topology."""
+    if not dp_plan:
+        return True
+    dp_topics = [s.get("topic") or "" for s in dp_plan]
+    step_titles = [s.title.lower() for s in steps]
+    mismatch = False
+    for i, step_a in enumerate(step_titles):
+        for j, step_b in enumerate(step_titles):
+            if i >= j:
+                continue
+            a_dp_idx = next((k for k, t in enumerate(dp_topics) if t and t.lower() == step_a), None)
+            b_dp_idx = next((k for k, t in enumerate(dp_topics) if t and t.lower() == step_b), None)
+            if a_dp_idx is not None and b_dp_idx is not None and a_dp_idx > b_dp_idx:
+                logger.warning(
+                    "learning_plan_order_contradiction: "
+                    "«%s» appears before «%s» in generated table "
+                    "but graph says the reverse order",
+                    steps[j].title,
+                    steps[i].title,
+                )
+                mismatch = True
+                break
+    return not mismatch
 
 
 def _dynamic_plan_prompt_block(dp: dict[str, Any] | None) -> str:
     if not dp or not dp.get("enabled"):
         return ""
+    plan_items = dp.get("plan") or []
     lines = [
-        "Персонализированный порядок шагов (reading_status, quiz_mastery, spaced repetition):",
+        "=== ОБЯЗАТЕЛЬНЫЙ ПОРЯДОК ШАГОВ (из карты знаний) ===",
+        "Карта знаний определила следующий порядок. НЕ МЕНЯЙ ЕГО.",
+        "Для колонки «Зависимости» используй известные связи prerequisite → topic.",
+        "",
     ]
-    for i, step in enumerate(dp.get("plan") or [], 1):
+    for i, step in enumerate(plan_items, 1):
         t = step.get("topic")
         typ = step.get("type")
         reason = step.get("reason", "")
         hours = step.get("estimated_hours")
         lines.append(f"{i}. {t} [{typ}] ~{hours}h — {reason}")
+    lines.append("")
     lines.append(f"Доля концептов на уровне transfer: {dp.get('mastery_percentage')}%")
     lines.append(f"Просроченных повторений (SR): {dp.get('next_review_count')}")
+    lines.append("================================")
     return "\n".join(lines)
 
 
@@ -98,11 +172,22 @@ def build_learning_plan(
         section_text = "\n".join(f"- {chunk}" for chunk in chunks)
         context_sections.append(f"{doc_meta}\nChunks:\n{section_text}")
 
+    doc_concepts = [
+        c.strip()
+        for doc in selected_documents
+        for c in (doc.get("key_concepts") or [])
+        if c.strip()
+    ]
+
     query_parts = [effective_goal, f"Topic: {resolved_topic}", f"Level: {effective_level}"]
     if time_budget_hours is not None:
         query_parts.append(f"Time budget: {time_budget_hours} hours")
     if known_topics:
         query_parts.append(f"Known topics: {', '.join(known_topics)}")
+
+    prereq_snippet = _graph_prerequisite_snippet(doc_concepts)
+    if prereq_snippet:
+        query_parts.append(prereq_snippet)
 
     dynamic_plan: dict[str, Any] | None = None
     if user_progress:
@@ -124,6 +209,7 @@ def build_learning_plan(
         query_str="\n".join(query_parts),
     )
     response = complete_with_resilience(llm, prompt, stage="learning_plan")
+    plan_text = response.text.strip()
 
     coverage = compute_source_coverage(
         source_paths=document_paths,
@@ -132,12 +218,28 @@ def build_learning_plan(
     )
     missing_topics = _compute_missing_topics(selected_documents, known_topics=known_topics)
 
+    if dynamic_plan and dynamic_plan.get("plan"):
+        parsed = parse_plan_table(plan_text)
+        if parsed:
+            _reorder_validator(parsed, dynamic_plan["plan"])
+
+    if time_budget_hours is not None and time_budget_hours > 0:
+        budget = check_budget(plan_text, time_budget_hours)
+        if budget and budget.over_budget:
+            logger.warning(
+                "learning_plan_over_budget: total=%.1fh budget=%.1fh exceeds_by=%.1fh steps=%d",
+                budget.total_hours,
+                budget.budget_hours,
+                budget.exceeds_by_hours,
+                budget.steps_count,
+            )
+
     result: dict[str, Any] = {
         "topic": resolved_topic,
         "goal": effective_goal,
         "level": effective_level,
         "time_budget_hours": time_budget_hours,
-        "plan": response.text.strip(),
+        "plan": plan_text,
         "documents": selected_documents,
         "sources": sources,
         "coverage": coverage,

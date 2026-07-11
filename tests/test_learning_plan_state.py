@@ -426,4 +426,58 @@ def test_lps_preview_cards_empty_when_no_table() -> None:
     assert lps.preview_cards_from_plan_text("просто текст без таблицы") == []
 
 
+# ──────────────────────────────────────────────
+# Budget compliance (B2)
+# ──────────────────────────────────────────────
+
+
+def test_lps_check_budget_within_budget() -> None:
+    status = lps.check_budget(TABLE_PLAN, 5.0)
+    assert status is not None
+    assert status.total_hours == 3.5
+    assert status.budget_hours == 5.0
+    assert status.over_budget is False
+    assert status.exceeds_by_hours == 0.0
+    assert status.steps_count == 2
+
+
+def test_lps_check_budget_over_budget() -> None:
+    status = lps.check_budget(TABLE_PLAN, 2.0)
+    assert status is not None
+    assert status.over_budget is True
+    assert status.exceeds_by_hours == 1.5
+
+
+def test_lps_check_budget_exact_match() -> None:
+    status = lps.check_budget(TABLE_PLAN, 3.5)
+    assert status is not None
+    assert status.over_budget is False
+    assert status.exceeds_by_hours == 0.0
+
+
+def test_lps_check_budget_none_when_no_table() -> None:
+    assert lps.check_budget("", 10.0) is None
+    assert lps.check_budget("просто текст", 10.0) is None
+
+
+def test_lps_check_budget_zero_budget() -> None:
+    """Zero budget skips over-budget flag but still returns summary."""
+    status = lps.check_budget(TABLE_PLAN, 0.0)
+    assert status is not None
+    assert status.total_hours == 3.5
+    assert status.over_budget is False
+
+
+def test_lps_check_budget_with_invalid_hours() -> None:
+    plan = """
+| # | Тема | Время (ч) |
+|---|---|---|
+| 1 | Векторы | около часа |
+| 2 | Производная | 2,5 |
+""".strip()
+    status = lps.check_budget(plan, 10.0)
+    assert status is not None
+    assert status.total_hours == 2.5
+    assert status.missing_or_invalid_hours == 1
+    assert status.over_budget is False
 

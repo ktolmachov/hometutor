@@ -246,6 +246,35 @@ def hours_summary_from_markdown(plan_md: str) -> dict[str, Any] | None:
     }
 
 
+@dataclass(frozen=True)
+class BudgetCompliance:
+    """Result of checking a plan table against a time budget."""
+
+    total_hours: float
+    budget_hours: float
+    steps_count: int
+    missing_or_invalid_hours: int
+    over_budget: bool
+    exceeds_by_hours: float
+
+
+def check_budget(plan_md: str, time_budget_hours: float) -> BudgetCompliance | None:
+    """Check plan table hours against budget. Returns None when no table detected."""
+    summary = hours_summary_from_markdown(plan_md)
+    if summary is None:
+        return None
+    total = float(summary["total_hours"])
+    budget = float(time_budget_hours) if time_budget_hours > 0 else 0.0
+    return BudgetCompliance(
+        total_hours=round(total, 2),
+        budget_hours=budget,
+        steps_count=int(summary["steps_count"]),
+        missing_or_invalid_hours=int(summary["missing_or_invalid_hours"]),
+        over_budget=budget > 0 and total > budget,
+        exceeds_by_hours=round(max(0.0, total - budget), 2),
+    )
+
+
 def steps_from_markdown(plan_md: str) -> list[str]:
     """Extract human-readable step texts from a learning plan markdown.
 

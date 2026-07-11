@@ -6,6 +6,7 @@ import streamlit as st
 
 from app import user_state
 from app.knowledge_graph import knowledge_graph as _knowledge_graph
+from app.learning_plan_state import check_budget as _check_budget
 from app.ui.answer_helpers import format_sources_markdown
 from app.ui.course_prepare_view import render_course_prepare_view
 from app.ui.helpers import format_request_error
@@ -67,10 +68,11 @@ def render_topics_plan_subtab(
         "Учитывать прогресс (чтение, quiz, интервальные повторения)",
         value=_graph_has_concepts,
         key=f"plan_user_progress_{selected_topic['topic_id']}",
-        help="Добавляет персонализированный порядок шагов в промпт и возвращает поле dynamic_plan в ответе API."
-        if not _graph_has_concepts
-        else "По карте знаний: граф и прогресс влияют на подсказку для порядка шагов. "
-        "Отключите для свободного (free-form) плана.",
+        help="Карта знаний определяет обязательный порядок шагов и зависимости. "
+        "Прогресс (чтение, quiz, интервальные повторения) влияет на персонализацию."
+        if _graph_has_concepts
+        else "Карта знаний пуста: порядок шагов будет свободным (free-form), "
+        "зависимости определит LLM без привязки к графу.",
     )
     known_topics = [item.strip() for item in known_topics_raw.split(",") if item.strip()]
     render_course_prepare_view(
@@ -202,24 +204,39 @@ def render_topics_plan_subtab(
         if not rendered_as_table:
             render_longform_block(display_plan_md, markdown=True)
         plan_steps = user_state.learning_plan_steps_from_markdown(plan_md)
-        hours_summary = user_state.learning_plan_table_hours_summary_from_markdown(plan_md)
-        if hours_summary:
-            budget_hours_raw = learning_plan.get("time_budget_hours")
-            try:
-                budget_hours = float(budget_hours_raw)
-            except (TypeError, ValueError):
-                budget_hours = 0.0
-            total_hours = float(hours_summary.get("total_hours") or 0.0)
-            invalid_hours = int(hours_summary.get("missing_or_invalid_hours") or 0)
-            if budget_hours > 0 and total_hours > budget_hours:
-                st.warning(
-                    f"План по таблице занимает ~{total_hours:g} ч, "
-                    f"что выше заданного бюджета {budget_hours:g} ч. "
-                    "Сократите шаги или пересоберите план с меньшим объёмом."
-                )
-            elif invalid_hours > 0:
+        budget_raw = learning_plan.get("time_budget_hours")
+        try:
+            budget_float = float(budget_raw) if budget_raw else 0.0
+        except (TypeError, ValueError):
+            budget_float = 0.0
+        budget_status = _check_budget(plan_md, budget_float) if budget_float > 0 else None
+        if budget_status:
+            if budget_status.over_budget:
+                budget_cols = st.columns([3, 1])
+                with budget_cols[0]:
+                    st.warning(
+                        f"План по таблице занимает ~{budget_status.total_hours:g} ч, "
+                        f"что на {budget_status.exceeds_by_hours:g} ч выше "
+                        f"заданного бюджета {budget_status.budget_hours:g} ч."
+                    )
+                with budget_cols[1]:
+                    if st.button(
+                        "Пересобрать по бюджету",
+                        key=f"budget_rebuild_{selected_topic['topic_id']}",
+                        type="secondary",
+                        use_container_width=True,
+                    ):
+                        if st.session_state.get("last_learning_plan"):
+                            lp = dict(st.session_state["last_learning_plan"])
+                            old_budget = lp.get("time_budget_hours")
+                            if old_budget:
+                                lp["time_budget_hours"] = old_budget
+                            st.session_state["pending_rebuild"] = lp.get("selection_mode") or "topic"
+                            st.rerun()
+            elif budget_status.missing_or_invalid_hours > 0:
                 st.caption(
-                    f"В {invalid_hours} шаг(ах) не удалось прочитать время из колонки «Время (ч)»."
+                    f"В {budget_status.missing_or_invalid_hours} шаг(ах) не удалось "
+                    "прочитать время из колонки «Время (ч)»."
                 )
         n_steps = max(len(plan_steps), 1)
         step_options = list(range(min(max(len(plan_steps), 1), 40)))

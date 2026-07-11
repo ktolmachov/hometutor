@@ -1,0 +1,127 @@
+{
+  "scenario_id": "scenario_06",
+  "started_at": "2026-06-20T18:54:32.829Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_home_due_badge",
+      "caption": "Бейдж «К повторению» на главном экране",
+      "narration": "Аня заходит — система уже знает: 12 карточек пора повторить.",
+      "file": "01_home_due_badge.png",
+      "taken_at": "2026-06-20T18:54:35.203Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 621,
+        "streamlit_ready": 12,
+        "screenshot": 104,
+        "total": 737
+      }
+    },
+    {
+      "step": 2,
+      "slug": "02_review_queue_opened",
+      "caption": "Очередь повторения открыта: верхняя карточка",
+      "narration": "Одна карточка за раз — без перегрузки.",
+      "file": "02_review_queue_opened.png",
+      "taken_at": "2026-06-20T18:54:36.224Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 637,
+        "streamlit_ready": 12,
+        "screenshot": 79,
+        "total": 728
+      }
+    },
+    {
+      "step": 3,
+      "slug": "03_card_flipped_answer",
+      "caption": "Карточка раскрыта: ответ + 4 кнопки SM-2",
+      "narration": "Оцени насколько помнишь: от «Забыл» до «Легко».",
+      "file": "03_card_flipped_answer.png",
+      "taken_at": "2026-06-20T18:54:36.740Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 407,
+        "streamlit_ready": 11,
+        "screenshot": 90,
+        "total": 508
+      }
+    },
+    {
+      "step": 4,
+      "slug": "04_grade_selected_state_update",
+      "caption": "Оценка выбрана — карточка уходит из очереди",
+      "narration": "Выбрал «Хорошо» — карточка переносится на +4 дня.",
+      "file": "04_grade_selected_state_update.png",
+      "taken_at": "2026-06-20T18:54:37.255Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 420,
+        "streamlit_ready": 11,
+        "screenshot": 77,
+        "total": 508
+      }
+    },
+    {
+      "step": 5,
+      "slug": "05_queue_progress",
+      "caption": "Прогресс очереди: «11 осталось, ~4 мин»",
+      "narration": "Видно сколько осталось и когда закончишь — не бесконечный список.",
+      "file": "05_queue_progress.png",
+      "taken_at": "2026-06-20T18:54:37.772Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 407,
+        "streamlit_ready": 11,
+        "screenshot": 87,
+        "total": 505
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-06-20T18:54:37.772Z",
+  "total_duration_ms": 4943,
+  "shot_count": 5,
+  "timings_summary": {
+    "wait": {
+      "sum": 2492,
+      "avg": 498,
+      "p95": 637
+    },
+    "streamlit_ready": {
+      "sum": 57,
+      "avg": 11,
+      "p95": 12
+    },
+    "screenshot": {
+      "sum": 437,
+      "avg": 87,
+      "p95": 104
+    },
+    "total": {
+      "sum": 2986,
+      "avg": 597,
+      "p95": 737
+    }
+  }
+}

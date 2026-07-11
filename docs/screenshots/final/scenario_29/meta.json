@@ -1,0 +1,91 @@
+{
+  "scenario_id": "scenario_29",
+  "started_at": "2026-06-20T18:57:25.019Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_delight_progress_rail",
+      "caption": "Delight loop: progress rail на Home",
+      "narration": "Виден путь Q&A → Tutor → Quiz → Card → Review → Graduation.",
+      "file": "01_delight_progress_rail.png",
+      "taken_at": "2026-06-20T18:57:27.473Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 511,
+        "streamlit_ready": 10,
+        "screenshot": 135,
+        "total": 656
+      }
+    },
+    {
+      "step": 2,
+      "slug": "02_celebration_overlay",
+      "caption": "Celebration overlay после mastery ≥ 80%",
+      "narration": "Система поздравляет с освоением темы и показывает метрики сессии.",
+      "file": "02_celebration_overlay.png",
+      "taken_at": "2026-06-20T18:57:28.599Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 518,
+        "streamlit_ready": 16,
+        "screenshot": 115,
+        "total": 649
+      }
+    },
+    {
+      "step": 3,
+      "slug": "03_graduation_ctas",
+      "caption": "CTA: следующая тема / weak / home",
+      "narration": "Три безопасных следующих шага после graduation.",
+      "file": "03_graduation_ctas.png",
+      "taken_at": "2026-06-20T18:57:29.532Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 694,
+        "streamlit_ready": 132,
+        "screenshot": 94,
+        "total": 920
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-06-20T18:57:29.532Z",
+  "total_duration_ms": 4513,
+  "shot_count": 3,
+  "timings_summary": {
+    "wait": {
+      "sum": 1723,
+      "avg": 574,
+      "p95": 694
+    },
+    "streamlit_ready": {
+      "sum": 158,
+      "avg": 53,
+      "p95": 132
+    },
+    "screenshot": {
+      "sum": 344,
+      "avg": 115,
+      "p95": 135
+    },
+    "total": {
+      "sum": 2225,
+      "avg": 742,
+      "p95": 920
+    }
+  }
+}

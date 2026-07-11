@@ -1,0 +1,4 @@
+{"scenario_id":"scenario_27","step":1,"slug":"01_topics_catalog_ready","file":"01_topics_catalog_ready.png","timings_ms":{"wait":420,"streamlit_ready":11,"screenshot":82,"total":513},"taken_at":"2026-06-20T18:57:19.017Z"}
+{"scenario_id":"scenario_27","step":2,"slug":"02_reindex_profile_badge","file":"02_reindex_profile_badge.png","timings_ms":{"wait":412,"streamlit_ready":13,"screenshot":88,"total":513},"taken_at":"2026-06-20T18:57:20.038Z"}
+{"scenario_id":"scenario_27","step":3,"slug":"03_mastery_preserved","file":"03_mastery_preserved.png","timings_ms":{"wait":825,"streamlit_ready":20,"screenshot":99,"total":944},"taken_at":"2026-06-20T18:57:21.032Z"}
+{"scenario_id":"scenario_27","step":4,"slug":"04_new_concepts_in_plan","file":"04_new_concepts_in_plan.png","timings_ms":{"wait":436,"streamlit_ready":20,"screenshot":91,"total":547},"taken_at":"2026-06-20T18:57:21.748Z"}

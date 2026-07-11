@@ -1,0 +1,127 @@
+{
+  "scenario_id": "scenario_16",
+  "started_at": "2026-06-20T18:56:02.965Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_home_tour_entry",
+      "caption": "Home: tour entry overlay",
+      "narration": "Structured onboarding from the first screen.",
+      "file": "01_home_tour_entry.png",
+      "taken_at": "2026-06-20T18:56:04.732Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 0,
+        "screenshot": 144,
+        "total": 144
+      }
+    },
+    {
+      "step": 2,
+      "slug": "02_chapter1_practice_step",
+      "caption": "Chapter 1: practice question step",
+      "narration": "The tour walks through a real first-answer path.",
+      "file": "02_chapter1_practice_step.png",
+      "taken_at": "2026-06-20T18:56:05.601Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 0,
+        "screenshot": 106,
+        "total": 106
+      }
+    },
+    {
+      "step": 3,
+      "slug": "03_chapter1_trust_step",
+      "caption": "Chapter 1: sources and trust",
+      "narration": "Users see how to verify answers against retrieved evidence.",
+      "file": "03_chapter1_trust_step.png",
+      "taken_at": "2026-06-20T18:56:06.569Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 0,
+        "screenshot": 91,
+        "total": 91
+      }
+    },
+    {
+      "step": 4,
+      "slug": "04_chapter2_overlay",
+      "caption": "Chapter 2: tutor handoff",
+      "narration": "From answer mode into structured learning.",
+      "file": "04_chapter2_overlay.png",
+      "taken_at": "2026-06-20T18:56:07.496Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 0,
+        "screenshot": 109,
+        "total": 109
+      }
+    },
+    {
+      "step": 5,
+      "slug": "05_resume_after_reload",
+      "caption": "Tour resumes after reload",
+      "narration": "Chapter progress survives a full page reload.",
+      "file": "05_resume_after_reload.png",
+      "taken_at": "2026-06-20T18:56:08.773Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 345,
+        "streamlit_ready": 0,
+        "screenshot": 93,
+        "total": 438
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-06-20T18:56:08.773Z",
+  "total_duration_ms": 5808,
+  "shot_count": 5,
+  "timings_summary": {
+    "wait": {
+      "sum": 345,
+      "avg": 69,
+      "p95": 345
+    },
+    "streamlit_ready": {
+      "sum": 0,
+      "avg": 0,
+      "p95": 0
+    },
+    "screenshot": {
+      "sum": 543,
+      "avg": 109,
+      "p95": 144
+    },
+    "total": {
+      "sum": 888,
+      "avg": 178,
+      "p95": 438
+    }
+  }
+}

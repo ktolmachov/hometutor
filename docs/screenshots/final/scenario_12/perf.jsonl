@@ -1,0 +1,4 @@
+{"scenario_id":"scenario_12","step":1,"slug":"01_quiz_summary","file":"01_quiz_summary.png","timings_ms":{"wait":0,"streamlit_ready":6,"screenshot":31,"total":37},"taken_at":"2026-06-20T18:54:56.556Z"}
+{"scenario_id":"scenario_12","step":2,"slug":"02_convert_to_deck","file":"02_convert_to_deck.png","timings_ms":{"wait":0,"streamlit_ready":0,"screenshot":58,"total":58},"taken_at":"2026-06-20T18:54:56.900Z"}
+{"scenario_id":"scenario_12","step":3,"slug":"03_generated_cards_preview","file":"03_generated_cards_preview.png","timings_ms":{"wait":0,"streamlit_ready":42,"screenshot":62,"total":104},"taken_at":"2026-06-20T18:54:57.642Z"}
+{"scenario_id":"scenario_12","step":4,"slug":"04_saved_deck_review_ready","file":"04_saved_deck_review_ready.png","timings_ms":{"wait":0,"streamlit_ready":70,"screenshot":84,"total":154},"taken_at":"2026-06-20T18:54:58.489Z"}

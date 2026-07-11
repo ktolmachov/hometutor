@@ -1,0 +1,145 @@
+{
+  "scenario_id": "scenario_13",
+  "started_at": "2026-06-20T18:54:58.580Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_activate_course_scope",
+      "caption": "Активация папки как курса",
+      "narration": "Курс выбирается в Темах и становится активной областью.",
+      "file": "01_activate_course_scope.png",
+      "taken_at": "2026-06-20T18:54:59.983Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 120,
+        "screenshot": 84,
+        "total": 204
+      }
+    },
+    {
+      "step": 2,
+      "slug": "02_scoped_quick_answer",
+      "caption": "Scoped быстрый ответ внутри курса",
+      "narration": "Запросы автоматически ограничены материалами курса.",
+      "file": "02_scoped_quick_answer.png",
+      "taken_at": "2026-06-20T18:55:00.335Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 121,
+        "screenshot": 80,
+        "total": 201
+      }
+    },
+    {
+      "step": 3,
+      "slug": "03_course_plan",
+      "caption": "План изучения курса",
+      "narration": "План формируется на основе структуры и текущего прогресса.",
+      "file": "03_course_plan.png",
+      "taken_at": "2026-06-20T18:55:01.206Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 135,
+        "screenshot": 78,
+        "total": 213
+      }
+    },
+    {
+      "step": 4,
+      "slug": "04_course_flashcards",
+      "caption": "Генерация карточек курса",
+      "narration": "Карточки запускают закрепление ключевых концептов.",
+      "file": "04_course_flashcards.png",
+      "taken_at": "2026-06-20T18:55:01.971Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 72,
+        "screenshot": 86,
+        "total": 158
+      }
+    },
+    {
+      "step": 5,
+      "slug": "05_tutor_unknown_recovery",
+      "caption": "Маршрут «Не знаю» через Tutor",
+      "narration": "Тьютор помогает пройти сложные места без срыва сессии.",
+      "file": "05_tutor_unknown_recovery.png",
+      "taken_at": "2026-06-20T18:55:02.759Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 91,
+        "screenshot": 69,
+        "total": 160
+      }
+    },
+    {
+      "step": 6,
+      "slug": "06_course_mastery_dashboard",
+      "caption": "Dashboard курса и mastery",
+      "narration": "Видно рост mastery и сигнал graduation по курсу.",
+      "file": "06_course_mastery_dashboard.png",
+      "taken_at": "2026-06-20T18:55:03.621Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 121,
+        "screenshot": 108,
+        "total": 229
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-06-20T18:55:03.622Z",
+  "total_duration_ms": 5042,
+  "shot_count": 6,
+  "timings_summary": {
+    "wait": {
+      "sum": 0,
+      "avg": 0,
+      "p95": 0
+    },
+    "streamlit_ready": {
+      "sum": 660,
+      "avg": 110,
+      "p95": 135
+    },
+    "screenshot": {
+      "sum": 505,
+      "avg": 84,
+      "p95": 108
+    },
+    "total": {
+      "sum": 1165,
+      "avg": 194,
+      "p95": 229
+    }
+  }
+}

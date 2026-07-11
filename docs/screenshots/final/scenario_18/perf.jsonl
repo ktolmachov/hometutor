@@ -1,0 +1,4 @@
+{"scenario_id":"scenario_18","step":1,"slug":"01_home_modes_hub","file":"01_home_modes_hub.png","timings_ms":{"wait":408,"streamlit_ready":0,"screenshot":99,"total":507},"taken_at":"2026-06-20T18:56:15.690Z"}
+{"scenario_id":"scenario_18","step":2,"slug":"02_flashcards_due_surface","file":"02_flashcards_due_surface.png","timings_ms":{"wait":423,"streamlit_ready":0,"screenshot":103,"total":526},"taken_at":"2026-06-20T18:56:16.457Z"}
+{"scenario_id":"scenario_18","step":3,"slug":"03_progress_next_actions","file":"03_progress_next_actions.png","timings_ms":{"wait":427,"streamlit_ready":0,"screenshot":164,"total":591},"taken_at":"2026-06-20T18:56:17.942Z"}
+{"scenario_id":"scenario_18","step":4,"slug":"04_back_to_home_rhythm","file":"04_back_to_home_rhythm.png","timings_ms":{"wait":426,"streamlit_ready":0,"screenshot":98,"total":524},"taken_at":"2026-06-20T18:56:18.664Z"}

@@ -1,0 +1,5 @@
+{"scenario_id":"scenario_02","step":1,"slug":"01_home_initial","file":"01_home_initial.png","timings_ms":{"wait":0,"streamlit_ready":0,"screenshot":85,"total":85},"taken_at":"2026-06-20T18:54:13.700Z"}
+{"scenario_id":"scenario_02","step":2,"slug":"02_click_topics","file":"02_click_topics.png","timings_ms":{"wait":0,"streamlit_ready":0,"screenshot":77,"total":77},"taken_at":"2026-06-20T18:54:14.766Z"}
+{"scenario_id":"scenario_02","step":3,"slug":"03_back_to_home","file":"03_back_to_home.png","timings_ms":{"wait":0,"streamlit_ready":0,"screenshot":58,"total":58},"taken_at":"2026-06-20T18:54:15.573Z"}
+{"scenario_id":"scenario_02","step":4,"slug":"04_click_progress","file":"04_click_progress.png","timings_ms":{"wait":0,"streamlit_ready":0,"screenshot":69,"total":69},"taken_at":"2026-06-20T18:54:16.342Z"}
+{"scenario_id":"scenario_02","step":5,"slug":"05_ssr_banner","file":"05_ssr_banner.png","timings_ms":{"wait":0,"streamlit_ready":0,"screenshot":95,"total":95},"taken_at":"2026-06-20T18:54:16.850Z"}

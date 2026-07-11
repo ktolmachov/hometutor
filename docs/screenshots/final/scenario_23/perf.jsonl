@@ -1,0 +1,3 @@
+{"scenario_id":"scenario_23","step":1,"slug":"01_recommendation_with_reason","file":"01_recommendation_with_reason.png","timings_ms":{"wait":823,"streamlit_ready":12,"screenshot":105,"total":940},"taken_at":"2026-06-20T18:56:36.606Z"}
+{"scenario_id":"scenario_23","step":2,"slug":"02_evidence_panel","file":"02_evidence_panel.png","timings_ms":{"wait":808,"streamlit_ready":12,"screenshot":91,"total":911},"taken_at":"2026-06-20T18:56:37.537Z"}
+{"scenario_id":"scenario_23","step":3,"slug":"03_local_first_trust","file":"03_local_first_trust.png","timings_ms":{"wait":414,"streamlit_ready":12,"screenshot":92,"total":518},"taken_at":"2026-06-20T18:56:38.055Z"}

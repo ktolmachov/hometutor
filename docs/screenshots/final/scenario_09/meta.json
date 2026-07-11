@@ -1,0 +1,127 @@
+{
+  "scenario_id": "scenario_09",
+  "started_at": "2026-06-20T18:54:44.286Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_plan_overview",
+      "caption": "Обзор плана на неделю: 3 приоритетные темы",
+      "narration": "Система отобрала три темы — не весь учебник, а именно эти.",
+      "file": "01_plan_overview.png",
+      "taken_at": "2026-06-20T18:54:46.215Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 659,
+        "streamlit_ready": 81,
+        "screenshot": 671,
+        "total": 1411
+      }
+    },
+    {
+      "step": 2,
+      "slug": "02_plan_derived_from_gaps",
+      "caption": "«Почему здесь»: weak spot по каждой теме",
+      "narration": "Не просто список — объяснение почему эта тема приоритетна.",
+      "file": "02_plan_derived_from_gaps.png",
+      "taken_at": "2026-06-20T18:54:46.758Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 422,
+        "streamlit_ready": 14,
+        "screenshot": 91,
+        "total": 527
+      }
+    },
+    {
+      "step": 3,
+      "slug": "03_plan_diff_since_last",
+      "caption": "Diff с прошлой сессией: что изменилось",
+      "narration": "План живёт вместе с прогрессом — обновился с последней сессии.",
+      "file": "03_plan_diff_since_last.png",
+      "taken_at": "2026-06-20T18:54:47.291Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 413,
+        "streamlit_ready": 16,
+        "screenshot": 93,
+        "total": 522
+      }
+    },
+    {
+      "step": 4,
+      "slug": "04_plan_today_action",
+      "caption": "«Сегодня: разобрать X (8 мин)»",
+      "narration": "Одно действие на сегодня — не список на неделю вперёд.",
+      "file": "04_plan_today_action.png",
+      "taken_at": "2026-06-20T18:54:47.826Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 417,
+        "streamlit_ready": 15,
+        "screenshot": 92,
+        "total": 524
+      }
+    },
+    {
+      "step": 5,
+      "slug": "05_plan_accepts_adjust",
+      "caption": "Корректировка приоритета → пересчёт плана",
+      "narration": "Сдвинула тему вниз — план пересчитался мгновенно.",
+      "file": "05_plan_accepts_adjust.png",
+      "taken_at": "2026-06-20T18:54:48.358Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 407,
+        "streamlit_ready": 16,
+        "screenshot": 91,
+        "total": 514
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-06-20T18:54:48.358Z",
+  "total_duration_ms": 4072,
+  "shot_count": 5,
+  "timings_summary": {
+    "wait": {
+      "sum": 2318,
+      "avg": 464,
+      "p95": 659
+    },
+    "streamlit_ready": {
+      "sum": 142,
+      "avg": 28,
+      "p95": 81
+    },
+    "screenshot": {
+      "sum": 1038,
+      "avg": 208,
+      "p95": 671
+    },
+    "total": {
+      "sum": 3498,
+      "avg": 700,
+      "p95": 1411
+    }
+  }
+}

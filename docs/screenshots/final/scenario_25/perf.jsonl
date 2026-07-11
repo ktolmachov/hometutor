@@ -1,0 +1,4 @@
+{"scenario_id":"scenario_25","step":1,"slug":"01_mastery_vector_overview","file":"01_mastery_vector_overview.png","timings_ms":{"wait":530,"streamlit_ready":16,"screenshot":93,"total":639},"taken_at":"2026-06-20T18:56:43.929Z"}
+{"scenario_id":"scenario_25","step":2,"slug":"02_graduated_concepts","file":"02_graduated_concepts.png","timings_ms":{"wait":410,"streamlit_ready":777,"screenshot":89,"total":1276},"taken_at":"2026-06-20T18:56:45.223Z"}
+{"scenario_id":"scenario_25","step":3,"slug":"03_weak_concepts_priority","file":"03_weak_concepts_priority.png","timings_ms":{"wait":418,"streamlit_ready":15,"screenshot":100,"total":533},"taken_at":"2026-06-20T18:56:45.816Z"}
+{"scenario_id":"scenario_25","step":4,"slug":"04_cta_to_tutor","file":"04_cta_to_tutor.png","timings_ms":{"wait":410,"streamlit_ready":18,"screenshot":99,"total":527},"taken_at":"2026-06-20T18:56:46.369Z"}

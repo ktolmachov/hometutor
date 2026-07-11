@@ -1,0 +1,91 @@
+{
+  "scenario_id": "scenario_15",
+  "started_at": "2026-06-20T18:55:06.369Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_wait_ux",
+      "caption": "Skeleton/progressive reveal вместо немого ожидания",
+      "narration": "Пользователь видит первый полезный сигнал меньше чем за две секунды.",
+      "file": "01_wait_ux.png",
+      "taken_at": "2026-06-20T18:55:09.886Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 513,
+        "streamlit_ready": 12,
+        "screenshot": 79,
+        "total": 604
+      }
+    },
+    {
+      "step": 2,
+      "slug": "02_tutor_handoff",
+      "caption": "Переход Q&A → Tutor без потери контекста",
+      "narration": "Тьютор знает вопрос, тему и источники, с которыми пришёл пользователь.",
+      "file": "02_tutor_handoff.png",
+      "taken_at": "2026-06-20T18:56:00.838Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 807,
+        "streamlit_ready": 14,
+        "screenshot": 82,
+        "total": 903
+      }
+    },
+    {
+      "step": 3,
+      "slug": "03_progress_receipt",
+      "caption": "Мотивационный receipt после учебного шага",
+      "narration": "Система показывает не только действие, но и образовательный результат.",
+      "file": "03_progress_receipt.png",
+      "taken_at": "2026-06-20T18:56:02.871Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 1244,
+        "streamlit_ready": 130,
+        "screenshot": 107,
+        "total": 1481
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-06-20T18:56:02.871Z",
+  "total_duration_ms": 56502,
+  "shot_count": 3,
+  "timings_summary": {
+    "wait": {
+      "sum": 2564,
+      "avg": 855,
+      "p95": 1244
+    },
+    "streamlit_ready": {
+      "sum": 156,
+      "avg": 52,
+      "p95": 130
+    },
+    "screenshot": {
+      "sum": 268,
+      "avg": 89,
+      "p95": 107
+    },
+    "total": {
+      "sum": 2988,
+      "avg": 996,
+      "p95": 1481
+    }
+  }
+}

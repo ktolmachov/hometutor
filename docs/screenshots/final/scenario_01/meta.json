@@ -1,0 +1,127 @@
+{
+  "scenario_id": "scenario_01",
+  "started_at": "2026-06-20T18:54:07.521Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_home_mode_selector",
+      "caption": "Home Mode Selector: 7 карточек режимов",
+      "narration": "UI встречает семью режимами, а не пустым чатом.",
+      "file": "01_home_mode_selector.png",
+      "taken_at": "2026-06-20T18:54:09.920Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 824,
+        "streamlit_ready": 12,
+        "screenshot": 173,
+        "total": 1009
+      }
+    },
+    {
+      "step": 2,
+      "slug": "02_quick_answer_empty",
+      "caption": "Быстрый ответ: готов принять вопрос",
+      "narration": "Аня спрашивает как есть — без магических промптов.",
+      "file": "02_quick_answer_empty.png",
+      "taken_at": "2026-06-20T18:54:10.996Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 10,
+        "screenshot": 76,
+        "total": 86
+      }
+    },
+    {
+      "step": 3,
+      "slug": "03_quick_answer_with_sources",
+      "caption": "Ответ получен: confidence + источники",
+      "narration": "Ответ — с confidence-оценкой и точными фрагментами из её лекций.",
+      "file": "03_quick_answer_with_sources.png",
+      "taken_at": "2026-06-20T18:54:11.832Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 21,
+        "screenshot": 100,
+        "total": 121
+      }
+    },
+    {
+      "step": 4,
+      "slug": "04_sources_expanded",
+      "caption": "Раскрытые источники с превью",
+      "narration": "Никаких галлюцинаций: каждый тезис подкреплён фрагментом.",
+      "file": "04_sources_expanded.png",
+      "taken_at": "2026-06-20T18:54:11.999Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 22,
+        "screenshot": 96,
+        "total": 118
+      }
+    },
+    {
+      "step": 5,
+      "slug": "05_learn_this_topic_cta",
+      "caption": "Кнопка «Учить эту тему 5 минут»",
+      "narration": "А если вдруг захотелось разобраться — одна кнопка превращает ответ в учебный разбор.",
+      "file": "05_learn_this_topic_cta.png",
+      "taken_at": "2026-06-20T18:54:12.175Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 18,
+        "screenshot": 96,
+        "total": 114
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-06-20T18:54:12.176Z",
+  "total_duration_ms": 4655,
+  "shot_count": 5,
+  "timings_summary": {
+    "wait": {
+      "sum": 824,
+      "avg": 165,
+      "p95": 824
+    },
+    "streamlit_ready": {
+      "sum": 83,
+      "avg": 17,
+      "p95": 22
+    },
+    "screenshot": {
+      "sum": 541,
+      "avg": 108,
+      "p95": 173
+    },
+    "total": {
+      "sum": 1448,
+      "avg": 290,
+      "p95": 1009
+    }
+  }
+}

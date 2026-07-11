@@ -1,0 +1,109 @@
+{
+  "scenario_id": "scenario_10",
+  "started_at": "2026-06-20T18:54:48.448Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_home_resume_card",
+      "caption": "Resume-карта на главной",
+      "narration": "Сразу видно, откуда продолжить и какой следующий шаг.",
+      "file": "01_home_resume_card.png",
+      "taken_at": "2026-06-20T18:54:50.161Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 0,
+        "screenshot": 120,
+        "total": 120
+      }
+    },
+    {
+      "step": 2,
+      "slug": "02_plan_diff_today",
+      "caption": "План на сегодня с diff «что изменилось»",
+      "narration": "План подстроился под паузу и текущий контекст.",
+      "file": "02_plan_diff_today.png",
+      "taken_at": "2026-06-20T18:54:51.114Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 217,
+        "screenshot": 105,
+        "total": 322
+      }
+    },
+    {
+      "step": 3,
+      "slug": "03_due_queue_soft_recovery",
+      "caption": "Due-очередь после пропуска без перегруза",
+      "narration": "Очередь распределена мягко, без лавины overdue.",
+      "file": "03_due_queue_soft_recovery.png",
+      "taken_at": "2026-06-20T18:54:51.688Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 312,
+        "streamlit_ready": 14,
+        "screenshot": 190,
+        "total": 516
+      }
+    },
+    {
+      "step": 4,
+      "slug": "04_reindex_profile_badge",
+      "caption": "Бейдж обновления профиля после reindex",
+      "narration": "Учебное состояние сохраняется после обновления индекса.",
+      "file": "04_reindex_profile_badge.png",
+      "taken_at": "2026-06-20T18:54:52.860Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 313,
+        "streamlit_ready": 18,
+        "screenshot": 96,
+        "total": 427
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-06-20T18:54:52.860Z",
+  "total_duration_ms": 4412,
+  "shot_count": 4,
+  "timings_summary": {
+    "wait": {
+      "sum": 625,
+      "avg": 156,
+      "p95": 313
+    },
+    "streamlit_ready": {
+      "sum": 249,
+      "avg": 62,
+      "p95": 217
+    },
+    "screenshot": {
+      "sum": 511,
+      "avg": 128,
+      "p95": 190
+    },
+    "total": {
+      "sum": 1385,
+      "avg": 346,
+      "p95": 516
+    }
+  }
+}

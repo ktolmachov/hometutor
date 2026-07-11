@@ -1,0 +1,109 @@
+{
+  "scenario_id": "scenario_27",
+  "started_at": "2026-06-20T18:57:17.268Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_topics_catalog_ready",
+      "caption": "Темы: каталог после добавления материалов",
+      "narration": "Новые документы попадают в каталог тем без ручной разметки.",
+      "file": "01_topics_catalog_ready.png",
+      "taken_at": "2026-06-20T18:57:19.017Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 420,
+        "streamlit_ready": 11,
+        "screenshot": 82,
+        "total": 513
+      }
+    },
+    {
+      "step": 2,
+      "slug": "02_reindex_profile_badge",
+      "caption": "Бейдж: профиль обновлён после reindex",
+      "narration": "Mastery rehydrated — learner state сохранён поверх нового индекса.",
+      "file": "02_reindex_profile_badge.png",
+      "taken_at": "2026-06-20T18:57:20.038Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 412,
+        "streamlit_ready": 13,
+        "screenshot": 88,
+        "total": 513
+      }
+    },
+    {
+      "step": 3,
+      "slug": "03_mastery_preserved",
+      "caption": "Mastery vector без обнуления",
+      "narration": "Прежние концепты остаются на своих уровнях освоения.",
+      "file": "03_mastery_preserved.png",
+      "taken_at": "2026-06-20T18:57:21.032Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 825,
+        "streamlit_ready": 20,
+        "screenshot": 99,
+        "total": 944
+      }
+    },
+    {
+      "step": 4,
+      "slug": "04_new_concepts_in_plan",
+      "caption": "Adaptive Plan: новые концепты в блоке New",
+      "narration": "Система предлагает свежие темы из новых файлов отдельно от gap.",
+      "file": "04_new_concepts_in_plan.png",
+      "taken_at": "2026-06-20T18:57:21.748Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 436,
+        "streamlit_ready": 20,
+        "screenshot": 91,
+        "total": 547
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-06-20T18:57:21.749Z",
+  "total_duration_ms": 4481,
+  "shot_count": 4,
+  "timings_summary": {
+    "wait": {
+      "sum": 2093,
+      "avg": 523,
+      "p95": 825
+    },
+    "streamlit_ready": {
+      "sum": 64,
+      "avg": 16,
+      "p95": 20
+    },
+    "screenshot": {
+      "sum": 360,
+      "avg": 90,
+      "p95": 99
+    },
+    "total": {
+      "sum": 2517,
+      "avg": 629,
+      "p95": 944
+    }
+  }
+}

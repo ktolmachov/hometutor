@@ -1,0 +1,91 @@
+{
+  "scenario_id": "scenario_19",
+  "started_at": "2026-06-20T18:56:18.763Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_main_view_ready",
+      "caption": "Main UI after onboarding",
+      "narration": "The app shell renders with modes and navigation controls.",
+      "file": "01_main_view_ready.png",
+      "taken_at": "2026-06-20T18:56:20.984Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 0,
+        "screenshot": 235,
+        "total": 235
+      }
+    },
+    {
+      "step": 2,
+      "slug": "02_sidebar_env_context",
+      "caption": "Sidebar with configuration context",
+      "narration": "API key hints or provider status appear here when relevant.",
+      "file": "02_sidebar_env_context.png",
+      "taken_at": "2026-06-20T18:56:21.381Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 0,
+        "streamlit_ready": 0,
+        "screenshot": 164,
+        "total": 164
+      }
+    },
+    {
+      "step": 3,
+      "slug": "03_mode_cards_confirmed",
+      "caption": "Mode cards confirmed",
+      "narration": "Ready to start the primary learning scenarios.",
+      "file": "03_mode_cards_confirmed.png",
+      "taken_at": "2026-06-20T18:56:23.174Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 215,
+        "streamlit_ready": 0,
+        "screenshot": 106,
+        "total": 321
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-06-20T18:56:23.174Z",
+  "total_duration_ms": 4411,
+  "shot_count": 3,
+  "timings_summary": {
+    "wait": {
+      "sum": 215,
+      "avg": 72,
+      "p95": 215
+    },
+    "streamlit_ready": {
+      "sum": 0,
+      "avg": 0,
+      "p95": 0
+    },
+    "screenshot": {
+      "sum": 505,
+      "avg": 168,
+      "p95": 235
+    },
+    "total": {
+      "sum": 720,
+      "avg": 240,
+      "p95": 321
+    }
+  }
+}

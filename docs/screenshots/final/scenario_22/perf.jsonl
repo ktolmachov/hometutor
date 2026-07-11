@@ -1,0 +1,4 @@
+{"scenario_id":"scenario_22","step":1,"slug":"01_ai_vision_overview","file":"01_ai_vision_overview.png","timings_ms":{"wait":0,"streamlit_ready":0,"screenshot":113,"total":113},"taken_at":"2026-06-20T18:56:32.675Z"}
+{"scenario_id":"scenario_22","step":2,"slug":"02_levels_1_2_personal_memory","file":"02_levels_1_2_personal_memory.png","timings_ms":{"wait":0,"streamlit_ready":0,"screenshot":72,"total":72},"taken_at":"2026-06-20T18:56:33.019Z"}
+{"scenario_id":"scenario_22","step":3,"slug":"03_levels_3_4_planner_graph","file":"03_levels_3_4_planner_graph.png","timings_ms":{"wait":0,"streamlit_ready":0,"screenshot":78,"total":78},"taken_at":"2026-06-20T18:56:33.360Z"}
+{"scenario_id":"scenario_22","step":4,"slug":"04_level_5_feedback_loop","file":"04_level_5_feedback_loop.png","timings_ms":{"wait":0,"streamlit_ready":0,"screenshot":70,"total":70},"taken_at":"2026-06-20T18:56:33.701Z"}

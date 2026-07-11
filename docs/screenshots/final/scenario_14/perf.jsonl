@@ -1,0 +1,4 @@
+{"scenario_id":"scenario_14","step":1,"slug":"01_open_sync_controls","file":"01_open_sync_controls.png","timings_ms":{"wait":0,"streamlit_ready":59,"screenshot":80,"total":139},"taken_at":"2026-06-20T18:55:04.478Z"}
+{"scenario_id":"scenario_14","step":2,"slug":"02_export_bundle","file":"02_export_bundle.png","timings_ms":{"wait":0,"streamlit_ready":0,"screenshot":75,"total":75},"taken_at":"2026-06-20T18:55:04.599Z"}
+{"scenario_id":"scenario_14","step":3,"slug":"03_import_bundle","file":"03_import_bundle.png","timings_ms":{"wait":0,"streamlit_ready":60,"screenshot":65,"total":125},"taken_at":"2026-06-20T18:55:05.219Z"}
+{"scenario_id":"scenario_14","step":4,"slug":"04_post_restore_validation","file":"04_post_restore_validation.png","timings_ms":{"wait":0,"streamlit_ready":58,"screenshot":331,"total":389},"taken_at":"2026-06-20T18:55:06.279Z"}

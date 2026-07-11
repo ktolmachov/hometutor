@@ -26,7 +26,7 @@
 2. **Публичный адрес 24/7:** постоянная HTTPS-ссылка `https://huggingface.co/spaces/<username>/hometutor`.
 3. **Секреты:** ключи провайдеров, `JWT_SECRET`, `YANDEX_METRIKA_ID` хранятся в HF Space Secrets, не в репозитории.
 4. **Полный runtime:** в отличие от Streamlit-SDK варианта, здесь работает и REST API (`/docs`, `/health`), и аутентификация (`AUTH_ENABLED=true`).
-5. **Обновление:** обычный `git push` в HF-remote (вручную или через `.github/workflows/deploy.yml`).
+5. **Обновление:** snapshot-push (см. Шаг 4) — вручную или автоматически через `.github/workflows/deploy.yml`.
 
 ### 👎 Ограничения
 1. **Только облачные LLM:** бесплатный тариф не запускает локальные модели (Ollama/LM Studio) — нет GPU/достаточного CPU.
@@ -82,17 +82,27 @@ git commit -m "chore: pre-build demo database index"
 > дерева `main` без `docs/screenshots/`; `demo_chroma_db/` уходит LFS-указателями
 > (правила в `.gitattributes`), их объекты заливаются `git lfs push`.
 
+Требуется установленный [git-lfs](https://git-lfs.com/) (входит в Git for Windows;
+проверка: `git lfs version`, разовая настройка хуков в репозитории: `git lfs install --local`).
+
 PowerShell:
 
 ```powershell
 git remote add space https://huggingface.co/spaces/ВАШ_ЛОГИН_HF/hometutor
+# если remote уже существует:
+# git remote set-url space https://huggingface.co/spaces/ВАШ_ЛОГИН_HF/hometutor
 
-# snapshot-дерево без docs/screenshots (через временный индекс, рабочая копия не трогается)
-$env:GIT_INDEX_FILE = ".git/space-index"
-git read-tree 'main^{tree}'
-git rm -r --cached --quiet docs/screenshots
-$tree = git write-tree
-Remove-Item Env:GIT_INDEX_FILE
+# snapshot-дерево без docs/screenshots (через временный индекс, рабочая копия не трогается);
+# finally гарантирует сброс GIT_INDEX_FILE — иначе все последующие git-команды
+# в этой сессии молча работали бы с временным индексом
+try {
+    $env:GIT_INDEX_FILE = ".git/space-index"
+    git read-tree 'main^{tree}'
+    git rm -r --cached --quiet docs/screenshots
+    $tree = git write-tree
+} finally {
+    Remove-Item Env:GIT_INDEX_FILE -ErrorAction SilentlyContinue
+}
 
 $commit = git commit-tree -m "Deploy hometutor to HF Space" $tree
 git lfs push space $commit
@@ -110,5 +120,7 @@ git push space "${commit}:refs/heads/main" --force
 ### Шаг 6: Проверка
 Hugging Face соберёт образ по корневому `Dockerfile` и запустит
 [`docker_entrypoint.sh`](../docker/docker_entrypoint.sh) (bootstrap demo-данных → uvicorn → streamlit).
-Откройте публичную ссылку Space, зарегистрируйтесь (если `AUTH_ENABLED=true`) и проверьте
-`/health` через `https://<ваш-space>.hf.space` (Streamlit) — REST API доступен только внутри контейнера.
+Откройте публичную ссылку Space и зарегистрируйтесь (если `AUTH_ENABLED=true`).
+Наружу HF проксирует только Streamlit (порт 8501) — REST API (`/health`, `/docs`) снаружи
+недоступен; работу uvicorn проверяйте по логам Space (вкладка **Logs**: uvicorn стартует
+до Streamlit, UI ходит к нему внутри контейнера через `http://127.0.0.1:8000`).

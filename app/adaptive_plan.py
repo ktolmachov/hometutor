@@ -433,6 +433,21 @@ class AdaptiveDailyPlan:
             }
         )
 
+        # C1 bridge: learning plan step completion → daily plan context
+        try:
+            from app.user_state import get_latest_learning_plan_resume
+
+            lp_resume = get_latest_learning_plan_resume()
+            if lp_resume:
+                plan["learning_plan_context"] = {
+                    "display_title": str(lp_resume.get("display_title") or ""),
+                    "step_index": lp_resume.get("step_index"),
+                    "step_label": str(lp_resume.get("step_label") or "")[:120],
+                    "progress": lp_resume.get("progress"),
+                }
+        except Exception:  # noqa: BLE001 — bridge is best-effort
+            pass
+
         _attach_entry_surface_contract(plan)
         self._save_plan(plan)
         return plan

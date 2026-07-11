@@ -66,6 +66,23 @@ def render_adaptive_plan_hub(
             daily_xp=int(progress.get("daily_xp_today") or 0),
         )
     )
+    # C1 bridge: show learning plan step context when available
+    lp_ctx = plan.get("learning_plan_context")
+    if lp_ctx:
+        lp_title = str(lp_ctx.get("display_title") or "Программа обучения")
+        lp_step = lp_ctx.get("step_index")
+        lp_label = str(lp_ctx.get("step_label") or "")
+        lp_progress = lp_ctx.get("progress")
+        ctx_parts = [f"📖 {lp_title}"]
+        if lp_step is not None:
+            ctx_parts.append(f"шаг {int(lp_step) + 1}")
+        if lp_label:
+            ctx_parts.append(f"— {lp_label[:80]}")
+        if lp_progress is not None:
+            pct = min(1.0, max(0.0, float(lp_progress))) * 100
+            ctx_parts.append(f"({pct:.0f}%)")
+        st.caption(" · ".join(ctx_parts))
+
     if total_blocks > 0 and progress_done == 0:
         st.caption(
             "План на сегодня уже сформирован — начните с кнопки «Начать следующий шаг» (US-6.1)."

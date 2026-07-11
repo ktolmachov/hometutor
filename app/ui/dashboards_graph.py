@@ -24,7 +24,7 @@ from app.ui.home_hub import (
     _find_topic_for_concept,
     _topic_documents_index,
 )
-from app.ui.knowledge_graph_d3 import render_d3_knowledge_graph
+from app.ui.knowledge_graph_d3 import collect_kg_learned_set, render_d3_knowledge_graph
 from app.ui.topics_catalog import load_topics_catalog as _load_topics_catalog
 from app.ui.tutor_mastery_forecast_panel import (
     render_tutor_orchestration_snapshot_expander as _render_tutor_orchestration_snapshot_expander,
@@ -125,14 +125,6 @@ def build_tutor_prompt_for_concept(
         f"{context}\n\n"
         f"Расскажи мне всё самое важное про «{concept_id}», что нужно знать для практической работы."
     )
-
-
-def _collect_learned_set(concepts: dict) -> set[str]:
-    learned_set = set(st.session_state.get("tutor_learned_concepts") or [])
-    for name, data in concepts.items():
-        if isinstance(data, dict) and data.get("learned"):
-            learned_set.add(name)
-    return learned_set
 
 
 def _workbench_state_rows(state=None) -> list[dict]:
@@ -1042,7 +1034,7 @@ def _render_knowledge_graph_tab() -> None:
             f"Показан preview staging graph `{label}`. Он не опубликован и не используется в RAG/плане, пока gate не пройден.",
             icon="⚠️",
         )
-    learned_set = _collect_learned_set(concepts)
+    learned_set = collect_kg_learned_set(concepts)
 
     if not concepts:
         st.info(

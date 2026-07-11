@@ -744,11 +744,15 @@ def render_kg_mission_card() -> None:
     # never show different numbers for the same graph. Frontier is recomputed from
     # mastery + prerequisites, not the stale raw ``frontier`` bundle flag.
     try:
-        from app.ui.knowledge_graph_d3 import compute_kg_counters
+        from app.ui.knowledge_graph_d3 import collect_kg_learned_set, compute_kg_counters
 
         typed_relations = knowledge_graph.get_typed_relations()
+        learned_set = collect_kg_learned_set(concepts)
         counters = compute_kg_counters(
-            concepts, mastery_vector=mastery_vector, typed_relations=typed_relations
+            concepts,
+            mastery_vector=mastery_vector,
+            learned_set=learned_set,
+            typed_relations=typed_relations,
         )
     except Exception:  # noqa: BLE001 - fall back to zeroed counters, card still renders
         counters = {"total_concepts": 0, "total_lessons": 0, "frontier": 0, "avg_mastery": 0.0}

@@ -378,6 +378,25 @@ def compute_kg_counters(
     return _kg_counters_from_skeleton(skel, mv, learned)
 
 
+def collect_kg_learned_set(concepts: Mapping[str, Any]) -> set[str]:
+    """Learned concept ids for the current session — shared input for counters (B1).
+
+    Combines in-session tutor-learned concepts
+    (``st.session_state["tutor_learned_concepts"]``) with the persisted ``learned`` flags
+    from the graph bundle. Mission Control and the Knowledge Graph tab must build the
+    SAME set and pass it to :func:`compute_kg_counters` / :func:`build_kg_payload`, so a
+    concept learned only in the current session moves frontier / learned / avg_mastery
+    identically on both screens.
+    """
+    import streamlit as st
+
+    learned: set[str] = set(st.session_state.get("tutor_learned_concepts") or [])
+    for cid, data in concepts.items():
+        if isinstance(data, dict) and data.get("learned"):
+            learned.add(cid)
+    return learned
+
+
 # ── Document path resolution (Obsidian / VS Code deep-links) ─────────
 
 def _document_paths(rel_path: str) -> tuple[str | None, str | None, str | None]:

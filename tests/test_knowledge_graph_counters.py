@@ -12,7 +12,11 @@ from __future__ import annotations
 
 import inspect
 
-from app.ui.knowledge_graph_d3 import build_kg_payload, compute_kg_counters
+from app.ui.knowledge_graph_d3 import (
+    build_kg_payload,
+    collect_kg_learned_set,
+    compute_kg_counters,
+)
 
 
 class TestComputeKgCounters:
@@ -86,6 +90,48 @@ class TestComputeKgCounters:
         assert counters["clusters"] == 0
 
 
+class TestCollectLearnedSet:
+    def test_combines_session_learned_and_bundle_flags(self, monkeypatch):
+        import streamlit
+
+        monkeypatch.setattr(streamlit, "session_state", {"tutor_learned_concepts": ["sess_a"]})
+        concepts = {
+            "sess_a": {},
+            "bundle_learned": {"learned": True},
+            "plain": {},
+        }
+
+        learned = collect_kg_learned_set(concepts)
+
+        assert learned == {"sess_a", "bundle_learned"}
+
+    def test_missing_session_key_is_safe(self, monkeypatch):
+        import streamlit
+
+        monkeypatch.setattr(streamlit, "session_state", {})
+        concepts = {"a": {"learned": True}}
+
+        assert collect_kg_learned_set(concepts) == {"a"}
+
+    def test_session_learned_concept_drives_counters_consistently(self, monkeypatch):
+        """Audit B1: a concept learned only in-session must raise avg_mastery / learned and
+        drop frontier identically on both screens, because both pass collect_kg_learned_set."""
+        import streamlit
+
+        monkeypatch.setattr(streamlit, "session_state", {"tutor_learned_concepts": ["sess"]})
+        concepts = {"sess": {}}
+
+        without = compute_kg_counters(concepts)  # the old Mission Control path (no learned_set)
+        with_learned = compute_kg_counters(
+            concepts, learned_set=collect_kg_learned_set(concepts)
+        )
+
+        assert without["learned"] == 0 and without["avg_mastery"] == 0.0
+        assert without["frontier"] == 1  # unlearned, no prereqs → was frontier
+        assert with_learned["learned"] == 1 and with_learned["avg_mastery"] == 100.0
+        assert with_learned["frontier"] == 0  # learned → no longer frontier
+
+
 class TestCountersParityWithPayload:
     def test_compute_kg_counters_equals_build_kg_payload_stats(self):
         concepts = {
@@ -136,3 +182,12 @@ class TestMissionControlUsesSharedHelper:
         # the old divergent formulas must be gone (regression guard for B1)
         assert "total - lessons" not in source
         assert 'd.get("frontier")' not in source
+
+    def test_render_kg_mission_card_passes_learned_set_to_counters(self):
+        """Audit B1: Mission Control must build and pass the same learned_set the KG tab uses."""
+        from app.ui.mission_control import render_kg_mission_card
+
+        source = inspect.getsource(render_kg_mission_card)
+
+        assert "collect_kg_learned_set" in source
+        assert "learned_set=" in source

@@ -566,6 +566,48 @@ def _show_cached_artifact(artifact: dict[str, Any]) -> None:
     st.success("Готовый план курса загружен из кэша.")
 
 
+def _prepare_course_artifact(
+    *,
+    documents: list[str],
+    course_title: str,
+    topic_name: str,
+    goal: str,
+    level: str,
+    time_budget_hours: float,
+    known_topics: list[str],
+    user_progress: bool,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    synthesis = fetch_json(
+        "POST",
+        "/synthesize",
+        timeout=120,
+        json={"topic": topic_name, "documents": documents},
+    )
+    payload = _learning_plan_payload(
+        topic_name=topic_name,
+        documents=documents,
+        goal=goal,
+        level=level,
+        time_budget_hours=time_budget_hours,
+        known_topics=known_topics,
+        user_progress=user_progress,
+    )
+    learning_plan = fetch_json("POST", "/learning-plan", timeout=120, json=payload)
+    learning_plan["selection_mode"] = "course_scope"
+    learning_plan["selected_documents"] = documents
+    artifact = save_course_artifact(
+        documents,
+        {
+            "course_title": course_title,
+            "topic_name": topic_name,
+            "synthesis": synthesis,
+            "learning_plan": learning_plan,
+            "flashcards_preview": _preview_cards_from_plan(learning_plan),
+        },
+    )
+    return artifact, learning_plan
+
+
 def render_course_prepare_view(
     *,
     topic: dict[str, Any],
@@ -591,7 +633,8 @@ def render_course_prepare_view(
     st.markdown("##### Подготовить активный курс")
     st.caption(
         f"{course_title}: {len(documents)} документ(ов). "
-        "Пайплайн покажет состав курса, соберёт обзор и построит план только по этим источникам."
+        "Пайплайн покажет состав курса, соберёт обзор и построит план только по этим источникам. "
+        "Новая программа включает практику и проверку результата для каждого шага."
     )
 
     cached = load_course_artifact(documents)
@@ -610,7 +653,7 @@ def render_course_prepare_view(
         graph_view=graph_view,
     )
 
-    cache_cols = st.columns([2, 1])
+    cache_cols = st.columns([2, 1, 1])
     with cache_cols[0]:
         if st.button("Подготовить курс", key=f"{key_prefix}_prepare_course", width="stretch", type="primary"):
             if cached:
@@ -621,36 +664,18 @@ def render_course_prepare_view(
                 with st.status("Готовлю курс", expanded=True) as status:
                     st.write(f"Шаг 1/4: найдено документов курса: {len(documents)}")
                     st.write("Шаг 2/4: собираю краткий обзор по активному scope")
-                    synthesis = fetch_json(
-                        "POST",
-                        "/synthesize",
-                        timeout=120,
-                        json={"topic": topic_name, "documents": documents},
-                    )
                     st.write("Шаг 3/4: строю учебный план только по документам курса")
-                    payload = _learning_plan_payload(
-                        topic_name=topic_name,
+                    artifact, learning_plan = _prepare_course_artifact(
                         documents=documents,
+                        course_title=course_title,
+                        topic_name=topic_name,
                         goal=goal,
                         level=level,
                         time_budget_hours=time_budget_hours,
                         known_topics=known_topics,
                         user_progress=user_progress,
                     )
-                    learning_plan = fetch_json("POST", "/learning-plan", timeout=120, json=payload)
-                    learning_plan["selection_mode"] = "course_scope"
-                    learning_plan["selected_documents"] = documents
                     st.write("Шаг 4/4: подготовил превью карточек для следующего шага")
-                    artifact = save_course_artifact(
-                        documents,
-                        {
-                            "course_title": course_title,
-                            "topic_name": topic_name,
-                            "synthesis": synthesis,
-                            "learning_plan": learning_plan,
-                            "flashcards_preview": _preview_cards_from_plan(learning_plan),
-                        },
-                    )
                     st.session_state["last_course_prepare"] = artifact
                     st.session_state["last_learning_plan"] = learning_plan
                     status.update(label=_prepare_complete_label(graph_view), state="complete")
@@ -660,8 +685,32 @@ def render_course_prepare_view(
     with cache_cols[1]:
         if cached and st.button("Открыть кэш", key=f"{key_prefix}_open_cached_course", width="stretch", type="secondary"):
             _show_cached_artifact(cached)
+    with cache_cols[2]:
+        if cached and st.button("Пересобрать план", key=f"{key_prefix}_rebuild_course", width="stretch", type="secondary"):
+            try:
+                with st.status("Пересобираю курс", expanded=True) as status:
+                    st.write(f"Шаг 1/4: найдено документов курса: {len(documents)}")
+                    st.write("Шаг 2/4: заново собираю краткий обзор по активному scope")
+                    st.write("Шаг 3/4: заново строю учебный план по документам курса")
+                    artifact, learning_plan = _prepare_course_artifact(
+                        documents=documents,
+                        course_title=course_title,
+                        topic_name=topic_name,
+                        goal=goal,
+                        level=level,
+                        time_budget_hours=time_budget_hours,
+                        known_topics=known_topics,
+                        user_progress=user_progress,
+                    )
+                    st.write("Шаг 4/4: обновил превью карточек для следующего шага")
+                    st.session_state["last_course_prepare"] = artifact
+                    st.session_state["last_learning_plan"] = learning_plan
+                    status.update(label="План курса пересобран и сохранён поверх кэша", state="complete")
+                    st.success("План курса пересобран. Новый маршрут открыт ниже.")
+            except Exception as exc:  # noqa: BLE001 - UI boundary: show API/persistence error without crashing Streamlit.
+                st.error(f"Не удалось пересобрать курс: {exc}")
 
-    preview = (cached or st.session_state.get("last_course_prepare") or {}).get("flashcards_preview") or []
+    preview = (st.session_state.get("last_course_prepare") or cached or {}).get("flashcards_preview") or []
     if preview:
         with st.expander("Превью карточек по плану", expanded=False):
             for idx, item in enumerate(preview[:5], 1):

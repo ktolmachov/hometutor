@@ -85,6 +85,23 @@ def get_topic_progress(topic_id: str) -> float | None:
     return _with_db(_work)
 
 
+def get_reading_status(resource_type: str, resource_id: str) -> dict[str, Any] | None:
+    def _work(conn: sqlite3.Connection) -> dict[str, Any] | None:
+        row = conn.execute(
+            """
+            SELECT resource_type, resource_id, step_index, step_label, progress,
+                   display_title, index_version, updated_at
+            FROM reading_status
+            WHERE resource_type = ? AND resource_id = ?
+            LIMIT 1
+            """,
+            (resource_type, resource_id),
+        ).fetchone()
+        return dict(row) if row else None
+
+    return _with_db(_work)
+
+
 def list_topic_reading_rows(*, limit: int = 200) -> list[dict[str, Any]]:
     """Краткий список прогресса по темам (`resource_type='topic'`) для дашборда."""
 

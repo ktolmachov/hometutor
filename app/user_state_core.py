@@ -316,6 +316,8 @@ class LearningPlanMarkdownStep:
     title: str
     documents: str = ""
     key_concepts: str = ""
+    practice: str = ""
+    check: str = ""
     dependencies: str = ""
     hours: str = ""
 
@@ -334,6 +336,15 @@ _TABLE_COLUMN_ALIASES: dict[str, str] = {
     "ключевые концепции": "key_concepts",
     "концепции": "key_concepts",
     "key concepts": "key_concepts",
+    "практика": "practice",
+    "упражнение": "practice",
+    "действие": "practice",
+    "practice": "practice",
+    "проверка результата": "check",
+    "самопроверка": "check",
+    "критерий успеха": "check",
+    "check": "check",
+    "outcome check": "check",
     "зависимости": "dependencies",
     "prerequisites": "dependencies",
     "dependencies": "dependencies",
@@ -417,6 +428,8 @@ def learning_plan_table_steps_from_markdown(plan_md: str) -> list[LearningPlanMa
                     title=title,
                     documents=values.get("documents", ""),
                     key_concepts=values.get("key_concepts", ""),
+                    practice=values.get("practice", ""),
+                    check=values.get("check", ""),
                     dependencies=values.get("dependencies", ""),
                     hours=values.get("hours", ""),
                 )
@@ -430,6 +443,10 @@ def learning_plan_step_to_text(step: LearningPlanMarkdownStep) -> str:
     parts = [step.title]
     if step.key_concepts:
         parts.append(f"Концепции: {step.key_concepts}")
+    if step.practice:
+        parts.append(f"Практика: {step.practice}")
+    if step.check:
+        parts.append(f"Проверка: {step.check}")
     if step.documents:
         parts.append(f"Документы: {step.documents}")
     if step.dependencies:

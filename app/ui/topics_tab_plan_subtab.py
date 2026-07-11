@@ -8,6 +8,7 @@ from app import user_state
 from app.ui.answer_helpers import format_sources_markdown
 from app.ui.course_prepare_view import render_course_prepare_view
 from app.ui.helpers import format_request_error
+from app.ui.learning_plan_navigation import enriched_learning_plan_markdown
 from app.ui.longform import render_longform_block
 from app.ui.print_view import open_print_view
 from app.ui.quiz_panel import render_quiz_panel
@@ -182,7 +183,12 @@ def render_topics_plan_subtab(
                         f"~{step.get('estimated_hours')}h — {step.get('reason', '')}"
                     )
         plan_md = learning_plan.get("plan", "")
-        render_longform_block(plan_md, markdown=True)
+        display_plan_md = enriched_learning_plan_markdown(
+            plan_md,
+            learning_plan=learning_plan,
+            topic_id=str(selected_topic.get("topic_id") or ""),
+        )
+        render_longform_block(display_plan_md, markdown=True)
         plan_steps = user_state.learning_plan_steps_from_markdown(plan_md)
         hours_summary = user_state.learning_plan_table_hours_summary_from_markdown(plan_md)
         if hours_summary:
@@ -294,7 +300,7 @@ def render_topics_plan_subtab(
                 f"- Покрытие: **{coverage.get('covered', 0)} из {coverage.get('total', 0)} документов ({ratio_pct}%)**\n"
             )
         md_lines.append("\n## План\n\n")
-        md_lines.append(plan_md)
+        md_lines.append(display_plan_md)
         if learning_plan.get("documents"):
             md_lines.append("\n\n## Документы\n\n")
             for doc in learning_plan.get("documents") or []:
@@ -309,7 +315,7 @@ def render_topics_plan_subtab(
                 open_print_view(
                     title=f"План обучения: {learning_plan.get('topic', selected_topic['topic_name'])}",
                     subtitle="Чистый вид для пошагового прохождения темы, лекции или подготовки к домашнему заданию.",
-                    body_md=plan_md,
+                    body_md=display_plan_md,
                     export_md="".join(md_lines),
                     documents=[
                         doc.get("relative_path") or doc.get("file_name") or "document"

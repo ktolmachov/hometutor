@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import json
 import uuid
+from typing import Any
 
 import streamlit as st
 
 from app import user_state
 from app.config import get_settings
+from app.course_cache import load_course_artifact, normalize_source_paths
 from app.course_folder_filter import is_user_course_folder_rel
 from app.ui_preferences import feature_visible_by_id, get_overrides, get_ui_level, feature_visible
 from app.ui.auth_gate import render_account_status_sidebar
@@ -28,6 +30,7 @@ from app.ui.study_scope import get_last_deactivated_scope as _get_last_deactivat
 from app.ui.study_scope import restore_scope as _restore_scope
 from app.ui.topics_catalog import load_topics_catalog
 from app.ui.widgets import render_panel_header
+from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
 
 _RESTORE_PREVIEW_KEYS: dict[str, tuple[str, ...]] = {
     "profiles": ("learner_profile_snapshots", "learner_profile_migration_log"),
@@ -368,6 +371,20 @@ def _render_mission_control_sidebar_sections(index_stats: dict | None) -> None:
                 _navigate_to(target_view)
 
 
+def _load_active_course_plan_into_session(scope: dict[str, Any]) -> bool:
+    documents = normalize_source_paths(list(scope.get("source_paths") or []))
+    if not documents:
+        return False
+    artifact = load_course_artifact(documents)
+    plan = artifact.get("learning_plan") if isinstance(artifact, dict) else None
+    if not isinstance(plan, dict):
+        return False
+    st.session_state["last_course_prepare"] = artifact
+    st.session_state["last_learning_plan"] = plan
+    st.session_state[PENDING_CURRENT_VIEW_KEY] = "Темы"
+    return True
+
+
 def render_sidebar(index_stats: dict | None):
     with st.sidebar:
         if get_settings().auth_enabled:
@@ -430,6 +447,11 @@ def render_sidebar(index_stats: dict | None):
         if _active_scope:
             _scope_title = str(_active_scope.get("title") or _active_scope.get("folder_rel") or "Курс")
             st.info(f"🎯 Активный курс: **{_scope_title}**")
+            if st.button("Открыть план курса", key="sidebar_open_course_plan", width="stretch", type="primary"):
+                if _load_active_course_plan_into_session(_active_scope):
+                    st.rerun()
+                else:
+                    st.warning("Для активного курса пока нет сохранённого плана. Откройте «Темы» и нажмите «Подготовить курс».")
             if st.button("× Деактивировать курс", key="sidebar_deactivate_scope", width="stretch", type="secondary"):
                 _deactivate_scope()
                 st.rerun()

@@ -13,7 +13,7 @@ from app.config import DATA_DIR, get_settings
 from app.course_folder_filter import is_user_course_folder_rel
 from app.pace_engine import DEFAULT_PACE_MODE, normalize_pace_mode
 
-COURSE_PREPARE_PROMPT_VERSION = "course_prepare_v1"
+COURSE_PREPARE_PROMPT_VERSION = "course_prepare_v2"
 _NEXT_SESSION_PROMISES_KEY = "next_session_promises"
 _PROMISE_TTL_HOURS = 36
 

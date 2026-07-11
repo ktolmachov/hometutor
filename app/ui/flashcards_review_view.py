@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import uuid
 from typing import Any, Callable
 
 import streamlit as st
@@ -12,10 +13,9 @@ import streamlit.components.v1 as components
 
 from app.flashcard_handoff import (
     build_flashcard_handoff_seed,
-    clear_flashcard_handoff_session_fields,
     flashcard_handoff_session_fields,
 )
-from app.flashcard_handoff_timing import log_handoff_answer_ready, record_handoff_click
+from app.flashcard_handoff_timing import record_handoff_click
 from app.flashcards_tag_display import source_path_from_card
 from app.flashcard_service import (
     build_flashcard_review_undo_snapshot,
@@ -68,6 +68,10 @@ _EXPERT_FILTER_DEFAULTS = {
 _REVIEW_SCOPE_RESET_PENDING_KEY = "flashcards_review_scope_reset_pending"
 _FC_LAST_ACTION_KEY = "flashcards_review_last_action"
 _FC_REVIEW_AUTOLOAD_PENDING_KEY = "flashcards_review_autoload_pending"
+_FC_INLINE_EXPLANATION_IDX_KEY = "fc_inline_explanation_idx"
+_FC_INLINE_EXPLANATION_SEEDED_IDX_KEY = "fc_inline_explanation_seeded_idx"
+_FC_INLINE_TUTOR_SESSION_ID_KEY = "fc_inline_tutor_session_id"
+_FC_INLINE_TUTOR_CARD_ID_KEY = "fc_inline_tutor_card_id"
 
 
 def _maybe_render_undo_last_rating(api_call: Callable[..., Any]) -> None:
@@ -419,10 +423,12 @@ def _render_review_rating_bridge(
     )
 
 
-def _seed_tutor_handoff_session(card: dict[str, Any]) -> None:
-    import uuid as _uuid
-
-    _sid = st.session_state.get("tutor_session_id") or str(_uuid.uuid4())
+def _seed_tutor_handoff_session(
+    card: dict[str, Any],
+    *,
+    session_id: str | None = None,
+) -> None:
+    _sid = session_id or st.session_state.get("tutor_session_id") or str(uuid.uuid4())
     st.session_state["tutor_session_id"] = _sid
     record_handoff_click(
         st.session_state,
@@ -455,36 +461,6 @@ def _seed_tutor_handoff_session(card: dict[str, Any]) -> None:
     st.session_state["tutor_handoff_scroll_to_answer_pending"] = True
 
 
-def _complete_tutor_handoff_navigation(card: dict[str, Any]) -> None:
-    for key, value in build_flashcard_tutor_handoff_state(card).items():
-        st.session_state[key] = value
-    _seed_tutor_handoff_session(card)
-    st.session_state["tutor_last_nba"] = {
-        "concept": str(card.get("topic") or card.get("deck_name") or ""),
-        "reason": "Карточка отмечена как непонятная; следующий шаг — короткая проверка.",
-        "action": "Проверь меня",
-        "route": "targeted_reinforcement",
-    }
-    st.session_state.pop("tutor_pending_prompt", None)
-    st.session_state.pop("tutor_pending_session_id", None)
-    log_handoff_answer_ready(
-        st.session_state,
-        api_debug={
-            "engine_build_ms": 0.0,
-            "retrieval_ms": 0.0,
-            "llm_ms": 0.0,
-            "rag_ms": 0.0,
-            "post_processing_ms": 0.0,
-            "total_answer_ms": 0.0,
-            "cache_hit": True,
-        },
-    )
-    clear_flashcard_handoff_session_fields(st.session_state)
-    st.session_state["_request_navigate_to_tutor"] = True
-    invalidate_flashcards_due_counts_only()
-    st.rerun()
-
-
 def _render_flashcard_tutor_handoff_button(
     *,
     api_call: Callable[..., Any],
@@ -492,6 +468,8 @@ def _render_flashcard_tutor_handoff_button(
     idx: int,
     merge_session_min_next_review: Callable[[Any, str | None], None],
 ) -> None:
+    if st.session_state.get(_FC_INLINE_EXPLANATION_IDX_KEY) == idx:
+        return
     if not st.button(flashcard_gap_to_tutor_cta_ru(), key="fc_gap_to_tutor", width='stretch', type="secondary"):
         return
     try:
@@ -511,9 +489,126 @@ def _render_flashcard_tutor_handoff_button(
     stats = st.session_state.get("flashcards_review_stats", {})
     stats["again"] = stats.get("again", 0) + 1
     st.session_state["flashcards_review_stats"] = stats
-    st.session_state["flashcards_review_index"] = idx + 1
-    st.session_state["flashcards_card_flipped"] = False
-    _complete_tutor_handoff_navigation(card)
+    st.session_state[_FC_INLINE_EXPLANATION_IDX_KEY] = idx
+    invalidate_flashcards_due_counts_only()
+    st.rerun()
+
+
+def _ensure_inline_tutor_session(card: dict[str, Any], idx: int) -> str:
+    card_id = int(card["id"])
+    seeded_idx = st.session_state.get(_FC_INLINE_EXPLANATION_SEEDED_IDX_KEY)
+    seeded_card_id = st.session_state.get(_FC_INLINE_TUTOR_CARD_ID_KEY)
+    sid = str(st.session_state.get(_FC_INLINE_TUTOR_SESSION_ID_KEY) or "")
+    if seeded_idx == idx and seeded_card_id == card_id and sid:
+        st.session_state["tutor_session_id"] = sid
+        return sid
+
+    sid = str(uuid.uuid4())
+    st.session_state[_FC_INLINE_TUTOR_SESSION_ID_KEY] = sid
+    st.session_state[_FC_INLINE_TUTOR_CARD_ID_KEY] = card_id
+    st.session_state[_FC_INLINE_EXPLANATION_SEEDED_IDX_KEY] = idx
+    st.session_state["tutor_session_id"] = sid
+    for key, value in build_flashcard_tutor_handoff_state(card).items():
+        st.session_state[key] = value
+    _seed_tutor_handoff_session(card, session_id=sid)
+    st.session_state.pop("tutor_handoff_check_self_pending", None)
+    st.session_state.pop("tutor_handoff_scroll_to_answer_pending", None)
+    return sid
+
+
+def _flashcard_deep_study_prompt_text(card: dict[str, Any]) -> tuple[str | None, str | None]:
+    source_path = source_path_from_card(card)
+    if not source_path:
+        return None, "Источник не найден, невозможно составить промпт."
+    try:
+        from app.deep_study_prompt import build_deep_study_prompt
+        from app.section_index import best_section_for, build_section_index
+
+        sections = build_section_index(source_path)
+        if not sections:
+            return None, "Для источника ещё нет рабочего конспекта с разделами."
+        query_text = " ".join(
+            part
+            for part in [
+                str(card.get("front") or ""),
+                str(card.get("back") or card.get("answer") or ""),
+            ]
+            if part
+        )
+        section = best_section_for(sections, query_text)
+        if section is None:
+            return None, "Не удалось найти подходящий раздел конспекта для этой карточки."
+        topic = str(card.get("topic") or card.get("deck_name") or "Карточка")
+        return (
+            build_deep_study_prompt(
+                topic=topic,
+                sections=[section],
+                prerequisites=[],
+                related_concepts=[],
+            ),
+            None,
+        )
+    except Exception:  # noqa: BLE001 - prompt lookup must not break flashcard review.
+        return None, "Не удалось загрузить раздел конспекта."
+
+
+def _inline_tutor_answer_text(message: Message) -> str | None:
+    if message.role != "assistant":
+        return None
+    meta = message.metadata or {}
+    tutor_answer = meta.get("tutor_answer") if isinstance(meta, dict) else None
+    if isinstance(tutor_answer, dict):
+        text = str(tutor_answer.get("teaching_summary") or "").strip()
+        if text:
+            return text
+    text = str(message.content or "").strip()
+    return text or None
+
+
+def _render_inline_tutor_tab(sid: str) -> None:
+    history = session_store.get(sid)
+    answers = [
+        text
+        for text in (_inline_tutor_answer_text(message) for message in history)
+        if text
+    ]
+    if not answers:
+        st.info("Объяснение для карточки пока не найдено.")
+        return
+
+    _, answer_col, _ = st.columns([1, 5, 1])
+    with answer_col:
+        for answer in answers:
+            with st.container(border=True):
+                st.markdown(answer)
+
+
+def _render_inline_deep_prompt_tab(card: dict[str, Any]) -> None:
+    prompt_text, warning = _flashcard_deep_study_prompt_text(card)
+    if warning:
+        st.info(warning)
+        return
+    if not prompt_text:
+        return
+
+    with st.expander("Показать промпт для глубокого изучения", expanded=False):
+        st.code(prompt_text, language="markdown")
+        from app.ui.living_konspekt_next_steps import _EXTERNAL_LLM_TARGETS
+
+        prompt_cols = st.columns(len(_EXTERNAL_LLM_TARGETS))
+        for col, (label, url) in zip(prompt_cols, _EXTERNAL_LLM_TARGETS):
+            with col:
+                st.link_button(label, url, width="stretch")
+
+
+def _render_inline_explanation_panel(card: dict[str, Any], idx: int) -> None:
+    sid = _ensure_inline_tutor_session(card, idx)
+    st.markdown("### Разбор карточки")
+    tutor_tab, prompt_tab = st.tabs(["Тьютор", "Промпт"])
+    with tutor_tab:
+        _render_inline_tutor_tab(sid)
+    with prompt_tab:
+        _render_inline_deep_prompt_tab(card)
 
 
 def _render_card_section_links(card: dict[str, Any], idx: int) -> None:
@@ -712,13 +807,24 @@ def _render_active_review_card(
 
     _render_card_section_links(card, idx)
 
-    _render_review_rating_bridge(
-        api_call=api_call,
-        card=card,
-        idx=idx,
-        interval_preview=interval_preview,
-        merge_session_min_next_review=merge_session_min_next_review,
-    )
+    if st.session_state.get(_FC_INLINE_EXPLANATION_IDX_KEY) == idx:
+        _render_inline_explanation_panel(card, idx)
+        if st.button("Далее ➡️", key=f"fc_next_card_{idx}", width='stretch', type="primary"):
+            st.session_state["flashcards_review_index"] = idx + 1
+            st.session_state["flashcards_card_flipped"] = False
+            st.session_state.pop(_FC_INLINE_EXPLANATION_IDX_KEY, None)
+            st.session_state.pop(_FC_INLINE_EXPLANATION_SEEDED_IDX_KEY, None)
+            st.session_state.pop(_FC_INLINE_TUTOR_SESSION_ID_KEY, None)
+            st.session_state.pop(_FC_INLINE_TUTOR_CARD_ID_KEY, None)
+            st.rerun()
+    else:
+        _render_review_rating_bridge(
+            api_call=api_call,
+            card=card,
+            idx=idx,
+            interval_preview=interval_preview,
+            merge_session_min_next_review=merge_session_min_next_review,
+        )
 
 
 def render_review(
@@ -878,6 +984,10 @@ def render_review(
                 st.session_state["flashcards_review_session_next_review_min"] = None
                 st.session_state["flashcards_review_session_status"] = "loaded"
                 st.session_state["flashcards_review_session_error"] = None
+                st.session_state.pop(_FC_INLINE_EXPLANATION_IDX_KEY, None)
+                st.session_state.pop(_FC_INLINE_EXPLANATION_SEEDED_IDX_KEY, None)
+                st.session_state.pop(_FC_INLINE_TUTOR_SESSION_ID_KEY, None)
+                st.session_state.pop(_FC_INLINE_TUTOR_CARD_ID_KEY, None)
                 st.session_state[FLASHCARDS_REVIEW_RECEIPT_BASELINE_KEY] = (
                     capture_fc_review_receipt_baseline(scope_signature)
                 )

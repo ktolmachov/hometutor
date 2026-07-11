@@ -42,7 +42,7 @@ from app.ui.study_scope import (
     get_last_deactivated_scope,
     restore_scope,
 )
-from app.ui_preferences import feature_visible, get_overrides, get_ui_level
+from app.ui_preferences import feature_visible, feature_visible_by_id, get_overrides, get_ui_level
 
 
 HINT_TO_TILE: Final[dict[str, str]] = {
@@ -291,8 +291,15 @@ def _tile_definitions(*, due_count: int | None) -> tuple[MissionTile, ...]:
     )
 
 
-def _render_ssr_banner(rec: SmartStudyRecommendation, *, index_stats: dict | None = None) -> None:
-    """Home Mission Control: объяснимый SSR без полной карточки `e2e-smart-study-next-step`."""
+def _build_ssr_banner_html(
+    rec: SmartStudyRecommendation, *, index_stats: dict | None = None
+) -> str:
+    """Чистый сборщик HTML баннера SSR (без Streamlit-вызовов) — тестируется напрямую.
+
+    Блок «Локальные сигналы» с сырыми EvidenceItem-строками виден только при
+    ``panel:debug_summary`` (tier 5): обычный пользователь не должен видеть
+    разработческую диагностику даже после раскрытия <details>.
+    """
     contrast = smart_study_contrastive_explanation(rec)
     defer_modes = smart_study_why_not_others_ru(rec)
     hint_attr = _safe(str(rec.hint_kind))
@@ -300,20 +307,21 @@ def _render_ssr_banner(rec: SmartStudyRecommendation, *, index_stats: dict | Non
 
     pedagogy_line = str(rec.route_pedagogy_ru or "").strip()
 
-    ledger_lines = list(build_ssr_evidence_for_banner(index_stats))
-    audit_tail = str(rec.ml_audit_ru or "").strip()
-    if audit_tail:
-        ledger_lines.append(audit_tail)
     ledger_section = ""
-    if ledger_lines:
-        items_li = "".join(f"<li>{_safe(line)}</li>" for line in ledger_lines)
-        ledger_section = (
-            '<div class="ssr-section" data-testid="e2e-ssr-evidence">'
-            '<span class="ssr-chip ssr-chip--signals">📊 Локальные сигналы</span>'
-            "<p>это устройство и индекс; не облачный скоринг и не внешний профиль:</p>"
-            f"<ul>{items_li}</ul>"
-            "</div>"
-        )
+    if feature_visible_by_id("panel:debug_summary", context_ok=True):
+        ledger_lines = list(build_ssr_evidence_for_banner(index_stats))
+        audit_tail = str(rec.ml_audit_ru or "").strip()
+        if audit_tail:
+            ledger_lines.append(audit_tail)
+        if ledger_lines:
+            items_li = "".join(f"<li>{_safe(line)}</li>" for line in ledger_lines)
+            ledger_section = (
+                '<div class="ssr-section" data-testid="e2e-ssr-evidence">'
+                '<span class="ssr-chip ssr-chip--signals">📊 Локальные сигналы</span>'
+                "<p>это устройство и индекс; не облачный скоринг и не внешний профиль:</p>"
+                f"<ul>{items_li}</ul>"
+                "</div>"
+            )
 
     # Короткая причина всегда видна строкой под заголовком (inline)
     why_now_inline = _safe(rec.why_now_ru)
@@ -340,7 +348,7 @@ def _render_ssr_banner(rec: SmartStudyRecommendation, *, index_stats: dict | Non
             "</div>"
         )
 
-    banner_html = (
+    return (
         f'<section class="ssr-banner" data-testid="mission-control-ssr-banner" '
         f'data-router-hint="{hint_attr}" role="region" aria-labelledby="{title_id}">'
         # ── Hero: всегда видимая часть ──
@@ -358,7 +366,11 @@ def _render_ssr_banner(rec: SmartStudyRecommendation, *, index_stats: dict | Non
         f"</details>"
         f"</section>"
     )
-    st.html(banner_html)
+
+
+def _render_ssr_banner(rec: SmartStudyRecommendation, *, index_stats: dict | None = None) -> None:
+    """Home Mission Control: объяснимый SSR без полной карточки `e2e-smart-study-next-step`."""
+    st.html(_build_ssr_banner_html(rec, index_stats=index_stats))
 
     btn_label = str(rec.primary_label_ru or "").strip() or "Продолжить обучение"
     st.button(

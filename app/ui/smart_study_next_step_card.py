@@ -11,6 +11,7 @@ from app.smart_study_route_simulator import (
     simulate_what_if,
 )
 from app.ui.adaptive_plan_llm_enrichment import _ssr_why_now_for_card, stream_ssr_explanation  # noqa: F401
+from app.ui_preferences import feature_visible_by_id
 
 
 def render_smart_study_next_step_card(
@@ -90,7 +91,6 @@ def render_smart_study_next_step_card(
         "<strong>Что с другими режимами:</strong> "
         f"{safe_whynot}</p></div>"
     )
-    ledger_html = ""
     ledger_lines = list(evidence_ledger or [])
     audit_tail = str(rec_render.ml_audit_ru or "").strip()
     if audit_tail:
@@ -101,7 +101,8 @@ def render_smart_study_next_step_card(
         primary_nav=str(rec_render.primary_nav),
         weak_concept=weak_concept,
     )
-    if ledger_lines:
+    ledger_html = ""
+    if ledger_lines and feature_visible_by_id("panel:debug_summary", context_ok=True):
         items_li = "".join(
             f'<li style="margin:0.12rem 0;line-height:1.35;">{html_stdlib.escape(line)}</li>'
             for line in ledger_lines

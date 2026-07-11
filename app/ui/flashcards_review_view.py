@@ -38,7 +38,6 @@ from app.ui.continuity_bridge import flashcard_gap_to_tutor_cta_ru, flashcards_e
 from app.ui.expert_controls import render_expert_controls
 from app.ui.flashcard_handoff_source_actions import (
     first_flashcard_handoff_source_url,
-    render_flashcard_handoff_source_actions,
 )
 from app.ui.flashcards_interactive_card import build_interactive_card_html, estimate_interactive_card_height
 from app.ui.flashcards_read_cache import (
@@ -77,6 +76,13 @@ _FC_INLINE_EXPLANATION_IDX_KEY = "fc_inline_explanation_idx"
 _FC_INLINE_EXPLANATION_SEEDED_IDX_KEY = "fc_inline_explanation_seeded_idx"
 _FC_INLINE_TUTOR_SESSION_ID_KEY = "fc_inline_tutor_session_id"
 _FC_INLINE_TUTOR_CARD_ID_KEY = "fc_inline_tutor_card_id"
+
+
+def _clear_inline_explanation_state() -> None:
+    st.session_state.pop(_FC_INLINE_EXPLANATION_IDX_KEY, None)
+    st.session_state.pop(_FC_INLINE_EXPLANATION_SEEDED_IDX_KEY, None)
+    st.session_state.pop(_FC_INLINE_TUTOR_SESSION_ID_KEY, None)
+    st.session_state.pop(_FC_INLINE_TUTOR_CARD_ID_KEY, None)
 
 
 def _maybe_render_undo_last_rating(api_call: Callable[..., Any]) -> None:
@@ -377,6 +383,7 @@ def _record_review_rating(
     }
     st.session_state["flashcards_review_index"] = idx + 1
     st.session_state["flashcards_card_flipped"] = False
+    _clear_inline_explanation_state()
     invalidate_flashcards_due_counts_only()
     st.rerun()
 
@@ -595,10 +602,6 @@ def _linkify_inline_source_line(answer: str, source: dict[str, Any] | None) -> s
     return answer.replace(source_line, linked_line)
 
 
-def _render_inline_source_actions(source: dict[str, Any] | None) -> None:
-    render_flashcard_handoff_source_actions(source)
-
-
 def _render_inline_tutor_tab(sid: str) -> None:
     history = session_store.get(sid)
     answer_items = []
@@ -616,7 +619,6 @@ def _render_inline_tutor_tab(sid: str) -> None:
         for answer, source in answer_items:
             with st.container(border=True):
                 st.markdown(answer)
-                _render_inline_source_actions(source)
 
 
 def _render_inline_deep_prompt_tab(card: dict[str, Any]) -> None:
@@ -842,25 +844,21 @@ def _render_active_review_card(
     components.html(card_html, height=estimate_interactive_card_height(card), scrolling=True)
 
     _render_card_section_links(card, idx)
+    _render_review_rating_bridge(
+        api_call=api_call,
+        card=card,
+        idx=idx,
+        interval_preview=interval_preview,
+        merge_session_min_next_review=merge_session_min_next_review,
+    )
 
     if st.session_state.get(_FC_INLINE_EXPLANATION_IDX_KEY) == idx:
         _render_inline_explanation_panel(card, idx)
         if st.button("Далее ➡️", key=f"fc_next_card_{idx}", width='stretch', type="primary"):
             st.session_state["flashcards_review_index"] = idx + 1
             st.session_state["flashcards_card_flipped"] = False
-            st.session_state.pop(_FC_INLINE_EXPLANATION_IDX_KEY, None)
-            st.session_state.pop(_FC_INLINE_EXPLANATION_SEEDED_IDX_KEY, None)
-            st.session_state.pop(_FC_INLINE_TUTOR_SESSION_ID_KEY, None)
-            st.session_state.pop(_FC_INLINE_TUTOR_CARD_ID_KEY, None)
+            _clear_inline_explanation_state()
             st.rerun()
-    else:
-        _render_review_rating_bridge(
-            api_call=api_call,
-            card=card,
-            idx=idx,
-            interval_preview=interval_preview,
-            merge_session_min_next_review=merge_session_min_next_review,
-        )
 
 
 def render_review(

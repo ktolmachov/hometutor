@@ -166,6 +166,39 @@ class TestKnowledgeGraphTemplateFallback:
 
 
 class TestKnowledgeGraphSelectionBridge:
+    def test_build_kg_html_returns_complete_export_document(self):
+        html = build_kg_html(
+            {
+                "nodes": [{"id": "llm-agent", "label": "LLM Agent", "level": "beginner"}],
+                "edges": [],
+                "levels": {},
+                "stats": {"total": 1},
+                "weekly_plan": [],
+                "health": {},
+                "cluster_labels": {},
+                "decay_vector": {},
+                "mastery_history": [],
+                "compiler_health": None,
+            }
+        )
+
+        assert html.strip().startswith("<!DOCTYPE html>")
+        assert '<svg id="svg"></svg>' in html
+        for placeholder in [
+            "__D3_TAG__",
+            "__NODES__",
+            "__EDGES__",
+            "__LEVELS__",
+            "__STATS__",
+            "__WEEKLY_PLAN__",
+            "__HEALTH__",
+            "__CLUSTER_LABELS__",
+            "__DECAY_VECTOR__",
+            "__MASTERY_HISTORY__",
+            "__COMPILER_HEALTH__",
+        ]:
+            assert placeholder not in html
+
     def test_node_click_bridge_posts_component_value_and_keeps_url_fallback(self):
         html = build_kg_html(
             {

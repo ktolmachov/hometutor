@@ -26,6 +26,7 @@ from app.ui.home_hub import (
 )
 from app.ui.knowledge_graph_d3 import (
     _is_lesson_node as _is_lesson_concept,
+    build_kg_html,
     collect_kg_learned_set,
     render_d3_knowledge_graph,
 )
@@ -1085,6 +1086,14 @@ def _render_knowledge_graph_tab() -> None:
         f"📊 {stats.get('total_concepts', stats.get('total', 0))} концептов · {stats.get('avg_mastery', 0)}% ср. mastery · "
         f"{stats.get('learned', 0)} освоено · {stats.get('frontier', 0)} доступно · "
         f"{stats.get('clusters', 0)} кластеров"
+    )
+    st.download_button(
+        "⬇ Скачать живую карту (HTML)",
+        data=build_kg_html(payload),
+        file_name="knowledge_graph.html",
+        mime="text/html",
+        key="kg_download_live_html",
+        help="Самодостаточная интерактивная карта курса для локального открытия без приложения.",
     )
 
     with st.expander("🔬 Качество графа", expanded=False):

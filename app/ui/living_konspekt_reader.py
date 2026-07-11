@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 import re
 from typing import Any, Callable, Mapping
@@ -138,6 +139,22 @@ def _render_section_progress_controls(
 
 
 _MERMAID_RE = re.compile(r"```(?:mermaid|flowchart).*?\n(.*?)\n```", re.DOTALL | re.IGNORECASE)
+_MERMAID_PATH = Path(__file__).resolve().parent / "assets" / "mermaid.min.js"
+
+
+@lru_cache(maxsize=1)
+def _load_mermaid_source() -> str:
+    try:
+        return _MERMAID_PATH.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def _mermaid_script_tag() -> str:
+    source = _load_mermaid_source()
+    if source:
+        return f"<script>{source}</script>"
+    return '<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>'
 
 
 import base64
@@ -219,6 +236,7 @@ def _render_mermaid_diagram(code: str) -> None:
     else:
         height = max(250, min(800, 200 + num_lines * 45))
 
+    mermaid_script_tag = _mermaid_script_tag()
     html_code = f"""
     <!DOCTYPE html>
     <html>
@@ -249,9 +267,13 @@ def _render_mermaid_diagram(code: str) -> None:
         <div class="mermaid">
 {code}
         </div>
-        <script type="module">
-            import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
-            mermaid.initialize({{
+        {mermaid_script_tag}
+        <script>
+            const mermaidApi = window.mermaid
+                || window.__esbuild_esm_mermaid_nm?.mermaid?.default
+                || window.__esbuild_esm_mermaid_nm?.mermaid;
+            if (mermaidApi) {{
+                mermaidApi.initialize({{
                 startOnLoad: false,
                 theme: 'default',
                 securityLevel: 'loose',
@@ -259,19 +281,28 @@ def _render_mermaid_diagram(code: str) -> None:
                     useWidth: true,
                     htmlLabels: true
                 }}
-            }});
-            function draw() {{
-                if (window.innerWidth > 0 && window.innerHeight > 0) {{
-                    mermaid.run();
+                }});
+                function draw() {{
+                    if (window.innerWidth > 0 && window.innerHeight > 0) {{
+                        mermaidApi.run();
+                    }} else {{
+                        setTimeout(draw, 50);
+                    }}
+                }}
+                draw();
+            }} else {{
+                const target = document.querySelector('.mermaid');
+                if (target) {{
+                    target.textContent = 'Mermaid renderer unavailable.';
+                    target.style.color = '#b91c1c';
+                    target.style.fontFamily = 'system-ui, -apple-system, sans-serif';
                 }} else {{
-                    setTimeout(draw, 50);
+                    document.body.textContent = 'Mermaid renderer unavailable.';
                 }}
             }}
-            draw();
         </script>
     </body>
     </html>
     """
     import streamlit.components.v1 as components
     components.html(html_code, height=height, scrolling=True)
-

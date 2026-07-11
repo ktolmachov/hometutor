@@ -849,6 +849,21 @@ After block."""
         assert len(html_calls) == 2
         assert "A --> B" in html_calls[0]
         assert "C --> D" in html_calls[1]
+        assert "import mermaid from" not in html_calls[0]
+        assert "mermaid.esm.min.mjs" not in html_calls[0]
+        assert "cdn.jsdelivr.net/npm/mermaid@11" not in html_calls[0]
+        assert "__esbuild_esm_mermaid_nm" in html_calls[0]
+
+    def test_mermaid_renderer_keeps_cdn_as_missing_asset_fallback(self, monkeypatch, tmp_path):
+        import app.ui.living_konspekt_reader as reader
+
+        reader._load_mermaid_source.cache_clear()
+        monkeypatch.setattr(reader, "_MERMAID_PATH", tmp_path / "missing-mermaid.min.js")
+
+        script_tag = reader._mermaid_script_tag()
+
+        assert 'src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"' in script_tag
+        reader._load_mermaid_source.cache_clear()
 
     def test_rewrite_image_paths_for_artifact(self):
         from app.konspekt_artifact import _rewrite_image_paths_for_artifact
@@ -860,5 +875,3 @@ After block."""
         
         assert "../Course/assets/pic.png" in rewritten or "..\\Course\\assets\\pic.png" in rewritten
         assert "https://example.com/logo.png" in rewritten
-
-

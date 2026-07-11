@@ -225,7 +225,8 @@ flowchart LR
 - `app/knowledge_graph_bundle.py`
 - `app/ui/dashboards_graph.py` — companion-панель Knowledge Graph: действия с
   концептом, evidence ledger, graph quality audit и deterministic alias/duplicate
-  diagnostics поверх активного graph bundle.
+  diagnostics поверх активного graph bundle; тот же D3 HTML-payload можно скачать
+  как самодостаточную живую карту `knowledge_graph.html`.
 
 Graph bundle публикуется только после `gate_passed=true`. Если новая active
 index generation уже записана в registry, но graph bundle не promoted из-за

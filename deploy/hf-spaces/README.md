@@ -75,17 +75,37 @@ git commit -m "chore: pre-build demo database index"
 2. SDK: **Docker**, тариф **CPU basic** (free).
 3. **Settings → Variables and secrets** — добавить значения из таблицы выше.
 
-### Шаг 4: Remote и отправка
-```bash
+### Шаг 4: Remote и отправка snapshot-коммита
+
+> ⚠️ **Не делайте `git push space main`** — HF отклоняет push сырых бинарных блобов,
+> а история `main` содержит PNG/GIF скриншотов. В Space пушится **один snapshot-коммит**
+> дерева `main` без `docs/screenshots/`; `demo_chroma_db/` уходит LFS-указателями
+> (правила в `.gitattributes`), их объекты заливаются `git lfs push`.
+
+PowerShell:
+
+```powershell
 git remote add space https://huggingface.co/spaces/ВАШ_ЛОГИН_HF/hometutor
-git push space main --force
+
+# snapshot-дерево без docs/screenshots (через временный индекс, рабочая копия не трогается)
+$env:GIT_INDEX_FILE = ".git/space-index"
+git read-tree 'main^{tree}'
+git rm -r --cached --quiet docs/screenshots
+$tree = git write-tree
+Remove-Item Env:GIT_INDEX_FILE
+
+$commit = git commit-tree -m "Deploy hometutor to HF Space" $tree
+git lfs push space $commit
+git push space "${commit}:refs/heads/main" --force
 ```
+
 Корневой `README.md` уже содержит нужный YAML-заголовок (`sdk: docker`, `app_port: 8501`) —
 отдельно копировать его не нужно (в отличие от старого Streamlit-SDK варианта).
 
 ### Шаг 5: Автодеплой из CI (опционально)
-`.github/workflows/deploy.yml` пушит в тот же HF remote после успешного прохождения CI на `main`,
-если в GitHub Secrets заданы `HF_TOKEN` и `HF_USERNAME`.
+`.github/workflows/deploy.yml` делает то же самое автоматически (snapshot-коммит + LFS)
+после успешного прохождения CI на `main`, если в GitHub Secrets заданы `HF_TOKEN`
+и `HF_USERNAME`.
 
 ### Шаг 6: Проверка
 Hugging Face соберёт образ по корневому `Dockerfile` и запустит

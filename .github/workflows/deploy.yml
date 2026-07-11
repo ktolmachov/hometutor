@@ -13,10 +13,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
           ref: main
 
-      - name: Push to Hugging Face Space
+      # HF отклоняет push сырых бинарных блобов (включая старые PNG/GIF в истории),
+      # поэтому пушим НЕ историю main, а один snapshot-коммит её дерева:
+      #  - docs/screenshots/ исключается (нужны только на GitHub, не в Space);
+      #  - demo_chroma_db/ уходит LFS-указателями (см. .gitattributes),
+      #    объекты загружаются отдельным `git lfs push`.
+      - name: Push snapshot to Hugging Face Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_USERNAME: ${{ secrets.HF_USERNAME }}
@@ -28,5 +32,14 @@ jobs:
           fi
           git config user.email "ci@hometutor"
           git config user.name "CI"
+          git lfs install --local
+          git lfs pull --include="demo_chroma_db/**"
           git remote add space "https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co/spaces/${HF_USERNAME}/${HF_SPACE}"
-          git push --force space HEAD:main
+          export GIT_INDEX_FILE=.git/space-index
+          git read-tree 'HEAD^{tree}'
+          git rm -r --cached --quiet docs/screenshots || true
+          TREE=$(git write-tree)
+          unset GIT_INDEX_FILE
+          COMMIT=$(git commit-tree -m "Deploy hometutor (snapshot of ${GITHUB_SHA})" "${TREE}")
+          git lfs push space "${COMMIT}"
+          git push --force space "${COMMIT}:refs/heads/main"

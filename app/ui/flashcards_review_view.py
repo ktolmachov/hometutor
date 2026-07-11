@@ -452,6 +452,7 @@ def _seed_tutor_handoff_session(card: dict[str, Any]) -> None:
     _stored_history = session_store.get(_sid)
     st.session_state["tutor_handoff_check_self_pending"] = True
     st.session_state["tutor_handoff_quiz_msg_idx"] = max(0, len(_stored_history) - 1)
+    st.session_state["tutor_handoff_scroll_to_answer_pending"] = True
 
 
 def _complete_tutor_handoff_navigation(card: dict[str, Any]) -> None:

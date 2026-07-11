@@ -125,20 +125,20 @@ def build_flashcard_handoff_seed(card: dict[str, Any]) -> dict[str, Any]:
     source_text = f"Вопрос: {front}\n\nОтвет: {back}".strip()
     sources = []
     if source_text:
-        sources.append(
-            {
-                "file_name": source_path.rsplit("/", 1)[-1] if source_path else (
-                    f"Карточка #{card_id}" if card_id is not None else "Карточка"
-                ),
-                "relative_path": source_path or None,
-                "page": "flashcard",
-                "score": 1.0 if back else None,
-                "text": source_text,
-                "route": FLASHCARD_HANDOFF_SEED_ROUTE,
-                "rank_reason": "прямой ответ выбранной карточки",
-                "cite_index": 1,
-            }
-        )
+        source = {
+            "file_name": source_path.rsplit("/", 1)[-1] if source_path else (
+                f"Карточка #{card_id}" if card_id is not None else "Карточка"
+            ),
+            "relative_path": source_path or None,
+            "page": "flashcard",
+            "score": 1.0 if back else None,
+            "text": source_text,
+            "route": FLASHCARD_HANDOFF_SEED_ROUTE,
+            "rank_reason": "прямой ответ выбранной карточки",
+            "cite_index": 1,
+        }
+        _attach_flashcard_source_actions(source, card=card, source_path=source_path)
+        sources.append(source)
 
     tutor_meta = {
         "teaching": payload,
@@ -173,6 +173,72 @@ def build_flashcard_handoff_seed(card: dict[str, Any]) -> dict[str, Any]:
         "topic": topic,
         "sources": sources,
     }
+
+
+def _attach_flashcard_source_actions(
+    source: dict[str, Any],
+    *,
+    card: dict[str, Any],
+    source_path: str,
+) -> None:
+    """Best-effort action links for the Tutor flashcard handoff source."""
+    if not source_path:
+        return
+    try:
+        from app.obsidian_export import obsidian_uri, vscode_uri
+        from app.section_index import best_section_for, build_section_index
+
+        sections = build_section_index(source_path)
+        if not sections:
+            return
+        query_text = " ".join(
+            part
+            for part in [
+                str(card.get("front") or ""),
+                str(card.get("back") or card.get("answer") or ""),
+            ]
+            if part
+        )
+        section = best_section_for(sections, query_text)
+        if section is None:
+            return
+        source["section_heading"] = section.heading_text
+        source["section_line_start"] = section.line_start
+        source["obsidian_uri"] = obsidian_uri(section.konspekt_md_abs, heading_text=section.heading_text)
+        source["vscode_uri"] = vscode_uri(section.konspekt_md_abs, line=section.line_start)
+    except Exception:  # noqa: BLE001 - source actions are optional for Tutor handoff.
+        return
+
+    try:
+        from urllib.parse import urlencode
+
+        from app.config import get_settings
+        from app.living_konspekt_source_resolver import SourceSectionCandidate
+        from app.living_konspekt_video_citations import video_citation_for_candidate
+
+        candidate = SourceSectionCandidate(section=section, score=0.0, reason="flashcard_handoff")
+        video_resolution = video_citation_for_candidate(candidate)
+        citation = video_resolution.citation
+        if video_resolution.status != "available" or citation is None or citation.url is None:
+            return
+
+        settings = get_settings()
+        if settings.auth_enabled or (settings.home_rag_api_key or "").strip():
+            video_url = citation.url
+        else:
+            query = urlencode(
+                {
+                    "url": citation.url,
+                    "heading": section.heading_text,
+                    "source": str(section.source_abs.name),
+                }
+            )
+            video_url = f"{settings.ui_api_base_url.rstrip('/')}/living-konspekt/video-citation/open?{query}"
+        source["video_url"] = video_url
+        source["video_label"] = f"🎬 Видео с {citation.timestamp_label}"
+        source["video_timestamp_label"] = citation.timestamp_label
+    except Exception:  # noqa: BLE001 - video citation is optional for Tutor handoff.
+        return
 
 
 def clear_flashcard_handoff_session_fields(state: Any) -> None:

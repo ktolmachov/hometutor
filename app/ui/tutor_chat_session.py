@@ -8,6 +8,7 @@ import uuid
 from typing import Any
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from app.tutor_pipeline_contract import qa_handoff_context_lines_for_preview
 from app.ui.answer_helpers import source_paths_from_answer
@@ -23,6 +24,7 @@ import app.ui.tutor_chat_quiz as tutor_chat_quiz
 import app.ui.tutor_chat_render as tutor_chat_render
 from app.flashcard_handoff import (
     FLASHCARD_HANDOFF_ENTRYPOINT,
+    FLASHCARD_HANDOFF_SEED_ROUTE,
     clear_flashcard_handoff_session_fields,
 )
 from app.flashcard_handoff_timing import (
@@ -32,6 +34,9 @@ from app.flashcard_handoff_timing import (
 )
 
 logger = logging.getLogger(__name__)
+
+_FLASHCARD_HANDOFF_EXPLANATION_ANCHOR = "flashcard-tutor-explanation"
+_FLASHCARD_HANDOFF_SCROLL_PENDING_KEY = "tutor_handoff_scroll_to_answer_pending"
 
 
 def _apply_qa_handoff_context() -> None:
@@ -590,8 +595,92 @@ def _maybe_start_tutor_micro_quiz(sid: str) -> None:
     st.rerun()
 
 
+def _is_flashcard_handoff_seed_message(msg: Any) -> bool:
+    meta = getattr(msg, "metadata", None)
+    if not isinstance(meta, dict):
+        return False
+    debug = meta.get("debug") if isinstance(meta.get("debug"), dict) else {}
+    if bool(debug.get("flashcard_handoff_seed")):
+        return True
+    sources = meta.get("sources")
+    if isinstance(sources, list):
+        return any(
+            isinstance(source, dict) and source.get("route") == FLASHCARD_HANDOFF_SEED_ROUTE
+            for source in sources
+        )
+    return False
+
+
+def _render_flashcard_handoff_explanation_anchor() -> None:
+    st.markdown(
+        (
+            f'<div id="{_FLASHCARD_HANDOFF_EXPLANATION_ANCHOR}" '
+            'style="scroll-margin-top:5.5rem"></div>'
+        ),
+        unsafe_allow_html=True,
+    )
+    if not st.session_state.pop(_FLASHCARD_HANDOFF_SCROLL_PENDING_KEY, False):
+        return
+    components.html(
+        f"""
+        <script>
+        try {{
+          const target = window.parent.document.getElementById("{_FLASHCARD_HANDOFF_EXPLANATION_ANCHOR}");
+          if (target) {{
+            target.scrollIntoView({{behavior: "smooth", block: "start"}});
+          }}
+        }} catch (error) {{
+          // Fallback link remains visible below the tutor response.
+        }}
+        </script>
+        """,
+        height=0,
+    )
+
+
+def _render_flashcard_handoff_source_actions(
+    sources: list[dict[str, Any]] | None,
+) -> None:
+    if not sources:
+        return
+    source = next(
+        (
+            item
+            for item in sources
+            if isinstance(item, dict) and item.get("route") == FLASHCARD_HANDOFF_SEED_ROUTE
+        ),
+        None,
+    )
+    if not isinstance(source, dict):
+        return
+    actions: list[tuple[str, str]] = []
+    heading = str(source.get("section_heading") or "").strip()
+    obsidian = str(source.get("obsidian_uri") or "").strip()
+    vscode = str(source.get("vscode_uri") or "").strip()
+    video_url = str(source.get("video_url") or "").strip()
+    video_label = str(source.get("video_label") or "").strip() or "🎬 Видео"
+    if obsidian:
+        label = f"📄 «{heading}» · Obsidian" if heading else "📄 Открыть в Obsidian"
+        actions.append((label, obsidian))
+    if vscode:
+        label = f"🖥 «{heading}» · VS Code" if heading else "🖥 Открыть раздел"
+        actions.append((label, vscode))
+    if video_url:
+        actions.append((video_label, video_url))
+    if not actions:
+        return
+
+    st.caption("Источник объяснения")
+    cols = st.columns(len(actions))
+    for idx, (label, url) in enumerate(actions):
+        with cols[idx]:
+            st.link_button(label, url, width="stretch")
+
+
 def _render_tutor_history(sid: str, history: list[Any]) -> None:
     for idx, msg in enumerate(history):
+        if msg.role == "assistant" and _is_flashcard_handoff_seed_message(msg):
+            _render_flashcard_handoff_explanation_anchor()
         with st.chat_message(msg.role):
             meta = msg.metadata or {}
             tutor_meta = meta.get("tutor") if isinstance(meta, dict) else {}
@@ -610,6 +699,8 @@ def _render_tutor_history(sid: str, history: list[Any]) -> None:
 
             if msg.role == "assistant" and isinstance(auto_q, dict) and auto_q.get("show_immediately"):
                 _render_unified_auto_quiz_card(auto_q, idx, sid)
+            if msg.role == "assistant" and _is_flashcard_handoff_seed_message(msg):
+                _render_flashcard_handoff_source_actions(msg_sources)
 
 
 def _render_tutor_followups(sid: str) -> None:
@@ -620,6 +711,10 @@ def _render_tutor_followups(sid: str) -> None:
         return
     if st.session_state.get("tutor_handoff_check_self_pending"):
         _idx = int(st.session_state.get("tutor_handoff_quiz_msg_idx") or 0)
+        st.markdown(
+            f'<a href="#{_FLASHCARD_HANDOFF_EXPLANATION_ANCHOR}">↑ К объяснению карточки</a>',
+            unsafe_allow_html=True,
+        )
         if st.button("Проверить себя", key="tutor_handoff_check_self", type="secondary"):
             st.session_state.pop("tutor_handoff_check_self_pending", None)
             st.session_state.pop("tutor_handoff_quiz_msg_idx", None)

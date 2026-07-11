@@ -219,7 +219,7 @@ st.plotly_chart(
 
 st.info(
     f"**Рекомендация (PLM 19.5, emotional_state: {profile.emotional_state})** — "
-    f"{adp.get('motivation_message') or plan.get('motivation_tip') or 'Продолжайте по плану и возвращайтесь к слабым концептам.'}"
+    f"{adp.get('motivation_message') or plan.get('motivation_tip') or 'Продолжайте по программе обучения и возвращайтесь к слабым концептам.'}"
 )
 
 _timeline = build_quiz_activity_timeline(data.get("quiz_mastery_rows"))

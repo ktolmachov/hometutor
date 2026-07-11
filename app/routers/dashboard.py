@@ -36,7 +36,7 @@ def get_mastery_dashboard():
 
 @router.get("/dashboard/coach_plan")
 def get_coach_plan(days: int = 7):
-    """Персональный план AI Coach (слабые места, NBA, эвристики времени)."""
+    """Недельный обзор AI Coach (слабые места, NBA, эвристики времени), не «План на сегодня»."""
     if get_settings().home_rag_e2e_offline:
         return _load_e2e_payload("scenario_09.json")
     d = max(1, min(14, int(days)))

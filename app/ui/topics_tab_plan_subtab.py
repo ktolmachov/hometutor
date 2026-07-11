@@ -1,4 +1,4 @@
-"""Подвкладка «План обучения» на вкладке «Темы» (P5c split)."""
+"""Подвкладка «Программа обучения» на вкладке «Темы» (P5c split)."""
 
 from __future__ import annotations
 
@@ -26,9 +26,9 @@ def render_topics_plan_subtab(
     iv: str | None,
 ) -> None:
     st.caption(
-        "Подходит для новой темы, длинной лекции и подготовки к домашнему заданию. План можно экспортировать в Markdown после генерации."
+        "Подходит для новой темы, длинной лекции и подготовки к домашнему заданию. Программу можно экспортировать в Markdown после генерации."
     )
-    st.markdown("#### План обучения")
+    st.markdown("#### Программа обучения")
     plan_goal = st.text_input(
         "Цель обучения",
         value=f"Изучить тему {selected_topic['topic_name']}",
@@ -61,7 +61,7 @@ def render_topics_plan_subtab(
     )
     if selected_documents:
         st.caption(
-            f"В текущей выборке: {len(selected_documents)} документ(ов). Кнопка `План по выборке` использует только их."
+            f"В текущей выборке: {len(selected_documents)} документ(ов). Кнопка «Программа по выборке» использует только их."
         )
     _graph_has_concepts = bool(_knowledge_graph.get_concepts())
     plan_user_progress = st.checkbox(
@@ -86,7 +86,7 @@ def render_topics_plan_subtab(
     )
     plan_action_row = st.columns(2)
     with plan_action_row[0]:
-        if st.button("План по всей теме", key=f"plan_all_{selected_topic['topic_id']}", width="stretch", type="primary"):
+        if st.button("Программа по всей теме", key=f"plan_all_{selected_topic['topic_id']}", width="stretch", type="primary"):
             topic_doc_paths = [
                 doc.get("relative_path") or doc.get("file_name")
                 for doc in selected_topic.get("documents") or []
@@ -110,11 +110,11 @@ def render_topics_plan_subtab(
                 result["selection_mode"] = "topic"
                 st.session_state["last_learning_plan"] = result
             except Exception as e:  # noqa: BLE001 — API call failure shown to user, must not crash the plan subtab
-                st.error(f"Ошибка learning plan: {format_request_error(e)}")
+                st.error(f"Ошибка программы обучения: {format_request_error(e)}")
     with plan_action_row[1]:
-        if st.button("План по выборке", key=f"plan_selected_{selected_topic['topic_id']}", width="stretch", type="secondary"):
+        if st.button("Программа по выборке", key=f"plan_selected_{selected_topic['topic_id']}", width="stretch", type="secondary"):
             if not selected_documents:
-                st.warning("Сначала выберите хотя бы один документ в левой колонке, чтобы построить план по выборке.")
+                st.warning("Сначала выберите хотя бы один документ в левой колонке, чтобы построить программу по выборке.")
             else:
                 try:
                     result = fetch_json(
@@ -135,12 +135,12 @@ def render_topics_plan_subtab(
                     result["selected_documents"] = selected_documents
                     st.session_state["last_learning_plan"] = result
                 except Exception as e:  # noqa: BLE001 — API call failure shown to user, must not crash the plan subtab
-                    st.error(f"Ошибка learning plan: {format_request_error(e)}")
+                    st.error(f"Ошибка программы обучения: {format_request_error(e)}")
 
     learning_plan = st.session_state.get("last_learning_plan")
     if learning_plan and learning_plan.get("topic") == selected_topic["topic_name"]:
         mode = "вся тема" if learning_plan.get("selection_mode") == "topic" else "выбранные документы"
-        st.caption(f"Режим плана: {mode}")
+        st.caption(f"Режим программы: {mode}")
         summary_cols = st.columns(3)
         with summary_cols[0]:
             render_metric_card("Уровень", str(learning_plan.get("level") or "n/a"), "study mode")
@@ -163,7 +163,7 @@ def render_topics_plan_subtab(
             )
             missing_docs = coverage.get("missing", [])
             if missing_docs:
-                st.caption(f"В этот план не вошли: {', '.join(missing_docs[:5])}")
+                st.caption(f"В эту программу не вошли: {', '.join(missing_docs[:5])}")
         goal_text = learning_plan.get("goal") or ""
         if goal_text:
             st.markdown(
@@ -215,7 +215,7 @@ def render_topics_plan_subtab(
                 budget_cols = st.columns([3, 1])
                 with budget_cols[0]:
                     st.warning(
-                        f"План по таблице занимает ~{budget_status.total_hours:g} ч, "
+                        f"Программа по таблице занимает ~{budget_status.total_hours:g} ч, "
                         f"что на {budget_status.exceeds_by_hours:g} ч выше "
                         f"заданного бюджета {budget_status.budget_hours:g} ч."
                     )
@@ -250,7 +250,7 @@ def render_topics_plan_subtab(
         step_cols = st.columns([3, 1])
         with step_cols[0]:
             cur_step = st.selectbox(
-                "Текущий шаг плана",
+                "Текущий шаг программы",
                 options=step_options,
                 format_func=_fmt_plan_step,
                 key=f"plan_step_pick_{selected_topic['topic_id']}",
@@ -272,7 +272,7 @@ def render_topics_plan_subtab(
                         step_index=si,
                         step_label=(label or "")[:500],
                         progress=(si + 1) / float(n_steps),
-                        display_title=f"План по теме «{selected_topic['topic_name']}»",
+                        display_title=f"Программа по теме «{selected_topic['topic_name']}»",
                         index_version=iv or None,
                     )
                 except Exception as exc:  # noqa: BLE001 — progress save failure is reported to the user, not fatal
@@ -282,7 +282,7 @@ def render_topics_plan_subtab(
                     st.rerun()
         if coverage.get("ratio") is not None:
             if st.button(
-                "Записать покрытие плана в прогресс темы",
+                "Записать покрытие программы в прогресс темы",
                 key=f"plan_cov_apply_{selected_topic['topic_id']}",
                 width="stretch",
                 type="secondary",
@@ -298,17 +298,17 @@ def render_topics_plan_subtab(
                 except Exception as exc:  # noqa: BLE001 — progress update failure is reported to the user, not fatal
                     st.error(str(exc))
                 else:
-                    st.success("Прогресс темы обновлён из покрытия плана")
+                    st.success("Прогресс темы обновлён из покрытия программы")
                     st.rerun()
-        st.markdown("##### Самопроверка (план)")
+        st.markdown("##### Самопроверка (программа)")
         plan_quiz_text = (plan_md or "") + "\n\n" + format_sources_markdown(learning_plan.get("sources") or [])
         render_quiz_panel(
             source_key=f"topics_plan_{selected_topic['topic_id']}",
-            title=f"План: {selected_topic['topic_name']}",
+            title=f"Программа: {selected_topic['topic_name']}",
             material=plan_quiz_text,
         )
         if learning_plan.get("documents"):
-            st.markdown("#### Документы в плане")
+            st.markdown("#### Документы в программе")
             render_chip_row(
                 [
                     doc.get("relative_path") or doc.get("file_name") or "document"
@@ -316,7 +316,7 @@ def render_topics_plan_subtab(
                 ]
             )
         md_lines = [
-            f"# План обучения: {learning_plan.get('topic', selected_topic['topic_name'])}\n\n",
+            f"# Программа обучения: {learning_plan.get('topic', selected_topic['topic_name'])}\n\n",
             "## Контекст\n\n",
             f"- Цель: **{goal_text or 'Не указана'}**\n",
             f"- Уровень: **{learning_plan.get('level') or 'n/a'}**\n",
@@ -328,7 +328,7 @@ def render_topics_plan_subtab(
             md_lines.append(
                 f"- Покрытие: **{coverage.get('covered', 0)} из {coverage.get('total', 0)} документов ({ratio_pct}%)**\n"
             )
-        md_lines.append("\n## План\n\n")
+        md_lines.append("\n## Программа обучения\n\n")
         md_lines.append(display_plan_md)
         if learning_plan.get("documents"):
             md_lines.append("\n\n## Документы\n\n")
@@ -342,7 +342,7 @@ def render_topics_plan_subtab(
         with plan_action_footer[0]:
             if st.button("Печать/чистый вид", key=f"print_plan_{selected_topic['topic_id']}", width="stretch", type="secondary"):
                 open_print_view(
-                    title=f"План обучения: {learning_plan.get('topic', selected_topic['topic_name'])}",
+                    title=f"Программа обучения: {learning_plan.get('topic', selected_topic['topic_name'])}",
                     subtitle="Чистый вид для пошагового прохождения темы, лекции или подготовки к домашнему заданию.",
                     body_md=display_plan_md,
                     export_md="".join(md_lines),
@@ -354,7 +354,7 @@ def render_topics_plan_subtab(
                 )
                 st.rerun()
         st.download_button(
-            label="Скачать план в Markdown",
+            label="Скачать программу в Markdown",
             data="".join(md_lines),
             file_name="learning_plan.md",
             mime="text/markdown",
@@ -367,12 +367,12 @@ def render_topics_plan_subtab(
         st.markdown(
             """
             <div class="callout">
-                <div class="panel-title">Соберите план изучения</div>
+                <div class="panel-title">Соберите программу обучения</div>
                 <div class="panel-subtitle">Подходит для новой темы, лекций и подготовки к экзамену или ДЗ</div>
                 <div><strong>1.</strong> Укажите цель, уровень и бюджет времени.</div>
                 <div><strong>2.</strong> При необходимости сузьте набор документов.</div>
-                <div><strong>3.</strong> Постройте план по теме или по вашей выборке.</div>
-                <div><strong>4.</strong> После генерации используйте план как маршрут, а чат с тьютором — как место для объяснений и проверки понимания.</div>
+                <div><strong>3.</strong> Постройте программу по теме или по вашей выборке.</div>
+                <div><strong>4.</strong> После генерации используйте программу как маршрут, а чат с тьютором — как место для объяснений и проверки понимания.</div>
             </div>
             """,
             unsafe_allow_html=True,

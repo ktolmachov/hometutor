@@ -563,7 +563,7 @@ def _show_cached_artifact(artifact: dict[str, Any]) -> None:
     if not isinstance(plan, dict):
         return
     st.session_state["last_learning_plan"] = plan
-    st.success("Готовый план курса загружен из кэша.")
+    st.success("Готовая программа курса загружена из кэша.")
 
 
 def _prepare_course_artifact(
@@ -625,7 +625,7 @@ def render_course_prepare_view(
 
     documents = normalize_source_paths(list(scope.get("source_paths") or []))
     if not documents:
-        st.info("Активный курс есть, но в нём нет списка документов для построения плана.")
+        st.info("Активный курс есть, но в нём нет списка документов для построения программы.")
         return
 
     topic_name = str(topic.get("topic_name") or scope.get("title") or "Активный курс")
@@ -633,7 +633,7 @@ def render_course_prepare_view(
     st.markdown("##### Подготовить активный курс")
     st.caption(
         f"{course_title}: {len(documents)} документ(ов). "
-        "Пайплайн покажет состав курса, соберёт обзор и построит план только по этим источникам. "
+        "Пайплайн покажет состав курса, соберёт обзор и построит программу только по этим источникам. "
         "Новая программа включает практику и проверку результата для каждого шага."
     )
 
@@ -664,7 +664,7 @@ def render_course_prepare_view(
                 with st.status("Готовлю курс", expanded=True) as status:
                     st.write(f"Шаг 1/4: найдено документов курса: {len(documents)}")
                     st.write("Шаг 2/4: собираю краткий обзор по активному scope")
-                    st.write("Шаг 3/4: строю учебный план только по документам курса")
+                    st.write("Шаг 3/4: строю программу обучения только по документам курса")
                     artifact, learning_plan = _prepare_course_artifact(
                         documents=documents,
                         course_title=course_title,
@@ -679,19 +679,19 @@ def render_course_prepare_view(
                     st.session_state["last_course_prepare"] = artifact
                     st.session_state["last_learning_plan"] = learning_plan
                     status.update(label=_prepare_complete_label(graph_view), state="complete")
-                    st.success("План курса готов. Ниже открылся маршрут по активному курсу.")
+                    st.success("Программа курса готова. Ниже открылся маршрут по активному курсу.")
             except Exception as exc:  # noqa: BLE001 - UI boundary: show API/persistence error without crashing Streamlit.
                 st.error(f"Не удалось подготовить курс: {exc}")
     with cache_cols[1]:
         if cached and st.button("Открыть кэш", key=f"{key_prefix}_open_cached_course", width="stretch", type="secondary"):
             _show_cached_artifact(cached)
     with cache_cols[2]:
-        if cached and st.button("Пересобрать план", key=f"{key_prefix}_rebuild_course", width="stretch", type="secondary"):
+        if cached and st.button("Пересобрать программу", key=f"{key_prefix}_rebuild_course", width="stretch", type="secondary"):
             try:
                 with st.status("Пересобираю курс", expanded=True) as status:
                     st.write(f"Шаг 1/4: найдено документов курса: {len(documents)}")
                     st.write("Шаг 2/4: заново собираю краткий обзор по активному scope")
-                    st.write("Шаг 3/4: заново строю учебный план по документам курса")
+                    st.write("Шаг 3/4: заново строю программу обучения по документам курса")
                     artifact, learning_plan = _prepare_course_artifact(
                         documents=documents,
                         course_title=course_title,
@@ -705,14 +705,14 @@ def render_course_prepare_view(
                     st.write("Шаг 4/4: обновил превью карточек для следующего шага")
                     st.session_state["last_course_prepare"] = artifact
                     st.session_state["last_learning_plan"] = learning_plan
-                    status.update(label="План курса пересобран и сохранён поверх кэша", state="complete")
-                    st.success("План курса пересобран. Новый маршрут открыт ниже.")
+                    status.update(label="Программа курса пересобрана и сохранена поверх кэша", state="complete")
+                    st.success("Программа курса пересобрана. Новый маршрут открыт ниже.")
             except Exception as exc:  # noqa: BLE001 - UI boundary: show API/persistence error without crashing Streamlit.
                 st.error(f"Не удалось пересобрать курс: {exc}")
 
     preview = (st.session_state.get("last_course_prepare") or cached or {}).get("flashcards_preview") or []
     if preview:
-        with st.expander("Превью карточек по плану", expanded=False):
+        with st.expander("Превью карточек по программе", expanded=False):
             for idx, item in enumerate(preview[:5], 1):
                 st.markdown(f"{idx}. **{item}**")
 

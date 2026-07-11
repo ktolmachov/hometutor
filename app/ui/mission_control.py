@@ -691,6 +691,34 @@ def _build_kg_mini_svg(concepts: dict, mastery_vector: dict) -> str:
     )
 
 
+def _kg_bundle_state_badge() -> str:
+    """Compact bundle-state badge for the KG Mission Control card (B1).
+
+    Mirrors the publish-status banner shown on the Knowledge Graph screen so that, when
+    the active graph bundle is not the canonical ``active`` generation (previous/legacy),
+    both screens surface the same state instead of silently showing numbers from a
+    different bundle. Returns ``""`` when the bundle is the normal active generation or
+    when the status lookup is unavailable.
+    """
+    try:
+        from app.graph_publish_status import get_graph_publish_status
+
+        reader_source = str((get_graph_publish_status() or {}).get("reader_source") or "active")
+    except Exception:  # noqa: BLE001 - badge is optional diagnostics, never breaks the card
+        return ""
+    if reader_source == "previous":
+        return (
+            '<span class="kg-mc-badge" title="Показан предыдущий опубликованный graph bundle '
+            '(active generation не найдена)">⚠ previous bundle</span>'
+        )
+    if reader_source == "legacy":
+        return (
+            '<span class="kg-mc-badge" title="Published graph bundle не найден — '
+            'показан legacy graph">⚠ legacy bundle</span>'
+        )
+    return ""
+
+
 def render_kg_mission_card() -> None:
     """Compact Knowledge Graph teaser card for Mission Control."""
     from app.ui.feature_registry import feature_by_id
@@ -711,14 +739,26 @@ def render_kg_mission_card() -> None:
     except Exception:  # noqa: BLE001
         mastery_vector = {}
 
+    # B1: single source of truth — counters come from the same helper the Knowledge
+    # Graph screen uses (compute_kg_counters ← build_kg_payload), so the two screens can
+    # never show different numbers for the same graph. Frontier is recomputed from
+    # mastery + prerequisites, not the stale raw ``frontier`` bundle flag.
+    try:
+        from app.ui.knowledge_graph_d3 import compute_kg_counters
+
+        typed_relations = knowledge_graph.get_typed_relations()
+        counters = compute_kg_counters(
+            concepts, mastery_vector=mastery_vector, typed_relations=typed_relations
+        )
+    except Exception:  # noqa: BLE001 - fall back to zeroed counters, card still renders
+        counters = {"total_concepts": 0, "total_lessons": 0, "frontier": 0, "avg_mastery": 0.0}
+    concept_nodes = counters["total_concepts"]
+    lessons = counters["total_lessons"]
+    frontier = counters["frontier"]
+    avg_mastery = counters["avg_mastery"]
+
     valid = {cid: data for cid, data in concepts.items() if isinstance(data, dict)}
-    total = len(valid)
-    lessons = sum(1 for d in valid.values() if str(d.get("level") or "").strip() == "lesson")
-    frontier = sum(1 for d in valid.values() if d.get("frontier"))
-    avg_mastery = round(
-        sum(mastery_vector.get(cid, 0.0) for cid in valid) / max(total, 1) * 100
-    )
-    concept_nodes = total - lessons
+    bundle_badge = _kg_bundle_state_badge()
 
     mini_svg = _build_kg_mini_svg(valid, mastery_vector)
     st.html(
@@ -726,7 +766,7 @@ def render_kg_mission_card() -> None:
         f'<div class="kg-mc-header">'
         f'<span class="kg-mc-icon">🕸</span>'
         f'<div class="kg-mc-titles">'
-        f'<div class="kg-mc-title">Граф знаний</div>'
+        f'<div class="kg-mc-title">Граф знаний</div>{bundle_badge}'
         f'<div class="kg-mc-subtitle">Визуальная карта знаний курса — клик по узлу открывает детали</div>'
         f'</div></div>'
         f'<div class="kg-mc-preview">{mini_svg}</div>'

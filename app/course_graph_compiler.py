@@ -397,7 +397,7 @@ def _assemble_relations(
             weak = rel_type == "related" or confidence < WEAK_EVIDENCE_CONFIDENCE
             evidence_doc_id = str(item.get("evidence_doc_id") or doc_id).strip()
             evidence_chunk_id = str(item.get("evidence_chunk_id") or "").strip()
-            if evidence_chunk_id not in valid_chunk_ids.get(evidence_doc_id, set()):
+            if not evidence_chunk_id:
                 evidence_chunk_id = _first_valid_chunk_id(valid_chunk_ids, evidence_doc_id)
             relations.append(
                 _RelationDraft(
@@ -628,10 +628,21 @@ def _compute_metrics(
         for c in concepts.values()
         if isinstance(c, dict) and (c.get("provenance") or {}).get("source_doc_id")
     )
+    valid_chunk_ids = {
+        doc_id: {
+            str(row.get("chunk_id") or "").strip()
+            for row in rows
+            if str(row.get("chunk_id") or "").strip()
+        }
+        for doc_id, rows in documents_grouped.items()
+    }
     relations_with_evidence = sum(
         1
         for rel in typed_relations
-        if isinstance(rel, dict) and rel.get("evidence_doc_id") and rel.get("evidence_chunk_id")
+        if isinstance(rel, dict)
+        and rel.get("evidence_doc_id")
+        and rel.get("evidence_chunk_id")
+        and str(rel.get("evidence_chunk_id")) in valid_chunk_ids.get(str(rel.get("evidence_doc_id")), set())
     )
     docs_participating = sum(
         1

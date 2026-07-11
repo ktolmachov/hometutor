@@ -20,6 +20,7 @@ from app.routers.admin import router as admin_router
 from app.routers.auth import router as auth_router
 from app.routers.ssr import router as ssr_router
 from app.routers.dashboard import router as dashboard_router
+from app.routers.debug import router as debug_router
 from app.routers.core import router as core_router
 from app.routers.feedback import router as feedback_router
 from app.routers.files import router as files_router
@@ -271,6 +272,7 @@ app.add_middleware(
 )
 
 app.include_router(core_router)
+app.include_router(debug_router)
 app.include_router(ssr_router)
 app.include_router(auth_router)
 # auth_scope — no-op при AUTH_ENABLED=false (default); require_api_key — no-op без HOME_RAG_API_KEY.

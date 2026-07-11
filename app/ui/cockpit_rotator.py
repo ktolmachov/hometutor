@@ -7,7 +7,7 @@ from typing import Final
 import streamlit as st
 
 SESSION_KEY: Final[str] = "cockpit_rotator_slot_index"
-DEFAULT_SLOTS: Final[tuple[str, ...]] = ("flashcards", "micro_quiz", "tutor_chat", "living_konspekt")
+DEFAULT_SLOTS: Final[tuple[str, ...]] = ("flashcards", "micro_quiz", "tutor_chat")
 SLOT_LABELS: Final[dict[str, str]] = {
     "flashcards": "Flashcards",
     "micro_quiz": "Micro quiz",

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 from collections import deque
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Sequence
@@ -132,6 +133,251 @@ def _connected_components(node_ids: Sequence[str], edges: Sequence[Dict[str, str
     return {nid: root_to_idx.setdefault(find(nid), len(root_to_idx)) for nid in node_ids}
 
 
+# ── Shared graph skeleton + counters (B1: single source of truth) ─────
+#
+# Mission Control and the Knowledge Graph screen must report identical counters
+# for the same graph version. The frontier is RECOMPUTED from mastery_vector +
+# prerequisite-readiness (never the stale raw ``frontier`` bundle flag).
+# ``build_kg_payload`` (heavy D3 render) and ``compute_kg_counters`` (lightweight
+# Mission Control path) share the same skeleton + frontier math so the two cannot
+# drift apart again.
+
+
+@dataclass
+class _KGSkeleton:
+    """Resolved graph skeleton shared by the heavy renderer and the counter helper."""
+
+    valid: Dict[str, Any]
+    ids: List[str]
+    id_set: set
+    edges: List[Dict[str, Any]]
+    prereqs_map: Dict[str, List[str]]
+    missing_map: Dict[str, List[str]]
+    fwd: Dict[str, List[str]]
+    unlocks: Dict[str, List[str]]
+    reach: Dict[str, int]
+    clusters: Dict[str, int]
+
+
+def _build_kg_skeleton(
+    concepts: Mapping[str, Any],
+    typed_relations: Iterable[Mapping[str, Any]] | None = None,
+    doc_index: Mapping[str, Any] | None = None,
+) -> _KGSkeleton:
+    """Resolve concepts into nodes, edges, prerequisites, reach and clusters.
+
+    Pure extraction of the structure ``build_kg_payload`` builds up-front; shared with
+    :func:`compute_kg_counters` so both paths operate on the identical graph view.
+    """
+    doc_index = doc_index or {}
+    valid = {cid: data for cid, data in concepts.items() if isinstance(data, dict)}
+    ids = list(valid.keys())
+    id_set = set(ids)
+    label_to_id = {
+        str(data.get("label") or cid).strip(): cid
+        for cid, data in valid.items()
+        if str(data.get("label") or cid).strip()
+    }
+
+    def resolve_concept_id(value: Any) -> str | None:
+        ref = str(value or "").strip()
+        if ref in id_set:
+            return ref
+        return label_to_id.get(ref)
+
+    edges: List[Dict[str, Any]] = []
+    prereqs_map: Dict[str, List[str]] = {}
+    missing_map: Dict[str, List[str]] = {}
+    seen_edges: set[tuple[str, str]] = set()
+    for relation in typed_relations or []:
+        source = resolve_concept_id(relation.get("source_concept_id"))
+        target = resolve_concept_id(relation.get("target_concept_id"))
+        if not source or not target or source == target:
+            continue
+        key = (source, target)
+        if key in seen_edges:
+            continue
+        seen_edges.add(key)
+        edges.append({
+            "source": source,
+            "target": target,
+            "relation_type": str(relation.get("relation_type") or "related"),
+            "confidence": relation.get("confidence"),
+            "evidence_doc_id": relation.get("evidence_doc_id"),
+            "evidence_chunk_id": relation.get("evidence_chunk_id"),
+            "weak_evidence": relation.get("weak_evidence"),
+            "inferred_relation": relation.get("inferred_relation"),
+            "evidence_doc_label": _evidence_doc_label(relation.get("evidence_doc_id"), doc_index),
+        })
+
+    for cid, data in valid.items():
+        raw_prereqs = [str(p).strip() for p in (data.get("prerequisites") or []) if str(p).strip()]
+        prereqs = [resolved for p in raw_prereqs if (resolved := resolve_concept_id(p))]
+        prereqs_map[cid] = prereqs
+        missing_map[cid] = [p for p in raw_prereqs if resolve_concept_id(p) is None]
+        for p in prereqs:
+            key = (p, cid)
+            if key not in seen_edges:
+                seen_edges.add(key)
+                edges.append({
+                    "source": p,
+                    "target": cid,
+                    "relation_type": "prerequisite",
+                })
+
+    seen_related: set[tuple[str, str]] = set()
+    for cid, data in valid.items():
+        related = [str(r).strip() for r in (data.get("related_concepts") or []) if str(r).strip()]
+        for r in related:
+            related_id = resolve_concept_id(r)
+            if related_id:
+                canon = (min(cid, related_id), max(cid, related_id))
+                if canon not in seen_related:
+                    seen_related.add(canon)
+                    key = (cid, related_id)
+                    if key not in seen_edges and (related_id, cid) not in seen_edges:
+                        seen_edges.add(key)
+                        edges.append({
+                            "source": cid,
+                            "target": related_id,
+                            "relation_type": "related",
+                        })
+
+    fwd: Dict[str, List[str]] = {cid: [] for cid in ids}
+    unlocks: Dict[str, List[str]] = {cid: [] for cid in ids}
+    for e in edges:
+        fwd[e["source"]].append(e["target"])
+        unlocks[e["source"]].append(e["target"])
+
+    reach = {cid: _reach_count(cid, fwd) for cid in ids}
+    clusters = _connected_components(ids, edges)
+
+    return _KGSkeleton(
+        valid=valid,
+        ids=ids,
+        id_set=id_set,
+        edges=edges,
+        prereqs_map=prereqs_map,
+        missing_map=missing_map,
+        fwd=fwd,
+        unlocks=unlocks,
+        reach=reach,
+        clusters=clusters,
+    )
+
+
+def _mastery_pct(
+    cid: str,
+    data: Mapping[str, Any],
+    mastery_vector: Mapping[str, float],
+    learned: set[str],
+) -> float:
+    if cid in mastery_vector:
+        return round(float(mastery_vector[cid]) * 100.0, 1)
+    if cid in learned or bool(data.get("learned")):
+        return 100.0
+    return 0.0
+
+
+def _frontier_state(
+    cid: str,
+    data: Mapping[str, Any],
+    prereqs: List[str],
+    mastery_vector: Mapping[str, float],
+    learned: set[str],
+    id_set: set[str],
+    valid: Mapping[str, Any],
+) -> tuple[float, bool, bool]:
+    """Single source for the per-node (mastery, learned, frontier) decision.
+
+    ``frontier`` is recomputed from mastery + prerequisite-readiness (matching the D3
+    renderer), not read from the stale raw ``frontier`` flag stored in the bundle.
+    """
+    m = _mastery_pct(cid, data, mastery_vector, learned)
+    is_learned = cid in learned or bool(data.get("learned")) or m >= 80.0
+    prereqs_ready = all(
+        (p in mastery_vector and mastery_vector[p] * 100 >= 80)
+        or p in learned
+        or bool(valid.get(p, {}).get("learned"))
+        for p in prereqs if p in id_set
+    )
+    frontier = (not is_learned) and m < 80.0 and prereqs_ready
+    return m, is_learned, frontier
+
+
+def _kg_counters_from_skeleton(
+    skel: _KGSkeleton,
+    mastery_vector: Mapping[str, float],
+    learned: set[str],
+) -> Dict[str, Any]:
+    """Unified Knowledge Graph counters from a built skeleton (B1).
+
+    Consumed by both :func:`build_kg_payload` (graph screen ``stats``) and
+    :func:`compute_kg_counters` (Mission Control card), so the two screens report
+    identical numbers for the same graph.
+
+    ``total_concepts`` excludes lesson nodes (``level == "lesson"``); ``avg_mastery``
+    divides by ALL nodes (concepts + lessons) intentionally — lesson nodes carry
+    aggregate mastery in the bundle and both screens historically used the full node
+    set as the denominator. Keeping it preserves the existing mastery calibration.
+    """
+    total = len(skel.valid)
+    total_concepts = 0
+    total_lessons = 0
+    learned_count = 0
+    frontier_count = 0
+    missing_count = 0
+    mastery_sum = 0.0
+    for cid, data in skel.valid.items():
+        if _norm_level(data.get("level")) == "lesson":
+            total_lessons += 1
+        else:
+            total_concepts += 1
+        m, is_learned, is_frontier = _frontier_state(
+            cid, data, skel.prereqs_map.get(cid, []),
+            mastery_vector, learned, skel.id_set, skel.valid,
+        )
+        mastery_sum += m
+        if is_learned:
+            learned_count += 1
+        if is_frontier:
+            frontier_count += 1
+        if skel.missing_map.get(cid):
+            missing_count += 1
+    return {
+        "total": total,
+        "total_concepts": total_concepts,
+        "total_lessons": total_lessons,
+        "edges": len(skel.edges),
+        "learned": learned_count,
+        "frontier": frontier_count,
+        "missing": missing_count,
+        "avg_mastery": round(mastery_sum / total, 1) if total else 0.0,
+        "clusters": len(set(skel.clusters.values())) if skel.clusters else 0,
+    }
+
+
+def compute_kg_counters(
+    concepts: Mapping[str, Any],
+    mastery_vector: Mapping[str, float] | None = None,
+    learned_set: Iterable[str] | None = None,
+    typed_relations: Iterable[Mapping[str, Any]] | None = None,
+) -> Dict[str, Any]:
+    """Unified Knowledge Graph counters — single source of truth for UI (B1).
+
+    Lightweight: builds only the graph skeleton (no document sections / D3 nodes) and
+    recomputes the frontier exactly like :func:`build_kg_payload`. Mission Control and
+    the Knowledge Graph screen both derive their visible counters from this math.
+
+    Returns ``total``, ``total_concepts`` (without lesson nodes), ``total_lessons``,
+    ``frontier`` (recomputed), ``learned``, ``avg_mastery``, ``clusters`` and ``edges``.
+    """
+    skel = _build_kg_skeleton(concepts, typed_relations)
+    mv = mastery_vector or {}
+    learned = {str(x).strip() for x in (learned_set or []) if str(x).strip()}
+    return _kg_counters_from_skeleton(skel, mv, learned)
+
+
 # ── Document path resolution (Obsidian / VS Code deep-links) ─────────
 
 def _document_paths(rel_path: str) -> tuple[str | None, str | None, str | None]:
@@ -219,108 +465,24 @@ def build_kg_payload(
     decay_vector = build_decay_vector(sr_records or [])
     section_index_cache: dict[str, list[Any]] = {}
 
-    valid = {cid: data for cid, data in concepts.items() if isinstance(data, dict)}
-    ids = list(valid.keys())
-    id_set = set(ids)
-    label_to_id = {
-        str(data.get("label") or cid).strip(): cid
-        for cid, data in valid.items()
-        if str(data.get("label") or cid).strip()
-    }
-
-    def resolve_concept_id(value: Any) -> str | None:
-        ref = str(value or "").strip()
-        if ref in id_set:
-            return ref
-        return label_to_id.get(ref)
-
-    edges: List[Dict[str, Any]] = []
-    prereqs_map: Dict[str, List[str]] = {}
-    missing_map: Dict[str, List[str]] = {}
-    seen_edges: set[tuple[str, str]] = set()
-    for relation in typed_relations or []:
-        source = resolve_concept_id(relation.get("source_concept_id"))
-        target = resolve_concept_id(relation.get("target_concept_id"))
-        if not source or not target or source == target:
-            continue
-        key = (source, target)
-        if key in seen_edges:
-            continue
-        seen_edges.add(key)
-        edges.append({
-            "source": source,
-            "target": target,
-            "relation_type": str(relation.get("relation_type") or "related"),
-            "confidence": relation.get("confidence"),
-            "evidence_doc_id": relation.get("evidence_doc_id"),
-            "evidence_chunk_id": relation.get("evidence_chunk_id"),
-            "weak_evidence": relation.get("weak_evidence"),
-            "inferred_relation": relation.get("inferred_relation"),
-            "evidence_doc_label": _evidence_doc_label(relation.get("evidence_doc_id"), doc_index),
-        })
-
-    for cid, data in valid.items():
-        raw_prereqs = [str(p).strip() for p in (data.get("prerequisites") or []) if str(p).strip()]
-        prereqs = [resolved for p in raw_prereqs if (resolved := resolve_concept_id(p))]
-        prereqs_map[cid] = prereqs
-        missing_map[cid] = [p for p in raw_prereqs if resolve_concept_id(p) is None]
-        for p in prereqs:
-            key = (p, cid)
-            if key not in seen_edges:
-                seen_edges.add(key)
-                edges.append({
-                    "source": p,
-                    "target": cid,
-                    "relation_type": "prerequisite",
-                })
-
-    seen_related: set[tuple[str, str]] = set()
-    for cid, data in valid.items():
-        related = [str(r).strip() for r in (data.get("related_concepts") or []) if str(r).strip()]
-        for r in related:
-            related_id = resolve_concept_id(r)
-            if related_id:
-                canon = (min(cid, related_id), max(cid, related_id))
-                if canon not in seen_related:
-                    seen_related.add(canon)
-                    key = (cid, related_id)
-                    if key not in seen_edges and (related_id, cid) not in seen_edges:
-                        seen_edges.add(key)
-                        edges.append({
-                            "source": cid,
-                            "target": related_id,
-                            "relation_type": "related",
-                        })
-
-    fwd: Dict[str, List[str]] = {cid: [] for cid in ids}
-    unlocks: Dict[str, List[str]] = {cid: [] for cid in ids}
-    for e in edges:
-        fwd[e["source"]].append(e["target"])
-        unlocks[e["source"]].append(e["target"])
-
-    reach = {cid: _reach_count(cid, fwd) for cid in ids}
+    skel = _build_kg_skeleton(concepts, typed_relations, doc_index)
+    valid = skel.valid
+    ids = skel.ids
+    id_set = skel.id_set
+    edges = skel.edges
+    prereqs_map = skel.prereqs_map
+    missing_map = skel.missing_map
+    unlocks = skel.unlocks
+    reach = skel.reach
+    clusters = skel.clusters
     max_reach = max(reach.values()) if reach else 0
-    clusters = _connected_components(ids, edges)
-
-    def mastery_pct(cid: str, data: Mapping[str, Any]) -> float:
-        if cid in mastery_vector:
-            return round(float(mastery_vector[cid]) * 100.0, 1)
-        if cid in learned or bool(data.get("learned")):
-            return 100.0
-        return 0.0
 
     nodes: List[Dict[str, Any]] = []
     for cid, data in valid.items():
-        m = mastery_pct(cid, data)
-        is_learned = cid in learned or bool(data.get("learned")) or m >= 80.0
         prereqs = prereqs_map[cid]
-        prereqs_ready = all(
-            (p in mastery_vector and mastery_vector[p] * 100 >= 80)
-            or p in learned
-            or bool(valid.get(p, {}).get("learned"))
-            for p in prereqs if p in id_set
+        m, is_learned, frontier = _frontier_state(
+            cid, data, prereqs, mastery_vector, learned, id_set, valid
         )
-        frontier = (not is_learned) and m < 80.0 and prereqs_ready
 
         related = list(data.get("related_documents") or data.get("documents") or [])
         courses = sorted({
@@ -375,14 +537,7 @@ def build_kg_payload(
             "decay": decay_vector.get(cid),
         })
 
-    stats = {
-        "total": len(nodes), "edges": len(edges),
-        "learned": sum(1 for n in nodes if n["learned"]),
-        "frontier": sum(1 for n in nodes if n["frontier"]),
-        "missing": sum(1 for n in nodes if n["missing"]),
-        "avg_mastery": round(sum(n["mastery"] for n in nodes) / len(nodes), 1) if nodes else 0.0,
-        "clusters": len(set(clusters.values())) if clusters else 0,
-    }
+    stats = _kg_counters_from_skeleton(skel, mastery_vector, learned)
 
     return {
         "nodes": nodes,

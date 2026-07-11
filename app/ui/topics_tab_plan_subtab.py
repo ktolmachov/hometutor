@@ -8,7 +8,7 @@ from app import user_state
 from app.ui.answer_helpers import format_sources_markdown
 from app.ui.course_prepare_view import render_course_prepare_view
 from app.ui.helpers import format_request_error
-from app.ui.learning_plan_navigation import enriched_learning_plan_markdown
+from app.ui.learning_plan_navigation import enriched_learning_plan_markdown, render_learning_plan_table
 from app.ui.longform import render_longform_block
 from app.ui.print_view import open_print_view
 from app.ui.quiz_panel import render_quiz_panel
@@ -188,7 +188,14 @@ def render_topics_plan_subtab(
             learning_plan=learning_plan,
             topic_id=str(selected_topic.get("topic_id") or ""),
         )
-        render_longform_block(display_plan_md, markdown=True)
+        rendered_as_table = render_learning_plan_table(
+            plan_md,
+            learning_plan=learning_plan,
+            topic_id=str(selected_topic.get("topic_id") or ""),
+            key_prefix=f"plan_nav_{selected_topic['topic_id']}",
+        )
+        if not rendered_as_table:
+            render_longform_block(display_plan_md, markdown=True)
         plan_steps = user_state.learning_plan_steps_from_markdown(plan_md)
         hours_summary = user_state.learning_plan_table_hours_summary_from_markdown(plan_md)
         if hours_summary:

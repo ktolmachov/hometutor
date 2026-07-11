@@ -4,7 +4,7 @@ import app.ui.learning_plan_navigation as learning_plan_navigation
 import app.ui.sidebar as sidebar
 from app.section_index import IndexedSection
 from app.ui.course_prepare_view import _prepare_course_artifact, _preview_cards_from_plan
-from app.ui.learning_plan_navigation import enriched_learning_plan_markdown
+from app.ui.learning_plan_navigation import enriched_learning_plan_markdown, learning_plan_display_rows
 from types import SimpleNamespace
 from pathlib import Path
 
@@ -158,6 +158,7 @@ def test_enriched_learning_plan_markdown_adds_inline_material_links(monkeypatch)
         learning_plan={"plan": TABLE_PLAN},
         topic_id="topic-1",
     )
+    rows = learning_plan_display_rows(TABLE_PLAN, topic_id="topic-1")
 
     assert "Статус" in enriched
     assert "Материалы" in enriched
@@ -166,6 +167,9 @@ def test_enriched_learning_plan_markdown_adds_inline_material_links(monkeypatch)
     assert "[Obsidian](obsidian://open)" in enriched
     assert "[VS Code](vscode://file)" in enriched
     assert "[Видео 1:23](https://youtu.be/x?t=83s)" in enriched
+    assert rows[0]["links"]["obsidian"] == "obsidian://open"
+    assert rows[0]["links"]["vscode"] == "vscode://file"
+    assert rows[0]["links"]["video_url"] == "https://youtu.be/x?t=83s"
 
 
 def test_sidebar_load_active_course_plan_into_session(monkeypatch) -> None:
@@ -182,3 +186,15 @@ def test_sidebar_load_active_course_plan_into_session(monkeypatch) -> None:
     assert session["last_course_prepare"] == artifact
     assert session["last_learning_plan"] == artifact["learning_plan"]
     assert session[sidebar.PENDING_CURRENT_VIEW_KEY] == "Темы"
+
+
+def test_learning_plan_display_rows_fallback_to_document_link(monkeypatch) -> None:
+    monkeypatch.setattr(learning_plan_navigation, "build_section_index", lambda rel: [])
+    monkeypatch.setattr(learning_plan_navigation, "resolve_source", lambda rel: Path("D:/data/intro.md"))
+    monkeypatch.setattr(learning_plan_navigation, "vscode_uri", lambda path, line=None: "vscode://doc")
+
+    rows = learning_plan_display_rows(TABLE_PLAN, topic_id="")
+    enriched = enriched_learning_plan_markdown(TABLE_PLAN, learning_plan={"plan": TABLE_PLAN}, topic_id="")
+
+    assert rows[0]["links"]["vscode_doc"] == "vscode://doc"
+    assert "[Документ](vscode://doc)" in enriched

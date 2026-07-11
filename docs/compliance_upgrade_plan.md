@@ -5,14 +5,14 @@
 > Защита идёт по двум репозиториям вместе: **`hometutor`** (runtime, этот репо) и
 > **`hometutor-studio`** (процесс, backlog, user stories, промпты).
 
-## Статус реализации (на 2026-06-30)
+## Статус реализации (на 2026-07-11)
 
 | Поток | Статус | Примечание |
 |---|---|---|
 | A — аутентификация | ✅ реализовано, проверено | JWT+bcrypt, per-user state isolation, prod-guard секрета, revoked-сессии, интеграционные тесты на реальном `app.api.app` |
 | E — Яндекс.Метрика | ✅ реализовано | opt-in через `YANDEX_METRIKA_ID`, идемпотентная инъекция |
-| B — CI/CD | ⚠️ код готов, **не подтверждено на GitHub** | `.github/workflows/ci.yml`/`deploy.yml` существуют, локально `pytest`+`ruff` зелёные; ни разу не прогонялись на реальном GitHub Actions раннере — риск таймаута из-за тяжёлого `requirements.txt` (torch/docling/chromadb) |
-| C — деплой | ⚠️ только конфиг | HF Docker SDK заголовок в `README.md` готов, `deploy.yml` ждёт секреты `HF_TOKEN`/`HF_USERNAME`; живой Space не создан, демо-URL не существует |
+| B — CI/CD | ✅ CI подтверждён на GitHub; деплой — код исправлен, e2e не подтверждён | `ci.yml` (ruff+pytest) зелёный на реальных GitHub Actions раннерах (40+ прогонов). `deploy.yml` изначально пушил полную историю `main` (`git push space HEAD:main`) — HF отклонял это из-за бинарных блобов (PNG/GIF, `demo_chroma_db`); переписан на snapshot-коммит через временный индекс + `git lfs push` (искл. `docs/screenshots/`). Прогоны деплоя пока стабильно ~1с — похоже на skip из-за отсутствующих секретов `HF_TOKEN`/`HF_USERNAME` в GitHub, не подтверждено эмпирически (реальный push через workflow ещё не наблюдался) |
+| C — деплой | ⚠️ Space создан, но не подтверждён рабочим | Живой Space существует: `https://huggingface.co/spaces/kt20251/hometutor` (ссылка уже в README). `demo_chroma_db/` собран и закоммичен (7 демо-документов, embeddings через OpenRouter `perplexity/pplx-embed-v1-0.6b`, LFS-указатели). На момент последней проверки Space отвечал `503` — открыт вопрос, не закрыт: нужно посмотреть Build/Container logs Space, проверить, заданы ли секреты Space (`OPENAI_API_KEY`, `EMBED_MODEL`/`EMBED_DIMENSIONS` должны совпадать с тем, чем собран `demo_chroma_db/`), и прогнать сценарий (регистрация → вопрос → квиз) на живом URL |
 | D — документация | ✅ реализовано | README, `docs/AI_DEVELOPMENT.md`, `architecture.md`/`api_reference.md`/`technical_specification.md` синхронизированы с кодом |
 
 Побочные находки в процессе реализации (исправлены): дефолт `rag_context_token_budget` был

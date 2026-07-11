@@ -1,1 +1,6 @@
 *.sh text eol=lf
+
+# Hugging Face отклоняет push бинарных файлов обычными git-блобами —
+# demo-индекс должен храниться через LFS/Xet (см. deploy/hf-spaces/README.md).
+demo_chroma_db/**/*.bin filter=lfs diff=lfs merge=lfs -text
+demo_chroma_db/*.sqlite3 filter=lfs diff=lfs merge=lfs -text

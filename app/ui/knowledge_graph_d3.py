@@ -1,7 +1,7 @@
 """Beautiful D3.js knowledge-graph renderer — Wave 1 + Wave 2 + Wave 3 complete.
 
 Wave 1 packages shipped (all additive, zero breaking changes):
-  KG-01  build_weekly_plan()   — "Plan My Week" overlay (📅 mode)
+  KG-01  weekly plan overlay   — removed from user-facing graph UI (C2)
   KG-02  build_graph_health()  — Graph diagnostics panel (🔬)
   KG-03  build_cluster_labels()— Named cluster hulls
   KG-04  SVG export + permalink copy (⬇ SVG / 🔗 buttons)
@@ -32,7 +32,6 @@ from app.ui.knowledge_graph_d3_analysis import (
     build_decay_vector,
     build_graph_health,
     build_mastery_history,
-    build_weekly_plan,
     compute_decay,
 )
 
@@ -575,8 +574,9 @@ def build_kg_payload(
         "edges": edges,
         "levels": _LEVEL_META,
         "stats": stats,
-        # Wave 1 enrichments
-        "weekly_plan": build_weekly_plan(nodes, due_reviews),
+        # C2: no user-facing weekly graph planner. Keep the key as a stable
+        # export contract, but do not expose a competing source of "today".
+        "weekly_plan": [],
         "health": build_graph_health(nodes, edges),
         "cluster_labels": build_cluster_labels(nodes),
         # Wave 2 enrichments

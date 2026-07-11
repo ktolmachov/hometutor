@@ -206,8 +206,8 @@
     <button class="rp-find" id="rp-find">Найти путь ▶</button>
     <div id="rp-steps"></div>
   </div>
-  <!-- KG-01 plan panel -->
-  <div class="pp" id="pp"><div class="pp-hd">📅 На неделю — план обучения</div><div id="pp-cards"></div></div>
+  <!-- C2: legacy weekly plan panel is intentionally hidden from user-facing graph UI. -->
+  <div class="pp" id="pp" aria-hidden="true" style="display:none"><div id="pp-cards"></div></div>
   <!-- KG-02 diagnostics panel -->
   <div class="dp-panel" id="dp-panel">
     <div class="dp-hd"><span class="dp-title">🔬 Здоровье графа</span><span class="dp-score" id="dp-score"></span><button class="dp-x" id="dp-close">✕</button></div>
@@ -611,7 +611,7 @@ function openPanel(d){
 }
 function focusNode(d){const s=1.6;svg.transition().duration(550).call(zoom.transform,d3.zoomIdentity.translate(W/2-d.x*s,H/2-d.y*s).scale(s));}
 
-// ── KG-01: plan panel ──
+// ── KG-01: legacy hidden plan panel ──
 const pp=document.getElementById('pp'),ppCards=document.getElementById('pp-cards');
 function renderPlanPanel(){
   if(!WEEKLY_PLAN.length){ppCards.innerHTML='<div style="padding:12px 13px;font-size:11px;color:var(--txt3)">Нет задач — всё освоено! 🎉</div>';return;}
@@ -918,7 +918,6 @@ timeBtn.addEventListener('click',()=>{
 const MODES=[
   {k:'all',label:'🌐 Весь граф'},{k:'next',label:'✦ Что учить'},
   {k:'progress',label:'📊 Прогресс'},{k:'gaps',label:'⚠ Пробелы'},
-  {k:'plan',label:'📅 На неделю'},
 ];
 let activeMode='all';
 const modesEl=document.getElementById('modes');
@@ -927,7 +926,6 @@ MODES.forEach(m=>{const b=document.createElement('button');b.className='mode-btn
 function applyMode(k,keepLinks){
   clearPlanMode();pp.classList.remove('show');
   if(k==='all'){resetModeVisual();return;}
-  if(k==='plan'){applyPlanMode();pp.classList.add('show');return;}
   let test;
   if(k==='next')test=n=>n.frontier;
   else if(k==='gaps')test=n=>(n.missing&&n.missing.length)||(n.mastery>0&&n.mastery<50);

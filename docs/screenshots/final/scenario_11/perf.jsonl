@@ -1,3 +1,0 @@
-{"scenario_id":"scenario_11","step":1,"slug":"01_flashcards_deck_ready","file":"01_flashcards_deck_ready.png","timings_ms":{"wait":0,"streamlit_ready":3,"screenshot":34,"total":37},"taken_at":"2026-06-20T18:54:53.957Z"}
-{"scenario_id":"scenario_11","step":2,"slug":"02_export_button","file":"02_export_button.png","timings_ms":{"wait":0,"streamlit_ready":8,"screenshot":67,"total":75},"taken_at":"2026-06-20T18:54:54.327Z"}
-{"scenario_id":"scenario_11","step":3,"slug":"03_export_success","file":"03_export_success.png","timings_ms":{"wait":434,"streamlit_ready":15,"screenshot":78,"total":527},"taken_at":"2026-06-20T18:54:55.517Z"}

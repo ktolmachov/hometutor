@@ -1,3 +1,0 @@
-{"scenario_id":"scenario_30","step":1,"slug":"01_ssr_recommendation","file":"01_ssr_recommendation.png","timings_ms":{"wait":517,"streamlit_ready":13,"screenshot":208,"total":738},"taken_at":"2026-06-20T18:57:32.156Z"}
-{"scenario_id":"scenario_30","step":2,"slug":"02_after_action_receipt","file":"02_after_action_receipt.png","timings_ms":{"wait":408,"streamlit_ready":13,"screenshot":111,"total":532},"taken_at":"2026-06-20T18:57:33.756Z"}
-{"scenario_id":"scenario_30","step":3,"slug":"03_local_metrics_changed","file":"03_local_metrics_changed.png","timings_ms":{"wait":419,"streamlit_ready":11,"screenshot":92,"total":522},"taken_at":"2026-06-20T18:57:34.286Z"}

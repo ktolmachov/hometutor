@@ -1,3 +1,0 @@
-{"scenario_id":"scenario_20","step":1,"slug":"01_open_tutor_with_topic","file":"01_open_tutor_with_topic.png","timings_ms":{"wait":882,"streamlit_ready":74,"screenshot":90,"total":1046},"taken_at":"2026-06-20T18:56:25.773Z"}
-{"scenario_id":"scenario_20","step":2,"slug":"02_micro_quiz_or_explanation","file":"02_micro_quiz_or_explanation.png","timings_ms":{"wait":822,"streamlit_ready":26,"screenshot":96,"total":944},"taken_at":"2026-06-20T18:56:26.755Z"}
-{"scenario_id":"scenario_20","step":3,"slug":"03_after_answer_next_step","file":"03_after_answer_next_step.png","timings_ms":{"wait":815,"streamlit_ready":29,"screenshot":97,"total":941},"taken_at":"2026-06-20T18:56:27.741Z"}

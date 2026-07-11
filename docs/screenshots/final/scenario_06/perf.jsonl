@@ -1,5 +1,0 @@
-{"scenario_id":"scenario_06","step":1,"slug":"01_home_due_badge","file":"01_home_due_badge.png","timings_ms":{"wait":621,"streamlit_ready":12,"screenshot":104,"total":737},"taken_at":"2026-06-20T18:54:35.203Z"}
-{"scenario_id":"scenario_06","step":2,"slug":"02_review_queue_opened","file":"02_review_queue_opened.png","timings_ms":{"wait":637,"streamlit_ready":12,"screenshot":79,"total":728},"taken_at":"2026-06-20T18:54:36.224Z"}
-{"scenario_id":"scenario_06","step":3,"slug":"03_card_flipped_answer","file":"03_card_flipped_answer.png","timings_ms":{"wait":407,"streamlit_ready":11,"screenshot":90,"total":508},"taken_at":"2026-06-20T18:54:36.740Z"}
-{"scenario_id":"scenario_06","step":4,"slug":"04_grade_selected_state_update","file":"04_grade_selected_state_update.png","timings_ms":{"wait":420,"streamlit_ready":11,"screenshot":77,"total":508},"taken_at":"2026-06-20T18:54:37.255Z"}
-{"scenario_id":"scenario_06","step":5,"slug":"05_queue_progress","file":"05_queue_progress.png","timings_ms":{"wait":407,"streamlit_ready":11,"screenshot":87,"total":505},"taken_at":"2026-06-20T18:54:37.772Z"}

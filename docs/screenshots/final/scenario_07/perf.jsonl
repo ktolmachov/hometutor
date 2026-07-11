@@ -1,4 +1,0 @@
-{"scenario_id":"scenario_07","step":1,"slug":"01_progress_unified_strip","file":"01_progress_unified_strip.png","timings_ms":{"wait":1072,"streamlit_ready":105,"screenshot":93,"total":1270},"taken_at":"2026-06-20T18:54:39.741Z"}
-{"scenario_id":"scenario_07","step":2,"slug":"02_mastery_timeline","file":"02_mastery_timeline.png","timings_ms":{"wait":415,"streamlit_ready":14,"screenshot":78,"total":507},"taken_at":"2026-06-20T18:54:40.271Z"}
-{"scenario_id":"scenario_07","step":3,"slug":"03_weak_spots_panel","file":"03_weak_spots_panel.png","timings_ms":{"wait":422,"streamlit_ready":15,"screenshot":74,"total":511},"taken_at":"2026-06-20T18:54:40.847Z"}
-{"scenario_id":"scenario_07","step":4,"slug":"04_streak_and_next_action","file":"04_streak_and_next_action.png","timings_ms":{"wait":417,"streamlit_ready":17,"screenshot":83,"total":517},"taken_at":"2026-06-20T18:54:41.388Z"}

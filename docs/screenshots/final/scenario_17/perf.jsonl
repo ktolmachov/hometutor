@@ -1,4 +1,0 @@
-{"scenario_id":"scenario_17","step":1,"slug":"01_tutor_plan_header","file":"01_tutor_plan_header.png","timings_ms":{"wait":0,"streamlit_ready":0,"screenshot":207,"total":207},"taken_at":"2026-06-20T18:56:11.360Z"}
-{"scenario_id":"scenario_17","step":2,"slug":"02_plan_detail_open","file":"02_plan_detail_open.png","timings_ms":{"wait":0,"streamlit_ready":0,"screenshot":83,"total":83},"taken_at":"2026-06-20T18:56:11.537Z"}
-{"scenario_id":"scenario_17","step":3,"slug":"03_delta_expander","file":"03_delta_expander.png","timings_ms":{"wait":0,"streamlit_ready":0,"screenshot":131,"total":131},"taken_at":"2026-06-20T18:56:12.184Z"}
-{"scenario_id":"scenario_17","step":4,"slug":"04_added_removed_lists","file":"04_added_removed_lists.png","timings_ms":{"wait":219,"streamlit_ready":0,"screenshot":126,"total":345},"taken_at":"2026-06-20T18:56:12.877Z"}

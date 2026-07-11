@@ -1,5 +1,0 @@
-{"scenario_id":"scenario_09","step":1,"slug":"01_plan_overview","file":"01_plan_overview.png","timings_ms":{"wait":659,"streamlit_ready":81,"screenshot":671,"total":1411},"taken_at":"2026-06-20T18:54:46.215Z"}
-{"scenario_id":"scenario_09","step":2,"slug":"02_plan_derived_from_gaps","file":"02_plan_derived_from_gaps.png","timings_ms":{"wait":422,"streamlit_ready":14,"screenshot":91,"total":527},"taken_at":"2026-06-20T18:54:46.758Z"}
-{"scenario_id":"scenario_09","step":3,"slug":"03_plan_diff_since_last","file":"03_plan_diff_since_last.png","timings_ms":{"wait":413,"streamlit_ready":16,"screenshot":93,"total":522},"taken_at":"2026-06-20T18:54:47.291Z"}
-{"scenario_id":"scenario_09","step":4,"slug":"04_plan_today_action","file":"04_plan_today_action.png","timings_ms":{"wait":417,"streamlit_ready":15,"screenshot":92,"total":524},"taken_at":"2026-06-20T18:54:47.826Z"}
-{"scenario_id":"scenario_09","step":5,"slug":"05_plan_accepts_adjust","file":"05_plan_accepts_adjust.png","timings_ms":{"wait":407,"streamlit_ready":16,"screenshot":91,"total":514},"taken_at":"2026-06-20T18:54:48.358Z"}

@@ -12,3 +12,4 @@ eval_results/
 .pytest_cache/
 .python/
 hometutor.egg-info/
+docs/screenshots/final/

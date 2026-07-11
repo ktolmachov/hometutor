@@ -1,3 +1,0 @@
-{"scenario_id":"scenario_15","step":1,"slug":"01_wait_ux","file":"01_wait_ux.png","timings_ms":{"wait":513,"streamlit_ready":12,"screenshot":79,"total":604},"taken_at":"2026-06-20T18:55:09.886Z"}
-{"scenario_id":"scenario_15","step":2,"slug":"02_tutor_handoff","file":"02_tutor_handoff.png","timings_ms":{"wait":807,"streamlit_ready":14,"screenshot":82,"total":903},"taken_at":"2026-06-20T18:56:00.838Z"}
-{"scenario_id":"scenario_15","step":3,"slug":"03_progress_receipt","file":"03_progress_receipt.png","timings_ms":{"wait":1244,"streamlit_ready":130,"screenshot":107,"total":1481},"taken_at":"2026-06-20T18:56:02.871Z"}

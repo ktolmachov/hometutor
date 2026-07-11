@@ -1,3 +1,0 @@
-{"scenario_id":"scenario_21","step":1,"slug":"01_smart_study_router_card","file":"01_smart_study_router_card.png","timings_ms":{"wait":520,"streamlit_ready":41,"screenshot":98,"total":659},"taken_at":"2026-06-20T18:56:30.873Z"}
-{"scenario_id":"scenario_21","step":2,"slug":"02_router_reason_and_alternatives","file":"02_router_reason_and_alternatives.png","timings_ms":{"wait":316,"streamlit_ready":12,"screenshot":95,"total":423},"taken_at":"2026-06-20T18:56:31.306Z"}
-{"scenario_id":"scenario_21","step":3,"slug":"03_router_trace_open","file":"03_router_trace_open.png","timings_ms":{"wait":306,"streamlit_ready":12,"screenshot":116,"total":434},"taken_at":"2026-06-20T18:56:32.081Z"}

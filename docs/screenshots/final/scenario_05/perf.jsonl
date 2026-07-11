@@ -1,4 +1,0 @@
-{"scenario_id":"scenario_05","step":1,"slug":"01_flashcards_section","file":"01_flashcards_section.png","timings_ms":{"wait":0,"streamlit_ready":66,"screenshot":86,"total":152},"taken_at":"2026-06-20T18:54:28.565Z"}
-{"scenario_id":"scenario_05","step":2,"slug":"02_create_new_upload","file":"02_create_new_upload.png","timings_ms":{"wait":0,"streamlit_ready":13,"screenshot":85,"total":98},"taken_at":"2026-06-20T18:54:30.608Z"}
-{"scenario_id":"scenario_05","step":3,"slug":"03_preview_generated","file":"03_preview_generated.png","timings_ms":{"wait":0,"streamlit_ready":16,"screenshot":90,"total":106},"taken_at":"2026-06-20T18:54:32.034Z"}
-{"scenario_id":"scenario_05","step":4,"slug":"04_save_deck","file":"04_save_deck.png","timings_ms":{"wait":0,"streamlit_ready":17,"screenshot":114,"total":131},"taken_at":"2026-06-20T18:54:32.737Z"}

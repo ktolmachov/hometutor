@@ -1,3 +1,0 @@
-{"scenario_id":"scenario_19","step":1,"slug":"01_main_view_ready","file":"01_main_view_ready.png","timings_ms":{"wait":0,"streamlit_ready":0,"screenshot":235,"total":235},"taken_at":"2026-06-20T18:56:20.984Z"}
-{"scenario_id":"scenario_19","step":2,"slug":"02_sidebar_env_context","file":"02_sidebar_env_context.png","timings_ms":{"wait":0,"streamlit_ready":0,"screenshot":164,"total":164},"taken_at":"2026-06-20T18:56:21.381Z"}
-{"scenario_id":"scenario_19","step":3,"slug":"03_mode_cards_confirmed","file":"03_mode_cards_confirmed.png","timings_ms":{"wait":215,"streamlit_ready":0,"screenshot":106,"total":321},"taken_at":"2026-06-20T18:56:23.174Z"}

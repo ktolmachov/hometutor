@@ -280,7 +280,9 @@ def render_generate(*, api_call: Callable[..., Any]) -> None:
         scope_data = active_scope or {}
         source_paths = [str(path).strip() for path in scope_data.get("source_paths") or [] if str(path).strip()]
         course_id = str(scope_data.get("id") or "").strip() or None
-        course_title = str(scope_data.get("title") or scope_data.get("folder_rel") or "Активный курс")
+        course_title = str(
+            scope_data.get("title") or scope_data.get("folder_rel") or "Активный курс"
+        ).removeprefix("Курс: ")
         folder_rel = str(scope_data.get("folder_rel") or "").strip() or None
         identifier = json.dumps(
             {"course_id": course_id, "folder_rel": folder_rel},

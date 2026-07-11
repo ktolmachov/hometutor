@@ -282,7 +282,11 @@ def _render_flashcards_tab() -> None:
         label_visibility="collapsed",
     )
     st.caption(f"Карточек к повторению (все колоды): {due_n}")
-    st.markdown(f'<div data-testid="e2e-fc-active-section">{active_section}</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div data-testid="e2e-fc-active-section" data-value="{html.escape(active_section)}" '
+        'style="min-height:1px" aria-hidden="true">&nbsp;</div>',
+        unsafe_allow_html=True,
+    )
     nav_decks, nav_create, nav_review = st.columns(3)
     with nav_decks:
         if st.button("🗂 Колоды", key="fc_nav_decks", width='stretch'):

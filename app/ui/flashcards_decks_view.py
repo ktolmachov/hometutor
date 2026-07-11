@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, Callable
 
 import streamlit as st
@@ -11,6 +12,33 @@ from app.ui.flashcards_read_cache import (
     invalidate_flashcards_due_counts_only,
     invalidate_flashcards_read_cache,
 )
+
+_SOURCE_TYPE_LABELS_RU = {
+    "document": "документ",
+    "upload": "загруженный файл",
+    "course": "курс",
+}
+
+
+def _deck_source_label(source_type: str, source_id: str) -> str:
+    """Human-readable ``"<тип> <ref>"`` for a deck card face.
+
+    Course-scoped decks store ``source_id`` as a JSON dict
+    (``{"course_id": ..., "folder_rel": ...}``, see
+    ``flashcards_generate_view.py``) — decode it here instead of showing the
+    raw JSON to the learner.
+    """
+    type_label = _SOURCE_TYPE_LABELS_RU.get(source_type, source_type or "—")
+    if source_type == "course" and source_id:
+        try:
+            parsed = json.loads(source_id)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            parsed = None
+        if isinstance(parsed, dict):
+            folder = str(parsed.get("folder_rel") or "").strip()
+            if folder:
+                return f"{type_label} «{folder}»"
+    return f"{type_label}: {source_id or '—'}"
 
 
 def render_decks_list(
@@ -55,9 +83,10 @@ def render_decks_list(
         total = deck.get("card_count", 0)
         stype = deck.get("source_type") or "—"
         source = deck.get("source_id") or "—"
+        source_label = _deck_source_label(stype, source)
         due_badge = badge(f"🔁 {due} к повторению") if due else ""
         st.markdown(
-            deck_head(f"📚 {deck['name']}", f"Тип: {stype} · ref: {source} · {total} карточек", "fc")
+            deck_head(f"📚 {deck['name']}", f"{source_label} · {total} карточек", "fc")
             + f'<p style="margin:0.5rem 0">{due_badge}</p>'
             + deck_tail(),
             unsafe_allow_html=True,

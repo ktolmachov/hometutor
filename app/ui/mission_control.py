@@ -909,6 +909,7 @@ def build_context_row_segments(
     segments: list[str] = []
     if scope:
         title = str(scope.get("title") or scope.get("folder_rel") or "Курс")
+        title = title.removeprefix("Курс: ")
         segments.append(f"🎯 Курс: {title}")
     if snapshot:
         streak = int(snapshot.get("daily_streak") or 0)

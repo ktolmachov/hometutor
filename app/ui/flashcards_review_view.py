@@ -12,6 +12,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from app.flashcard_handoff import (
+    FLASHCARD_HANDOFF_SEED_ROUTE,
     build_flashcard_handoff_seed,
     flashcard_handoff_session_fields,
 )
@@ -565,22 +566,76 @@ def _inline_tutor_answer_text(message: Message) -> str | None:
     return text or None
 
 
+def _inline_tutor_source(message: Message) -> dict[str, Any] | None:
+    meta = message.metadata or {}
+    sources = meta.get("sources") if isinstance(meta, dict) else None
+    if not isinstance(sources, list):
+        return None
+    for source in sources:
+        if isinstance(source, dict) and str(source.get("route") or "") == FLASHCARD_HANDOFF_SEED_ROUTE:
+            return source
+    return next((source for source in sources if isinstance(source, dict)), None)
+
+
+def _source_url_for_inline_answer(source: dict[str, Any] | None) -> str:
+    if not isinstance(source, dict):
+        return ""
+    return str(source.get("obsidian_uri") or source.get("vscode_uri") or source.get("video_url") or "").strip()
+
+
+def _linkify_inline_source_line(answer: str, source: dict[str, Any] | None) -> str:
+    source_path = str((source or {}).get("relative_path") or "").strip()
+    source_url = _source_url_for_inline_answer(source)
+    if not source_path or not source_url:
+        return answer
+    source_line = f"Источник карточки: `{source_path}`"
+    linked_line = f"Источник карточки: [`{source_path}`]({source_url})"
+    return answer.replace(source_line, linked_line)
+
+
+def _render_inline_source_actions(source: dict[str, Any] | None) -> None:
+    if not isinstance(source, dict):
+        return
+    heading = str(source.get("section_heading") or "").strip()
+    obsidian = str(source.get("obsidian_uri") or "").strip()
+    vscode = str(source.get("vscode_uri") or "").strip()
+    video_url = str(source.get("video_url") or "").strip()
+    video_label = str(source.get("video_label") or "").strip() or "🎬 Видео"
+    actions: list[tuple[str, str]] = []
+    if obsidian:
+        actions.append((f"📄 «{heading}» · Obsidian" if heading else "📄 Obsidian", obsidian))
+    if vscode:
+        actions.append((f"🖥 «{heading}» · VS Code" if heading else "🖥 VS Code", vscode))
+    if video_url:
+        actions.append((video_label, video_url))
+    if not actions:
+        return
+
+    st.caption("Источник объяснения")
+    cols = st.columns(len(actions))
+    for col, (label, url) in zip(cols, actions):
+        with col:
+            st.link_button(label, url, width="stretch")
+
+
 def _render_inline_tutor_tab(sid: str) -> None:
     history = session_store.get(sid)
-    answers = [
-        text
-        for text in (_inline_tutor_answer_text(message) for message in history)
-        if text
-    ]
-    if not answers:
+    answer_items = []
+    for message in history:
+        text = _inline_tutor_answer_text(message)
+        if text:
+            source = _inline_tutor_source(message)
+            answer_items.append((_linkify_inline_source_line(text, source), source))
+    if not answer_items:
         st.info("Объяснение для карточки пока не найдено.")
         return
 
     _, answer_col, _ = st.columns([1, 5, 1])
     with answer_col:
-        for answer in answers:
+        for answer, source in answer_items:
             with st.container(border=True):
                 st.markdown(answer)
+                _render_inline_source_actions(source)
 
 
 def _render_inline_deep_prompt_tab(card: dict[str, Any]) -> None:

@@ -479,9 +479,13 @@ cleanup, linking, tests и UI.
 - coherence-правило запрещает декоративное обогащение;
 - изменения не пишутся в markdown без явного подтверждения.
 
-Текущее состояние: markdown-reader «Живого конспекта» уже умеет рендерить существующие
-fenced-блоки `mermaid` / `flowchart` offline через vendored `app/ui/assets/mermaid.min.js`;
-генерация схемы, preview принять/отклонить и prompt-role остаются частью M2.2.
+Текущее состояние: Mermaid-схема раздела реализована как первый срез M2.2:
+prompt-role `section_diagram` живёт в `app/prompts/`, вызов идёт через provider-layer
+(`get_graph_llm()`), результат показывается через preview принять/отклонить, а markdown
+исходного конспекта меняется только после явного «Принять схему». Markdown-reader
+«Живого конспекта» рендерит fenced-блоки `mermaid` / `flowchart` offline через vendored
+`app/ui/assets/mermaid.min.js`. Аналогия, пример и термины остаются follow-up расширением
+поверх того же preview-паттерна.
 
 **US-M2.3.** Как студент, я хочу, чтобы диаграммы и скриншоты имели текстовые подписи,
 чтобы поиск находил «ту самую схему».
@@ -716,11 +720,11 @@ low-confidence states деградируют без уверенной timestamp
 **Write-set:** `app/prompts/`, UI preview helper, tests around prompt registry/preview state.
 
 **DoD:**
-- prompt source-of-truth находится в `app/prompts/`;
-- effective text model по умолчанию — `qwopus3.6-35b-a3b-v1-mtp`;
-- результат содержит схему/пример/аналогию/термины;
-- пользователь явно принимает изменения;
-- декоративный контент запрещён prompt rule.
+- done для Mermaid-схемы: prompt source-of-truth находится в `app/prompts/`;
+- done для Mermaid-схемы: вызов проходит через graph/provider-layer;
+- done для Mermaid-схемы: пользователь явно принимает изменения до записи markdown;
+- done для Mermaid-схемы: декоративный контент запрещён prompt rule;
+- follow-up: пример/аналогия/термины в том же preview-flow.
 
 ### M3.1 Media progress persistence
 

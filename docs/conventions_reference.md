@@ -6,6 +6,9 @@
 
 - Prompt templates live in `app/prompts/`.
 - Prompt names and exports должны проходить через package API, не через копипасту строк в UI/routers.
+- Новая prompt-role должна быть зарегистрирована в `PROMPT_ROLE_CONTRACT`; если role вызывает LLM
+  из UI/сервиса, prompt text всё равно остаётся в `app/prompts/`, а provider выбирается через
+  `app/provider.py`.
 - Pipeline выбирает prompt через context/contract, а не через ad hoc if в endpoint.
 - При изменении prompt behavior обновляйте smoke/trace ожидания и пользовательскую документацию, если меняется UX.
 

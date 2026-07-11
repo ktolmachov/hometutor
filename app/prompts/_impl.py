@@ -848,6 +848,42 @@ NEXT_ACTION_PROMPT = PromptTemplate(
 """
 )
 
+SECTION_DIAGRAM_SYSTEM = (
+    "Ты превращаешь один учебный раздел в компактную структурную Mermaid-схему.\n\n"
+    "Правила:\n"
+    "- Используй только переданный текст раздела; не добавляй внешние факты.\n"
+    "- Верни ровно один fenced-блок ```mermaid ... ``` и ничего вне него.\n"
+    "- Предпочитай flowchart TD/LR или mindmap.\n"
+    "- Схема должна показывать смысловую структуру: понятия, причинно-следственные связи, шаги или развилки.\n"
+    "- Не делай декоративную схему без содержательной связи с разделом.\n"
+    "- Не копируй весь текст: 4-9 узлов, короткие подписи, без длинных абзацев.\n"
+    "- Если материала недостаточно для схемы, верни минимальную flowchart-схему с узлом о нехватке данных."
+)
+
+SECTION_DIAGRAM_USER_TEMPLATE = (
+    "Заголовок раздела: {heading}\n\n"
+    "Текст раздела:\n"
+    "---------------------\n"
+    "{section_text}\n"
+    "---------------------\n\n"
+    "Сгенерируй ровно один Mermaid-блок для этого раздела."
+)
+
+
+def build_section_diagram_messages(*, heading: str, section_text: str) -> list[ChatMessage]:
+    """Build system/user messages for Living Konspekt section diagram generation."""
+    return [
+        ChatMessage(role=MessageRole.SYSTEM, content=SECTION_DIAGRAM_SYSTEM),
+        ChatMessage(
+            role=MessageRole.USER,
+            content=SECTION_DIAGRAM_USER_TEMPLATE.format(
+                heading=(heading or "Без заголовка").strip(),
+                section_text=(section_text or "").strip(),
+            ),
+        ),
+    ]
+
+
 SSR_LLM_EXPLANATION_PROMPT_VERSION = "1.4"
 
 # v1.4: split into static SYSTEM (KV-cache friendly) + dynamic USER template.
@@ -1144,6 +1180,10 @@ PROMPT_ROLE_CONTRACT: dict[str, dict[str, str]] = {
     "homework": {
         "format": "system_user",
         "reason": "Homework ChatPromptTemplate (SYSTEM + USER)",
+    },
+    "section_diagram": {
+        "format": "system_user",
+        "reason": "Living Konspekt section diagram generation (SYSTEM + USER)",
     },
 }
 

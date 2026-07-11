@@ -37,7 +37,12 @@ from app.ui.living_konspekt_view import (
     set_workbench_rows,
 )
 from app.ui.living_konspekt_next_steps import graph_lens_items
-from app.ui.living_konspekt_workbench_panel import deletion_options
+from app.ui.living_konspekt_workbench_panel import (
+    accept_section_diagram_preview,
+    deletion_options,
+    generate_section_diagram_block,
+    _normalize_mermaid_block,
+)
 from app.user_state_research import normalize_research_payload
 from app.ui.sidebar import apply_research_payload
 
@@ -739,6 +744,73 @@ class TestCollectConceptContext:
         prereqs, related = _collect_concept_context([_row(row)])
         assert prereqs == []
         assert related == []
+
+
+class TestSectionDiagramPreview:
+    def test_section_diagram_prompt_role_is_registered(self):
+        from app.prompts import build_section_diagram_messages, get_prompt_role_contract
+
+        contract = get_prompt_role_contract("section_diagram")
+        messages = build_section_diagram_messages(heading="Тема", section_text="A связано с B.")
+
+        assert contract["format"] == "system_user"
+        assert len(messages) == 2
+        assert "Mermaid" in str(messages[0].content)
+        assert "A связано с B." in str(messages[1].content)
+
+    def test_normalize_mermaid_requires_single_block(self):
+        raw = "```mermaid\nflowchart TD\n    A --> B\n```"
+        assert _normalize_mermaid_block(raw) == raw
+        assert _normalize_mermaid_block(raw + "\n\ntext outside") == ""
+        assert _normalize_mermaid_block(raw + "\n" + raw) == ""
+        assert _normalize_mermaid_block("just text") == ""
+
+    def test_generate_section_diagram_uses_section_diagram_prompt(self):
+        row = section_to_row(_section(MD_A, 10, heading="Агенты", text="Агент использует модель, инструменты и память."))
+        llm = DummyLLM(responses=["```mermaid\nflowchart TD\n    A[Агент] --> B[Инструменты]\n```"])
+
+        block = generate_section_diagram_block(row, llm=llm)
+
+        assert "flowchart TD" in block
+        assert len(llm.calls) == 1
+        assert "Текст раздела" in llm.calls[0]
+        assert "Агент использует модель" in llm.calls[0]
+
+    def test_accept_preview_updates_current_rows_without_source_write(self):
+        row = workbench_service.normalize_runtime_rows(
+            [section_to_row(_section(MD_A, 10, heading="Агенты", text="Текст раздела."))]
+        )[0]
+        row["own_text"] = "Текст раздела."
+        diagram = "```mermaid\nflowchart TD\n    A --> B\n```"
+
+        updated = accept_section_diagram_preview(
+            [row],
+            row_key=str(row["row_key"]),
+            diagram_block=diagram,
+            write_source=False,
+        )
+
+        assert "flowchart TD" in updated[0]["text"]
+        assert "flowchart TD" in updated[0]["own_text"]
+        assert updated[0]["line_end"] > row["line_end"]
+
+    def test_accept_preview_writes_to_source_markdown_after_line_end(self, tmp_path: Path):
+        md = tmp_path / "lecture.md"
+        md.write_text("# Конспект\n\n## Раздел\n\nТекст раздела.\n\n## Следующий\n\nДальше.\n", encoding="utf-8")
+        section = _section(md, 3, heading="Раздел", text="Текст раздела.")
+        row = section_to_row(section)
+        row["row_key"] = "test-row"
+        diagram = "```mermaid\nflowchart TD\n    A --> B\n```"
+
+        accept_section_diagram_preview(
+            [row],
+            row_key=str(row["row_key"]),
+            diagram_block=diagram,
+            write_source=True,
+        )
+
+        saved = md.read_text(encoding="utf-8")
+        assert "Текст раздела.\n\n```mermaid\nflowchart TD\n    A --> B\n```\n\n## Следующий" in saved
 
 
 class DummyLLMResponse:

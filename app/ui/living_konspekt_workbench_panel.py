@@ -9,17 +9,209 @@ from typing import Any, Callable, MutableMapping
 import streamlit as st
 
 from app import workbench_service
+from app.llm_resilience import chat_with_resilience, complete_with_resilience
+from app.prompts import build_section_diagram_messages
 from app.section_index import IndexedSection, parse_sections
 from app.ui.helpers import format_request_error
 from app.ui.living_konspekt_media import _render_media_panel, _row_section_id, _unique_document_rows
 
 _SLUG_RE = re.compile(r"[^\w\-]+", re.UNICODE)
+_SECTION_DIAGRAM_PREVIEW_KEY = "living_konspekt_section_diagram_preview"
+_MERMAID_BLOCK_RE = re.compile(r"```(?:mermaid|flowchart)?\s*\n(.*?)\n```", re.DOTALL | re.IGNORECASE)
 
 AddSection = Callable[[IndexedSection, MutableMapping[str, Any] | None], bool]
 MoveSection = Callable[[str, int], bool]
 RemoveSection = Callable[[str], None]
 RemoveRows = Callable[[set[str]], None]
 ClearRows = Callable[[], None]
+
+
+def _response_text(response: Any) -> str:
+    text = getattr(response, "text", None)
+    if text is not None:
+        return str(text).strip()
+    message = getattr(response, "message", None)
+    content = getattr(message, "content", None)
+    if content is not None:
+        return str(content).strip()
+    return str(response or "").strip()
+
+
+def _normalize_mermaid_block(text: str) -> str:
+    raw = str(text or "").strip()
+    blocks = _MERMAID_BLOCK_RE.findall(raw)
+    if len(blocks) == 1:
+        outside = _MERMAID_BLOCK_RE.sub("", raw).strip()
+        if outside:
+            return ""
+        code = blocks[0].strip()
+    elif not blocks:
+        code = raw.strip("` \n")
+    else:
+        return ""
+    lines = [line.rstrip() for line in code.splitlines() if line.strip()]
+    if not lines:
+        return ""
+    first = lines[0].strip().lower()
+    if not (first.startswith("flowchart") or first.startswith("graph ") or first == "mindmap"):
+        return ""
+    return "```mermaid\n" + "\n".join(lines) + "\n```"
+
+
+def generate_section_diagram_block(row: dict[str, Any], *, llm: Any | None = None) -> str:
+    """Generate and validate one Mermaid block for a Living Konspekt section."""
+    section_text = str(row.get("own_text") or row.get("text") or "").strip()
+    if not section_text:
+        return ""
+    messages = build_section_diagram_messages(
+        heading=str(row.get("heading_text") or "Без заголовка"),
+        section_text=section_text[:8000],
+    )
+    llm_eff = llm
+    if llm_eff is None:
+        from app.provider import get_graph_llm
+
+        llm_eff = get_graph_llm()
+    if hasattr(llm_eff, "chat"):
+        response = chat_with_resilience(
+            llm_eff,
+            messages,
+            stage="section_diagram.generate",
+            max_tokens=900,
+            temperature=0.1,
+        )
+    else:
+        prompt = "\n\n".join(str(getattr(message, "content", "") or "") for message in messages)
+        response = complete_with_resilience(
+            llm_eff,
+            prompt,
+            stage="section_diagram.generate",
+            max_tokens=900,
+            temperature=0.1,
+        )
+    return _normalize_mermaid_block(_response_text(response))
+
+
+def _append_diagram_to_text(text: str, diagram_block: str) -> str:
+    body = str(text or "").rstrip()
+    block = str(diagram_block or "").strip()
+    return f"{body}\n\n{block}".strip() if body else block
+
+
+def _write_diagram_to_source(row: dict[str, Any], diagram_block: str) -> None:
+    md_abs = str(row.get("konspekt_md_abs") or "").strip()
+    if not md_abs:
+        return
+    path = Path(md_abs)
+    if not path.is_file():
+        return
+    content = path.read_text(encoding="utf-8")
+    lines = content.splitlines()
+    try:
+        line_end = int(row.get("line_end") or len(lines))
+    except (TypeError, ValueError):
+        line_end = len(lines)
+    insert_at = max(0, min(line_end, len(lines)))
+    block_lines = [str(diagram_block).strip(), ""]
+    if insert_at > 0 and lines[insert_at - 1].strip():
+        block_lines.insert(0, "")
+    updated = "\n".join([*lines[:insert_at], *block_lines, *lines[insert_at:]])
+    if content.endswith("\n"):
+        updated += "\n"
+    path.write_text(updated, encoding="utf-8")
+
+
+def accept_section_diagram_preview(
+    rows: list[dict[str, Any]],
+    *,
+    row_key: str,
+    diagram_block: str,
+    write_source: bool = True,
+) -> list[dict[str, Any]]:
+    """Apply a confirmed section diagram to source markdown and current workbench rows."""
+    normalized = _normalize_mermaid_block(diagram_block)
+    if not normalized:
+        return list(rows)
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if str(row.get("row_key") or "") != row_key:
+            out.append(row)
+            continue
+        if write_source:
+            _write_diagram_to_source(row, normalized)
+        updated = dict(row)
+        updated["text"] = _append_diagram_to_text(str(updated.get("text") or ""), normalized)
+        own_text = str(updated.get("own_text") or "").strip()
+        if own_text:
+            updated["own_text"] = _append_diagram_to_text(own_text, normalized)
+        line_delta = len(normalized.splitlines()) + 2
+        try:
+            updated["line_end"] = int(updated.get("line_end") or 0) + line_delta
+        except (TypeError, ValueError):
+            pass
+        out.append(updated)
+    return out
+
+
+def _render_section_diagram_preview_controls(row: dict[str, Any], rows: list[dict[str, Any]]) -> None:
+    from app.ui.living_konspekt_reader import render_markdown_with_mermaid
+    from app.ui.living_konspekt_state import set_workbench_rows
+
+    row_key = str(row.get("row_key") or "")
+    if not row_key:
+        return
+    preview = st.session_state.get(_SECTION_DIAGRAM_PREVIEW_KEY)
+    if not (isinstance(preview, dict) and str(preview.get("row_key") or "") == row_key):
+        return
+    diagram_block = str(preview.get("diagram") or "").strip()
+    if not diagram_block:
+        return
+    st.markdown("**Предпросмотр схемы**")
+    render_markdown_with_mermaid(diagram_block)
+    cols = st.columns(2)
+    with cols[0]:
+        if st.button("Принять схему", key=f"lk_accept_diagram_{row_key}", width="stretch"):
+            updated_rows = accept_section_diagram_preview(
+                rows,
+                row_key=row_key,
+                diagram_block=diagram_block,
+            )
+            set_workbench_rows(updated_rows)
+            st.session_state.pop(_SECTION_DIAGRAM_PREVIEW_KEY, None)
+            st.toast("Схема добавлена в раздел.", icon="✓")
+            st.rerun()
+    with cols[1]:
+        if st.button("Отклонить", key=f"lk_reject_diagram_{row_key}", width="stretch"):
+            st.session_state.pop(_SECTION_DIAGRAM_PREVIEW_KEY, None)
+            st.rerun()
+
+
+def _render_section_diagram_button(row: dict[str, Any], rows: list[dict[str, Any]]) -> None:
+    row_key = str(row.get("row_key") or "")
+    section_text = str(row.get("own_text") or row.get("text") or "").strip()
+    if not row_key:
+        return
+    if st.button(
+        "Схема раздела",
+        key=f"lk_generate_diagram_{row_key}",
+        width="stretch",
+        disabled=not section_text,
+        help="Сгенерировать Mermaid-схему и показать предпросмотр перед записью.",
+    ):
+        try:
+            diagram = generate_section_diagram_block(row)
+        except Exception as exc:  # noqa: BLE001 - provider/UI errors should not break the workbench.
+            st.error(f"Не удалось сгенерировать схему: {format_request_error(exc)}")
+            return
+        if not diagram:
+            st.warning("Модель не вернула корректный Mermaid-блок. Попробуйте ещё раз после уточнения раздела.")
+            return
+        st.session_state[_SECTION_DIAGRAM_PREVIEW_KEY] = {
+            "row_key": row_key,
+            "diagram": diagram,
+        }
+        st.rerun()
+    _render_section_diagram_preview_controls(row, rows)
 
 
 def _row_konspekt_label(row: dict[str, Any]) -> str:
@@ -223,6 +415,7 @@ def render_collected_sections(
                     doc_dir = Path(md_abs).parent if md_abs else None
                     render_markdown_with_mermaid(str(row.get("text") or ""), doc_dir=doc_dir)
                     _render_media_panel(row)
+                    _render_section_diagram_button(row, row_list)
             with cols[1]:
                 if md_abs:
                     st.link_button("📄 Открыть", obsidian_uri(Path(md_abs), heading_text=heading_text), width="stretch")

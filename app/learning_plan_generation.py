@@ -370,7 +370,23 @@ class DynamicLearningPlan:
         return plan_out
 
     def get_smart_resume(self) -> str:
-        """Один концепт/тема для кнопки «Продолжить обучение»."""
+        """Один концепт/тема для кнопки «Продолжить обучение».
+
+        Приоритет: 1) сохранённый шаг плана обучения → 2) dashboard recommendation
+        → 3) due SM-2 → 4) next-best action → 5) topological sort → \"general\".
+        """
+        try:
+            from app.user_state import get_latest_learning_plan_resume
+
+            resume = get_latest_learning_plan_resume()
+            if resume:
+                label = str(resume.get("step_label") or "").strip()
+                if label:
+                    title = label.split("\n", 1)[0][:80]
+                    return f"План: {title}"
+        except Exception:  # noqa: BLE001 — resume read must never break home page
+            pass
+
         from app.visualization_service import dashboard
 
         rec = dashboard.get_mastery_data().get("next_recommendation") or {}

@@ -1,8 +1,10 @@
 """Baseline 7-day SSR weekly planner (rule-based, pre-L3 optimization).
 
-Consumes compact learner profiles (fixtures or API-shaped dicts), distributes
-minutes across retention (due SM-2 cards), weak-concept recovery, and
-new/continuation work, and emits an auxiliary L3 telemetry event when enabled.
+**C2 status:** SSRL3 evaluation baseline / offline fixture generator.
+This module is NOT connected to the user-facing weekly plan or coach surfaces.
+The main planning surface is ``DynamicLearningPlan`` (learning_plan_generation.py)
+for personalised step ordering and ``AdaptiveDailyPlan`` (adaptive_plan.py) for
+"План на сегодня". Do not promote this module as a competing source of truth.
 """
 
 from __future__ import annotations

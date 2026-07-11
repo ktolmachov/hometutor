@@ -56,3 +56,57 @@ def test_telegram_daily_topic_line_marks_weekly_fallback(monkeypatch) -> None:
     monkeypatch.setattr(learning_plan_service, "plan_service", _PlanService())
 
     assert telegram_notifications._daily_topic_line() == "Сегодня (резервный план): Векторы"
+
+
+# ── C1 state bridge: get_smart_resume checks learning_plan step ──
+
+def _patch_smart_resume_deps(monkeypatch, *, learning_plan_resume):
+    """Common dependency stubs so get_smart_resume() runs without real DB/graph."""
+    monkeypatch.setattr("app.user_state.get_latest_learning_plan_resume", lambda: learning_plan_resume)
+
+    class _FakeDash:
+        @staticmethod
+        def get_mastery_data():
+            return {}
+
+    class _FakeKG:
+        @staticmethod
+        def get_concepts():
+            return {}
+
+        @staticmethod
+        def topological_sort(ids):
+            return ids
+
+        @staticmethod
+        def get_next_best_actions(user_pct, limit=1, due_priority=None):
+            return []
+
+    monkeypatch.setattr(
+        "app.learning_plan_generation.plan_service._kg", _FakeKG()
+    )
+    monkeypatch.setattr("app.visualization_service.dashboard", _FakeDash())
+
+
+def test_get_smart_resume_prefers_learning_plan_step(monkeypatch) -> None:
+    fake_resume = {
+        "resource_type": "learning_plan",
+        "step_index": 1,
+        "step_label": "Векторы — скалярное произведение",
+        "display_title": "План по теме «Линейная алгебра»",
+    }
+    _patch_smart_resume_deps(monkeypatch, learning_plan_resume=fake_resume)
+
+    result = learning_plan_service.plan_service.get_smart_resume()
+
+    assert result.startswith("План:")
+    assert "Векторы" in result or "скалярное" in result
+
+
+def test_get_smart_resume_falls_through_on_empty_learning_plan(monkeypatch) -> None:
+    _patch_smart_resume_deps(monkeypatch, learning_plan_resume=None)
+
+    result = learning_plan_service.plan_service.get_smart_resume()
+
+    assert isinstance(result, str)
+    assert result

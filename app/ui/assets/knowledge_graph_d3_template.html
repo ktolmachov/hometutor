@@ -279,11 +279,11 @@ function _docActions(r){
     const best=r.sections[0];
     btns+=`<a class="action-btn vsc" href="${_escHtml(best.vscode_uri)}" title="Открыть лучший раздел в VS Code (строка ${best.line_start})">🖥 VS Code: раздел</a>`;
   } else if(r.obs_uri){
-    btns+=`<a class="action-btn obs ready" href="${r.obs_uri}" title="✅ Конспект готов — открыть в Obsidian">🔮 Obsidian</a>`;
+    btns+=`<a class="action-btn obs ready" href="${_escHtml(r.obs_uri)}" title="✅ Конспект готов — открыть в Obsidian">🔮 Obsidian</a>`;
   } else if(r.needs_konspekt){
     btns+=`<a class="action-btn obs notready" href="javascript:void(0)" title="Нажмите «Подготовить для Obsidian» во вкладке Темы">🔮 нет конспекта</a>`;
-  } else if(r.src_abs){
-    btns+=`<a class="action-btn obs" href="${_obsidianUri(r.src_abs)}" title="Откроется исходник (конспект не создан)">🔮 Obsidian</a>`;
+  } else if(r.md_abs){
+    btns+=`<a class="action-btn obs ready" href="${_obsidianUri(r.md_abs)}" title="Открыть подготовленный markdown в Obsidian">🔮 Obsidian</a>`;
   }
   if(r.src_abs&&!(r.sections&&r.sections.length))btns+=`<a class="action-btn vsc" href="${_vscodeUri(r.src_abs)}" title="Открыть исходник в VS Code">🖥 VS Code</a>`;
   if(r.src_abs)btns+=`<span class="action-btn cpy" data-copy="${(r.src_abs||'').replace(/"/g,'&quot;')}" title="Скопировать путь">📋 Путь</span>`;

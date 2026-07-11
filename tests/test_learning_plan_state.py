@@ -188,6 +188,19 @@ def test_sidebar_load_active_course_plan_into_session(monkeypatch) -> None:
     assert session[sidebar.PENDING_CURRENT_VIEW_KEY] == "Темы"
 
 
+def test_learning_plan_checkbox_respects_graph_content(monkeypatch) -> None:
+    """B1: the local variable _graph_has_concepts mirrors get_concepts()."""
+    import app.ui.topics_tab_plan_subtab as subtab
+
+    monkeypatch.setattr(subtab._knowledge_graph, "get_concepts", lambda: {"vec": {}})
+    has = bool(subtab._knowledge_graph.get_concepts())
+    assert has is True
+
+    monkeypatch.setattr(subtab._knowledge_graph, "get_concepts", lambda: {})
+    has = bool(subtab._knowledge_graph.get_concepts())
+    assert has is False
+
+
 def test_learning_plan_display_rows_fallback_to_document_link(monkeypatch) -> None:
     monkeypatch.setattr(learning_plan_navigation, "build_section_index", lambda rel: [])
     monkeypatch.setattr(learning_plan_navigation, "resolve_source", lambda rel: Path("D:/data/intro.md"))

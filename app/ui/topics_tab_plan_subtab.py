@@ -5,6 +5,7 @@ from __future__ import annotations
 import streamlit as st
 
 from app import user_state
+from app.knowledge_graph import knowledge_graph as _knowledge_graph
 from app.ui.answer_helpers import format_sources_markdown
 from app.ui.course_prepare_view import render_course_prepare_view
 from app.ui.helpers import format_request_error
@@ -61,11 +62,15 @@ def render_topics_plan_subtab(
         st.caption(
             f"В текущей выборке: {len(selected_documents)} документ(ов). Кнопка `План по выборке` использует только их."
         )
+    _graph_has_concepts = bool(_knowledge_graph.get_concepts())
     plan_user_progress = st.checkbox(
         "Учитывать прогресс (чтение, quiz, интервальные повторения)",
-        value=False,
+        value=_graph_has_concepts,
         key=f"plan_user_progress_{selected_topic['topic_id']}",
-        help="Добавляет персонализированный порядок шагов в промпт и возвращает поле dynamic_plan в ответе API.",
+        help="Добавляет персонализированный порядок шагов в промпт и возвращает поле dynamic_plan в ответе API."
+        if not _graph_has_concepts
+        else "По карте знаний: граф и прогресс влияют на подсказку для порядка шагов. "
+        "Отключите для свободного (free-form) плана.",
     )
     known_topics = [item.strip() for item in known_topics_raw.split(",") if item.strip()]
     render_course_prepare_view(

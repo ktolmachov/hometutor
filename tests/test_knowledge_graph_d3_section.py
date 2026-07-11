@@ -199,6 +199,40 @@ class TestKnowledgeGraphSelectionBridge:
         ]:
             assert placeholder not in html
 
+    def test_export_uses_server_generated_obsidian_links_for_document_actions(self):
+        html = build_kg_html(
+            {
+                "nodes": [
+                    {
+                        "id": "llm-agent",
+                        "label": "LLM Agent",
+                        "level": "beginner",
+                        "related": [
+                            {
+                                "src_abs": "D:/corpus/lecture.txt",
+                                "md_abs": "D:/vault/lecture.md",
+                                "obs_uri": "obsidian://stub",
+                                "sections": [],
+                            }
+                        ],
+                    }
+                ],
+                "edges": [],
+                "levels": {},
+                "stats": {"total": 1},
+                "weekly_plan": [],
+                "health": {},
+                "cluster_labels": {},
+                "decay_vector": {},
+                "mastery_history": [],
+                "compiler_health": None,
+            }
+        )
+
+        assert '"obs_uri": "obsidian://stub"' in html
+        assert 'href="${_escHtml(r.obs_uri)}"' in html
+        assert 'href="${_obsidianUri(r.src_abs)}"' not in html
+
     def test_node_click_bridge_posts_component_value_and_keeps_url_fallback(self):
         html = build_kg_html(
             {

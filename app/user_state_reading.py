@@ -70,6 +70,25 @@ def get_latest_resume() -> dict[str, Any] | None:
     return _with_db(_work)
 
 
+def get_latest_learning_plan_resume() -> dict[str, Any] | None:
+    """Latest reading_status row where resource_type == 'learning_plan', or None."""
+
+    def _work(conn: sqlite3.Connection) -> dict[str, Any] | None:
+        row = conn.execute(
+            """
+            SELECT resource_type, resource_id, step_index, step_label, progress,
+                   display_title, index_version, updated_at
+            FROM reading_status
+            WHERE resource_type = 'learning_plan'
+            ORDER BY updated_at DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        return dict(row) if row else None
+
+    return _with_db(_work)
+
+
 def get_topic_progress(topic_id: str) -> float | None:
     rid = topic_resource_id(topic_id)
 

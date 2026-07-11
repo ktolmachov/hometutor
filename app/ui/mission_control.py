@@ -964,6 +964,32 @@ _NON_COLD_HERO_CARDS: Final[tuple[Callable[[], None], ...]] = (
     render_living_konspekt_mission_card,
 )
 
+# C1 state bridge: learning-plan reading resume card rendered when a step is saved.
+# Not included in _NON_COLD_HERO_CARDS by default — it is called conditionally
+# when `get_latest_resume()` returns a learning_plan entry (see _render_plan_resume_card).
+_plan_resume_card_key = "_plan_resume_card_shown"
+
+
+def _render_plan_resume_card(index_stats: dict | None) -> None:
+    """Render reading-resume card for saved learning-plan steps (C1 bridge).
+
+    Uses ``get_latest_learning_plan_resume()`` so a recent document/topic
+    reading_status does not override the learning-plan card.
+    """
+    try:
+        from app.user_state import get_latest_learning_plan_resume
+
+        if not get_latest_learning_plan_resume():
+            return
+    except Exception:  # noqa: BLE001 — card must never break home page
+        return
+    try:
+        from app.ui.resume_cards import render_reading_resume_card
+
+        render_reading_resume_card(index_stats)
+    except Exception:  # noqa: BLE001 — card must never break home page
+        pass
+
 
 def _render_home_secondary_surfaces(index_stats: dict | None) -> None:
     """First-session hero / seed-question chips / delight rail — secondary CTAs.
@@ -1044,6 +1070,7 @@ def render_mission_control(index_stats: dict | None = None) -> None:
         _render_ssr_banner(rec, index_stats=index_stats)
         for card_renderer in _NON_COLD_HERO_CARDS:
             card_renderer()
+        _render_plan_resume_card(index_stats)
         _render_home_secondary_surfaces(index_stats)
         with st.expander("Ещё режимы", expanded=False):
             st.caption(

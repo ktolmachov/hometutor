@@ -36,6 +36,10 @@ from app.ui.knowledge_graph_d3_analysis import (
     compute_decay,
 )
 
+# Canonical lesson-node detection lives in the data layer (B1): every surface —
+# progress stats, D3/counters, graph audit, Mission Control card — shares one rule.
+from app.knowledge_graph import is_lesson_node as _is_lesson_node
+
 _D3_PATH = Path(__file__).resolve().parent / "assets" / "d3.v7.min.js"
 _HTML_TEMPLATE_PATH = Path(__file__).resolve().parent / "assets" / "knowledge_graph_d3_template.html"
 _COMPONENT_PATH = Path(__file__).resolve().parent / "assets" / "kg_d3_component"
@@ -303,19 +307,6 @@ def _frontier_state(
     )
     frontier = (not is_learned) and m < 80.0 and prereqs_ready
     return m, is_learned, frontier
-
-
-def _is_lesson_node(cid: str, data: Mapping[str, Any]) -> bool:
-    """Single source for "is this graph node a lesson?" (B1).
-
-    Mirrors ``dashboards_graph._is_lesson_concept``: a node is a lesson when its id
-    carries the ``lesson:`` curriculum-anchor prefix (set by
-    ``course_graph_compiler._lesson_anchor_id``) OR its normalized ``level`` is
-    ``"lesson"``. Both the counters and the graph audit apply this identical rule, so
-    legacy bundles that populate only one of the two markers are classified the same
-    way everywhere — lesson anchors never leak into ``total_concepts``.
-    """
-    return str(cid or "").startswith("lesson:") or _norm_level(data.get("level")) == "lesson"
 
 
 def _kg_counters_from_skeleton(

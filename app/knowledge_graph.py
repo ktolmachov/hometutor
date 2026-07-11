@@ -31,6 +31,24 @@ logger = logging.getLogger(__name__)
 GRADUATION_STABILITY_DAYS = 7
 
 
+def is_lesson_node(concept_id: str, data: Any) -> bool:
+    """Single source of truth: is this graph node a curriculum lesson anchor? (B1)
+
+    A node is a lesson when its id carries the ``lesson:`` curriculum-anchor prefix
+    (assigned by ``course_graph_compiler._lesson_anchor_id``) OR its ``level`` is
+    ``"lesson"`` (case-insensitive). Every surface that separates lessons from real
+    concepts — ``get_progress_stats``, ``compute_kg_counters`` / D3 stats,
+    ``dashboards_graph`` audit, the Mission Control KG card — must route through this
+    one definition so legacy bundles that populate only one of the two markers are
+    classified identically everywhere.
+    """
+    if str(concept_id or "").startswith("lesson:"):
+        return True
+    if isinstance(data, dict):
+        return str(data.get("level") or "").strip().lower() == "lesson"
+    return False
+
+
 def _tarjan_sccs(vertices: List[str], adj: Dict[str, List[str]]) -> List[List[str]]:
     """Tarjan SCC decomposition; ``adj`` maps node -> direct successors."""
     index_counter = [0]
@@ -601,39 +619,42 @@ class JsonKnowledgeGraph(KnowledgeGraphReader):
         return out
 
     def get_progress_stats(self) -> Dict[str, Any]:
-        """Сводка для дашборда: mastery, распределение по level, timeline изученных."""
+        """Сводка для дашборда: mastery, распределение по level, timeline изученных.
+
+        Концепты и lesson-узлы считаются раздельно (B1): ``total_concepts`` исключает
+        curriculum-anchor лекции (через :func:`is_lesson_node`), ``learned`` и
+        ``mastery_percent`` — покрытие именно концептов, не разбавленное lesson-узлами.
+        ``total_lessons`` показывает лекции отдельно.
+        """
         concepts = self._data.get("concepts", {})
-        total = len(concepts)
-        learned = sum(
-            1 for c in concepts.values() if isinstance(c, dict) and c.get("learned")
-        )
-        mastery = round((learned / total * 100.0), 1) if total else 0.0
-
+        total_concepts = 0
+        total_lessons = 0
+        learned = 0
         levels: Dict[str, int] = {"beginner": 0, "intermediate": 0, "advanced": 0}
-        for c in concepts.values():
-            if not isinstance(c, dict):
-                continue
-            lvl = (c.get("level") or "intermediate")
-            if isinstance(lvl, str):
-                lvl = lvl.strip().lower()
-            else:
-                lvl = "intermediate"
-            if lvl not in levels:
-                lvl = "intermediate"
-            levels[lvl] = levels.get(lvl, 0) + 1
-
         timeline: List[Tuple[str, str]] = []
         for name, c in concepts.items():
             if not isinstance(c, dict):
                 continue
+            if is_lesson_node(name, c):
+                total_lessons += 1
+                continue
+            total_concepts += 1
+            if c.get("learned"):
+                learned += 1
+            lvl = str(c.get("level") or "intermediate").strip().lower()
+            if lvl not in levels:
+                lvl = "intermediate"
+            levels[lvl] = levels.get(lvl, 0) + 1
             la = c.get("learned_at")
             if la and c.get("learned"):
                 timeline.append((str(la), str(name)))
         timeline.sort(key=lambda x: x[0], reverse=True)
         timeline = timeline[:10]
+        mastery = round((learned / total_concepts * 100.0), 1) if total_concepts else 0.0
 
         return {
-            "total_concepts": total,
+            "total_concepts": total_concepts,
+            "total_lessons": total_lessons,
             "learned": learned,
             "mastery_percent": mastery,
             "level_distribution": levels,

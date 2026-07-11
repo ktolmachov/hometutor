@@ -743,23 +743,54 @@ def render_kg_mission_card() -> None:
     # Graph screen uses (compute_kg_counters ← build_kg_payload), so the two screens can
     # never show different numbers for the same graph. Frontier is recomputed from
     # mastery + prerequisites, not the stale raw ``frontier`` bundle flag.
-    try:
-        from app.ui.knowledge_graph_d3 import collect_kg_learned_set, compute_kg_counters
+    #
+    # Each input is isolated so a failure in one layer never silently zeroes the real
+    # numbers over a still-rendered graph preview (P1): typed_relations are optional for
+    # the counter math; the learned set degrades to bundle-only flags; only a failure of
+    # the counter helper itself yields ``counters is None`` → the card shows an honest
+    # "счётчики недоступны" instead of synthetic zeros.
+    from app.ui.knowledge_graph_d3 import collect_kg_learned_set, compute_kg_counters
 
+    try:
         typed_relations = knowledge_graph.get_typed_relations()
+    except Exception:  # noqa: BLE001 - relations optional; prerequisites still come from concept data
+        typed_relations = []
+    try:
         learned_set = collect_kg_learned_set(concepts)
+    except Exception:  # noqa: BLE001 - fall back to bundle-only learned flags (no session set)
+        learned_set = {
+            cid for cid, data in concepts.items()
+            if isinstance(data, dict) and data.get("learned")
+        }
+    try:
         counters = compute_kg_counters(
             concepts,
             mastery_vector=mastery_vector,
             learned_set=learned_set,
             typed_relations=typed_relations,
         )
-    except Exception:  # noqa: BLE001 - fall back to zeroed counters, card still renders
-        counters = {"total_concepts": 0, "total_lessons": 0, "frontier": 0, "avg_mastery": 0.0}
-    concept_nodes = counters["total_concepts"]
-    lessons = counters["total_lessons"]
-    frontier = counters["frontier"]
-    avg_mastery = counters["avg_mastery"]
+    except Exception:  # noqa: BLE001 - don't show synthetic zeros over a real graph preview
+        counters = None
+
+    if counters is not None:
+        stats_html = (
+            '<div class="kg-mc-stats">'
+            f'<div class="kg-mc-stat"><span class="kg-mc-num">{counters["total_concepts"]}</span>'
+            '<span class="kg-mc-lbl">концептов</span></div>'
+            f'<div class="kg-mc-stat"><span class="kg-mc-num">{counters["total_lessons"]}</span>'
+            '<span class="kg-mc-lbl">лекций</span></div>'
+            f'<div class="kg-mc-stat"><span class="kg-mc-num">{counters["frontier"]}</span>'
+            '<span class="kg-mc-lbl">готово учить</span></div>'
+            f'<div class="kg-mc-stat"><span class="kg-mc-num">{counters["avg_mastery"]}%</span>'
+            '<span class="kg-mc-lbl">mastery</span></div>'
+            '</div>'
+        )
+    else:
+        stats_html = (
+            '<div class="kg-mc-stats"><span class="kg-mc-lbl">'
+            'Счётчики недоступны — граф виден, но метрики не посчитаны.'
+            '</span></div>'
+        )
 
     valid = {cid: data for cid, data in concepts.items() if isinstance(data, dict)}
     bundle_badge = _kg_bundle_state_badge()
@@ -774,16 +805,8 @@ def render_kg_mission_card() -> None:
         f'<div class="kg-mc-subtitle">Визуальная карта знаний курса — клик по узлу открывает детали</div>'
         f'</div></div>'
         f'<div class="kg-mc-preview">{mini_svg}</div>'
-        f'<div class="kg-mc-stats">'
-        f'<div class="kg-mc-stat"><span class="kg-mc-num">{concept_nodes}</span>'
-        f'<span class="kg-mc-lbl">концептов</span></div>'
-        f'<div class="kg-mc-stat"><span class="kg-mc-num">{lessons}</span>'
-        f'<span class="kg-mc-lbl">лекций</span></div>'
-        f'<div class="kg-mc-stat"><span class="kg-mc-num">{frontier}</span>'
-        f'<span class="kg-mc-lbl">готово учить</span></div>'
-        f'<div class="kg-mc-stat"><span class="kg-mc-num">{avg_mastery}%</span>'
-        f'<span class="kg-mc-lbl">mastery</span></div>'
-        f'</div></div>'
+        f'{stats_html}'
+        f'</div>'
     )
     st.button(
         "Открыть граф знаний →",

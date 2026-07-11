@@ -224,13 +224,22 @@ class TestMissionControlUsesSharedHelper:
 class TestSharedLessonDetection:
     """B1: the "is this node a lesson?" rule must be one definition everywhere."""
 
+    def test_canonical_helper_lives_in_data_layer(self):
+        from app.knowledge_graph import is_lesson_node
+
+        assert is_lesson_node("lesson:x", {}) is True
+        assert is_lesson_node("c", {"level": "Lesson"}) is True
+        assert is_lesson_node("c", {}) is False
+
     def test_dashboards_graph_is_lesson_concept_is_the_shared_helper(self):
+        from app.knowledge_graph import is_lesson_node
         from app.ui import dashboards_graph
         from app.ui.knowledge_graph_d3 import _is_lesson_node
 
-        # dashboards_graph._is_lesson_concept must be the very same callable, not an
-        # independent reimplementation that can drift (regression guard for B1).
-        assert dashboards_graph._is_lesson_concept is _is_lesson_node
+        # The UI helpers are the very same callable as the data-layer canonical
+        # definition, not independent reimplementations that can drift (B1).
+        assert _is_lesson_node is is_lesson_node
+        assert dashboards_graph._is_lesson_concept is is_lesson_node
 
     def test_counter_matches_audit_helper_on_prefix_only_node(self):
         from app.ui.dashboards_graph import _is_lesson_concept
@@ -246,3 +255,84 @@ class TestSharedLessonDetection:
         # the counter agrees with the shared helper: 1 lesson, 1 concept
         assert counters["total_lessons"] == 1
         assert counters["total_concepts"] == 1
+
+
+class TestProgressStatsExcludesLessons:
+    """B1 audit (P2): ``get_progress_stats`` must count concepts without lessons so the
+    progress UI's "концептов / Покрытие графа" metric agrees with Mission Control and the
+    Knowledge Graph screen, instead of diluting coverage with curriculum-anchor lessons."""
+
+    @staticmethod
+    def _reader(concepts):
+        from pathlib import Path
+
+        from app.knowledge_graph import JsonKnowledgeGraph
+
+        kg = JsonKnowledgeGraph(path=Path("/nonexistent-for-test"))
+        kg._data = {"concepts": dict(concepts), "documents": {}, "edges": {}}
+        return kg
+
+    def test_total_concepts_excludes_lessons(self):
+        concepts = {
+            "a": {"level": "beginner", "learned": True},
+            "b": {"level": "intermediate"},
+            "lesson:lec-1": {"level": "lesson"},
+            "lesson:lec-2": {"level": "lesson", "learned": True},
+        }
+        stats = self._reader(concepts).get_progress_stats()
+
+        assert stats["total_concepts"] == 2
+        assert stats["total_lessons"] == 2
+        assert stats["learned"] == 1  # only concept 'a'; lesson 'lec-2' is not a concept
+
+    def test_mastery_percent_is_concept_coverage_not_diluted_by_lessons(self):
+        # 1 of 2 concepts learned -> 50%, even though lessons inflate the node count.
+        concepts = {
+            "a": {"level": "beginner", "learned": True},
+            "b": {"level": "advanced"},
+            "lesson:lec": {"level": "lesson"},
+        }
+        stats = self._reader(concepts).get_progress_stats()
+
+        assert stats["total_concepts"] == 2
+        assert stats["learned"] == 1
+        assert stats["mastery_percent"] == 50.0
+
+    def test_lesson_anchor_prefix_excluded_without_level(self):
+        # prefix-only lesson node (no level) must not leak into concepts (legacy bundle)
+        concepts = {
+            "real": {"level": "beginner"},
+            "lesson:legacy": {},
+        }
+        stats = self._reader(concepts).get_progress_stats()
+
+        assert stats["total_concepts"] == 1
+        assert stats["total_lessons"] == 1
+
+    def test_level_distribution_skips_lessons(self):
+        # lessons used to fall into 'intermediate' via the level fallback; now excluded
+        concepts = {
+            "a": {"level": "beginner"},
+            "lesson:lec": {"level": "lesson"},
+        }
+        stats = self._reader(concepts).get_progress_stats()
+
+        assert stats["level_distribution"] == {"beginner": 1, "intermediate": 0, "advanced": 0}
+
+
+class TestMissionControlCounterFallback:
+    """B1 audit (P1): a failure in one input layer must never render synthetic zeros over
+    a still-rendered graph preview. typed_relations failures degrade gracefully; only a
+    counter-helper failure shows an honest "счётчики недоступны"."""
+
+    def test_no_synthetic_zero_fallback_in_card(self):
+        from app.ui.mission_control import render_kg_mission_card
+
+        source = inspect.getsource(render_kg_mission_card)
+
+        # the old combined try/except that zeroed all counters must be gone
+        assert '"total_concepts": 0' not in source
+        # typed_relations failure degrades to an empty list instead of zeroing counters
+        assert "typed_relations = []" in source
+        # an honest neutral placeholder replaces synthetic zeros on counter failure
+        assert "Счётчики недоступны" in source

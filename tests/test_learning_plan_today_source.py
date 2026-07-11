@@ -46,16 +46,11 @@ def test_telegram_daily_topic_line_uses_adaptive_primary(monkeypatch) -> None:
     assert telegram_notifications._daily_topic_line() == "Сегодня: Матрицы"
 
 
-def test_telegram_daily_topic_line_marks_weekly_fallback(monkeypatch) -> None:
-    class _PlanService:
-        def generate_personalized_plan(self, *, user_progress: bool) -> dict:
-            assert user_progress is True
-            return {"daily_plan": [{"concept": "Векторы"}]}
-
+def test_telegram_daily_topic_line_returns_none_when_no_primary(monkeypatch) -> None:
+    """A3: no fallback to old coach plan — returns None gracefully."""
     monkeypatch.setattr(learning_plan_service, "get_today_primary_learning_item", lambda: None)
-    monkeypatch.setattr(learning_plan_service, "plan_service", _PlanService())
 
-    assert telegram_notifications._daily_topic_line() == "Сегодня (резервный план): Векторы"
+    assert telegram_notifications._daily_topic_line() is None
 
 
 # ── C1 state bridge: get_smart_resume checks learning_plan step ──

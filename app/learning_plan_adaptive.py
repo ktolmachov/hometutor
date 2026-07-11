@@ -98,6 +98,20 @@ def primary_learning_item_from_adaptive_daily_plan(plan: dict[str, Any] | None) 
 
 
 def get_today_primary_learning_item(*, user_id: str | None = None) -> dict[str, Any] | None:
+    """Canonical cross-channel source for 'what to do today'.
+
+    Returns the primary learning item from the saved adaptive daily plan
+    (KV, date-matched to today UTC), or ``None`` when no plan exists for
+    today.  Used by:
+
+    - Telegram ``_daily_topic_line()``
+    - Mission Control / home hub (via ``render_adaptive_plan_hub``)
+    - My Progress page (via ``render_adaptive_daily_plan_section``)
+    - Dashboard API (``GET /dashboard/adaptive_daily_plan``)
+
+    When the plan needs to be built fresh, callers should use
+    ``AdaptiveDailyPlan(user_id).build_adaptive_daily_plan()`` directly.
+    """
     plan = get_adaptive_daily_plan_for_orchestrator(user_id=user_id)
     return primary_learning_item_from_adaptive_daily_plan(plan)
 

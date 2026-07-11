@@ -1,4 +1,5 @@
 from app import user_state
+import app.learning_plan_state as lps
 import app.ui.course_prepare_view as course_prepare_view
 import app.ui.learning_plan_navigation as learning_plan_navigation
 import app.ui.sidebar as sidebar
@@ -211,3 +212,218 @@ def test_learning_plan_display_rows_fallback_to_document_link(monkeypatch) -> No
 
     assert rows[0]["links"]["vscode_doc"] == "vscode://doc"
     assert "[Документ](vscode://doc)" in enriched
+
+
+# ──────────────────────────────────────────────
+# Tests for app.learning_plan_state (dedicated module)
+# ──────────────────────────────────────────────
+
+
+def test_lps_parse_table_normal() -> None:
+    """Acceptance: step count equals data-row count in the table."""
+    steps = lps.parse_plan_table(TABLE_PLAN)
+    assert len(steps) == 2
+
+
+def test_lps_parse_table_prompt_contract_columns() -> None:
+    """Table from LEARNING_PLAN_PROMPT (8 columns) is recognised correctly."""
+    plan = """
+| # | Тема | Документ(ы) | Ключевые концепции | Практика | Проверка результата | Зависимости | Время (ч) |
+|---|---|---|---|---|---|---|---|
+| 1 | Линейная алгебра | la.md | матрицы, векторы | Решить 3 задачи | Объяснить собственные векторы | нет | 2 |
+| 2 | Матричные операции | matrix.md | умножение, транспонирование | Перемножить 2 матрицы | Проверить умножение | Шаг 1 | 1.5 |
+""".strip()
+    steps = lps.parse_plan_table(plan)
+    assert len(steps) == 2
+    assert steps[0].title == "Линейная алгебра"
+    assert steps[1].title == "Матричные операции"
+
+
+def test_lps_step_text_has_no_pipe() -> None:
+    steps = lps.parse_plan_table(TABLE_PLAN)
+    assert steps
+    for step in steps:
+        text = lps.step_to_text(step)
+        assert "|" not in text
+
+
+def test_lps_step_text_starts_with_title() -> None:
+    steps = lps.parse_plan_table(TABLE_PLAN)
+    assert len(steps) == 2
+    assert lps.step_to_text(steps[0]).startswith("Векторы")
+    assert lps.step_to_text(steps[1]).startswith("Скалярное произведение")
+
+
+def test_lps_step_text_contains_all_fields() -> None:
+    steps = lps.parse_plan_table(TABLE_PLAN)
+    text = lps.step_to_text(steps[0])
+    assert "Концепции: координаты, модуль" in text
+    assert "Практика: Нарисовать 3 вектора" in text
+    assert "Проверка: Объяснить модуль" in text
+    assert "Документы: intro.md" in text
+    assert "Время: 1.5 ч" in text
+
+
+def test_lps_fallback_legacy_numbered_list() -> None:
+    plan_md = """
+1. Первый шаг
+   Деталь первого шага
+2. Второй шаг
+""".strip()
+    steps = lps.steps_from_markdown(plan_md)
+    assert steps == ["1. Первый шаг\n   Деталь первого шага", "2. Второй шаг"]
+
+
+def test_lps_fallback_empty_plan() -> None:
+    assert lps.steps_from_markdown("") == []
+    assert lps.steps_from_markdown("   ") == []
+    assert lps.steps_from_markdown(None) == []  # type: ignore[arg-type]
+
+
+def test_lps_malformed_table_no_header() -> None:
+    """Table with no recognised header column returns empty list without crashing."""
+    plan = """
+| foo | bar | baz |
+|---|---|---|
+| 1 | 2 | 3 |
+""".strip()
+    assert lps.parse_plan_table(plan) == []
+    # steps_from_markdown falls through to legacy paragraph fallback — no crash
+    lps.steps_from_markdown(plan)
+
+
+def test_lps_malformed_table_no_separator() -> None:
+    """Lines with pipe but no valid separator → not a table."""
+    plan = """
+| # | Тема |
+| a | b |
+| c | d |
+""".strip()
+    assert lps.parse_plan_table(plan) == []
+
+
+def test_lps_malformed_table_title_column_missing() -> None:
+    """Header maps to fields but 'title' is absent."""
+    plan = """
+| # | Часы |
+|---|---|
+| 1 | 2.0 |
+""".strip()
+    assert lps.parse_plan_table(plan) == []
+
+
+def test_lps_malformed_table_empty_separator_row() -> None:
+    plan = """
+| # | Тема | Время (ч) |
+|---|---|---|
+""".strip()
+    assert lps.parse_plan_table(plan) == []
+
+
+def test_lps_malformed_table_does_not_crash() -> None:
+    """Various broken tables return [] instead of raising."""
+    cases = [
+        "",
+        "   ",
+        "not a table at all",
+        "| stray pipe",
+        "| # | Тема |\n| --- | --- |\n| 1 |\n| 2 | Тема2 |\n|",
+    ]
+    for case in cases:
+        lps.parse_plan_table(case)  # should not raise
+        lps.steps_from_markdown(case)  # should not raise
+
+
+def test_lps_hours_summary() -> None:
+    summary = lps.hours_summary_from_markdown(TABLE_PLAN)
+    assert summary == {"total_hours": 3.5, "steps_count": 2, "missing_or_invalid_hours": 0}
+
+
+def test_lps_hours_summary_none_when_no_table() -> None:
+    assert lps.hours_summary_from_markdown("") is None
+    assert lps.hours_summary_from_markdown("some text") is None
+
+
+def test_lps_hours_summary_invalid_hours() -> None:
+    plan = """
+| # | Тема | Время (ч) |
+|---|---|---|
+| 1 | Векторы | около часа |
+| 2 | Производная | 2,5 |
+""".strip()
+    summary = lps.hours_summary_from_markdown(plan)
+    assert summary == {"total_hours": 2.5, "steps_count": 2, "missing_or_invalid_hours": 1}
+
+
+def test_lps_steps_from_markdown_matches_user_state() -> None:
+    """The dedicated module produces identical results to user_state for the canonical table."""
+    lps_steps = lps.steps_from_markdown(TABLE_PLAN)
+    us_steps = user_state.learning_plan_steps_from_markdown(TABLE_PLAN)
+    assert lps_steps == us_steps
+
+
+def test_lps_parse_table_returns_frozen_dataclass_instances() -> None:
+    steps = lps.parse_plan_table(TABLE_PLAN)
+    assert len(steps) == 2
+    assert isinstance(steps[0], lps.LearningPlanStep)
+    assert steps[0].title == "Векторы"
+    assert steps[0].documents == "intro.md"
+    assert steps[0].key_concepts == "координаты, модуль"
+    assert steps[0].practice.startswith("Нарисовать")
+    assert steps[0].check.startswith("Объяснить")
+    assert steps[0].dependencies == "нет"
+    assert steps[0].hours == "1.5"
+
+
+# ──────────────────────────────────────────────
+# Preview cards (A2)
+# ──────────────────────────────────────────────
+
+
+def test_lps_preview_card_text_includes_title_concepts_hours() -> None:
+    step = lps.LearningPlanStep(
+        index="1",
+        title="Векторы",
+        key_concepts="координаты, модуль",
+        hours="1.5",
+    )
+    card = lps.preview_card_text(step)
+    assert card.startswith("Векторы")
+    assert "координаты, модуль" in card
+    assert "1.5" in card
+    assert "|" not in card
+
+
+def test_lps_preview_card_text_fallsback_to_documents() -> None:
+    step = lps.LearningPlanStep(
+        index="1",
+        title="Векторы",
+        documents="intro.md",
+        hours="",
+    )
+    card = lps.preview_card_text(step)
+    assert "intro.md" in card
+
+
+def test_lps_preview_card_text_no_extras() -> None:
+    step = lps.LearningPlanStep(index="1", title="Тема без данных")
+    card = lps.preview_card_text(step)
+    assert card == "Тема без данных"
+    assert "|" not in card
+
+
+def test_lps_preview_cards_from_plan_text() -> None:
+    cards = lps.preview_cards_from_plan_text(TABLE_PLAN)
+    assert len(cards) == 2
+    assert cards[0].startswith("Векторы")
+    assert "координаты" in cards[0]
+    assert "1.5" in cards[0]
+    assert all("|" not in c for c in cards)
+
+
+def test_lps_preview_cards_empty_when_no_table() -> None:
+    assert lps.preview_cards_from_plan_text("") == []
+    assert lps.preview_cards_from_plan_text("просто текст без таблицы") == []
+
+
+

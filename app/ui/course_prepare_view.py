@@ -6,7 +6,6 @@ from typing import Any
 
 import streamlit as st
 
-from app import user_state
 from app.course_cache import (
     GraphStatusView,
     course_scope_hash,
@@ -16,6 +15,7 @@ from app.course_cache import (
     resolve_graph_status,
     save_course_artifact,
 )
+from app.learning_plan_state import preview_cards_from_plan_text
 from app.ui.study_scope import get_active_scope
 from app.ui_client import fetch_json
 
@@ -719,9 +719,9 @@ def render_course_prepare_view(
 
 def _preview_cards_from_plan(learning_plan: dict[str, Any]) -> list[str]:
     plan_text = str(learning_plan.get("plan") or "")
-    parsed_steps = user_state.learning_plan_steps_from_markdown(plan_text)
-    if parsed_steps:
-        return parsed_steps[:7]
+    cards = preview_cards_from_plan_text(plan_text)
+    if cards:
+        return cards[:7]
     lines = [line.strip(" -0123456789.").strip() for line in plan_text.splitlines()]
     return [line for line in lines if len(line) >= 8][:7]
 

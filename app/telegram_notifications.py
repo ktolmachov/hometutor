@@ -38,23 +38,20 @@ def _safe_due_reviews() -> int:
 
 
 def _daily_topic_line() -> str | None:
-    from app.learning_plan_service import get_today_primary_learning_item, plan_service
+    """Primary topic for today from the canonical cross-channel source.
+
+    Returns ``"Сегодня: {topic}"`` from the saved adaptive daily plan, or
+    ``None`` when no plan for today exists (the caller falls back to a
+    generic message).
+    """
+    from app.learning_plan_service import get_today_primary_learning_item
 
     item = get_today_primary_learning_item()
     if item:
         topic = str(item.get("topic") or "").strip()
         if topic:
             return f"Сегодня: {topic}"
-
-    plan = plan_service.generate_personalized_plan(user_progress=True)
-    dp = plan.get("daily_plan") or []
-    if not dp:
-        return None
-    d0 = dp[0]
-    topic = str(d0.get("concept") or d0.get("topic") or "").strip()
-    if not topic:
-        return None
-    return f"Сегодня (резервный план): {topic}"
+    return None
 
 
 def start_notifications(bot: "Bot") -> None:

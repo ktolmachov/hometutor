@@ -60,3 +60,62 @@ def test_flashcard_handoff_seed_attaches_section_and_video_actions(monkeypatch) 
     assert source["vscode_uri"] == "vscode://file"
     assert source["video_url"] == "https://youtu.be/demo?t=83"
     assert source["video_label"] == "🎬 Видео с 1:23"
+    assert source["source_actions"] == [
+        {
+            "kind": "obsidian_section",
+            "label": "Открыть раздел «Idempotency keys» в Obsidian",
+            "url": "obsidian://open",
+        },
+        {
+            "kind": "vscode_section",
+            "label": "Открыть раздел «Idempotency keys» в VS Code",
+            "url": "vscode://file",
+        },
+        {
+            "kind": "video",
+            "label": "🎬 Видео с 1:23",
+            "url": "https://youtu.be/demo?t=83",
+        },
+    ]
+
+
+def test_flashcard_handoff_seed_keeps_source_action_without_section_index(monkeypatch, tmp_path) -> None:
+    source_abs = tmp_path / "lesson.md"
+    source_abs.write_text("# Lesson\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "app.obsidian_export.resolve_source",
+        lambda source_path: source_abs,
+    )
+    monkeypatch.setattr(
+        "app.obsidian_export.vscode_uri",
+        lambda path, line=None: "vscode://source",
+    )
+    monkeypatch.setattr(
+        "app.obsidian_export.vault_target",
+        lambda source_path: tmp_path / "vault" / "lesson.md",
+    )
+    monkeypatch.setattr(
+        "app.section_index.build_section_index",
+        lambda source_path: [],
+    )
+
+    seed = handoff.build_flashcard_handoff_seed(
+        {
+            "id": 8,
+            "front": "Почему LLM stateless?",
+            "back": "Она не хранит память между запросами без внешнего состояния.",
+            "source_path": "ии агенты/lesson.md",
+        }
+    )
+
+    source = seed["sources"][0]
+    assert source["source_vscode_uri"] == "vscode://source"
+    assert source["source_actions"] == [
+        {
+            "kind": "vscode_source",
+            "label": "Открыть источник в VS Code",
+            "url": "vscode://source",
+        }
+    ]
+    assert source["source_action_note"] == "Раздел конспекта ещё не подготовлен; можно открыть исходный файл."

@@ -36,6 +36,10 @@ from app.session_store import session_store
 
 from app.ui.continuity_bridge import flashcard_gap_to_tutor_cta_ru, flashcards_expert_controls_intro_ru
 from app.ui.expert_controls import render_expert_controls
+from app.ui.flashcard_handoff_source_actions import (
+    first_flashcard_handoff_source_url,
+    render_flashcard_handoff_source_actions,
+)
 from app.ui.flashcards_interactive_card import build_interactive_card_html, estimate_interactive_card_height
 from app.ui.flashcards_read_cache import (
     due_count_cache_key,
@@ -578,9 +582,7 @@ def _inline_tutor_source(message: Message) -> dict[str, Any] | None:
 
 
 def _source_url_for_inline_answer(source: dict[str, Any] | None) -> str:
-    if not isinstance(source, dict):
-        return ""
-    return str(source.get("obsidian_uri") or source.get("vscode_uri") or source.get("video_url") or "").strip()
+    return first_flashcard_handoff_source_url(source)
 
 
 def _linkify_inline_source_line(answer: str, source: dict[str, Any] | None) -> str:
@@ -594,28 +596,7 @@ def _linkify_inline_source_line(answer: str, source: dict[str, Any] | None) -> s
 
 
 def _render_inline_source_actions(source: dict[str, Any] | None) -> None:
-    if not isinstance(source, dict):
-        return
-    heading = str(source.get("section_heading") or "").strip()
-    obsidian = str(source.get("obsidian_uri") or "").strip()
-    vscode = str(source.get("vscode_uri") or "").strip()
-    video_url = str(source.get("video_url") or "").strip()
-    video_label = str(source.get("video_label") or "").strip() or "🎬 Видео"
-    actions: list[tuple[str, str]] = []
-    if obsidian:
-        actions.append((f"📄 «{heading}» · Obsidian" if heading else "📄 Obsidian", obsidian))
-    if vscode:
-        actions.append((f"🖥 «{heading}» · VS Code" if heading else "🖥 VS Code", vscode))
-    if video_url:
-        actions.append((video_label, video_url))
-    if not actions:
-        return
-
-    st.caption("Источник объяснения")
-    cols = st.columns(len(actions))
-    for col, (label, url) in zip(cols, actions):
-        with col:
-            st.link_button(label, url, width="stretch")
+    render_flashcard_handoff_source_actions(source)
 
 
 def _render_inline_tutor_tab(sid: str) -> None:

@@ -184,12 +184,49 @@ def _attach_flashcard_source_actions(
     """Best-effort action links for the Tutor flashcard handoff source."""
     if not source_path:
         return
+    actions: list[dict[str, str]] = []
+    section: Any | None = None
+
+    try:
+        from app.obsidian_export import obsidian_uri, resolve_source, vault_target, vscode_uri
+
+        source_abs = resolve_source(source_path)
+        if source_abs is not None:
+            source_vscode_uri = vscode_uri(source_abs)
+            source["source_vscode_uri"] = source_vscode_uri
+            actions.append(
+                {
+                    "kind": "vscode_source",
+                    "label": "Открыть источник в VS Code",
+                    "url": source_vscode_uri,
+                }
+            )
+            vault_md = vault_target(source_abs)
+            if vault_md.exists():
+                source_obsidian_uri = obsidian_uri(vault_md)
+                source["source_obsidian_uri"] = source_obsidian_uri
+                actions.insert(
+                    0,
+                    {
+                        "kind": "obsidian_source",
+                        "label": "Открыть конспект в Obsidian",
+                        "url": source_obsidian_uri,
+                    },
+                )
+            else:
+                source["source_action_note"] = (
+                    "Раздел конспекта ещё не подготовлен; можно открыть исходный файл."
+                )
+    except Exception:  # noqa: BLE001 - source actions are optional for Tutor handoff.
+        source["source_action_note"] = "Источник карточки указан, но файл не удалось открыть автоматически."
+
     try:
         from app.obsidian_export import obsidian_uri, vscode_uri
         from app.section_index import best_section_for, build_section_index
 
         sections = build_section_index(source_path)
         if not sections:
+            source["source_actions"] = actions
             return
         query_text = " ".join(
             part
@@ -201,12 +238,28 @@ def _attach_flashcard_source_actions(
         )
         section = best_section_for(sections, query_text)
         if section is None:
+            source["source_actions"] = actions
             return
         source["section_heading"] = section.heading_text
         source["section_line_start"] = section.line_start
         source["obsidian_uri"] = obsidian_uri(section.konspekt_md_abs, heading_text=section.heading_text)
         source["vscode_uri"] = vscode_uri(section.konspekt_md_abs, line=section.line_start)
+        source.pop("source_action_note", None)
+        heading = str(section.heading_text or "").strip()
+        actions = [
+            {
+                "kind": "obsidian_section",
+                "label": f"Открыть раздел «{heading}» в Obsidian" if heading else "Открыть раздел в Obsidian",
+                "url": source["obsidian_uri"],
+            },
+            {
+                "kind": "vscode_section",
+                "label": f"Открыть раздел «{heading}» в VS Code" if heading else "Открыть раздел в VS Code",
+                "url": source["vscode_uri"],
+            },
+        ]
     except Exception:  # noqa: BLE001 - source actions are optional for Tutor handoff.
+        source["source_actions"] = actions
         return
 
     try:
@@ -237,8 +290,16 @@ def _attach_flashcard_source_actions(
         source["video_url"] = video_url
         source["video_label"] = f"🎬 Видео с {citation.timestamp_label}"
         source["video_timestamp_label"] = citation.timestamp_label
+        actions.append(
+            {
+                "kind": "video",
+                "label": source["video_label"],
+                "url": video_url,
+            }
+        )
     except Exception:  # noqa: BLE001 - video citation is optional for Tutor handoff.
-        return
+        pass
+    source["source_actions"] = actions
 
 
 def clear_flashcard_handoff_session_fields(state: Any) -> None:

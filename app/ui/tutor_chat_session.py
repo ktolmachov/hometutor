@@ -32,6 +32,7 @@ from app.flashcard_handoff_timing import (
     log_handoff_answer_ready,
     record_handoff_tutor_mount,
 )
+from app.ui.flashcard_handoff_source_actions import render_flashcard_handoff_source_actions
 
 logger = logging.getLogger(__name__)
 
@@ -653,28 +654,7 @@ def _render_flashcard_handoff_source_actions(
     )
     if not isinstance(source, dict):
         return
-    actions: list[tuple[str, str]] = []
-    heading = str(source.get("section_heading") or "").strip()
-    obsidian = str(source.get("obsidian_uri") or "").strip()
-    vscode = str(source.get("vscode_uri") or "").strip()
-    video_url = str(source.get("video_url") or "").strip()
-    video_label = str(source.get("video_label") or "").strip() or "🎬 Видео"
-    if obsidian:
-        label = f"📄 «{heading}» · Obsidian" if heading else "📄 Открыть в Obsidian"
-        actions.append((label, obsidian))
-    if vscode:
-        label = f"🖥 «{heading}» · VS Code" if heading else "🖥 Открыть раздел"
-        actions.append((label, vscode))
-    if video_url:
-        actions.append((video_label, video_url))
-    if not actions:
-        return
-
-    st.caption("Источник объяснения")
-    cols = st.columns(len(actions))
-    for idx, (label, url) in enumerate(actions):
-        with cols[idx]:
-            st.link_button(label, url, width="stretch")
+    render_flashcard_handoff_source_actions(source)
 
 
 def _render_tutor_history(sid: str, history: list[Any]) -> None:

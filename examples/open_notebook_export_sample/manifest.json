@@ -1,0 +1,28 @@
+{
+  "export_id": "open_notebook_export_sample_001",
+  "exported_at": "2026-07-11T00:00:00+03:00",
+  "source_system": "open_notebook",
+  "notebook_title": "Local AI Runtime Notes",
+  "sources": [
+    {
+      "source_id": "onb:local-ai-runtime-notes:local-llm-runtime-notes:02e545fd",
+      "title": "Local AI Runtime Notes",
+      "source_type": "markdown",
+      "original_url": null,
+      "exported_path": "sources/local_llm_runtime_notes.md",
+      "content_sha256": "02e545fd8b420c057c3d9a4aa2492d2a25b84a620339bbac787def888976193a",
+      "is_ai_generated": false,
+      "citation_policy": "authoritative"
+    },
+    {
+      "source_id": "onb:local-ai-runtime-notes:summary-by-open-notebook:da9f793b",
+      "title": "Summary by Open Notebook",
+      "source_type": "markdown",
+      "original_url": null,
+      "exported_path": "derived/summary_by_open_notebook.md",
+      "content_sha256": "da9f793bc5b7855778df55a08155752012dd70070ebade91b5e1f1fe5093f834",
+      "is_ai_generated": true,
+      "citation_policy": "derived_non_authoritative"
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "version": "v1",
+  "description": "OpenNotebook -> HomeTutor Bridge MVP cases",
+  "cases": [
+    {
+      "id": "onb_exact_model_001",
+      "question": "Какая модель использовалась для финального RAG runtime?",
+      "expected_contains": [
+        "qwopus3.6-35b-a3b-v1-mtp"
+      ],
+      "must_not_contain": [
+        "source:56erm7lowdyob4ha6r6t"
+      ]
+    },
+    {
+      "id": "onb_profile_rag_001",
+      "question": "Какой ctx у профиля rag?",
+      "expected_contains": [
+        "ctx = 32768",
+        "24k context probe"
+      ]
+    },
+    {
+      "id": "onb_profile_rag_fast_001",
+      "question": "Какой ctx у профиля rag-fast?",
+      "expected_contains": [
+        "ctx = 16384",
+        "12k context probe"
+      ]
+    },
+    {
+      "id": "onb_refusal_weather_001",
+      "question": "Какая была температура воздуха в Париже во время запуска?",
+      "expected_refusal": true,
+      "forbidden_evidence_contains": [
+        "температура воздуха в Париже",
+        "weather in Paris"
+      ]
+    }
+  ]
+}

@@ -60,3 +60,37 @@ class TestRenderCardSectionLinksSmoke:
         link_urls = [b.url for b in at.get("link_button")]
         assert any("obsidian://" in url for url in link_urls)
         assert any("vscode://" in url for url in link_urls)
+
+    def test_renders_four_columns_when_video_found(self, monkeypatch: pytest.MonkeyPatch):
+        from app.living_konspekt_video_citations import SourceVideoCitation, SourceVideoCitationResolution
+        import app.living_konspekt_video_citations as video_citations
+
+        citation = SourceVideoCitation(
+            heading="Агент ИИ",
+            video_title="Введение в ИИ",
+            timestamp_label="10:20",
+            start_seconds=620,
+            end_seconds=None,
+            url="https://youtube.com/watch?v=123&t=620s",
+            source_label="lecture.md",
+        )
+        resolution = SourceVideoCitationResolution("available", citation, "Видео-цитата готова.")
+
+        monkeypatch.setattr(
+            video_citations,
+            "video_citation_for_candidate",
+            lambda candidate: resolution,
+        )
+
+        at = AppTest.from_function(_app)
+        at.run()
+        assert not at.exception
+
+        link_buttons = at.get("link_button")
+        link_urls = [b.url for b in link_buttons]
+        link_labels = [b.label for b in link_buttons]
+
+        assert any("obsidian://" in url for url in link_urls)
+        assert any("vscode://" in url for url in link_urls)
+        assert any("youtube.com" in url for url in link_urls)
+        assert any("10:20" in label for label in link_labels)

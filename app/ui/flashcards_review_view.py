@@ -544,20 +544,95 @@ def _render_card_section_links(card: dict[str, Any], idx: int) -> None:
     if sum(1 for s in sections if s.heading_text == section.heading_text) > 1:
         st.caption("⚠️ Заголовок повторяется в документе — VS Code точнее для повторяющихся заголовков.")
 
-    link_cols = st.columns(3)
-    with link_cols[0]:
+    has_video = False
+    is_local_video = False
+    video_url = None
+    video_label = ""
+    local_video_obj = None
+    local_start_seconds = 0
+    local_video_title = ""
+
+    try:
+        from urllib.parse import urlencode
+        from app.config import get_settings
+        from app.living_konspekt_source_resolver import SourceSectionCandidate
+        from app.living_konspekt_video_citations import video_citation_for_candidate
+
+        candidate = SourceSectionCandidate(section=section, score=0.0, reason="flashcard_review")
+        video_resolution = video_citation_for_candidate(candidate)
+        if (
+            video_resolution.status == "available"
+            and video_resolution.citation is not None
+        ):
+            citation = video_resolution.citation
+            if citation.url is not None:
+                has_video = True
+                video_label = f"🎬 Смотреть с {citation.timestamp_label}"
+
+                settings = get_settings()
+                if settings.auth_enabled or (settings.home_rag_api_key or "").strip():
+                    video_url = citation.url
+                else:
+                    query = urlencode(
+                        {
+                            "url": citation.url,
+                            "heading": section.heading_text,
+                            "source": str(section.source_abs.name),
+                        }
+                    )
+                    video_url = f"{settings.ui_api_base_url.rstrip('/')}/living-konspekt/video-citation/open?{query}"
+            else:
+                # Local video citation
+                from pathlib import Path
+                from app.media_sidecar import load_media_sidecar_for_konspekt, LocalVideoSource
+
+                sidecar = load_media_sidecar_for_konspekt(Path(section.konspekt_md_abs))
+                if sidecar and isinstance(sidecar.video, LocalVideoSource):
+                    is_local_video = True
+                    has_video = True
+                    local_video_obj = sidecar.video
+                    local_start_seconds = citation.start_seconds
+                    local_video_title = citation.video_title
+                    video_label = f"🎬 Видео {citation.timestamp_label}"
+    except Exception:  # noqa: BLE001 - video citation lookup failure must not break card rendering
+        pass
+
+    if has_video:
+        link_cols = st.columns(4)
+        obs_col, vs_col, vid_col, wb_col = link_cols[0], link_cols[1], link_cols[2], link_cols[3]
+    else:
+        link_cols = st.columns(3)
+        obs_col, vs_col, wb_col = link_cols[0], link_cols[1], link_cols[2]
+        vid_col = None
+
+    with obs_col:
         st.link_button(
             f"📄 «{section.heading_text}» · Obsidian",
             obsidian_uri(section.konspekt_md_abs, heading_text=section.heading_text),
             width="stretch",
         )
-    with link_cols[1]:
+    with vs_col:
         st.link_button(
             f"🖥 «{section.heading_text}» · VS Code",
             vscode_uri(section.konspekt_md_abs, line=section.line_start),
             width="stretch",
         )
-    with link_cols[2]:
+    if vid_col is not None:
+        with vid_col:
+            if is_local_video:
+                show_local_key = f"fc_show_local_video_{idx}"
+                is_active = bool(st.session_state.get(show_local_key, False))
+                btn_label = "🎬 Скрыть видео" if is_active else video_label
+                if st.button(btn_label, key=f"fc_toggle_video_{idx}", width="stretch"):
+                    st.session_state[show_local_key] = not is_active
+                    st.rerun()
+            elif video_url is not None:
+                st.link_button(
+                    video_label,
+                    video_url,
+                    width="stretch",
+                )
+    with wb_col:
         if st.button("➕ В рабочий конспект", key=f"fc_section_to_workbench_{idx}", width="stretch"):
             rows = workbench_service.normalize_runtime_rows(
                 list(st.session_state.get(workbench_service.WORKBENCH_SECTIONS_KEY) or [])
@@ -570,6 +645,14 @@ def _render_card_section_links(card: dict[str, Any], idx: int) -> None:
                 f"Добавлено в рабочий конспект: «{section.heading_text}»" if added else "Уже в рабочем конспекте",
                 icon="📚",
             )
+
+    if is_local_video and st.session_state.get(f"fc_show_local_video_{idx}", False):
+        try:
+            from app.ui.living_konspekt_media import _render_local_video_player
+            st.write("")  # spacing
+            _render_local_video_player(local_video_obj, local_video_title, start_time=local_start_seconds)
+        except Exception as exc:  # noqa: BLE001
+            st.caption(f"Не удалось воспроизвести локальное видео: {exc}")
 
 
 def _render_active_review_card(

@@ -175,7 +175,7 @@ def render_sidebar_research_sessions(index_stats: dict | None) -> None:
     with st.expander("Исследования", expanded=False):
         if st.session_state.pop("_research_stale_banner", None):
             st.warning(
-                "Индекс менялся после сохранения этой сессии — перепроверьте источники и при необходимости заново соберите synthesis или план."
+                "Индекс менялся после сохранения этой сессии — перепроверьте источники и при необходимости заново соберите synthesis или программу."
             )
         name = st.text_input(
             "Имя сессии",
@@ -447,11 +447,11 @@ def render_sidebar(index_stats: dict | None):
         if _active_scope:
             _scope_title = str(_active_scope.get("title") or _active_scope.get("folder_rel") or "Курс")
             st.info(f"🎯 Активный курс: **{_scope_title}**")
-            if st.button("Открыть план курса", key="sidebar_open_course_plan", width="stretch", type="primary"):
+            if st.button("Открыть программу курса", key="sidebar_open_course_plan", width="stretch", type="primary"):
                 if _load_active_course_plan_into_session(_active_scope):
                     st.rerun()
                 else:
-                    st.warning("Для активного курса пока нет сохранённого плана. Откройте «Темы» и нажмите «Подготовить курс».")
+                    st.warning("Для активного курса пока нет сохранённой программы. Откройте «Темы» и нажмите «Подготовить курс».")
             if st.button("× Деактивировать курс", key="sidebar_deactivate_scope", width="stretch", type="secondary"):
                 _deactivate_scope()
                 st.rerun()
@@ -494,7 +494,7 @@ def render_sidebar(index_stats: dict | None):
                     if _ract:
                         st.caption(f"Активация в реестре: {str(_ract)[:19].replace('T', ' ')} UTC")
                     st.caption(
-                        "Сохранённые сессии исследований помечают версию индекса; при её смене перепроверьте synthesis и планы."
+                        "Сохранённые сессии исследований помечают версию индекса; при её смене перепроверьте synthesis и программы."
                     )
         else:
             st.info("Индекс пока недоступен. Проверьте, что база уже проиндексирована, или запустите переиндексацию.")
@@ -566,7 +566,7 @@ def render_sidebar(index_stats: dict | None):
         render_panel_header("Сессия", "Что уже исследовали в этом окне")
         render_reading_mode_toggle(
             key="reading_mode",
-            help_text="Удобный режим для длинных ответов, конспектов и планов обучения: уже строка, спокойнее ритм текста и меньше визуального шума.",
+            help_text="Удобный режим для длинных ответов, конспектов и программ обучения: уже строка, спокойнее ритм текста и меньше визуального шума.",
         )
         render_focus_view_toggle(
             key="focus_view",

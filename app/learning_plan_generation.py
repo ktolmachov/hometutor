@@ -383,7 +383,7 @@ class DynamicLearningPlan:
                 label = str(resume.get("step_label") or "").strip()
                 if label:
                     title = label.split("\n", 1)[0][:80]
-                    return f"План: {title}"
+                    return f"Программа: {title}"
         except Exception:  # noqa: BLE001 — resume read must never break home page
             pass
 

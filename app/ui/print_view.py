@@ -1,4 +1,4 @@
-"""Режим «Чистый вид» для печати/чтения конспекта или плана."""
+"""Режим «Чистый вид» для печати/чтения конспекта или программы."""
 from __future__ import annotations
 
 import streamlit as st
@@ -32,7 +32,7 @@ def render_print_view() -> None:
     payload = st.session_state.get("print_view_payload")
     st.markdown('<div class="panel">', unsafe_allow_html=True)
     if not payload:
-        render_panel_header("Чистый вид", "Откройте конспект или план обучения и нажмите «Печать/чистый вид».")
+        render_panel_header("Чистый вид", "Откройте конспект или программу обучения и нажмите «Печать/чистый вид».")
         st.info("Здесь появится отдельный longform-материал без лишних боковых панелей.")
         st.markdown("</div>", unsafe_allow_html=True)
         return

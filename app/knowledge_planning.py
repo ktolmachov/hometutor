@@ -56,13 +56,17 @@ def _graph_prerequisite_snippet(doc_concepts: list[str]) -> str:
     )
 
 
-def _reorder_validator(steps: list[dict[str, Any]], dp_plan: list[dict[str, Any]]) -> bool:
-    """Log a warning if the generated table order contradicts graph topology."""
+def _reorder_validator(steps: list[dict[str, Any]], dp_plan: list[dict[str, Any]]) -> tuple[bool, str]:
+    """Check if the generated table order contradicts graph topology.
+
+    Returns ``(ok, warning_msg)`` where *ok* is ``True`` if order matches
+    the graph, and *warning_msg* is a human-readable contradiction detail
+    (or empty when no violation).
+    """
     if not dp_plan:
-        return True
+        return True, ""
     dp_topics = [s.get("topic") or "" for s in dp_plan]
     step_titles = [s.title.lower() for s in steps]
-    mismatch = False
     for i, step_a in enumerate(step_titles):
         for j, step_b in enumerate(step_titles):
             if i >= j:
@@ -70,16 +74,14 @@ def _reorder_validator(steps: list[dict[str, Any]], dp_plan: list[dict[str, Any]
             a_dp_idx = next((k for k, t in enumerate(dp_topics) if t and t.lower() == step_a), None)
             b_dp_idx = next((k for k, t in enumerate(dp_topics) if t and t.lower() == step_b), None)
             if a_dp_idx is not None and b_dp_idx is not None and a_dp_idx > b_dp_idx:
-                logger.warning(
-                    "learning_plan_order_contradiction: "
-                    "«%s» appears before «%s» in generated table "
-                    "but graph says the reverse order",
-                    steps[j].title,
-                    steps[i].title,
+                msg = (
+                    f"Порядок шагов в сгенерированной таблице нарушает карту знаний: "
+                    f"«{steps[j].title}» идёт раньше «{steps[i].title}», "
+                    f"хотя граф указывает обратный порядок."
                 )
-                mismatch = True
-                break
-    return not mismatch
+                logger.warning("learning_plan_order_contradiction: %s", msg)
+                return False, msg
+    return True, ""
 
 
 def _dynamic_plan_prompt_block(dp: dict[str, Any] | None) -> str:
@@ -218,10 +220,13 @@ def build_learning_plan(
     )
     missing_topics = _compute_missing_topics(selected_documents, known_topics=known_topics)
 
+    plan_order_warning = None
     if dynamic_plan and dynamic_plan.get("plan"):
         parsed = parse_plan_table(plan_text)
         if parsed:
-            _reorder_validator(parsed, dynamic_plan["plan"])
+            ok, msg = _reorder_validator(parsed, dynamic_plan["plan"])
+            if not ok:
+                plan_order_warning = msg
 
     if time_budget_hours is not None and time_budget_hours > 0:
         budget = check_budget(plan_text, time_budget_hours)
@@ -245,6 +250,8 @@ def build_learning_plan(
         "coverage": coverage,
         "missing_topics": missing_topics,
     }
+    if plan_order_warning:
+        result["plan_order_warning"] = plan_order_warning
     if dynamic_plan is not None:
         result["dynamic_plan"] = dynamic_plan
     return result

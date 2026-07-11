@@ -88,13 +88,13 @@ def test_get_smart_resume_prefers_learning_plan_step(monkeypatch) -> None:
         "resource_type": "learning_plan",
         "step_index": 1,
         "step_label": "Векторы — скалярное произведение",
-        "display_title": "План по теме «Линейная алгебра»",
+            "display_title": "Программа по теме «Линейная алгебра»",
     }
     _patch_smart_resume_deps(monkeypatch, learning_plan_resume=fake_resume)
 
     result = learning_plan_service.plan_service.get_smart_resume()
 
-    assert result.startswith("План:")
+    assert result.startswith("Программа:")
     assert "Векторы" in result or "скалярное" in result
 
 

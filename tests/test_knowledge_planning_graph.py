@@ -48,11 +48,13 @@ def test_reorder_validator_passes_when_order_matches() -> None:
         {"topic": "Векторы"},
         {"topic": "Скалярное произведение"},
     ]
-    assert _reorder_validator(steps, dp_plan) is True
+    ok, msg = _reorder_validator(steps, dp_plan)
+    assert ok is True
+    assert msg == ""
 
 
 def test_reorder_validator_warns_on_contradiction() -> None:
-    """Order contradiction detected → returns False (warning goes to stderr, visible in logs)."""
+    """Order contradiction detected → returns (False, warning text)."""
     steps = [
         LearningPlanStep(index="1", title="Скалярное произведение"),
         LearningPlanStep(index="2", title="Векторы"),
@@ -61,8 +63,11 @@ def test_reorder_validator_warns_on_contradiction() -> None:
         {"topic": "Векторы"},
         {"topic": "Скалярное произведение"},
     ]
-    result = _reorder_validator(steps, dp_plan)
-    assert result is False
+    ok, msg = _reorder_validator(steps, dp_plan)
+    assert ok is False
+    assert "нарушает карту знаний" in msg
+    assert "Векторы" in msg
+    assert "Скалярное произведение" in msg
 
 
 def test_reorder_validator_no_warning_when_topics_not_in_graph() -> None:
@@ -73,9 +78,13 @@ def test_reorder_validator_no_warning_when_topics_not_in_graph() -> None:
     dp_plan = [
         {"topic": "Unrelated"},
     ]
-    assert _reorder_validator(steps, dp_plan) is True
+    ok, msg = _reorder_validator(steps, dp_plan)
+    assert ok is True
+    assert msg == ""
 
 
 def test_reorder_validator_empty_dp_plan_passes() -> None:
     steps = [LearningPlanStep(index="1", title="Векторы")]
-    assert _reorder_validator(steps, []) is True
+    ok, msg = _reorder_validator(steps, [])
+    assert ok is True
+    assert msg == ""

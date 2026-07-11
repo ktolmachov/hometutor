@@ -1,4 +1,4 @@
-"""Вкладка «Темы»: каталог тем, synthesis, план обучения."""
+"""Вкладка «Темы»: каталог тем, synthesis, программа обучения."""
 from __future__ import annotations
 
 import streamlit as st
@@ -80,7 +80,7 @@ def render_topics_tab(index_stats: dict | None = None) -> None:
     iv = index_version_label(index_stats)
     st.markdown('<div class="panel">', unsafe_allow_html=True)
     st.caption(
-        "Этот экран лучше всего подходит для длинных лекций и новых тем: здесь можно собрать конспект или построить план обучения по всей теме либо по выбранной выборке документов."
+        "Этот экран лучше всего подходит для длинных лекций и новых тем: здесь можно собрать конспект или построить программу обучения по всей теме либо по выбранной выборке документов."
     )
     render_panel_header(
         "Темы и synthesis",
@@ -174,7 +174,7 @@ def render_topics_tab(index_stats: dict | None = None) -> None:
             )
     render_topic_scope_quiz_panel(selected_topic)
     st.markdown("---")
-    result_tabs = st.tabs(["Конспект", "План обучения"])
+    result_tabs = st.tabs(["Конспект", "Программа обучения"])
     with result_tabs[0]:
         render_topics_synthesis_subtab(selected_topic=selected_topic, iv=iv)
     with result_tabs[1]:

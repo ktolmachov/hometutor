@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "embed_model": "perplexity/pplx-embed-v1-0.6b",
+  "retrieval_fingerprint": "155ddfa3ca7dee7191e11e90",
+  "hashes": {
+    "README.md": "d9d12fdf737520ba1ee3ee013f6c24069a32047414aa383f01ccb5b521e354ff",
+    "alpha_rag_intro.md": "4f02709d35464813f52a08dbcbddf45e1f81f3dc3c6a281b5893fdf3fa49676a",
+    "beta_vector_db.md": "be146276e95afb5449c08793bd90051bdc032bc84246accc7d7ccb5e5820ef23",
+    "delta_srs.md": "a0021e41e1f34de42a358cd37deed18249080a8d95f6f13bf25c4e508765f314",
+    "epsilon_guardrails.md": "48b8d9f30992c58d4c08c0aa8d3092684f60ab8106d325419db0625672f1d80b",
+    "gamma_hybrid.md": "63fbd987cfec7fb1ad93a99967214157e0bdc482e0e5400054e203721948257a",
+    "python_basics.md": "9e9cef01028375fb2886ec6048a8a16de1804735bb06f6e4b981c3c8547d56d3"
+  },
+  "file_manifest": {
+    "schema_version": 1,
+    "files": {
+      "alpha_rag_intro.md": {
+        "size": 1176,
+        "mtime_ns": 1780387960000000000,
+        "ext": ".md"
+      },
+      "beta_vector_db.md": {
+        "size": 921,
+        "mtime_ns": 1780387960000000000,
+        "ext": ".md"
+      },
+      "delta_srs.md": {
+        "size": 677,
+        "mtime_ns": 1780387960000000000,
+        "ext": ".md"
+      },
+      "epsilon_guardrails.md": {
+        "size": 652,
+        "mtime_ns": 1780387960000000000,
+        "ext": ".md"
+      },
+      "gamma_hybrid.md": {
+        "size": 670,
+        "mtime_ns": 1780387960000000000,
+        "ext": ".md"
+      },
+      "python_basics.md": {
+        "size": 831,
+        "mtime_ns": 1780387960000000000,
+        "ext": ".md"
+      },
+      "README.md": {
+        "size": 497,
+        "mtime_ns": 1780387960000000000,
+        "ext": ".md"
+      }
+    }
+  },
+  "source_fragments": 7,
+  "nodes_count": 7
+}

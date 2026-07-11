@@ -245,13 +245,12 @@ def build_learning_plan(
         "level": effective_level,
         "time_budget_hours": time_budget_hours,
         "plan": plan_text,
+        "plan_order_warning": plan_order_warning,
         "documents": selected_documents,
         "sources": sources,
         "coverage": coverage,
         "missing_topics": missing_topics,
     }
-    if plan_order_warning:
-        result["plan_order_warning"] = plan_order_warning
     if dynamic_plan is not None:
         result["dynamic_plan"] = dynamic_plan
     return result

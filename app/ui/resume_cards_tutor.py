@@ -595,7 +595,7 @@ def render_reading_resume_card(index_stats: dict | None) -> None:
 
     st.markdown('<div class="home-dash-card">', unsafe_allow_html=True)
     st.markdown(
-        '<div class="home-dash-head home-dash-head-continue"><h3>🎯 Продолжить тему или план</h3></div>',
+        '<div class="home-dash-head home-dash-head-continue"><h3>🎯 Продолжить тему или программу</h3></div>',
         unsafe_allow_html=True,
     )
     st.markdown('<div class="home-dash-body">', unsafe_allow_html=True)

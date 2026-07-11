@@ -177,6 +177,9 @@ def render_topics_plan_subtab(
             )
         if learning_plan.get("missing_topics"):
             st.caption(f"Полезно добрать перед следующим шагом: {', '.join(learning_plan['missing_topics'][:6])}")
+        plan_order_warning = str(learning_plan.get("plan_order_warning") or "").strip()
+        if plan_order_warning:
+            st.warning(plan_order_warning)
         dp = learning_plan.get("dynamic_plan")
         if dp and dp.get("enabled"):
             with st.expander("Персонализированный порядок (прогресс + граф + повторения)", expanded=False):

@@ -24,7 +24,11 @@ from app.ui.home_hub import (
     _find_topic_for_concept,
     _topic_documents_index,
 )
-from app.ui.knowledge_graph_d3 import collect_kg_learned_set, render_d3_knowledge_graph
+from app.ui.knowledge_graph_d3 import (
+    _is_lesson_node as _is_lesson_concept,
+    collect_kg_learned_set,
+    render_d3_knowledge_graph,
+)
 from app.ui.topics_catalog import load_topics_catalog as _load_topics_catalog
 from app.ui.tutor_mastery_forecast_panel import (
     render_tutor_orchestration_snapshot_expander as _render_tutor_orchestration_snapshot_expander,
@@ -464,10 +468,6 @@ def _is_test_artifact_path(path: str) -> bool:
         return False
     first = normalized.split("/", 1)[0]
     return first.startswith("_test") or first.startswith("test-")
-
-
-def _is_lesson_concept(concept_id: str, info: dict) -> bool:
-    return concept_id.startswith("lesson:") or str(info.get("level") or "") == "lesson"
 
 
 def _is_test_artifact_concept(concept_id: str, info: dict) -> bool:

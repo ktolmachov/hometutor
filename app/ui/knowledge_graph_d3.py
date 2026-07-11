@@ -305,6 +305,19 @@ def _frontier_state(
     return m, is_learned, frontier
 
 
+def _is_lesson_node(cid: str, data: Mapping[str, Any]) -> bool:
+    """Single source for "is this graph node a lesson?" (B1).
+
+    Mirrors ``dashboards_graph._is_lesson_concept``: a node is a lesson when its id
+    carries the ``lesson:`` curriculum-anchor prefix (set by
+    ``course_graph_compiler._lesson_anchor_id``) OR its normalized ``level`` is
+    ``"lesson"``. Both the counters and the graph audit apply this identical rule, so
+    legacy bundles that populate only one of the two markers are classified the same
+    way everywhere — lesson anchors never leak into ``total_concepts``.
+    """
+    return str(cid or "").startswith("lesson:") or _norm_level(data.get("level")) == "lesson"
+
+
 def _kg_counters_from_skeleton(
     skel: _KGSkeleton,
     mastery_vector: Mapping[str, float],
@@ -316,10 +329,11 @@ def _kg_counters_from_skeleton(
     :func:`compute_kg_counters` (Mission Control card), so the two screens report
     identical numbers for the same graph.
 
-    ``total_concepts`` excludes lesson nodes (``level == "lesson"``); ``avg_mastery``
-    divides by ALL nodes (concepts + lessons) intentionally — lesson nodes carry
-    aggregate mastery in the bundle and both screens historically used the full node
-    set as the denominator. Keeping it preserves the existing mastery calibration.
+    ``total_concepts`` excludes lesson nodes (detected via :func:`_is_lesson_node`:
+    ``lesson:`` id prefix OR ``level == "lesson"``); ``avg_mastery`` divides by ALL
+    nodes (concepts + lessons) intentionally — lesson nodes carry aggregate mastery in
+    the bundle and both screens historically used the full node set as the denominator.
+    Keeping it preserves the existing mastery calibration.
     """
     total = len(skel.valid)
     total_concepts = 0
@@ -329,7 +343,7 @@ def _kg_counters_from_skeleton(
     missing_count = 0
     mastery_sum = 0.0
     for cid, data in skel.valid.items():
-        if _norm_level(data.get("level")) == "lesson":
+        if _is_lesson_node(cid, data):
             total_lessons += 1
         else:
             total_concepts += 1
@@ -346,6 +360,7 @@ def _kg_counters_from_skeleton(
             missing_count += 1
     return {
         "total": total,
+        "total_nodes": total,
         "total_concepts": total_concepts,
         "total_lessons": total_lessons,
         "edges": len(skel.edges),
@@ -369,8 +384,9 @@ def compute_kg_counters(
     recomputes the frontier exactly like :func:`build_kg_payload`. Mission Control and
     the Knowledge Graph screen both derive their visible counters from this math.
 
-    Returns ``total``, ``total_concepts`` (without lesson nodes), ``total_lessons``,
-    ``frontier`` (recomputed), ``learned``, ``avg_mastery``, ``clusters`` and ``edges``.
+    Returns ``total``/``total_nodes`` (all nodes), ``total_concepts`` (without lesson
+    nodes), ``total_lessons``, ``frontier`` (recomputed), ``learned``, ``avg_mastery``,
+    ``clusters`` and ``edges``.
     """
     skel = _build_kg_skeleton(concepts, typed_relations)
     mv = mastery_vector or {}

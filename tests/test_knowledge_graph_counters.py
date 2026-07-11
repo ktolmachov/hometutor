@@ -89,6 +89,34 @@ class TestComputeKgCounters:
         assert counters["avg_mastery"] == 0.0
         assert counters["clusters"] == 0
 
+    def test_total_nodes_equals_concepts_plus_lessons(self):
+        concepts = {
+            "a": {"label": "A"},
+            "b": {"label": "B", "level": "intermediate"},
+            "lesson:lec-1": {"label": "Lec 1", "level": "lesson"},
+            "c": {"label": "C"},
+        }
+        counters = compute_kg_counters(concepts)
+
+        assert counters["total_nodes"] == counters["total"] == 4
+        assert counters["total_concepts"] == 3
+        assert counters["total_lessons"] == 1
+        assert counters["total_nodes"] == counters["total_concepts"] + counters["total_lessons"]
+
+    def test_lesson_anchor_id_prefix_counted_as_lesson_without_level(self):
+        # Legacy/edge bundle: node carries the curriculum-anchor ``lesson:`` prefix but
+        # no ``level`` field. It must still be classified as a lesson (matching
+        # ``dashboards_graph._is_lesson_concept``), never leaking into ``total_concepts``.
+        concepts = {
+            "real_concept": {"label": "Real"},
+            "lesson:legacy-lec": {"label": "Legacy Lec"},  # prefix only, no level
+        }
+        counters = compute_kg_counters(concepts)
+
+        assert counters["total_nodes"] == 2
+        assert counters["total_concepts"] == 1
+        assert counters["total_lessons"] == 1
+
 
 class TestCollectLearnedSet:
     def test_combines_session_learned_and_bundle_flags(self, monkeypatch):
@@ -191,3 +219,30 @@ class TestMissionControlUsesSharedHelper:
 
         assert "collect_kg_learned_set" in source
         assert "learned_set=" in source
+
+
+class TestSharedLessonDetection:
+    """B1: the "is this node a lesson?" rule must be one definition everywhere."""
+
+    def test_dashboards_graph_is_lesson_concept_is_the_shared_helper(self):
+        from app.ui import dashboards_graph
+        from app.ui.knowledge_graph_d3 import _is_lesson_node
+
+        # dashboards_graph._is_lesson_concept must be the very same callable, not an
+        # independent reimplementation that can drift (regression guard for B1).
+        assert dashboards_graph._is_lesson_concept is _is_lesson_node
+
+    def test_counter_matches_audit_helper_on_prefix_only_node(self):
+        from app.ui.dashboards_graph import _is_lesson_concept
+
+        concepts = {
+            "lesson:lec": {"label": "Lec"},  # prefix only, no level
+            "plain": {"label": "Plain"},
+        }
+        counters = compute_kg_counters(concepts)
+
+        for cid, data in concepts.items():
+            assert _is_lesson_concept(cid, data) == (cid == "lesson:lec")
+        # the counter agrees with the shared helper: 1 lesson, 1 concept
+        assert counters["total_lessons"] == 1
+        assert counters["total_concepts"] == 1

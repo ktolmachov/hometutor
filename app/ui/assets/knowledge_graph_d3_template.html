@@ -206,8 +206,6 @@
     <button class="rp-find" id="rp-find">Найти путь ▶</button>
     <div id="rp-steps"></div>
   </div>
-  <!-- C2: legacy weekly plan panel is intentionally hidden from user-facing graph UI. -->
-  <div class="pp" id="pp" aria-hidden="true" style="display:none"><div id="pp-cards"></div></div>
   <!-- KG-02 diagnostics panel -->
   <div class="dp-panel" id="dp-panel">
     <div class="dp-hd"><span class="dp-title">🔬 Здоровье графа</span><span class="dp-score" id="dp-score"></span><button class="dp-x" id="dp-close">✕</button></div>
@@ -237,7 +235,6 @@
 __D3_TAG__
 <script>
 const NODES=__NODES__,EDGES=__EDGES__,LEVELS=__LEVELS__,STATS=__STATS__;
-const WEEKLY_PLAN=__WEEKLY_PLAN__;
 const HEALTH=__HEALTH__;
 const COMPILER_HEALTH=__COMPILER_HEALTH__;
 const CLUSTER_LABELS=__CLUSTER_LABELS__;
@@ -432,9 +429,6 @@ nodeSel.append('text').text(d=>d.label)
   .attr('fill','rgba(255,255,255,0.55)').attr('font-size',d=>d.reach>3?11:9.5)
   .attr('font-weight',d=>d.reach>3?600:400).style('pointer-events','none').style('user-select','none');
 
-// KG-01 plan overlay layer (updated on every tick)
-const planG=nodeG.append('g');
-const PLAN_COLORS=['#f87171','#fb923c','#fbbf24','#a3e635','#34d399'];
 // KG-05 route overlay layer
 const routeG=nodeG.append('g');
 // KG-06 decay overlay layer (gray circles proportional to forgetting)
@@ -448,9 +442,6 @@ sim.on('tick',()=>{
   link.each(function(d){const c=linkCoords(d);d3.select(this).attr('x1',c.x1).attr('y1',c.y1).attr('x2',c.x2).attr('y2',c.y2);});
   linkHit.each(function(d){const c=linkCoords(d);d3.select(this).attr('x1',c.x1).attr('y1',c.y1).attr('x2',c.x2).attr('y2',c.y2);});
   nodeSel.attr('transform',d=>`translate(${d.x},${d.y})`);
-  // KG-01: reposition plan halos on tick (data-joined, so d is a plan entry)
-  planG.selectAll('.ph').attr('cx',d=>d.node.x).attr('cy',d=>d.node.y);
-  planG.selectAll('.pn').attr('x',d=>d.node.x).attr('y',d=>d.node.y-R(d.node)-16);
   // KG-05: reposition route halos on tick
   routeG.selectAll('.rt').attr('cx',d=>d.node.x).attr('cy',d=>d.node.y);
   // KG-06: reposition decay overlay circles on tick
@@ -610,33 +601,6 @@ function openPanel(d){
   _kgPushConceptHash(d.id);
 }
 function focusNode(d){const s=1.6;svg.transition().duration(550).call(zoom.transform,d3.zoomIdentity.translate(W/2-d.x*s,H/2-d.y*s).scale(s));}
-
-// ── KG-01: legacy hidden plan panel ──
-const pp=document.getElementById('pp'),ppCards=document.getElementById('pp-cards');
-function renderPlanPanel(){
-  if(!WEEKLY_PLAN.length){ppCards.innerHTML='<div style="padding:12px 13px;font-size:11px;color:var(--txt3)">Нет задач — всё освоено! 🎉</div>';return;}
-  ppCards.innerHTML=WEEKLY_PLAN.map((p,i)=>{const col=PLAN_COLORS[i]||'#888';const tc={'due_review':'tag-due','frontier':'tag-frontier','in_progress':'tag-progress'}[p.reason]||'';
-    return`<div class="pc"><div class="num" style="background:${col}1a;color:${col};border:1.5px solid ${col}44">${i+1}</div><div class="body"><div class="name">${p.concept}</div><div class="why ${tc}">${p.reason_label}</div><div class="mbar"><i style="width:${p.mastery}%;background:${masteryColor(p.mastery)}"></i></div></div></div>`;
-  }).join('');
-}
-renderPlanPanel();
-
-function applyPlanMode(){
-  const planData=WEEKLY_PLAN.map((p,i)=>{const node=simNodes.find(n=>n.id===p.concept);return node?{node,idx:i,color:PLAN_COLORS[i]||'#888'}:null;}).filter(Boolean);
-  const planIds=new Set(planData.map(p=>p.node.id));
-  nodeSel.select('.core').attr('fill-opacity',n=>planIds.has(n.id)?1:0.05);
-  nodeSel.select('text').attr('fill',n=>planIds.has(n.id)?'rgba(255,255,255,0.95)':'rgba(255,255,255,0.04)');
-  link.attr('stroke','rgba(255,255,255,0.025)').attr('stroke-width',0.5).attr('stroke-opacity',1);
-  // data-joined plan halos (positions updated every tick)
-  planG.selectAll('.ph').data(planData,d=>d.node.id).join('circle').attr('class','ph')
-    .attr('r',d=>R(d.node)+9).attr('fill','none').attr('stroke',d=>d.color).attr('stroke-width',3.5).attr('stroke-opacity',0.85)
-    .attr('cx',d=>d.node.x).attr('cy',d=>d.node.y);
-  planG.selectAll('.pn').data(planData,d=>d.node.id).join('text').attr('class','pn')
-    .attr('text-anchor','middle').attr('fill',d=>d.color).attr('font-size',11).attr('font-weight',800)
-    .attr('x',d=>d.node.x).attr('y',d=>d.node.y-R(d.node)-16)
-    .text(d=>d.idx+1);
-}
-function clearPlanMode(){planG.selectAll('*').remove();}
 
 // ── KG-02: diagnostics panel ──
 function renderDiag(){
@@ -924,7 +888,6 @@ const modesEl=document.getElementById('modes');
 MODES.forEach(m=>{const b=document.createElement('button');b.className='mode-btn'+(m.k==='all'?' active':'');b.dataset.k=m.k;b.textContent=m.label;b.addEventListener('click',()=>{activeMode=m.k;document.querySelectorAll('.mode-btn').forEach(x=>x.classList.toggle('active',x.dataset.k===m.k));applyMode(m.k);});modesEl.appendChild(b);});
 
 function applyMode(k,keepLinks){
-  clearPlanMode();pp.classList.remove('show');
   if(k==='all'){resetModeVisual();return;}
   let test;
   if(k==='next')test=n=>n.frontier;
@@ -998,7 +961,7 @@ document.addEventListener('keydown',e=>{
     if(epPanel.classList.contains('open')){closeEdgePanel();return;}
     panel.classList.remove('open');qd.classList.remove('show');results=[];q.value='';
     activeMode='all';document.querySelectorAll('.mode-btn').forEach(x=>x.classList.toggle('active',x.dataset.k==='all'));
-    resetHL();resetModeVisual();clearPlanMode();pp.classList.remove('show');
+    resetHL();resetModeVisual();
     // KG-05: close route panel
     rpPanel.classList.remove('show');routeBtn.classList.remove('on');clearRouteMode();
     // KG-06: close decay overlay

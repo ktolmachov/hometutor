@@ -186,6 +186,7 @@ class TestKnowledgeGraphSelectionBridge:
         assert '<svg id="svg"></svg>' in html
         assert "📅 На неделю" not in html
         assert "На неделю — план обучения" not in html
+        assert "WEEKLY_PLAN" not in html
         assert "{k:'plan'" not in html
         for placeholder in [
             "__D3_TAG__",

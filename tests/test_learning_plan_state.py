@@ -2,6 +2,7 @@ from app import user_state
 import app.learning_plan_state as lps
 import app.ui.course_prepare_view as course_prepare_view
 import app.ui.learning_plan_navigation as learning_plan_navigation
+import app.ui.resume_cards_tutor as resume_cards_tutor
 import app.ui.sidebar as sidebar
 from app.section_index import IndexedSection
 from app.ui.course_prepare_view import _prepare_course_artifact, _preview_cards_from_plan
@@ -187,6 +188,38 @@ def test_sidebar_load_active_course_plan_into_session(monkeypatch) -> None:
     assert session["last_course_prepare"] == artifact
     assert session["last_learning_plan"] == artifact["learning_plan"]
     assert session[sidebar.PENDING_CURRENT_VIEW_KEY] == "Темы"
+
+
+def test_reading_resume_open_topics_uses_pending_navigation(monkeypatch) -> None:
+    session: dict = {}
+    resume = {
+        "resource_type": "learning_plan",
+        "resource_id": "plan:course_ai_agents",
+        "display_title": "Программа: Курс ИИ Агенты",
+        "step_index": 0,
+        "step_label": "Фундамент",
+    }
+
+    class RerunCalled(Exception):
+        pass
+
+    monkeypatch.setattr(resume_cards_tutor.st, "session_state", session)
+    monkeypatch.setattr(resume_cards_tutor.user_state, "get_latest_resume", lambda: resume)
+    monkeypatch.setattr(resume_cards_tutor.st, "markdown", lambda *args, **kwargs: None)
+    monkeypatch.setattr(resume_cards_tutor.st, "caption", lambda *args, **kwargs: None)
+    monkeypatch.setattr(resume_cards_tutor.st, "button", lambda *args, **kwargs: True)
+    monkeypatch.setattr(resume_cards_tutor.st, "rerun", lambda: (_ for _ in ()).throw(RerunCalled()))
+
+    try:
+        resume_cards_tutor.render_reading_resume_card(index_stats={})
+    except RerunCalled:
+        pass
+    else:
+        raise AssertionError("render_reading_resume_card should rerun after opening Topics")
+
+    assert session["active_topic_id"] == "course_ai_agents"
+    assert session[resume_cards_tutor.PENDING_CURRENT_VIEW_KEY] == "Темы"
+    assert "current_view" not in session
 
 
 def test_learning_plan_checkbox_respects_graph_content(monkeypatch) -> None:

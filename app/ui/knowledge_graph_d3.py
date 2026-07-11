@@ -597,7 +597,6 @@ def build_kg_html(payload: Mapping[str, Any]) -> str:
         .replace("__EDGES__",         json.dumps(payload["edges"],         ensure_ascii=False))
         .replace("__LEVELS__",        json.dumps(payload["levels"],        ensure_ascii=False))
         .replace("__STATS__",         json.dumps(payload["stats"],         ensure_ascii=False))
-        .replace("__WEEKLY_PLAN__",   json.dumps(payload["weekly_plan"],   ensure_ascii=False))
         .replace("__HEALTH__",        json.dumps(payload["health"],        ensure_ascii=False))
         .replace("__CLUSTER_LABELS__",json.dumps(payload["cluster_labels"],ensure_ascii=False))
         .replace("__DECAY_VECTOR__",    json.dumps(payload.get("decay_vector", {}),    ensure_ascii=False))

@@ -17,6 +17,7 @@ from app.ui.resume_cards_smart_study import (
     gather_smart_study_router_session_context,
     render_smart_study_router_strip_from_session_context,
 )
+from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
 
 def topic_id_from_resume(resume: dict) -> str | None:
     rid = resume.get("resource_id") or ""
@@ -314,7 +315,7 @@ def render_home_continue_unified(index_stats: dict | None) -> None:
                     tid = topic_id_from_resume(latest_resume)
                     if tid:
                         st.session_state["active_topic_id"] = tid
-                    st.session_state["current_view"] = "Темы"
+                    st.session_state[PENDING_CURRENT_VIEW_KEY] = "Темы"
                     st.session_state["tutor_cta_action"] = "mastery_gap_topics"
                     st.rerun()
                 elif has_qa:
@@ -607,7 +608,7 @@ def render_reading_resume_card(index_stats: dict | None) -> None:
     if st.button("Открыть «Темы»", key="resume_goto_topics", width='stretch', type="primary"):
         if tid:
             st.session_state["active_topic_id"] = tid
-        st.session_state["current_view"] = "Темы"
+        st.session_state[PENDING_CURRENT_VIEW_KEY] = "Темы"
         st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 

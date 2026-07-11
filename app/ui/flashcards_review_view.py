@@ -67,6 +67,7 @@ _EXPERT_FILTER_DEFAULTS = {
 
 _REVIEW_SCOPE_RESET_PENDING_KEY = "flashcards_review_scope_reset_pending"
 _FC_LAST_ACTION_KEY = "flashcards_review_last_action"
+_FC_REVIEW_AUTOLOAD_PENDING_KEY = "flashcards_review_autoload_pending"
 
 
 def _maybe_render_undo_last_rating(api_call: Callable[..., Any]) -> None:
@@ -848,9 +849,16 @@ def render_review(
             except Exception as ex:  # noqa: BLE001 - UI displays API failure.
                 st.error(str(ex))
 
+    autoload_queue = bool(st.session_state.pop(_FC_REVIEW_AUTOLOAD_PENDING_KEY, False))
     c_load, c_clear = st.columns([2, 1])
     with c_load:
-        if st.button("Загрузить очередь", type="primary", width='stretch', key="flashcards_review_load_queue"):
+        load_clicked = st.button(
+            "Загрузить очередь",
+            type="primary",
+            width='stretch',
+            key="flashcards_review_load_queue",
+        )
+        if autoload_queue or load_clicked:
             st.session_state["flashcards_review_session_status"] = "loading"
             try:
                 data = api_call("GET", "/flashcards/due", params=build_review_due_params(selected_deck_id, selected_tags))

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.ui import flashcards_generate_view as view
+from app.ui import flashcards_ui
 
 
 def test_route_saved_living_konspekt_deck_to_review(monkeypatch):
@@ -32,3 +33,20 @@ def test_route_saved_living_konspekt_deck_to_review(monkeypatch):
     assert state["flashcards_card_flipped"] is False
     assert state["flashcards_review_stats"] == {"again": 0, "hard": 0, "good": 0, "easy": 0}
     assert "flashcards_review_session_scope_signature" not in state
+
+
+def test_seed_review_scope_can_autoload_deck_queue(monkeypatch):
+    state: dict[str, object] = {
+        "flashcards_review_session_scope_signature": "old",
+        "flashcards_review_queue": [{"id": 1}],
+    }
+    monkeypatch.setattr(flashcards_ui.st, "session_state", state)
+
+    flashcards_ui._seed_review_scope(42, autoload=True)
+
+    assert state["flashcards_review_session_deck_id"] == 42
+    assert state["flashcards_review_deck_sync_pending"] == 42
+    assert state["flashcards_review_autoload_pending"] is True
+    assert state["flashcards_review_queue"] == []
+    assert state["flashcards_review_index"] == 0
+    assert state["flashcards_card_flipped"] is False

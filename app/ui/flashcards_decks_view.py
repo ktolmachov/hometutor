@@ -48,7 +48,7 @@ def render_decks_list(
     deck_tail: Callable[[], str],
     badge: Callable[[str], str],
     go: Callable[..., None],
-    seed_review_scope: Callable[[int | None], None],
+    seed_review_scope: Callable[..., None],
 ) -> None:
     created = st.session_state.pop("fc_quiz_deck_success_id", None)
     if created is not None:
@@ -99,7 +99,7 @@ def render_decks_list(
             if due and st.button(
                 f"Повторить ({due})", key=f"review_deck_{deck['id']}", width='stretch', type="primary"
             ):
-                seed_review_scope(deck["id"])
+                seed_review_scope(deck["id"], autoload=True)
                 go("review_from_deck")
         with c3:
             if st.button("🗑", key=f"del_deck_{deck['id']}", width='stretch', help="Удалить колоду"):
@@ -116,7 +116,7 @@ def render_deck_detail(
     *,
     api_call: Callable[..., Any],
     go: Callable[..., None],
-    seed_review_scope: Callable[[int | None], None],
+    seed_review_scope: Callable[..., None],
     cached_anki_apkg: Callable[[int, str | None], tuple[bytes | None, str | None]],
     deck_progress_ratio: Callable[[dict[str, Any] | None], float],
 ) -> None:
@@ -135,7 +135,7 @@ def render_deck_detail(
             go("decks")
     with c2:
         if st.button("🔁 Начать повторение", width='stretch', type="primary"):
-            seed_review_scope(deck_id)
+            seed_review_scope(deck_id, autoload=True)
             go("review_from_deck")
     with c3:
         safe_name = "".join(c for c in (deck.get("name") or "deck") if c not in '<>:"/\\|?*') or "deck"

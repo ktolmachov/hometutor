@@ -195,11 +195,15 @@ def _reset_review_session_state(state: Any) -> None:
     state.pop(FLASHCARDS_REVIEW_RECEIPT_BASELINE_KEY, None)
 
 
-def _seed_review_scope(deck_id: int | None) -> None:
+def _seed_review_scope(deck_id: int | None, *, autoload: bool = False) -> None:
     st.session_state["flashcards_review_session_deck_id"] = deck_id
     st.session_state.pop("flashcards_review_session_deck_label", None)
     st.session_state["flashcards_review_deck_sync_pending"] = deck_id
     _reset_review_session_state(st.session_state)
+    if autoload:
+        st.session_state["flashcards_review_autoload_pending"] = True
+    else:
+        st.session_state.pop("flashcards_review_autoload_pending", None)
 
 
 def _deck_progress_ratio(progress: dict[str, Any] | None) -> float:
@@ -298,6 +302,16 @@ def _render_flashcards_tab() -> None:
         if st.button("🔁 Повторение", key="fc_nav_review", width='stretch'):
             _set_flashcards_section(FC_MAIN_SECTION_REVIEW)
 
+    if active_section == FC_MAIN_SECTION_DECKS:
+        if subview == "deck_detail" and deck_id:
+            _render_deck_detail(deck_id)
+        else:
+            _render_decks_list()
+    elif active_section == FC_MAIN_SECTION_CREATE:
+        _render_generate()
+    else:
+        _render_review()
+
     try:
         from app.ui.resume_cards import (
             gather_smart_study_router_session_context,
@@ -319,16 +333,6 @@ def _render_flashcards_tab() -> None:
         import logging  # noqa: BLE001
 
         logging.getLogger(__name__).debug("flashcards hub smart study router: %s", _exc)
-
-    if active_section == FC_MAIN_SECTION_DECKS:
-        if subview == "deck_detail" and deck_id:
-            _render_deck_detail(deck_id)
-        else:
-            _render_decks_list()
-    elif active_section == FC_MAIN_SECTION_CREATE:
-        _render_generate()
-    else:
-        _render_review()
 
 
 # ─────────────────────────────────────────────────────────────

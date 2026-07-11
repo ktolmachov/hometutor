@@ -25,6 +25,9 @@ from app.ui_client import stream_ssr_explain as _stream_ssr_explain
 from app.learning_plan_service import (
     AdaptiveDailyPlan,
     get_adaptive_daily_plan_history,
+    get_primary_adaptive_daily_plan_block,
+    get_primary_adaptive_daily_plan_block_from_plan,
+    iter_adaptive_daily_plan_blocks,
     get_saved_adaptive_daily_plan,
 )
 from app.adaptive_plan_step_text import (
@@ -396,11 +399,7 @@ def get_adaptive_daily_plan(
     return _effective_plan(uid, plan_override)
 
 def _iter_plan_blocks(blocks: list[Any]) -> list[tuple[int, dict[str, Any]]]:
-    out: list[tuple[int, dict[str, Any]]] = []
-    for i, raw in enumerate(blocks):
-        if isinstance(raw, dict):
-            out.append((i, raw))
-    return out
+    return iter_adaptive_daily_plan_blocks(blocks)
 
 def _block_agent(block: dict[str, Any]) -> str:
     return str(block.get("agent") or block.get("recommended_agent") or "Orchestrator").strip() or "Orchestrator"
@@ -438,22 +437,11 @@ def tutor_prompt_for_block(block: dict[str, Any]) -> str:
 
 def get_primary_plan_block(blocks: list[Any]) -> tuple[int, dict[str, Any]] | None:
     """Первый содержательный шаг плана; ``auto_loop`` остаётся fallback-only."""
-    rendered = _iter_plan_blocks(blocks)
-    for item in rendered:
-        bt = str(item[1].get("type") or "").strip()
-        if bt != "auto_loop":
-            return item
-    return rendered[0] if rendered else None
+    return get_primary_adaptive_daily_plan_block(blocks)
 
 def get_primary_plan_block_from_plan(plan: dict[str, Any]) -> dict[str, Any] | None:
     """Prefer the explicit entry-surface contract when present."""
-    primary = plan.get("primary_block")
-    if isinstance(primary, dict):
-        return primary
-    fallback = get_primary_plan_block(list(plan.get("blocks") or []))
-    if fallback is None:
-        return None
-    return fallback[1]
+    return get_primary_adaptive_daily_plan_block_from_plan(plan)
 
 def adaptive_plan_progress_teaser_caption(
     user_id: str | None = None,

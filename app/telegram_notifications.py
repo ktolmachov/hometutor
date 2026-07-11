@@ -37,6 +37,26 @@ def _safe_due_reviews() -> int:
         return 0
 
 
+def _daily_topic_line() -> str | None:
+    from app.learning_plan_service import get_today_primary_learning_item, plan_service
+
+    item = get_today_primary_learning_item()
+    if item:
+        topic = str(item.get("topic") or "").strip()
+        if topic:
+            return f"Сегодня: {topic}"
+
+    plan = plan_service.generate_personalized_plan(user_progress=True)
+    dp = plan.get("daily_plan") or []
+    if not dp:
+        return None
+    d0 = dp[0]
+    topic = str(d0.get("concept") or d0.get("topic") or "").strip()
+    if not topic:
+        return None
+    return f"Сегодня (резервный план): {topic}"
+
+
 def start_notifications(bot: "Bot") -> None:
     global _scheduler
     s = get_settings()
@@ -59,18 +79,12 @@ def start_notifications(bot: "Bot") -> None:
     hour = int(s.telegram_daily_reminder_hour)
 
     async def daily_reminder() -> None:
-        from app.learning_plan_service import plan_service
-
         try:
             parts: list[str] = []
 
-            plan = plan_service.generate_personalized_plan(user_progress=True)
-            dp = plan.get("daily_plan") or []
-            if dp:
-                d0 = dp[0]
-                topic = str(d0.get("concept") or d0.get("topic") or "").strip()
-                if topic:
-                    parts.append(f"Сегодня: {topic}")
+            topic_line = _daily_topic_line()
+            if topic_line:
+                parts.append(topic_line)
 
             due_cards = _safe_due_flashcards()
             due_concepts = _safe_due_reviews()

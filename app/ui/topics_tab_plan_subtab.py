@@ -184,6 +184,25 @@ def render_topics_plan_subtab(
         plan_md = learning_plan.get("plan", "")
         render_longform_block(plan_md, markdown=True)
         plan_steps = user_state.learning_plan_steps_from_markdown(plan_md)
+        hours_summary = user_state.learning_plan_table_hours_summary_from_markdown(plan_md)
+        if hours_summary:
+            budget_hours_raw = learning_plan.get("time_budget_hours")
+            try:
+                budget_hours = float(budget_hours_raw)
+            except (TypeError, ValueError):
+                budget_hours = 0.0
+            total_hours = float(hours_summary.get("total_hours") or 0.0)
+            invalid_hours = int(hours_summary.get("missing_or_invalid_hours") or 0)
+            if budget_hours > 0 and total_hours > budget_hours:
+                st.warning(
+                    f"План по таблице занимает ~{total_hours:g} ч, "
+                    f"что выше заданного бюджета {budget_hours:g} ч. "
+                    "Сократите шаги или пересоберите план с меньшим объёмом."
+                )
+            elif invalid_hours > 0:
+                st.caption(
+                    f"В {invalid_hours} шаг(ах) не удалось прочитать время из колонки «Время (ч)»."
+                )
         n_steps = max(len(plan_steps), 1)
         step_options = list(range(min(max(len(plan_steps), 1), 40)))
 

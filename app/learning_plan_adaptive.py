@@ -49,6 +49,59 @@ def get_adaptive_daily_plan_for_orchestrator(*, user_id: str | None = None) -> d
     return saved
 
 
+def iter_adaptive_daily_plan_blocks(blocks: list[Any]) -> list[tuple[int, dict[str, Any]]]:
+    return [(idx, raw) for idx, raw in enumerate(blocks) if isinstance(raw, dict)]
+
+
+def get_primary_adaptive_daily_plan_block(blocks: list[Any]) -> tuple[int, dict[str, Any]] | None:
+    """First actionable daily-plan block; ``auto_loop`` is a fallback-only block."""
+    rendered = iter_adaptive_daily_plan_blocks(blocks)
+    for item in rendered:
+        block_type = str(item[1].get("type") or "").strip()
+        if block_type != "auto_loop":
+            return item
+    return rendered[0] if rendered else None
+
+
+def get_primary_adaptive_daily_plan_block_from_plan(plan: dict[str, Any]) -> dict[str, Any] | None:
+    primary = plan.get("primary_block")
+    if isinstance(primary, dict):
+        return primary
+    fallback = get_primary_adaptive_daily_plan_block(list(plan.get("blocks") or []))
+    if fallback is None:
+        return None
+    return fallback[1]
+
+
+def primary_learning_item_from_adaptive_daily_plan(plan: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Small cross-channel contract for the user's single primary item for today."""
+    if not isinstance(plan, dict):
+        return None
+    block = get_primary_adaptive_daily_plan_block_from_plan(plan)
+    if not isinstance(block, dict):
+        return None
+    topic = str(
+        block.get("concept")
+        or block.get("topic")
+        or block.get("title")
+        or block.get("description")
+        or ""
+    ).strip()
+    if not topic:
+        return None
+    return {
+        "topic": topic,
+        "source": "adaptive_daily_plan",
+        "date": str(plan.get("date") or ""),
+        "block": block,
+    }
+
+
+def get_today_primary_learning_item(*, user_id: str | None = None) -> dict[str, Any] | None:
+    plan = get_adaptive_daily_plan_for_orchestrator(user_id=user_id)
+    return primary_learning_item_from_adaptive_daily_plan(plan)
+
+
 def _estimate_ui_mastery_after_micro_quiz(current: str, quiz_ok: bool) -> str:
     """Грубая оценка UI-уровня (beginner/intermediate/advanced) после micro-quiz."""
     cur = (current or "intermediate").strip().lower()
@@ -210,6 +263,11 @@ def attach_confidence_dip_metadata(
 __all__ = [
     "attach_confidence_dip_metadata",
     "get_adaptive_daily_plan_for_orchestrator",
+    "get_primary_adaptive_daily_plan_block",
+    "get_primary_adaptive_daily_plan_block_from_plan",
     "get_recommended_next_step_after_micro_quiz",
     "get_saved_adaptive_daily_plan",
+    "get_today_primary_learning_item",
+    "iter_adaptive_daily_plan_blocks",
+    "primary_learning_item_from_adaptive_daily_plan",
 ]

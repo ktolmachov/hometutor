@@ -17,8 +17,13 @@ from app.adaptive_plan import (
 from app.learning_plan_adaptive import (
     attach_confidence_dip_metadata,
     get_adaptive_daily_plan_for_orchestrator,
+    get_primary_adaptive_daily_plan_block,
+    get_primary_adaptive_daily_plan_block_from_plan,
     get_recommended_next_step_after_micro_quiz,
     get_saved_adaptive_daily_plan,
+    get_today_primary_learning_item,
+    iter_adaptive_daily_plan_blocks,
+    primary_learning_item_from_adaptive_daily_plan,
 )
 from app.learning_plan_generation import DynamicLearningPlan, plan_service
 
@@ -29,7 +34,12 @@ __all__ = [
     "DynamicLearningPlan",
     "get_adaptive_daily_plan_for_orchestrator",
     "get_adaptive_daily_plan_history",
+    "get_primary_adaptive_daily_plan_block",
+    "get_primary_adaptive_daily_plan_block_from_plan",
     "get_recommended_next_step_after_micro_quiz",
     "get_saved_adaptive_daily_plan",
+    "get_today_primary_learning_item",
+    "iter_adaptive_daily_plan_blocks",
     "plan_service",
+    "primary_learning_item_from_adaptive_daily_plan",
 ]

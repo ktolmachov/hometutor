@@ -8,6 +8,7 @@ import json
 import logging
 import re
 import sqlite3
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, TypeVar
 
@@ -309,11 +310,172 @@ def learning_plan_resource_id(topic_id: str) -> str:
     return f"plan:{topic_id}"
 
 
+@dataclass(frozen=True)
+class LearningPlanMarkdownStep:
+    index: str
+    title: str
+    documents: str = ""
+    key_concepts: str = ""
+    dependencies: str = ""
+    hours: str = ""
+
+
+_TABLE_COLUMN_ALIASES: dict[str, str] = {
+    "#": "index",
+    "№": "index",
+    "номер": "index",
+    "шаг": "index",
+    "тема": "title",
+    "topic": "title",
+    "документ": "documents",
+    "документы": "documents",
+    "document": "documents",
+    "documents": "documents",
+    "ключевые концепции": "key_concepts",
+    "концепции": "key_concepts",
+    "key concepts": "key_concepts",
+    "зависимости": "dependencies",
+    "prerequisites": "dependencies",
+    "dependencies": "dependencies",
+    "время ч": "hours",
+    "время": "hours",
+    "часы": "hours",
+    "hours": "hours",
+}
+
+
+def _normalize_learning_plan_table_header(value: str) -> str:
+    normalized = re.sub(r"[*_`]", "", value or "").strip().lower().replace("ё", "е")
+    normalized = re.sub(r"\([^)]*\)", "", normalized)
+    normalized = re.sub(r"[^a-zа-я0-9#№]+", " ", normalized)
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def _split_markdown_table_row(line: str) -> list[str]:
+    raw = (line or "").strip()
+    if "|" not in raw:
+        return []
+    if raw.startswith("|"):
+        raw = raw[1:]
+    if raw.endswith("|"):
+        raw = raw[:-1]
+    return [cell.strip() for cell in raw.split("|")]
+
+
+def _is_markdown_table_separator(cells: list[str]) -> bool:
+    if not cells:
+        return False
+    normalized = [cell.strip() for cell in cells if cell.strip()]
+    return bool(normalized) and all(re.fullmatch(r":?-{3,}:?", cell) for cell in normalized)
+
+
+def _clean_learning_plan_table_cell(value: str) -> str:
+    cleaned = re.sub(r"<br\s*/?>", "; ", value or "", flags=re.IGNORECASE)
+    cleaned = re.sub(r"[*_`]", "", cleaned)
+    cleaned = cleaned.replace("|", " ")
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def _learning_plan_table_column_map(header_cells: list[str]) -> dict[int, str]:
+    mapped: dict[int, str] = {}
+    for idx, header in enumerate(header_cells):
+        normalized = _normalize_learning_plan_table_header(header)
+        key = _TABLE_COLUMN_ALIASES.get(normalized)
+        if key:
+            mapped[idx] = key
+    return mapped
+
+
+def learning_plan_table_steps_from_markdown(plan_md: str) -> list[LearningPlanMarkdownStep]:
+    """Parse the generated learning-plan markdown table into atomic plan rows."""
+    lines = (plan_md or "").splitlines()
+    for i, line in enumerate(lines[:-1]):
+        header_cells = _split_markdown_table_row(line)
+        separator_cells = _split_markdown_table_row(lines[i + 1])
+        column_map = _learning_plan_table_column_map(header_cells)
+        if "title" not in column_map.values() or not _is_markdown_table_separator(separator_cells):
+            continue
+
+        steps: list[LearningPlanMarkdownStep] = []
+        for row_line in lines[i + 2 :]:
+            row_cells = _split_markdown_table_row(row_line)
+            if not row_cells:
+                break
+            if _is_markdown_table_separator(row_cells):
+                continue
+            values = {
+                key: _clean_learning_plan_table_cell(row_cells[idx])
+                for idx, key in column_map.items()
+                if idx < len(row_cells)
+            }
+            title = values.get("title", "")
+            if not title:
+                continue
+            steps.append(
+                LearningPlanMarkdownStep(
+                    index=values.get("index", ""),
+                    title=title,
+                    documents=values.get("documents", ""),
+                    key_concepts=values.get("key_concepts", ""),
+                    dependencies=values.get("dependencies", ""),
+                    hours=values.get("hours", ""),
+                )
+            )
+        if steps:
+            return steps
+    return []
+
+
+def learning_plan_step_to_text(step: LearningPlanMarkdownStep) -> str:
+    parts = [step.title]
+    if step.key_concepts:
+        parts.append(f"Концепции: {step.key_concepts}")
+    if step.documents:
+        parts.append(f"Документы: {step.documents}")
+    if step.dependencies:
+        parts.append(f"Зависимости: {step.dependencies}")
+    if step.hours:
+        parts.append(f"Время: {step.hours} ч")
+    return ". ".join(parts)
+
+
+def _parse_learning_plan_hours(value: str) -> float | None:
+    match = re.search(r"\d+(?:[.,]\d+)?", value or "")
+    if not match:
+        return None
+    try:
+        return float(match.group(0).replace(",", "."))
+    except ValueError:
+        return None
+
+
+def learning_plan_table_hours_summary_from_markdown(plan_md: str) -> dict[str, Any] | None:
+    table_steps = learning_plan_table_steps_from_markdown(plan_md)
+    if not table_steps:
+        return None
+    total = 0.0
+    missing_or_invalid = 0
+    for step in table_steps:
+        hours = _parse_learning_plan_hours(step.hours)
+        if hours is None:
+            missing_or_invalid += 1
+            continue
+        total += hours
+    return {
+        "total_hours": round(total, 2),
+        "steps_count": len(table_steps),
+        "missing_or_invalid_hours": missing_or_invalid,
+    }
+
+
 def learning_plan_steps_from_markdown(plan_md: str) -> list[str]:
     """Split a markdown learning plan into coarse steps (numbered blocks or paragraphs)."""
     raw = (plan_md or "").strip()
     if not raw:
         return []
+    table_steps = learning_plan_table_steps_from_markdown(raw)
+    if table_steps:
+        return [learning_plan_step_to_text(step) for step in table_steps[:40]]
     lines = raw.splitlines()
     chunks: list[str] = []
     current: list[str] = []

@@ -82,5 +82,140 @@
       "## Следующий шаг"
     ],
     "requires_read_only": true
+  },
+  {
+    "id": "agent_study_session_state_machines",
+    "scenario_id": "study_session",
+    "question": "Собери учебную сессию по конечным автоматам и машинам состояний",
+    "required_tools_any_order": [
+      "learner.get_profile",
+      "rag.search"
+    ],
+    "optional_tools": [
+      "progress.get_mastery",
+      "quiz.generate",
+      "cards.propose"
+    ],
+    "required_sections": [
+      "## Диагностика",
+      "## Что изучать сейчас",
+      "## План на 10–20 минут",
+      "## Проверочные вопросы",
+      "## Карточки-кандидаты",
+      "## Следующие шаги"
+    ],
+    "requires_read_only": true
+  },
+  {
+    "id": "agent_study_session_mastery_high",
+    "scenario_id": "study_session",
+    "question": "Собери учебную сессию по продвинутым техникам RAG для человека с высоким mastery",
+    "required_tools_any_order": [
+      "learner.get_profile",
+      "rag.search",
+      "progress.get_mastery"
+    ],
+    "optional_tools": [
+      "quiz.generate",
+      "cards.propose"
+    ],
+    "required_sections": [
+      "## Диагностика",
+      "## Что изучать сейчас",
+      "## План на 10–20 минут",
+      "## Проверочные вопросы",
+      "## Карточки-кандидаты",
+      "## Следующие шаги"
+    ],
+    "requires_read_only": true
+  },
+  {
+    "id": "agent_study_session_weak_topic",
+    "scenario_id": "study_session",
+    "question": "Собери учебную сессию по малоизвестной теме про distributed tracing",
+    "required_tools_any_order": [
+      "learner.get_profile",
+      "rag.search"
+    ],
+    "optional_tools": [
+      "progress.get_mastery",
+      "quiz.generate"
+    ],
+    "required_sections": [
+      "## Диагностика",
+      "## Что изучать сейчас",
+      "## План на 10–20 минут",
+      "## Проверочные вопросы",
+      "## Следующие шаги"
+    ],
+    "expected_weak_data": true,
+    "requires_read_only": true
+  },
+  {
+    "id": "agent_study_session_with_quiz",
+    "scenario_id": "study_session",
+    "question": "Собери учебную сессию по основам Python с акцентом на проверку понимания",
+    "required_tools_any_order": [
+      "learner.get_profile",
+      "rag.search"
+    ],
+    "optional_tools": [
+      "progress.get_mastery",
+      "quiz.generate",
+      "cards.propose"
+    ],
+    "required_sections": [
+      "## Диагностика",
+      "## Что изучать сейчас",
+      "## План на 10–20 минут",
+      "## Проверочные вопросы",
+      "## Карточки-кандидаты",
+      "## Следующие шаги"
+    ],
+    "requires_read_only": true
+  },
+  {
+    "id": "agent_study_session_practical",
+    "scenario_id": "study_session",
+    "question": "Собери учебную сессию по написанию production-ready FastAPI приложения",
+    "required_tools_any_order": [
+      "learner.get_profile",
+      "rag.search"
+    ],
+    "optional_tools": [
+      "quiz.generate",
+      "cards.propose"
+    ],
+    "required_sections": [
+      "## Диагностика",
+      "## Что изучать сейчас",
+      "## План на 10–20 минут",
+      "## Проверочные вопросы",
+      "## Карточки-кандидаты",
+      "## Следующие шаги"
+    ],
+    "requires_read_only": true
+  },
+  {
+    "id": "agent_study_session_cards_focus",
+    "scenario_id": "study_session",
+    "question": "Собери учебную сессию по ключевым понятиям ChromaDB с созданием карточек",
+    "required_tools_any_order": [
+      "learner.get_profile",
+      "rag.search"
+    ],
+    "optional_tools": [
+      "progress.get_mastery",
+      "cards.propose"
+    ],
+    "required_sections": [
+      "## Диагностика",
+      "## Что изучать сейчас",
+      "## План на 10–20 минут",
+      "## Проверочные вопросы",
+      "## Карточки-кандидаты",
+      "## Следующие шаги"
+    ],
+    "requires_read_only": true
   }
 ]

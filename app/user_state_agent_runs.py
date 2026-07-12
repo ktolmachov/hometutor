@@ -60,7 +60,7 @@ def persist_agent_run(
     def _work(conn):
         conn.execute(
             """
-            INSERT INTO agent_runs(
+            INSERT OR REPLACE INTO agent_runs(
                 run_id, scenario_id, question, answer_status, stop_reason,
                 state, tool_calls_json, summary_json, created_at, completed_at
             )
@@ -79,6 +79,7 @@ def persist_agent_run(
                 now,
             ),
         )
+        conn.execute("DELETE FROM agent_steps WHERE run_id = ?", (run_id,))
         for step in result.steps:
             conn.execute(
                 """

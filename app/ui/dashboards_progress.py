@@ -207,6 +207,24 @@ def _render_learning_progress_tab() -> None:
     qs = load_quiz_ui_stats()
     try:
         from app.user_state import get_flashcard_progress_stats
+    except Exception:
+        pass
+
+    # C1: Student-facing agent runs history (compact, after A2 router)
+    try:
+        runs = _fetch_json("GET", "/agent/runs?limit=5") or []
+        if runs:
+            with st.expander("🤖 Что агент собирал для вас", expanded=False):
+                st.caption("Последние учебные сессии, собранные агентом (только чтение).")
+                for r in runs[:5]:
+                    rid = str(r.get("run_id", ""))[:8]
+                    q = str(r.get("question") or "")[:80]
+                    status = r.get("answer_status") or r.get("stop_reason") or ""
+                    st.markdown(f"- **{q}** · `{status}` · run `{rid}`")
+                st.caption("Полная история и детали — через API /agent/runs (для команды).")
+    except Exception:
+        pass  # best effort, don't break progress tab
+
 
         _fc_prog = get_flashcard_progress_stats()
     except Exception as _exc:  # noqa: BLE001 - robust visualization fallback if flashcards database lock occurs

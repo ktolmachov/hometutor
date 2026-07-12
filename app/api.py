@@ -34,6 +34,7 @@ from app.routers.quiz import router as quiz_router
 from app.routers.review import router as review_router
 from app.routers.sync import router as sync_router
 from app.routers.sessions import router as sessions_router
+from app.routers.agent import router as agent_router
 from app.retrieval_cache import EmptyIndexError, ReindexInProgressError
 
 
@@ -292,6 +293,7 @@ app.include_router(living_konspekt_router, dependencies=_protected_dependencies)
 app.include_router(feedback_router, dependencies=_protected_dependencies)
 app.include_router(files_router, dependencies=_protected_dependencies)
 app.include_router(admin_router, dependencies=_protected_dependencies)
+app.include_router(agent_router, dependencies=_protected_dependencies)
 
 
 @app.exception_handler(RequestValidationError)

@@ -1,6 +1,6 @@
 ﻿# hometutor Project Rules for Claude
 
-**Last updated:** 2026-07-05
+**Last updated:** 2026-07-12
 **Status:** Active — apply to all Claude Code sessions in this project
 
 ---
@@ -62,10 +62,10 @@ grep suffices.**
 
 ### 2. Known Large Areas
 
-- `app/` has 200+ modules (see `docs/architecture.md` for the module map); don't glob-read
+- `app/` has ~400 py modules (see `docs/architecture.md` for the module map); don't glob-read
   the whole package — target the specific module(s) named in the task.
-- `app/ui/` has 100+ Streamlit view modules; same rule applies.
-- `tests/` currently has ~40 files; there is no single "core" test suite file — tests are
+- `app/ui/` has ~120 Streamlit view modules; same rule applies.
+- `tests/` currently has ~90 files; there is no single "core" test suite file — tests are
   named after the feature area (e.g. `test_auth.py`, `test_flashcards_scheduling.py`).
 
 ### 3. Retry Policy

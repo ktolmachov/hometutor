@@ -298,11 +298,15 @@ DoD: `query_mode="agent"` отвечает на 10 технических сце
   `requires=("agent_enabled",)` в `feature_registry.py`, плитка «Агент» на
   Mission Control и view «Собрать учебную сессию» с текстовым вводом и
   `POST /ask` + `query_mode:"agent"`.
-- Evals — **частично**: golden-набор существует
-  (`eval_data/agent_scenarios_golden_v1.json`, покрыт
-  `tests/agent/test_agent_golden_cases.py`), но на дату аудита содержит 2
-  study_session-кейса, а не целевые 8–10; checks: есть источники, quiz
-  соответствует теме, карточки не сохраняются, stop_reason корректен.
+- Read API (A2) — **реализовано**: `app/routers/agent.py` с `GET /agent/runs` и
+  `GET /agent/runs/{run_id}`, зарегистрирован как защищённый эндпоинт.
+  Данные из `user_state_agent_runs` (санитайзинг на уровне хранения).
+- Evals — **реализовано**: golden-набор расширен до 8 `study_session` кейсов
+  (всего 10 кейсов), покрыт `tests/agent/test_agent_golden_cases.py`.
+  Проверки: источники, quiz, карточки (draft), stop_reason.
+- A1 Polish — **реализовано**: префилл текущей темы/курса из Mission Control в view агента.
+- B2 (save cards) — **подготовлено**: парсинг «## Карточки-кандидаты» + кнопки «Сохранить» с использованием add_flashcard + create_deck.
+- C1 (student history) — **подготовлено**: компактная секция «Что агент собирал для вас» в dashboards_progress.py (использует /agent/runs).
 
 DoD: пользователь получает цельную read-only сессию за один запуск; ни один
 candidate не сохраняется без явного будущего HITL. Non-goals: автосохранение
@@ -378,12 +382,11 @@ DoD: агент даёт полезный план улучшения консп
   usage/cost на шаг (`stage=agent_step_{n}`).
 - Метрики: `stops_by_reason`, `tool_error_rate`, `cost_per_run`, `steps_per_run`
   в metrics_storage; SLO-хук.
-- Future `app/routers/agent.py`: `GET /agent/runs/{run_id}` (реконструкция
-  траектории из `agent_runs`/`agent_steps` — это источник агентного trace,
-  отдельно от старого `debug.pipeline_trace`).
-- Persisted run хранит `scenario_id` (`generic`, `study_session`,
-  `graph_gap_finder`, `living_konspekt_coach`) и summary output-контракта,
-  чтобы сценарные evals можно было связывать с реальными прод-прогонами.
+- Read-only роутер `app/routers/agent.py` — **реализовано** (A2): `GET /agent/runs`
+  и `GET /agent/runs/{run_id}`. Persisted run хранит `scenario_id` (`generic`,
+  `study_session`, `graph_gap_finder`, `living_konspekt_coach`) и summary
+  output-контракта, чтобы сценарные evals можно было связывать с реальными
+  прод-прогонами. Полная observability (run_id в traces, метрики) — в разработке.
 - **Recovery-resume** (после сбоя процесса) — внутренний, в `state.py`: по
   последнему persisted шагу. Это НЕ HITL-approval resume (тот — Wave 5).
 - Doc sync: `docs/api_reference.md`, `docs/architecture.md`.

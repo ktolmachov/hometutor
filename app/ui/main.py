@@ -399,6 +399,20 @@ elif selected_view == "Собрать учебную сессию":
             "поиск по базе знаний, граф понятий, конспект или quiz. "
             "Введите вопрос или тему для учебной сессии."
         )
+
+        # A1 Polish: prefill from current_topic or active course scope (from Mission Control click)
+        current_topic = str(st.session_state.get("current_topic") or "").strip()
+        if not current_topic:
+            try:
+                from app.ui.study_scope import get_active_scope
+                sc = get_active_scope()
+                if sc:
+                    current_topic = str(sc.get("title") or sc.get("folder_rel") or "").strip()
+            except Exception:
+                pass
+        if current_topic and "agent_session_input" not in st.session_state:
+            st.session_state["agent_session_input"] = current_topic
+
         agent_q = st.text_input(
             "Ваш вопрос или тема",
             key="agent_session_input",
@@ -459,6 +473,56 @@ elif selected_view == "Собрать учебную сессию":
                                     f"🛠 {t.get('tool', '?')} — "
                                     f"{str(t.get('status') or t.get('result') or '')[ :120]}"
                                 )
+
+            # B2 (prepared): buttons to save card candidates from the agent draft answer.
+            # Parses the "## Карточки-кандидаты" section and offers one-click save via the existing flashcards deck API.
+            # Cards are saved as drafts (front/back based on the candidate text).
+            ans = st.session_state.get("last_answer", {}) or {}
+            answer_text = ans.get("answer", "") or ""
+            if "## Карточки-кандидаты" in answer_text:
+                st.markdown("---")
+                st.markdown("#### 💾 Карточки-кандидаты (сохранить)")
+                try:
+                    from app.ui_client import fetch_json as _save_fetch
+                    section = answer_text.split("## Карточки-кандидаты", 1)[1]
+                    if "## " in section:
+                        section = section.split("## ", 1)[0]
+                    cands = []
+                    for ln in section.splitlines():
+                        ln = ln.strip()
+                        if ln.startswith(("-", "*")):
+                            c = ln.lstrip("-* ").strip()
+                            if c and len(c) > 3:
+                                cands.append(c)
+                    for idx, cand in enumerate(cands[:5]):
+                        c1, c2 = st.columns([5, 2])
+                        with c1:
+                            st.caption(cand)
+                        with c2:
+                            if st.button("Сохранить", key=f"agent_save_card_{idx}"):
+                                try:
+                                    from app.user_state_flashcards import (
+                                        add_flashcard,
+                                        create_flashcard_deck,
+                                    )
+                                    deck_name = f"Агентские черновики — { (st.session_state.get('agent_session_input') or 'сессия')[:40] }"
+                                    deck_id = create_flashcard_deck(deck_name, source_type="agent")
+                                    add_flashcard(
+                                        deck_id,
+                                        cand,
+                                        f"{cand} (сгенерировано агентом в сессии)",
+                                    )
+                                    st.toast(f"Сохранено: {cand[:50]}", icon="✅")
+                                    # invalidate cache if exists
+                                    try:
+                                        from app.ui.flashcards_read_cache import invalidate_flashcards_read_cache
+                                        invalidate_flashcards_read_cache()
+                                    except Exception:
+                                        pass
+                                except Exception as exc:
+                                    st.error(f"Не удалось сохранить карточку: {exc}")
+                except Exception:
+                    pass
 else:
     _fragment_print_view()
 

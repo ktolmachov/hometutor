@@ -17,7 +17,7 @@ jobs:
 
       # HF отклоняет push сырых бинарных блобов (включая старые PNG/GIF в истории),
       # поэтому пушим НЕ историю main, а один snapshot-коммит её дерева:
-      #  - docs/screenshots/ исключается (нужны только на GitHub, не в Space);
+      #  - doc/screenshots/ и docs/screenshots/ исключаются (нужны только на GitHub, не в Space);
       #  - demo_chroma_db/ уходит LFS-указателями (см. .gitattributes),
       #    объекты загружаются отдельным `git lfs push`.
       - name: Push snapshot to Hugging Face Space
@@ -37,6 +37,7 @@ jobs:
           git remote add space "https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co/spaces/${HF_USERNAME}/${HF_SPACE}"
           export GIT_INDEX_FILE=.git/space-index
           git read-tree 'HEAD^{tree}'
+          git rm -r --cached --quiet doc/screenshots || true
           git rm -r --cached --quiet docs/screenshots || true
           TREE=$(git write-tree)
           unset GIT_INDEX_FILE

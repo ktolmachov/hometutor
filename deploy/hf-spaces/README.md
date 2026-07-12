@@ -103,7 +103,7 @@ git commit -m "chore: pre-build demo database index"
 
 > ⚠️ **Не делайте `git push space main`** — HF отклоняет push сырых бинарных блобов,
 > а история `main` содержит PNG/GIF скриншотов. В Space пушится **один snapshot-коммит**
-> дерева `main` без `docs/screenshots/`; `demo_chroma_db/` уходит LFS-указателями
+> дерева `main` без `doc/screenshots/` и `docs/screenshots/`; `demo_chroma_db/` уходит LFS-указателями
 > (правила в `.gitattributes`), их объекты заливаются `git lfs push`.
 
 Требуется установленный [git-lfs](https://git-lfs.com/) (входит в Git for Windows;
@@ -122,7 +122,7 @@ git remote add space https://huggingface.co/spaces/ВАШ_ЛОГИН_HF/hometuto
 try {
     $env:GIT_INDEX_FILE = ".git/space-index"
     git read-tree 'main^{tree}'
-    git rm -r --cached --quiet docs/screenshots
+    git rm -r --cached --quiet --ignore-unmatch doc/screenshots docs/screenshots
     $tree = git write-tree
 } finally {
     Remove-Item Env:GIT_INDEX_FILE -ErrorAction SilentlyContinue

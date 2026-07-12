@@ -12,7 +12,7 @@
 | Demo/pitch | [quickstart_demo.md](quickstart_demo.md) -> [user_guide.md](user_guide.md) |
 | Backend/API | [api_reference.md](api_reference.md) -> [technical_specification.md](technical_specification.md) |
 | Архитектор | [architecture.md](architecture.md) -> [conventions_architecture.md](conventions_architecture.md) |
-| Разработчик | [conventions.md](conventions.md) -> [conventions_reference.md](conventions_reference.md) |
+| Разработчик | [conventions.md](conventions.md) -> [evolutionary_development.md](evolutionary_development.md) -> [conventions_reference.md](conventions_reference.md) |
 | DevOps | [quickstart.md](quickstart.md) -> [../DOCKER_BUILD.md](../DOCKER_BUILD.md) -> [../deploy/hf-spaces/README.md](../deploy/hf-spaces/README.md) |
 
 ## Документы
@@ -27,6 +27,7 @@
 | [diagrams.md](diagrams.md) | автогенерируемые диаграммы (API, слои, ER, фичи UI) — обновлять `scripts/generate_diagrams.py` |
 | [technical_specification.md](technical_specification.md) | техническая спецификация runtime-системы |
 | [conventions.md](conventions.md) | короткие инженерные правила |
+| [evolutionary_development.md](evolutionary_development.md) | инженерный стиль маленьких проверяемых волн и критерии завершения |
 | [conventions_architecture.md](conventions_architecture.md) | архитектурные соглашения по слоям |
 | [conventions_reference.md](conventions_reference.md) | справочник по API, ошибкам, тестам и документации |
 | [AI_DEVELOPMENT.md](AI_DEVELOPMENT.md) | как ИИ использовался на этапах планирования/дизайна/разработки/деплоя, примеры промптов |

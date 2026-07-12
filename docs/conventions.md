@@ -3,6 +3,8 @@
 Актуализировано: 2026-06-24.
 
 Роль документа: короткий live-набор правил для runtime-репозитория `hometutor`. Подробности вынесены в [conventions_architecture.md](conventions_architecture.md) и [conventions_reference.md](conventions_reference.md).
+Инженерный стиль маленьких проверяемых волн описан отдельно:
+[evolutionary_development.md](evolutionary_development.md).
 
 ## TL;DR
 
@@ -38,5 +40,6 @@
 |---|---|
 | архитектурные границы, config, persistence, retrieval | [conventions_architecture.md](conventions_architecture.md) |
 | prompts, API, errors, testing, docs | [conventions_reference.md](conventions_reference.md) |
+| эволюционный подход, волны, критерии завершения | [evolutionary_development.md](evolutionary_development.md) |
 | runtime architecture | [architecture.md](architecture.md) |
 | HTTP API | [api_reference.md](api_reference.md) |

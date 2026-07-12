@@ -64,14 +64,16 @@
 | `ENABLE_METADATA_ENRICHMENT` | `false` | Отключить фоновое обогащение (экономия токенов) |
 | `ENABLE_DOCUMENT_SUMMARIES` | `false` | Отключить облачные суммаризации |
 | `ENABLE_RERANKER` | `false` | Отключить тяжёлый локальный reranker |
+| `TUTOR_INLINE_QUIZ_SEPARATE_LLM_CALL` | `false` | Не делать отдельный LLM-вызов для inline quiz после каждого ответа тьютора в HF demo |
+| `ENABLE_TUTOR_AUTO_QUIZ_LOOP` | `false` | Не генерировать server-side micro-quiz автоматически после каждого tutor-turn в HF demo |
 | `AUTH_ENABLED` | `true` | Включить логин/регистрацию (Workstream A) |
 | `JWT_SECRET` | `<сильный случайный секрет>` | Подпись JWT — обязательно своё значение, не дефолт из `config.env` |
 | `YANDEX_METRIKA_ID` | `<id счётчика>` | Опционально — аналитика посещений (Workstream E) |
 | `CORS_ORIGINS` | `https://<username>-hometutor.hf.space` | Добавить домен Space, если открываете API напрямую |
 
 `deploy/docker/docker_entrypoint.sh` выставляет HF-safe defaults для `HOME_RAG_*`,
-`OFFLINE_PROBE_LLM_ENDPOINT`, `LLM_LOCAL_WARMUP`, `QUIZ_*`, `GRAPH_*`, `SSR_*` и
-`EMBED_API_BASE`, когда контейнер запущен в Hugging Face Space (`SPACE_ID` или
+`OFFLINE_PROBE_LLM_ENDPOINT`, `LLM_LOCAL_WARMUP`, tutor quiz latency-флаги,
+`QUIZ_*`, `GRAPH_*`, `SSR_*` и `EMBED_API_BASE`, когда контейнер запущен в Hugging Face Space (`SPACE_ID` или
 `SPACE_HOST` присутствует). Если в контейнере есть writable `/data`, entrypoint также
 направляет runtime-состояние в `/data/hometutor`: там окажутся `data/auth.db`,
 `data/users/<id>/user_state.db`, `chroma_db/` и `logs/`. Явно заданные Space

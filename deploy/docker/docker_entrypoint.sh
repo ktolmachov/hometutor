@@ -21,6 +21,8 @@ if [[ -n "${SPACE_ID:-}" || -n "${SPACE_HOST:-}" ]]; then
   export HOME_RAG_LLM_FALLBACK_ENABLED="${HOME_RAG_LLM_FALLBACK_ENABLED:-true}"
   export OFFLINE_PROBE_LLM_ENDPOINT="${OFFLINE_PROBE_LLM_ENDPOINT:-false}"
   export LLM_LOCAL_WARMUP="${LLM_LOCAL_WARMUP:-false}"
+  export TUTOR_INLINE_QUIZ_SEPARATE_LLM_CALL="${TUTOR_INLINE_QUIZ_SEPARATE_LLM_CALL:-false}"
+  export ENABLE_TUTOR_AUTO_QUIZ_LOOP="${ENABLE_TUTOR_AUTO_QUIZ_LOOP:-false}"
 
   export OPENAI_API_BASE="${OPENAI_API_BASE:-https://openrouter.ai/api/v1}"
   export LLM_MODEL="${LLM_MODEL:-openai/gpt-4o-mini}"

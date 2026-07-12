@@ -69,6 +69,7 @@ class SavedArtifact:
         return self.has_manifest and bool(self.artifact_id)
 
 
+import ntpath
 import os
 
 
@@ -87,6 +88,16 @@ def _rewrite_image_paths_for_artifact(text: str, doc_dir: Path) -> str:
 
         if path_str.startswith(("http://", "https://", "data:")):
             return match.group(0)
+
+        doc_dir_raw = str(doc_dir).replace("\\", "/")
+        if re.match(r"^[A-Za-z]:/", doc_dir_raw):
+            img_path = ntpath.normpath(ntpath.join(doc_dir_raw, path_str.replace("\\", "/")))
+            doc_parts = doc_dir_raw.split("/")
+            data_idx = next((i for i, part in enumerate(doc_parts) if part.lower() == "data"), len(doc_parts) - 1)
+            artifacts_win = ntpath.normpath("/".join([*doc_parts[: data_idx + 1], ARTIFACTS_DIR_NAME]))
+            rel_path = ntpath.relpath(img_path, artifacts_win)
+            rel_path_posix = rel_path.replace("\\", "/")
+            return f"![{alt}]({rel_path_posix})"
 
         img_path = (doc_dir / path_str).resolve()
         try:

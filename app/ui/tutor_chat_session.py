@@ -372,8 +372,8 @@ def _handle_completed_tutor_result(
         if unified_ok:
             st.session_state["tutor_e11_five_min_unified_msg_idx"] = idx_u
         else:
-            st.session_state["tutor_micro_quiz_e11_loop"] = True
-            st.session_state["tutor_micro_quiz_start"] = {"sid": session_id, "msg_idx": idx_u}
+            st.session_state.pop("tutor_micro_quiz_e11_loop", None)
+            st.session_state.pop("tutor_micro_quiz_start", None)
 
 
 def _process_tutor_reply(question: str | None, session_id: str, graph_summary: str) -> None:

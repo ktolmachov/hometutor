@@ -136,9 +136,13 @@ def _llm_client_kwargs_local_primary(settings) -> dict:
     # async_http_client: LlamaIndex QueryEngine uses async calls internally; without this
     # the sync http_client is silently ignored and LlamaIndex falls back to the openai SDK
     # default (60 s), bypassing HOME_RAG_LLM_LOCAL_HARD_TIMEOUT_SEC configuration.
+    # timeout: explicitly passed to override llama-index OpenAI default (60 s), otherwise
+    # the SDK ignores the httpx client's timeout when timeout is passed as "given".
     _timeout = _llm_http_timeout_local_primary(settings)
+    read_cap = _primary_local_read_cap_sec(settings)
     return {
         "max_retries": 0,
+        "timeout": read_cap,
         "http_client": httpx.Client(timeout=_timeout),
         "async_http_client": httpx.AsyncClient(timeout=_timeout),
     }
@@ -258,9 +262,15 @@ def _embed_api_base(settings) -> str:
 
 
 def _llm_client_kwargs(settings) -> dict:
-    """OpenAI-совместимый клиент: retries SDK + явные connect/read таймауты (18 Core)."""
+    """OpenAI-совместимый клиент: retries SDK + явные connect/read таймауты (18 Core).
+    
+    timeout передаётся явно, чтобы переопределить дефолт llama-index OpenAI (60 с),
+    который иначе игнорирует таймаут из http_client.
+    """
+    timeout_sec = float(getattr(settings, "llm_request_timeout", 30))
     return {
         "max_retries": getattr(settings, "llm_max_retries", 2),
+        "timeout": timeout_sec,
         "http_client": httpx.Client(timeout=_llm_http_timeout(settings)),
     }
 
@@ -291,6 +301,12 @@ def _lmstudio_api_base(settings) -> str:
     raw = lm or llm
     return normalize_openai_compatible_api_base(raw)
 
+
+def _primary_chat_api_base_for_profile(settings) -> str:
+    profile = str(getattr(settings, "home_rag_local_profile", "balanced") or "balanced").strip().lower()
+    if profile == "cloud_fast":
+        return normalize_openai_compatible_api_base(getattr(settings, "openai_api_base", "") or "")
+    return _lmstudio_api_base(settings)
 
 
 # is_cloud_model is imported from app.config (single source of truth)
@@ -534,7 +550,7 @@ def ssr_llm_shares_main_api_base(settings=None) -> bool:
     s = settings or get_settings()
     raw = (getattr(s, "ssr_llm_api_base", None) or "").strip()
     ssr_base = normalize_openai_compatible_api_base(raw or _lmstudio_api_base(s))
-    main_base = normalize_openai_compatible_api_base(_lmstudio_api_base(s))
+    main_base = normalize_openai_compatible_api_base(_primary_chat_api_base_for_profile(s))
     return bool(ssr_base) and bool(main_base) and ssr_base.rstrip("/") == main_base.rstrip("/")
 
 
@@ -547,7 +563,7 @@ def get_healthcheck_llm(*, timeout_sec: float = 2.0):
     return OpenAI(
         model=s.llm_model,
         api_key=s.openai_api_key,
-        api_base=_lmstudio_api_base(s),
+        api_base=_primary_chat_api_base_for_profile(s),
         max_retries=0,
         timeout=timeout,
         reuse_client=False,

@@ -44,7 +44,17 @@
 |---|---|---|
 | `OPENAI_API_KEY` | `sk-or-v1-abc...` | API-ключ OpenRouter/OpenAI-совместимого провайдера |
 | `OPENAI_API_BASE` | `https://openrouter.ai/api/v1` | URL провайдера |
+| `HOME_RAG_DATA_MODE` | `demo` | Демо-режим данных; для HF выставляется автоматически, если переменная не задана |
+| `HOME_RAG_LOCAL_PROFILE` | `cloud_fast` | Primary chat идёт сразу в облачный OpenAI-compatible endpoint |
+| `OFFLINE_PROBE_LLM_ENDPOINT` | `false` | Не проверять loopback LM Studio/llama.cpp внутри Space |
+| `LLM_LOCAL_WARMUP` | `false` | Не запускать startup-probe локального SSR endpoint |
 | `LLM_MODEL` | `mistralai/mistral-7b-instruct:free` | Модель тьютора/объяснений |
+| `QUIZ_LLM_MODEL` | `mistralai/mistral-7b-instruct:free` | Модель генерации квизов; по умолчанию в HF берётся из `LLM_MODEL` |
+| `GRAPH_LLM_API_BASE` | `https://openrouter.ai/api/v1` | Endpoint для graph/concept LLM; по умолчанию в HF берётся из `OPENAI_API_BASE` |
+| `GRAPH_MODEL` | `mistralai/mistral-7b-instruct:free` | Graph/concept модель; по умолчанию в HF берётся из `LLM_MODEL` |
+| `SSR_LLM_API_BASE` | `https://openrouter.ai/api/v1` | Endpoint Smart Study Router; по умолчанию в HF берётся из `OPENAI_API_BASE` |
+| `SSR_LLM_MODEL` | `mistralai/mistral-7b-instruct:free` | SSR-модель; по умолчанию в HF берётся из `LLM_MODEL` |
+| `EMBED_API_BASE` | `https://openrouter.ai/api/v1` | Endpoint embeddings; должен соответствовать `EMBED_MODEL` |
 | `EMBED_MODEL` | `perplexity/pplx-embed-v1-0.6b` | Модель эмбеддингов (должна совпадать с использованной при сборке `demo_chroma_db/`) |
 | `EMBED_DIMENSIONS` | `1024` | Размерность векторов |
 | `ENABLE_METADATA_ENRICHMENT` | `false` | Отключить фоновое обогащение (экономия токенов) |
@@ -54,6 +64,11 @@
 | `JWT_SECRET` | `<сильный случайный секрет>` | Подпись JWT — обязательно своё значение, не дефолт из `config.env` |
 | `YANDEX_METRIKA_ID` | `<id счётчика>` | Опционально — аналитика посещений (Workstream E) |
 | `CORS_ORIGINS` | `https://<username>-hometutor.hf.space` | Добавить домен Space, если открываете API напрямую |
+
+`deploy/docker/docker_entrypoint.sh` выставляет HF-safe defaults для `HOME_RAG_*`,
+`OFFLINE_PROBE_LLM_ENDPOINT`, `LLM_LOCAL_WARMUP`, `QUIZ_*`, `GRAPH_*`, `SSR_*` и
+`EMBED_API_BASE`, когда контейнер запущен в Hugging Face Space (`SPACE_ID` или
+`SPACE_HOST` присутствует). Явно заданные Space Variables/Secrets имеют приоритет.
 
 ---
 

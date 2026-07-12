@@ -46,7 +46,7 @@ hometutor превращает папку с учебными материала
 Публичное демо разворачивается на Hugging Face Spaces (Docker SDK, см.
 [deploy/hf-spaces/README.md](deploy/hf-spaces/README.md)):
 
-> 🔗 **Демо-ссылка:** `https://huggingface.co/spaces/kt20251/hometutor`
+> 🔗 **Демо-ссылка:** `https://huggingface.co/spaces/kt20252/hometutor`
 > (заполняется после первого деплоя — см. инструкцию по ссылке выше).
 > Демо работает на эфемерном диске контейнера: учётные записи и прогресс не персистентны
 > между перезапусками Space — это ограничение бесплатного тарифа, не баг.

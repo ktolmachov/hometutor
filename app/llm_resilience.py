@@ -6,7 +6,9 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import logging
+from functools import partial
 from typing import Any
 from urllib.parse import urlparse
 
@@ -15,6 +17,13 @@ from app.logging_config import log_event
 from app.metrics import record_error
 
 logger = logging.getLogger(__name__)
+
+# Thread pool for soft-timeout enforcement on local LLM calls.
+# Orphaned threads are bounded by the httpx hard timeout on the underlying client.
+_LLM_POOL = concurrent.futures.ThreadPoolExecutor(
+    max_workers=4,
+    thread_name_prefix="llm_resilience_",
+)
 
 # Error class names (lowercased) that indicate the endpoint is unreachable rather
 # than a model/generation error. On these errors we try the cross-base fallback
@@ -115,6 +124,27 @@ def _is_connection_error(exc: Exception) -> bool:
     return type(exc).__name__.lower() in _CONNECTION_ERROR_NAMES
 
 
+def _local_soft_timeout_sec(settings) -> float | None:
+    val = getattr(settings, "home_rag_llm_local_soft_timeout_sec", None)
+    try:
+        return max(0.0, float(val)) if val is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _run_with_timeout(fn, timeout_sec: float, stage: str, base_url: str = "") -> Any:
+    future = _LLM_POOL.submit(fn)
+    try:
+        return future.result(timeout=timeout_sec)
+    except concurrent.futures.TimeoutError:
+        logger.warning("llm_call_soft_timeout stage=%s timeout=%.1fs", stage, timeout_sec)
+        if base_url:
+            _record_circuit_failure(base_url, TimeoutError("soft_timeout"))
+        raise TimeoutError(
+            f"LLM call soft timeout after {timeout_sec}s (stage={stage})"
+        )
+
+
 def complete_with_resilience(
     llm: Any,
     prompt: str,
@@ -145,7 +175,19 @@ def complete_with_resilience(
             kwargs=dict(kwargs),
         )
     try:
-        result = llm.complete(prompt, **kwargs)
+        if _is_local_llm_base(base_url):
+            soft = _local_soft_timeout_sec(settings)
+            if soft and soft > 0:
+                result = _run_with_timeout(
+                    partial(llm.complete, prompt, **kwargs),
+                    soft,
+                    stage,
+                    base_url=base_url,
+                )
+            else:
+                result = llm.complete(prompt, **kwargs)
+        else:
+            result = llm.complete(prompt, **kwargs)
         _record_circuit_success(base_url)
         return result
     except Exception as e:  # noqa: BLE001 - provider failures are recorded before deterministic fallback.
@@ -237,7 +279,19 @@ def chat_with_resilience(
             kwargs=dict(kwargs),
         )
     try:
-        result = llm.chat(messages, **kwargs)
+        if _is_local_llm_base(base_url):
+            soft = _local_soft_timeout_sec(settings)
+            if soft and soft > 0:
+                result = _run_with_timeout(
+                    partial(llm.chat, messages, **kwargs),
+                    soft,
+                    stage,
+                    base_url=base_url,
+                )
+            else:
+                result = llm.chat(messages, **kwargs)
+        else:
+            result = llm.chat(messages, **kwargs)
         _record_circuit_success(base_url)
         return result
     except Exception as e:  # noqa: BLE001 - provider failures are recorded before re-raise/fallback.

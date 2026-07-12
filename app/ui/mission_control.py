@@ -1058,7 +1058,10 @@ def render_mission_control(index_stats: dict | None = None) -> None:
     due_count = _flashcards_due_count()
     cold = _is_cold_user(due_count, index_stats)
     if cold:
-        # Cold user: focused 3-tile view; secondary CTAs lead, then tiles + settings.
+        # Cold user: SSR banner provides first recommendation, then focused
+        # 3-tile view + settings. The SSR hero CTA gives a clear next action
+        # instead of leaving the user guessing.
+        _render_ssr_banner(rec, index_stats=index_stats)
         _render_home_secondary_surfaces(index_stats)
         _render_tile_grid(rec=rec, due_count=due_count, cold_user=True)
         _render_configure_ui_button()

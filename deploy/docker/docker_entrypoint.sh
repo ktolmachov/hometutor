@@ -19,6 +19,24 @@ if [[ -f "deploy/hf-spaces/bootstrap_demo_paths.sh" ]]; then
   bash "deploy/hf-spaces/bootstrap_demo_paths.sh" || true
 fi
 
+if [[ -n "${SPACE_ID:-}" || -n "${SPACE_HOST:-}" ]]; then
+  export HOME_RAG_DATA_MODE="${HOME_RAG_DATA_MODE:-demo}"
+  export HOME_RAG_LOCAL_PROFILE="${HOME_RAG_LOCAL_PROFILE:-cloud_fast}"
+  export HOME_RAG_LLM_CLOUD_CONSENT="${HOME_RAG_LLM_CLOUD_CONSENT:-true}"
+  export HOME_RAG_LLM_FALLBACK_ENABLED="${HOME_RAG_LLM_FALLBACK_ENABLED:-true}"
+  export OFFLINE_PROBE_LLM_ENDPOINT="${OFFLINE_PROBE_LLM_ENDPOINT:-false}"
+  export LLM_LOCAL_WARMUP="${LLM_LOCAL_WARMUP:-false}"
+
+  export OPENAI_API_BASE="${OPENAI_API_BASE:-https://openrouter.ai/api/v1}"
+  export LLM_MODEL="${LLM_MODEL:-mistralai/mistral-7b-instruct:free}"
+  export QUIZ_LLM_MODEL="${QUIZ_LLM_MODEL:-${LLM_MODEL}}"
+  export GRAPH_LLM_API_BASE="${GRAPH_LLM_API_BASE:-${OPENAI_API_BASE}}"
+  export GRAPH_MODEL="${GRAPH_MODEL:-${LLM_MODEL}}"
+  export SSR_LLM_API_BASE="${SSR_LLM_API_BASE:-${OPENAI_API_BASE}}"
+  export SSR_LLM_MODEL="${SSR_LLM_MODEL:-${LLM_MODEL}}"
+  export EMBED_API_BASE="${EMBED_API_BASE:-${OPENAI_API_BASE}}"
+fi
+
 uvicorn app.api:app --host 0.0.0.0 --port 8000 &
 UVICORN_PID=$!
 

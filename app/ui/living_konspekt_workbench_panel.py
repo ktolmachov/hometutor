@@ -403,7 +403,13 @@ def render_collected_sections(
         with st.container(border=True):
             cols = st.columns([5, 1, 1, 1])
             with cols[0]:
-                st.markdown(f"**{heading_text or '—'}**")
+                badges = []
+                if row.get("read_at"):
+                    badges.append("✅")
+                if str(row.get("note") or "").strip():
+                    badges.append("📝")
+                badge_str = " " + " ".join(badges) if badges else ""
+                st.markdown(f"**{heading_text or '—'}**{badge_str}")
                 st.caption(f"{_row_konspekt_label(row)} · строки {line_start}-{row.get('line_end')}")
                 if (md_abs, heading_text) in duplicate_keys or _heading_ambiguous(md_abs, heading_text):
                     st.caption("⚠️ Заголовок повторяется в документе — VS Code точнее для повторяющихся заголовков.")

@@ -35,7 +35,7 @@ def test_tile_rows_keep_all_tiles() -> None:
     flattened = tuple(tile for row in rows for tile in row)
 
     assert flattened == tiles
-    assert [len(row) for row in rows] == [4, 3]
+    assert [len(row) for row in rows] == [4, 4]
 
 
 def test_has_indexed_materials_recognises_each_shape() -> None:

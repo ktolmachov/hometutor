@@ -89,6 +89,15 @@ FEATURES: Final[tuple[FeatureSpec, ...]] = (
         "panel",
         group_ru="Панели",
     ),
+    FeatureSpec(
+        "view:agent_session",
+        "Собрать учебную сессию (агент)",
+        3,
+        "nav",
+        "Собрать учебную сессию",
+        requires=("agent_enabled",),
+        fallback_hint_ru="Включите AGENT_ENABLED в .env для доступа к агентному режиму.",
+    ),
 )
 
 TILE_FEATURE_IDS: Final[dict[str, str]] = {
@@ -99,6 +108,7 @@ TILE_FEATURE_IDS: Final[dict[str, str]] = {
     "topics": "view:topics",
     "course": "view:course",
     "adaptive_plan": "view:adaptive_plan",
+    "agent_session": "view:agent_session",
 }
 
 VIEW_FEATURE_IDS: Final[dict[str, str]] = {

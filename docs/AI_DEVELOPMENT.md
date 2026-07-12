@@ -52,6 +52,10 @@ backlog, user stories, сценарные манифесты — ведётся 
 | 4 | «Добавь тесты на регистрацию/логин/401/409/422 и на изоляцию state между пользователями» | `tests/test_auth.py` — 11 тестов (happy path, неверный пароль → 401, дубликат email → 409, слабый пароль/email → 422, просроченный/битый JWT → 401, изоляция state между двумя пользователями, регресс при `AUTH_ENABLED=false`). |
 | 5 | «Подготовь CI: линт + тесты, без падения на существующем коде» | `.github/workflows/ci.yml` + стартовая конфигурация `[tool.ruff]` в `pyproject.toml` — выявлено 575 существующих предупреждений (`F401/F403/F405` от намеренных `import *`, `E402` от намеренного `sys.path.insert`, `E501` от длинных RU-комментариев); ИИ принял решение не рефакторить весь репозиторий ради линтера, а явно задокументировать и проигнорировать эти категории, оставив проверку значимой для нового кода. |
 | 6 | «Инъекция Яндекс.Метрики без поломки локалки» | `app/ui/analytics.py` — идемпотентный патч `index.html` Streamlit по маркеру-комментарию, no-op без `YANDEX_METRIKA_ID`, с тестами (`tests/test_yandex_metrika.py`) на фейковом `streamlit`-модуле, без касания реального пакета. |
+| 7 | «Таймауты LLM не работают — llama-index переопределяет 60s» | `app/provider.py`: `_llm_client_kwargs_local_primary` и `_llm_client_kwargs` теперь передают `timeout` явно в конструктор `OpenAI()`. Раньше httpx.Client имел корректный таймаут (30s), но llama-index передавал свой дефолт (60s) в OpenAI SDK, который игнорировал http_client. + `app/llm_resilience.py`: soft timeout 15s через ThreadPoolExecutor для локальных LLM. |
+| 8 | «Создай UI-дверь для агента (сейчас только через raw HTTP)» | `app/ui/feature_registry.py`, `app/ui/constants.py`, `app/ui/mission_control.py`, `app/ui/main.py` — FeatureSpec с `requires=("agent_enabled",)`, плитка «Агент» в Mission Control, view «Собрать учебную сессию» с текстовым вводом и `POST /ask` + `query_mode:"agent"`. Весь backend агента уже существовал, не было UI-точки входа. |
+| 9 | «Программа обучения и план на день показывают разные next actions» | `app/ui/adaptive_plan_card.py` — C1 bridge: при загрузке кэшированного плана из KV теперь обновляется `learning_plan_context` из текущего `learning_plan_resume`. Раньше cached plan на весь день показывал устаревший контекст, если пользователь выбирал другой шаг программы после 9 утра. |
+| 10 | «Граф знаний не показывает скорость обучения и количество сессий» | `app/ui/knowledge_graph_d3.py` + `app/ui/assets/knowledge_graph_d3_template.html` — в stats-бар графа добавлены `velocity` (learning_velocity × 100%), `sessions` (sessions_completed) и `interactions` (learning_interactions_total) из PersonalizedLearnerModel. Раньше граф знал только mastery и frontier. |
 
 ## 4. Backend/инфраструктура
 
@@ -114,6 +118,18 @@ backlog, user stories, сценарные манифесты — ведётся 
 7. **Проблема:** Яндекс.Метрику невозможно штатно вставить в `<head>` Streamlit-страницы.
    **Как помог ИИ:** нашёл обходной путь (патч раздаваемого `index.html` по маркеру) и
    закрыл его тестами на изолированном fake-модуле, не трогая реальную установку Streamlit.
+8. **Проблема:** таймауты LLM были неэффективны — llama-index переопределял их дефолтом 60s,
+   хотя конфиг указывал 15s/30s. **Как помог ИИ:** аудит показал, что httpx.Client timeout
+   игнорируется OpenAI SDK, когда `timeout` явно передан как «given». Фикс: передавать `timeout`
+   явно в конструктор OpenAI. + soft timeout через ThreadPoolExecutor для раннего отказа.
+9. **Проблема:** агент (AI-цикл с tool calling) был полностью реализован, но не имел
+   UI-точки входа — пользователь не мог узнать о его существовании. **Как помог ИИ:**
+   добавлен FeatureSpec `view:agent_session` с гейтингом по `AGENT_ENABLED`, плитка
+   в Mission Control и view с текстовым вводом, отправляющим `query_mode="agent"` в API.
+10. **Проблема:** после прохождения всех 8 направлений эволюционных волн не было единого
+    понимания, какие изменения действительно улучшили продукт. **Как помог ИИ:** каждый шаг
+    запускал targeted-тесты и проверял инварианты проекта до и после изменений, обеспечивая
+    отсутствие регрессий в 84 тестах.
 
 ## 7. Выводы и рекомендации
 

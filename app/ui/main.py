@@ -378,6 +378,58 @@ elif selected_view == "Найти материалы":
     _fragment_search_tab()
 elif selected_view == "Объяснить файл":
     _fragment_explain_tab()
+elif selected_view == "Собрать учебную сессию":
+    from app.ui.query_tab_answer_section import render_query_answer_section as _agent_render_answer
+    from app.ui_client import fetch_json as _agent_fetch
+
+    st.markdown("### 🤖 Собрать учебную сессию с ИИ-агентом")
+    st.caption(
+        "Агент сам решит, какой инструмент использовать: "
+        "поиск по базе знаний, граф понятий, конспект или quiz. "
+        "Введите вопрос или тему для учебной сессии."
+    )
+    agent_q = st.text_input(
+        "Ваш вопрос или тема",
+        key="agent_session_input",
+        placeholder="Например: разбери тему AI-агентов",
+    )
+    if st.button("Запустить сессию", type="primary", key="agent_session_launch"):
+        if str(agent_q or "").strip():
+            try:
+                with st.spinner("Агент собирает учебную сессию..."):
+                    data = _agent_fetch(
+                        "POST", "/ask", timeout=180,
+                        json={
+                            "question": agent_q,
+                            "query_mode": "agent",
+                            "folder": "",
+                            "folder_rel": "",
+                            "file_name": "",
+                            "relative_path": "",
+                        },
+                    )
+                if data:
+                    st.session_state["last_answer"] = {
+                        "question": agent_q,
+                        "answer": data.get("answer", ""),
+                        "sources": data.get("sources") or [],
+                        "confidence": data.get("confidence") or {},
+                        "request_id": (data.get("debug") or {}).get("request_id"),
+                    }
+                    st.session_state["last_debug"] = data.get("debug") or {}
+                    st.session_state["agent_session_result"] = True
+                    st.rerun()
+                else:
+                    st.warning("Агент не вернул ответ.")
+            except Exception as _exc:  # noqa: BLE001 - agent session must degrade gracefully
+                import logging
+
+                logging.getLogger(__name__).debug("agent session failed: %s", _exc)
+                st.error(f"Ошибка агента: {_exc}")
+        else:
+            st.info("Введите вопрос или тему для сессии.")
+    if st.session_state.get("agent_session_result"):
+        _agent_render_answer()
 else:
     _fragment_print_view()
 

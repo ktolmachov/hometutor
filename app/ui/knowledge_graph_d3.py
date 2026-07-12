@@ -367,6 +367,19 @@ def _kg_counters_from_skeleton(
     }
 
 
+def _enrich_stats_with_learner_velocity(stats: dict[str, Any]) -> None:
+    try:
+        from app import learner_model_service as _learner_model_service
+
+        _plm = _learner_model_service.get_personalized_learner_profile()
+        stats["velocity"] = round(float(_plm.learning_velocity) * 100, 1)
+        stats["sessions"] = int(_plm.sessions_completed or 0)
+        migration = _plm.state_migration if isinstance(_plm.state_migration, dict) else {}
+        stats["interactions"] = int(migration.get("learning_interactions_total") or 0)
+    except Exception:  # noqa: BLE001 — learner stats enrichment must not break graph rendering
+        pass
+
+
 def compute_kg_counters(
     concepts: Mapping[str, Any],
     mastery_vector: Mapping[str, float] | None = None,
@@ -386,7 +399,9 @@ def compute_kg_counters(
     skel = _build_kg_skeleton(concepts, typed_relations)
     mv = mastery_vector or {}
     learned = {str(x).strip() for x in (learned_set or []) if str(x).strip()}
-    return _kg_counters_from_skeleton(skel, mv, learned)
+    stats = _kg_counters_from_skeleton(skel, mv, learned)
+    _enrich_stats_with_learner_velocity(stats)
+    return stats
 
 
 def collect_kg_learned_set(concepts: Mapping[str, Any]) -> set[str]:
@@ -568,6 +583,8 @@ def build_kg_payload(
         })
 
     stats = _kg_counters_from_skeleton(skel, mastery_vector, learned)
+
+    _enrich_stats_with_learner_velocity(stats)
 
     return {
         "nodes": nodes,

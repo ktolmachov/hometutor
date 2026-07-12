@@ -51,6 +51,13 @@ class SmartStudyRecommendation:
     secondaries: tuple[SmartStudySecondaryAction, ...]
     route_pedagogy_ru: str = ""
     ml_audit_ru: str = ""
+    flashcard_due_n: int = 0
+    sm2_due_n: int = 0
+
+
+def smart_study_due_total(rec: SmartStudyRecommendation) -> int:
+    """Surface total for the two explicit due queues; not a deduplicated review queue."""
+    return max(0, int(rec.flashcard_due_n or 0)) + max(0, int(rec.sm2_due_n or 0))
 
 
 def smart_study_contrastive_explanation(rec: SmartStudyRecommendation) -> str:

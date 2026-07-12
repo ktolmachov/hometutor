@@ -36,6 +36,7 @@ def _build_tutor_payload(
             inline_quiz,
             socratic_followup,
             learner_profile,
+            learner_trace,
             tutor_cycle,
             orchestration_state,
             socratic,

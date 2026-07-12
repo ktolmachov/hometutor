@@ -105,6 +105,8 @@ def _ssr_recommendation_for_kind(
             secondaries=_stable_secondaries(primary_nav="flashcards_review", exclude_ids=sec_ex),
             route_pedagogy_ru=_SSR_ROUTE_PEDAGOGY_RETENTION_RU,
             ml_audit_ru=ml_audit_ru,
+            flashcard_due_n=fc,
+            sm2_due_n=due,
         )
     if hk == "sm2_due":
         if fc > 0 or due <= 0:
@@ -117,6 +119,8 @@ def _ssr_recommendation_for_kind(
             secondaries=_stable_secondaries(primary_nav="sm2_tutor"),
             route_pedagogy_ru=_SSR_ROUTE_PEDAGOGY_RETENTION_RU,
             ml_audit_ru=ml_audit_ru,
+            flashcard_due_n=fc,
+            sm2_due_n=due,
         )
     if hk == "quiz_failed":
         if not _quiz_feedback_failed(quiz_feedback_status):
@@ -132,6 +136,8 @@ def _ssr_recommendation_for_kind(
             secondaries=_stable_secondaries(primary_nav="quiz_recovery_tutor"),
             route_pedagogy_ru=_SSR_ROUTE_PEDAGOGY_WEAK_CONCEPT_RU,
             ml_audit_ru=ml_audit_ru,
+            flashcard_due_n=fc,
+            sm2_due_n=due,
         )
     if hk == "adaptive_plan":
         if not (plan_first and fc == 0 and due == 0):
@@ -150,6 +156,8 @@ def _ssr_recommendation_for_kind(
             primary_nav="plan_block_tutor",
             secondaries=_stable_secondaries(primary_nav="plan_block_tutor"),
             ml_audit_ru=ml_audit_ru,
+            flashcard_due_n=fc,
+            sm2_due_n=due,
         )
     if hk == "tutor_resume":
         if not (has_tutor_resume and topic_t):
@@ -161,6 +169,8 @@ def _ssr_recommendation_for_kind(
             primary_nav="tutor_resume",
             secondaries=_stable_secondaries(primary_nav="tutor_resume"),
             ml_audit_ru=ml_audit_ru,
+            flashcard_due_n=fc,
+            sm2_due_n=due,
         )
     if hk == "answer_ready":
         if not has_last_answer_qa:
@@ -176,6 +186,8 @@ def _ssr_recommendation_for_kind(
             secondaries=_stable_secondaries(primary_nav="qa_continue"),
             route_pedagogy_ru=_SSR_ROUTE_PEDAGOGY_NEW_LEARNING_RU,
             ml_audit_ru=ml_audit_ru,
+            flashcard_due_n=fc,
+            sm2_due_n=due,
         )
     if hk == "mastery_stale":
         if not (weak or has_reading_resume):
@@ -190,6 +202,8 @@ def _ssr_recommendation_for_kind(
             primary_nav="tutor_weak_gap",
             secondaries=_stable_secondaries(primary_nav="tutor_weak_gap"),
             ml_audit_ru=ml_audit_ru,
+            flashcard_due_n=fc,
+            sm2_due_n=due,
         )
     if hk == "safe_default":
         return SmartStudyRecommendation(
@@ -199,6 +213,8 @@ def _ssr_recommendation_for_kind(
             primary_nav="safe_tutor_5min",
             secondaries=_stable_secondaries(primary_nav="safe_tutor_5min"),
             ml_audit_ru=ml_audit_ru,
+            flashcard_due_n=fc,
+            sm2_due_n=due,
         )
     return None
 

@@ -422,15 +422,30 @@ def _apply_tutor_teaching_postprocessing(
             "confidence_delta": 0.02 if sources else 0.0,
             "session_id": getattr(options, "session_id", None),
         }
-        update_learner_model_after_interaction(
+        update_result = update_learner_model_after_interaction(
             "local",
             "tutor",
             update_outcome,
             session_id=getattr(options, "session_id", None),
         )
-        if ctx is not None:
+        updated_concepts = (
+            update_result.get("updated_concepts")
+            if isinstance(update_result, dict)
+            else {}
+        )
+        trace_cid = ""
+        if isinstance(updated_concepts, dict) and updated_concepts:
+            trace_cid = str(next(iter(updated_concepts.keys()))).strip()
+        if (
+            ctx is not None
+            and isinstance(update_result, dict)
+            and bool(update_result.get("mastery_updated"))
+            and bool(update_result.get("profile_saved"))
+            and trace_cid
+        ):
             ctx.metadata["learner_trace"] = {
                 "concept": topic,
+                "canonical_concept_id": trace_cid,
                 "mastery_score": mastery_hint,
                 "source_count": len(sources),
                 "cognitive_load_delta": update_outcome.get("cognitive_load_delta"),

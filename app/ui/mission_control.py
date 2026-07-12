@@ -18,6 +18,7 @@ from app.smart_study_router import (
     SmartStudyRouterHintKind,
     build_smart_study_evidence_ledger_lines,
     build_smart_study_recommendation,
+    smart_study_due_total,
     smart_study_contrastive_explanation,
     smart_study_why_not_others_ru,
 )
@@ -381,7 +382,7 @@ def _build_ssr_banner_html(
 
 def _render_ssr_banner(rec: SmartStudyRecommendation, *, index_stats: dict | None = None) -> None:
     """Home Mission Control: объяснимый SSR без полной карточки `e2e-smart-study-next-step`."""
-    total = int(getattr(rec, "flashcard_due_n", 0)) + int(getattr(rec, "sm2_due_n", 0))
+    total = smart_study_due_total(rec)
     st.html(_build_ssr_banner_html(rec, index_stats=index_stats, due_count_total=total or None))
 
     btn_label = str(rec.primary_label_ru or "").strip() or "Продолжить обучение"

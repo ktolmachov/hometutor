@@ -680,12 +680,13 @@ def update_learner_model_after_interaction(
     outcome: dict[str, Any],
     *,
     session_id: str | None = None,
-) -> None:
+) -> dict[str, Any]:
     """Хук после micro-quiz или tutor-ответа: обновить метрики и сохранить."""
     sid = (outcome.get("session_id") if isinstance(outcome, dict) else None) or session_id
     profile = get_personalized_learner_profile(user_id, session_id=sid)
     it = (interaction_type or "").strip().lower()
     outcome = outcome if isinstance(outcome, dict) else {}
+    concept_gains: dict[str, float] = {}
 
     if it == "quiz":
         concept_gains = _outcome_concept_gains(outcome)
@@ -715,8 +716,10 @@ def update_learner_model_after_interaction(
             profile.confidence_indicator = max(0.05, float(profile.confidence_indicator) - 0.02)
             profile.cognitive_load = min(0.95, float(profile.cognitive_load) + 0.04)
 
+    profile_saved = False
     try:
         save_learner_profile(user_id, profile.model_dump(mode="json"))
+        profile_saved = True
     except Exception as _exc:  # noqa: BLE001
         import logging  # noqa: BLE001
         logging.getLogger(__name__).debug("! caught exception: %s", _exc)
@@ -764,6 +767,17 @@ def update_learner_model_after_interaction(
         AdaptiveDailyPlan(user_id or "local", session_id=sid).build_adaptive_daily_plan()
     except Exception as exc:  # noqa: BLE001 - downstream best-effort
         logger.warning("adaptive_daily_plan_after_interaction_failed", exc_info=exc)
+
+    updated_concepts = {
+        concept: score
+        for concept, score in sorted(concept_gains.items())
+    }
+    return {
+        "interaction_type": it,
+        "mastery_updated": bool(updated_concepts),
+        "updated_concepts": updated_concepts,
+        "profile_saved": profile_saved,
+    }
 
 
 _SSR_UI_METADATA_KEY = "ssr_ui_metadata"

@@ -5,7 +5,11 @@ import pytest
 import app.flashcard_service as flashcard_service
 import app.learner_model_service as learner_model_service
 import app.llm_resilience as llm_resilience
+import app.query_rag_assembly as query_rag_assembly
 import app.query_response_postprocessing as qrp
+import app.query_session_persistence as query_session_persistence
+import app.query_tutor_context as query_tutor_context
+import app.ui.tutor_chat_response_render as tutor_chat_response_render
 
 
 def test_tutor_postprocessing_sends_non_empty_learner_outcome(monkeypatch) -> None:
@@ -42,6 +46,11 @@ def test_tutor_postprocessing_sends_non_empty_learner_outcome(monkeypatch) -> No
         captured["interaction_type"] = interaction_type
         captured["outcome"] = outcome
         captured["session_id"] = session_id
+        return {
+            "mastery_updated": True,
+            "profile_saved": True,
+            "updated_concepts": {"cid:state-machines": 0.48},
+        }
 
     monkeypatch.setattr(
         "app.learner_model_service.update_learner_model_after_interaction",
@@ -70,6 +79,183 @@ def test_tutor_postprocessing_sends_non_empty_learner_outcome(monkeypatch) -> No
     assert outcome["concept_gains"] == {"state machines": 0.48}
     assert outcome["source_count"] == 1
     assert outcome["session_id"] == "sid-1"
+    assert ctx.metadata["learner_trace"]["canonical_concept_id"] == "cid:state-machines"
+
+
+def test_tutor_postprocessing_does_not_show_trace_when_concept_unresolved(monkeypatch) -> None:
+    monkeypatch.setattr("app.knowledge_graph.get_graph_prerequisites_health", lambda: {})
+    monkeypatch.setattr(
+        "app.tutor_orchestrator.apply_tutor_self_correction",
+        lambda teaching, **_kwargs: teaching,
+    )
+    monkeypatch.setattr(
+        "app.tutor_orchestrator.decide_tutor_next_action",
+        lambda **_kwargs: {"next_action": "continue"},
+    )
+    monkeypatch.setattr(
+        "app.user_state.update_tutor_learner_profile_from_session",
+        lambda metadata: {"ok": True},
+    )
+    monkeypatch.setattr("app.quiz_service.format_tutor_v2_markdown", lambda teaching: "formatted")
+    monkeypatch.setattr(
+        qrp,
+        "get_settings",
+        lambda: SimpleNamespace(
+            enable_tutor_inline_quiz=False,
+            tutor_inline_quiz_separate_llm_call=False,
+        ),
+    )
+    monkeypatch.setattr(
+        "app.learner_model_service.update_learner_model_after_interaction",
+        lambda *_args, **_kwargs: {
+            "mastery_updated": False,
+            "profile_saved": True,
+            "updated_concepts": {},
+        },
+    )
+
+    ctx = SimpleNamespace(metadata={"current_topic": "general"}, effective_query="Explain")
+
+    qrp._apply_tutor_teaching_postprocessing(
+        response=SimpleNamespace(),
+        ctx=ctx,
+        options=SimpleNamespace(session_id="sid-1"),
+        sources=[],
+        tutor_teaching={"key_idea": "x"},
+        inline_quiz=[],
+        original_question="Explain",
+        logger=SimpleNamespace(warning=lambda *_args, **_kwargs: None),
+    )
+
+    assert "learner_trace" not in ctx.metadata
+
+
+def test_learner_trace_roundtrips_to_history_metadata_and_renderer(monkeypatch) -> None:
+    trace = {
+        "concept": "State Machine",
+        "canonical_concept_id": "cid:state-machine",
+        "mastery_score": 0.48,
+        "source_count": 2,
+    }
+    ctx = SimpleNamespace(
+        metadata={
+            "learner_trace": trace,
+            "tutor_decision": {"next_action": "continue"},
+            "persisted_learner_profile": {"ok": True},
+        },
+        trace={},
+    )
+    proc_result = {
+        "tutor_teaching": {"teaching_summary": "summary"},
+        "inline_quiz": [],
+        "socratic_followup": None,
+        "auto_quiz_payload": None,
+    }
+
+    _tutor_answer, _tutor_payload, assistant_meta = query_rag_assembly.build_tutor_payloads(
+        options=SimpleNamespace(query_mode="tutor", homework_mode=False, session_id="sid-1"),
+        ctx=ctx,
+        proc_result=proc_result,
+        answer_text="answer",
+        logger=SimpleNamespace(warning=lambda *_args, **_kwargs: None),
+    )
+    assert assistant_meta is not None
+    assert assistant_meta["tutor"]["learner_trace"] == trace
+
+    saved_history = {}
+
+    class FakeSessionStore:
+        def get(self, _sid):
+            return []
+
+        def save(self, sid, history):
+            saved_history["sid"] = sid
+            saved_history["history"] = history
+            return {"ok": True}
+
+    monkeypatch.setattr(
+        query_session_persistence.importlib,
+        "import_module",
+        lambda _name: SimpleNamespace(session_store=FakeSessionStore()),
+    )
+    query_session_persistence.persist_chat_session(
+        session_id="sid-1",
+        user_question="question",
+        assistant_answer="answer",
+        confidence=0.9,
+        assistant_metadata=assistant_meta,
+        sources=[],
+    )
+    assistant_msg = saved_history["history"][-1]
+    assert assistant_msg.metadata["tutor"]["learner_trace"] == trace
+
+    captions: list[str] = []
+
+    class DummyColumn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(tutor_chat_response_render.st, "caption", captions.append)
+    monkeypatch.setattr(tutor_chat_response_render.st, "columns", lambda _n: [DummyColumn()] * 3)
+    monkeypatch.setattr(tutor_chat_response_render.st, "success", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(tutor_chat_response_render.st, "warning", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(tutor_chat_response_render.st, "info", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(tutor_chat_response_render.st, "markdown", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        tutor_chat_response_render,
+        "render_tutor_visibility_badge",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        tutor_chat_response_render,
+        "render_teaching_summary_block",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        tutor_chat_response_render,
+        "render_tutor_trust_panel",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        tutor_chat_response_render,
+        "render_tutor_action_panel",
+        lambda *_args, **_kwargs: None,
+    )
+
+    tutor_chat_response_render.render_tutor_structured_response(
+        {"teaching_summary": "summary"},
+        msg_idx=1,
+        session_id="sid-1",
+        tutor_meta=assistant_msg.metadata["tutor"],
+    )
+
+    assert any("След записан" in caption for caption in captions)
+    assert any("State Machine" in caption for caption in captions)
+
+
+def test_tutor_payload_can_contain_only_learner_trace() -> None:
+    trace = {
+        "concept": "State Machine",
+        "canonical_concept_id": "cid:state-machine",
+        "mastery_score": 0.48,
+        "source_count": 2,
+    }
+
+    payload = query_tutor_context._build_tutor_payload(
+        tutor_teaching=None,
+        tutor_decision=None,
+        auto_quiz_payload=None,
+        inline_quiz=None,
+        socratic_followup=None,
+        learner_profile=None,
+        learner_trace=trace,
+    )
+
+    assert payload is not None
+    assert payload["learner_trace"] == trace
 
 
 def test_canonical_concept_resolver_matches_graph_fields(monkeypatch) -> None:
@@ -135,7 +321,7 @@ def test_learner_model_flashcard_outcome_updates_profile(monkeypatch) -> None:
         lambda *_args, **_kwargs: "concept:state-machines",
     )
 
-    learner_model_service.update_learner_model_after_interaction(
+    result = learner_model_service.update_learner_model_after_interaction(
         "local",
         "flashcard",
         {
@@ -152,6 +338,8 @@ def test_learner_model_flashcard_outcome_updates_profile(monkeypatch) -> None:
     assert saved["learning_velocity"] > 0.1
     assert saved["confidence_indicator"] > 0.5
     assert saved["cognitive_load"] < 0.5
+    assert result["mastery_updated"] is True
+    assert result["updated_concepts"] == {"concept:state-machines": 0.8}
 
 
 def test_learner_model_quiz_outcome_preserves_session_semantics(monkeypatch) -> None:
@@ -182,7 +370,7 @@ def test_learner_model_quiz_outcome_preserves_session_semantics(monkeypatch) -> 
         lambda *_args, **_kwargs: SimpleNamespace(build_adaptive_daily_plan=lambda: {}),
     )
 
-    learner_model_service.update_learner_model_after_interaction(
+    result = learner_model_service.update_learner_model_after_interaction(
         "local",
         "quiz",
         {
@@ -195,6 +383,8 @@ def test_learner_model_quiz_outcome_preserves_session_semantics(monkeypatch) -> 
     assert saved["mastery_vector"]["cid:state-machines"] == 0.2
     assert saved["sessions_completed"] == 2
     assert "learning_interactions_total" not in saved["state_migration"]
+    assert result["mastery_updated"] is True
+    assert result["updated_concepts"] == {"cid:state-machines": 0.2}
 
 
 def test_flashcard_review_writes_user_action_learner_state(monkeypatch) -> None:

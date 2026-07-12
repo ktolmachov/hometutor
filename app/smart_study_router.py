@@ -27,6 +27,7 @@ from app.smart_study_recommendation import (
     _build_smart_study_recommendation_rules,
     apply_smart_study_steering_preference,
     apply_source_coverage_route_guard,
+    smart_study_due_total,
     smart_study_contrastive_explanation,
     smart_study_why_not_others_ru,
 )
@@ -124,6 +125,7 @@ __all__ = [
     "build_smart_study_evidence_ledger_lines",
     "finalize_smart_study_confidence_ledger_lines",
     "build_smart_study_recommendation",
+    "smart_study_due_total",
     "smart_study_contrastive_explanation",
     "smart_study_why_not_others_ru",
     "apply_source_coverage_route_guard",

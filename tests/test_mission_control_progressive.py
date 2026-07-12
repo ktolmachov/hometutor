@@ -7,6 +7,7 @@ from app.ui.mission_control import (
     _tile_rows_for_grid,
     build_context_row_segments,
 )
+from app.smart_study_router import build_smart_study_recommendation, smart_study_due_total
 
 
 def test_cold_user_tile_ids_are_subset_of_all_tiles() -> None:
@@ -59,6 +60,18 @@ def test_indexed_base_without_activity_is_not_cold() -> None:
 
 def test_due_cards_alone_keep_user_warm() -> None:
     assert _is_cold_user(3, None) is False
+
+
+def test_smart_study_due_total_is_sum_of_two_explicit_queues() -> None:
+    rec = build_smart_study_recommendation(
+        surface="home",
+        flashcard_due_n=3,
+        sm2_due_n=2,
+    )
+
+    assert rec.flashcard_due_n == 3
+    assert rec.sm2_due_n == 2
+    assert smart_study_due_total(rec) == 5
 
 
 def test_context_row_segments_combine_course_and_xp() -> None:

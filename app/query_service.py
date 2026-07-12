@@ -1,4 +1,5 @@
 import hashlib
+import re
 import time
 import traceback
 import logging
@@ -829,6 +830,90 @@ def _build_timeout_answer(elapsed: float, error_type: str, *, include_timed_out:
     return result
 
 
+def _parse_retry_after_seconds(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        seconds_float = float(str(value).strip().strip("'\""))
+    except (TypeError, ValueError):
+        return None
+    seconds_int = int(seconds_float)
+    if seconds_float > seconds_int:
+        seconds_int += 1
+    return seconds_int if seconds_int > 0 else None
+
+
+def _provider_retry_after_seconds(e: Exception) -> int | None:
+    response = getattr(e, "response", None)
+    headers = getattr(response, "headers", None)
+    retry_after = headers.get("Retry-After") if hasattr(headers, "get") else None
+    parsed = _parse_retry_after_seconds(retry_after)
+    if parsed is not None:
+        return parsed
+
+    match = re.search(
+        r"(?:retry_after_seconds(?:_raw)?|retry-after)['\"\s:=>]+(\d+(?:\.\d+)?)",
+        str(e),
+        flags=re.IGNORECASE,
+    )
+    if match:
+        return _parse_retry_after_seconds(match.group(1))
+    return None
+
+
+def _provider_status_code(e: Exception) -> int | None:
+    status_code = getattr(e, "status_code", None)
+    if isinstance(status_code, int):
+        return status_code
+    response_status = getattr(getattr(e, "response", None), "status_code", None)
+    return response_status if isinstance(response_status, int) else None
+
+
+def _is_provider_rate_limit_error(e: Exception) -> bool:
+    if _provider_status_code(e) == 429:
+        return True
+    message = str(e).lower()
+    return any(
+        marker in message
+        for marker in (
+            "error code: 429",
+            "'code': 429",
+            '"code": 429',
+            "rate-limited",
+            "rate limited",
+            "rate limit",
+            "retry-after",
+        )
+    )
+
+
+def _build_provider_rate_limit_answer(elapsed: float, e: Exception) -> dict[str, Any]:
+    retry_after_seconds = _provider_retry_after_seconds(e)
+    wait_hint = (
+        f" Подождите примерно {retry_after_seconds} секунд и повторите запрос."
+        if retry_after_seconds
+        else " Подождите немного и повторите запрос."
+    )
+    return {
+        "answer": (
+            "Провайдер временно ограничил выбранную cloud-модель."
+            f"{wait_hint} Если ошибка повторяется, смените LLM_MODEL или добавьте BYOK-ключ/квоту "
+            "в OpenRouter. Это не проблема индекса или локального LM Studio."
+        ),
+        "sources": [],
+        "answer_status": "provider_rate_limited",
+        "debug": {
+            "cache_hit": False,
+            "total_answer_ms": round(elapsed * 1000, 3),
+            "error_type": type(e).__name__,
+            "provider_status_code": 429,
+            "retry_after_seconds": retry_after_seconds,
+            "fallback_applied": True,
+            "answer_status": "provider_rate_limited",
+        },
+    }
+
+
 def _handle_answer_question_exception(
     e: Exception,
     *,
@@ -852,6 +937,18 @@ def _handle_answer_question_exception(
             error_type=type(e).__name__,
         )
         return _build_timeout_answer(elapsed, type(e).__name__, include_timed_out=include_timed_out)
+
+    if _is_provider_rate_limit_error(e):
+        log_event(
+            logger,
+            logging.WARNING,
+            "answer_question_llm_rate_limited",
+            elapsed_sec=round(elapsed, 3),
+            question=redact_sensitive_text(question),
+            retry_after_seconds=_provider_retry_after_seconds(e),
+            error_type=type(e).__name__,
+        )
+        return _build_provider_rate_limit_answer(elapsed, e)
 
     log_event(
         logger,

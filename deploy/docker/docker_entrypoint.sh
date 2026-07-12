@@ -23,7 +23,7 @@ if [[ -n "${SPACE_ID:-}" || -n "${SPACE_HOST:-}" ]]; then
   export LLM_LOCAL_WARMUP="${LLM_LOCAL_WARMUP:-false}"
 
   export OPENAI_API_BASE="${OPENAI_API_BASE:-https://openrouter.ai/api/v1}"
-  export LLM_MODEL="${LLM_MODEL:-meta-llama/llama-3.2-3b-instruct:free}"
+  export LLM_MODEL="${LLM_MODEL:-openai/gpt-4o-mini}"
   export QUIZ_LLM_MODEL="${QUIZ_LLM_MODEL:-${LLM_MODEL}}"
   export GRAPH_LLM_API_BASE="${GRAPH_LLM_API_BASE:-${OPENAI_API_BASE}}"
   export GRAPH_MODEL="${GRAPH_MODEL:-${LLM_MODEL}}"

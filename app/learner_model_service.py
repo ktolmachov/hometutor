@@ -168,6 +168,86 @@ def _active_concept_ids() -> set[str]:
     }
 
 
+def _normalize_concept_lookup_text(value: Any) -> str:
+    return " ".join(str(value or "").strip().casefold().split())
+
+
+def _concept_lookup_terms(concept_id: str, node: dict[str, Any]) -> set[str]:
+    terms = {_normalize_concept_lookup_text(concept_id)}
+    for key in ("label", "name", "title", "display_name", "topic_name"):
+        term = _normalize_concept_lookup_text(node.get(key))
+        if term:
+            terms.add(term)
+    for key in ("aliases", "keywords", "key_concepts"):
+        values = node.get(key)
+        if isinstance(values, (list, tuple, set)):
+            terms.update(_normalize_concept_lookup_text(item) for item in values if _normalize_concept_lookup_text(item))
+    return {term for term in terms if term}
+
+
+def _source_path_matches_concept(source_path: str, node: dict[str, Any]) -> bool:
+    wanted = source_path.replace("\\", "/").casefold().strip()
+    if not wanted:
+        return False
+    for key in ("documents", "related_documents"):
+        values = node.get(key)
+        if not isinstance(values, (list, tuple, set)):
+            continue
+        for item in values:
+            candidate = str(item or "").replace("\\", "/").casefold().strip()
+            if candidate and (candidate == wanted or candidate.endswith("/" + wanted) or wanted.endswith("/" + candidate)):
+                return True
+    return False
+
+
+def resolve_canonical_concept_id_for_learner_signal(
+    *signals: Any,
+    source_path: str | None = None,
+) -> str | None:
+    """Map tutor/flashcard learner signals onto active graph concept ids."""
+    try:
+        concepts = get_active_knowledge_graph().get_concepts()
+    except Exception:  # noqa: BLE001 - unresolved signals should not break learner actions.
+        logger.debug("canonical_concept_resolve_graph_failed", exc_info=True)
+        return None
+    if not isinstance(concepts, dict) or not concepts:
+        return None
+
+    source = str(source_path or "").strip()
+    if source:
+        for concept_id, node in concepts.items():
+            if isinstance(node, dict) and _source_path_matches_concept(source, node):
+                return str(concept_id).strip() or None
+
+    normalized_signals = [
+        _normalize_concept_lookup_text(signal)
+        for signal in signals
+        if _normalize_concept_lookup_text(signal)
+    ]
+    if not normalized_signals:
+        return None
+
+    lookup: dict[str, str] = {}
+    for concept_id, node in concepts.items():
+        if not isinstance(node, dict):
+            continue
+        cid = str(concept_id).strip()
+        if not cid:
+            continue
+        for term in _concept_lookup_terms(cid, node):
+            lookup.setdefault(term, cid)
+
+    for signal in normalized_signals:
+        if signal in lookup:
+            return lookup[signal]
+
+    for signal in normalized_signals:
+        for term, cid in lookup.items():
+            if len(signal) >= 4 and len(term) >= 4 and (signal in term or term in signal):
+                return cid
+    return None
+
+
 def _filter_mastery_vector_for_active_index(
     mastery_vector: dict[str, float],
     *,
@@ -217,12 +297,17 @@ def _build_state_migration_summary(
         index_changed = source_index_version != current_index_version
     if source_generation_id and current_generation_id:
         index_changed = index_changed or (source_generation_id != current_generation_id)
+    previous_migration = snapshot.get("state_migration")
+    if not isinstance(previous_migration, dict):
+        previous_migration = {}
     return {
         "source_index_version": source_index_version,
         "source_generation_id": source_generation_id,
         "current_index_version": current_index_version,
         "current_generation_id": current_generation_id,
         "index_changed": index_changed,
+        "learning_interactions_total": int(previous_migration.get("learning_interactions_total") or 0),
+        "learning_interactions_by_type": dict(previous_migration.get("learning_interactions_by_type") or {}),
         **filtered_mastery_meta,
     }
 
@@ -501,6 +586,94 @@ def get_learner_state_health(
     }
 
 
+def _clamp01(value: Any, *, default: float = 0.0) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        number = default
+    return max(0.0, min(1.0, number))
+
+
+def _outcome_concept_gains(outcome: dict[str, Any]) -> dict[str, float]:
+    raw = outcome.get("concept_gains") if isinstance(outcome.get("concept_gains"), dict) else {}
+    gains: dict[str, float] = {}
+    for key, value in raw.items():
+        concept = str(key or "").strip()
+        if concept:
+            gains[concept] = _clamp01(value)
+    if gains:
+        return gains
+    concept = str(outcome.get("concept") or outcome.get("focus_topic") or outcome.get("topic") or "").strip()
+    if concept:
+        gains[concept] = _clamp01(outcome.get("mastery_score"), default=_clamp01(outcome.get("mastery_gain")))
+    return gains
+
+
+def _canonical_outcome_concept_gains(outcome: dict[str, Any]) -> dict[str, float]:
+    raw_gains = _outcome_concept_gains(outcome)
+    if not raw_gains:
+        return {}
+    source_path = str(outcome.get("source_path") or "").strip() or None
+    canonical: dict[str, float] = {}
+    for concept, score in raw_gains.items():
+        cid = resolve_canonical_concept_id_for_learner_signal(
+            concept,
+            outcome.get("concept"),
+            outcome.get("focus_topic"),
+            outcome.get("topic"),
+            source_path=source_path,
+        )
+        if cid:
+            canonical[cid] = max(canonical.get(cid, 0.0), _clamp01(score))
+    return canonical
+
+
+def _mean_gain(outcome: dict[str, Any], gains: dict[str, float]) -> float:
+    if "mastery_gain" in outcome:
+        return _clamp01(outcome.get("mastery_gain"))
+    if gains:
+        return sum(gains.values()) / float(len(gains))
+    return 0.0
+
+
+def _merge_outcome_mastery(profile: PersonalizedLearnerModel, gains: dict[str, float], *, monotonic: bool) -> None:
+    if not gains:
+        return
+    merged = {**profile.mastery_vector}
+    for concept, score in gains.items():
+        if monotonic:
+            previous = float(merged.get(concept, 0.0) or 0.0)
+            merged[concept] = max(previous, score)
+        else:
+            merged[concept] = score
+    concept_values = [value for key, value in merged.items() if key != "avg"]
+    if concept_values:
+        merged["avg"] = sum(concept_values) / float(len(concept_values))
+    profile.mastery_vector = merged
+
+
+def _bump_session_velocity(profile: PersonalizedLearnerModel, gain: float) -> None:
+    profile.sessions_completed = max(0, int(profile.sessions_completed or 0)) + 1
+    sc = profile.sessions_completed
+    profile.learning_velocity = (
+        float(profile.learning_velocity) * float(sc - 1) + _clamp01(gain)
+    ) / float(sc)
+
+
+def _bump_interaction_velocity(profile: PersonalizedLearnerModel, interaction_type: str, gain: float) -> None:
+    migration = dict(profile.state_migration or {})
+    total = int(migration.get("learning_interactions_total") or 0) + 1
+    by_type = dict(migration.get("learning_interactions_by_type") or {})
+    key = (interaction_type or "unknown").strip().lower() or "unknown"
+    by_type[key] = int(by_type.get(key) or 0) + 1
+    migration["learning_interactions_total"] = total
+    migration["learning_interactions_by_type"] = by_type
+    profile.state_migration = migration
+    profile.learning_velocity = (
+        float(profile.learning_velocity) * float(total - 1) + _clamp01(gain)
+    ) / float(total)
+
+
 def update_learner_model_after_interaction(
     user_id: str | None,
     interaction_type: str,
@@ -512,21 +685,35 @@ def update_learner_model_after_interaction(
     sid = (outcome.get("session_id") if isinstance(outcome, dict) else None) or session_id
     profile = get_personalized_learner_profile(user_id, session_id=sid)
     it = (interaction_type or "").strip().lower()
+    outcome = outcome if isinstance(outcome, dict) else {}
 
     if it == "quiz":
-        gain = float(outcome.get("mastery_gain") or 0.0)
-        cg = outcome.get("concept_gains") if isinstance(outcome.get("concept_gains"), dict) else {}
-        merged_mv = {**profile.mastery_vector, **{k: float(v) for k, v in cg.items()}}
-        profile.mastery_vector = merged_mv
-        profile.sessions_completed = max(0, profile.sessions_completed) + 1
-        sc = profile.sessions_completed
-        if sc > 0:
-            profile.learning_velocity = (
-                profile.learning_velocity * float(sc - 1) + gain
-            ) / float(sc)
+        concept_gains = _outcome_concept_gains(outcome)
+        gain = _mean_gain(outcome, concept_gains)
+        _merge_outcome_mastery(profile, concept_gains, monotonic=False)
+        _bump_session_velocity(profile, gain)
 
     elif it == "tutor":
-        profile.cognitive_load = max(0.1, float(profile.cognitive_load) - 0.05)
+        concept_gains = _canonical_outcome_concept_gains(outcome)
+        gain = _mean_gain(outcome, concept_gains)
+        _merge_outcome_mastery(profile, concept_gains, monotonic=True)
+        _bump_interaction_velocity(profile, it, gain or 0.05)
+        load_delta = float(outcome.get("cognitive_load_delta", -0.05) or -0.05)
+        profile.cognitive_load = max(0.05, min(0.95, float(profile.cognitive_load) + load_delta))
+        confidence_delta = float(outcome.get("confidence_delta", 0.02) or 0.0)
+        profile.confidence_indicator = max(0.05, min(1.0, float(profile.confidence_indicator) + confidence_delta))
+
+    elif it == "flashcard":
+        concept_gains = _canonical_outcome_concept_gains(outcome)
+        gain = _mean_gain(outcome, concept_gains)
+        _merge_outcome_mastery(profile, concept_gains, monotonic=True)
+        _bump_interaction_velocity(profile, it, gain)
+        if gain >= 0.7:
+            profile.confidence_indicator = min(1.0, float(profile.confidence_indicator) + 0.03)
+            profile.cognitive_load = max(0.05, float(profile.cognitive_load) - 0.03)
+        else:
+            profile.confidence_indicator = max(0.05, float(profile.confidence_indicator) - 0.02)
+            profile.cognitive_load = min(0.95, float(profile.cognitive_load) + 0.04)
 
     try:
         save_learner_profile(user_id, profile.model_dump(mode="json"))
@@ -657,6 +844,7 @@ __all__ = [
     "merge_personalized_into_learner_profile",
     "persist_concept_recovery_ladder",
     "read_persisted_concept_recovery_ladder",
+    "resolve_canonical_concept_id_for_learner_signal",
     "save_emotional_snapshot",
     "save_learner_profile",
     "save_learner_ssr_metadata",

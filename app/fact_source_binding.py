@@ -80,6 +80,21 @@ def build_quiz_event_provenance(
     )
 
 
+def build_user_action_provenance(
+    *,
+    action: str,
+    concept: str,
+    level: str,
+    event_id: str | None = None,
+) -> FactSourceProvenance:
+    return FactSourceProvenance(
+        source_type="user_action",
+        event_id=(event_id or action or "").strip() or None,
+        concept=(concept or "").strip() or None,
+        level=(level or "").strip() or None,
+    )
+
+
 def provenance_to_evidence_line(provenance: FactSourceProvenance | None) -> str | None:
     if provenance is None:
         return None
@@ -136,11 +151,44 @@ def apply_quiz_outcome_to_learner_state(
     }
 
 
+def apply_user_action_outcome_to_learner_state(
+    *,
+    concept: str,
+    score: float,
+    level: str,
+    action: str,
+    event_id: str | None = None,
+) -> dict[str, Any]:
+    """Apply a non-quiz learner action through the same provenance-gated memory door."""
+    from app.quiz_adaptive import update_mastery_after_score
+    from app.spaced_repetition import record_quiz_score_for_spaced_repetition
+
+    provenance = require_fact_provenance(
+        build_user_action_provenance(
+            action=action,
+            concept=concept,
+            level=level,
+            event_id=event_id,
+        ),
+        operation="apply_user_action_outcome_to_learner_state",
+    )
+    sr = record_quiz_score_for_spaced_repetition(concept, score, provenance=provenance)
+    mastery = update_mastery_after_score(concept, score, provenance=provenance)
+    set_last_mastery_provenance(provenance)
+    return {
+        "spaced_repetition": sr,
+        "quiz_adaptive": mastery,
+        "provenance": provenance_to_dict(provenance),
+    }
+
+
 __all__ = [
     "FactSourceBindingError",
     "FactSourceProvenance",
     "apply_quiz_outcome_to_learner_state",
+    "apply_user_action_outcome_to_learner_state",
     "build_quiz_event_provenance",
+    "build_user_action_provenance",
     "get_last_mastery_provenance",
     "is_fact_source_binding_enabled",
     "is_influencing_provenance_line",

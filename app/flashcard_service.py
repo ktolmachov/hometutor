@@ -73,6 +73,28 @@ def _utc_now_iso() -> str:
     return datetime.now(tz=timezone.utc).isoformat()
 
 
+def _flashcard_concept_for_learner(card: dict[str, Any]) -> str:
+    from app.flashcards_tag_display import source_path_from_card, split_card_tags
+
+    human_tags, _system_tags = split_card_tags(str(card.get("tags") or ""))
+    for tag in human_tags:
+        clean = str(tag or "").strip()
+        if clean:
+            return clean
+    source_path = source_path_from_card(card)
+    if source_path:
+        tail = source_path.replace("\\", "/").rsplit("/", 1)[-1]
+        stem = tail.rsplit(".", 1)[0].strip()
+        if stem:
+            return stem
+    deck_name = str(card.get("deck_name") or card.get("deck_source_id") or "").strip()
+    return deck_name or "flashcards"
+
+
+def _flashcard_mastery_score(quality: int) -> float:
+    return max(0.0, min(1.0, float(max(0, min(5, int(quality)))) / 5.0))
+
+
 # ─────────────────────────────────────────────────────────────
 # LLM generation
 # ─────────────────────────────────────────────────────────────
@@ -839,6 +861,55 @@ def review_flashcard(card_id: int, quality: int) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 - review state is already persisted
         logger.debug("flashcard_review_log insert failed: %s", exc)
 
+    learner_state_update: dict[str, Any] | None = None
+    concept_signal = _flashcard_concept_for_learner(card)
+    mastery_score = _flashcard_mastery_score(q)
+    try:
+        from app.flashcards_tag_display import source_path_from_card
+        from app.learner_model_service import resolve_canonical_concept_id_for_learner_signal
+
+        source_path = source_path_from_card(card)
+        canonical_concept = resolve_canonical_concept_id_for_learner_signal(
+            concept_signal,
+            source_path=source_path,
+        )
+    except Exception as exc:  # noqa: BLE001 - unresolved concept must not block card review
+        logger.debug("flashcard canonical concept resolve failed: %s", exc)
+        source_path = ""
+        canonical_concept = None
+    try:
+        from app.fact_source_binding import apply_user_action_outcome_to_learner_state
+
+        if canonical_concept:
+            learner_state_update = apply_user_action_outcome_to_learner_state(
+                concept=canonical_concept,
+                score=mastery_score,
+                level="flashcard_review",
+                action="flashcard_review",
+                event_id=f"flashcard:{card_id}:{last_review}",
+            )
+    except Exception as exc:  # noqa: BLE001 - review state is already persisted
+        logger.debug("flashcard learner-state update failed: %s", exc)
+
+    try:
+        from app.learner_model_service import update_learner_model_after_interaction
+
+        update_learner_model_after_interaction(
+            "local",
+            "flashcard",
+            {
+                "mastery_gain": mastery_score,
+                "mastery_score": mastery_score,
+                "concept_gains": {canonical_concept: mastery_score} if canonical_concept else {},
+                "concept": canonical_concept or "",
+                "concept_signal": concept_signal,
+                "source_path": source_path,
+                "quality": q,
+            },
+        )
+    except Exception as exc:  # noqa: BLE001 - learner model must not block flashcard review
+        logger.debug("flashcard learner-model update failed: %s", exc)
+
     try:
         from app.user_state import increment_weekly_progress
 
@@ -867,6 +938,7 @@ def review_flashcard(card_id: int, quality: int) -> dict[str, Any]:
         "repetitions": new_reps,
         "next_review": next_review,
         "last_review": last_review,
+        "learner_state": learner_state_update,
     }
 
 

@@ -404,10 +404,28 @@ def _apply_tutor_teaching_postprocessing(
     try:
         from app.learner_model_service import update_learner_model_after_interaction
 
+        metadata = (ctx.metadata or {}) if ctx is not None else {}
+        topic = str(
+            metadata.get("orchestrator_quiz_topic")
+            or metadata.get("current_topic")
+            or metadata.get("topic")
+            or "general"
+        ).strip() or "general"
+        mastery_hint = 0.48 if sources else 0.42
+        update_outcome = {
+            "mastery_gain": 0.06 if sources else 0.03,
+            "mastery_score": mastery_hint,
+            "concept_gains": {topic: mastery_hint},
+            "concept": topic,
+            "source_count": len(sources),
+            "cognitive_load_delta": -0.04 if sources else -0.02,
+            "confidence_delta": 0.02 if sources else 0.0,
+            "session_id": getattr(options, "session_id", None),
+        }
         update_learner_model_after_interaction(
             "local",
             "tutor",
-            {},
+            update_outcome,
             session_id=getattr(options, "session_id", None),
         )
     except Exception:  # noqa: BLE001 - learner model update is best-effort.

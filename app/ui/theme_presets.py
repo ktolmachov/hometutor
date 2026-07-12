@@ -47,6 +47,11 @@ THEME_TOKENS: Final[dict[str, dict[str, str]]] = {
         "chip-border": "rgba(185, 86, 49, 0.14)",
         "flashcard-front": "linear-gradient(160deg, rgba(36,59,44,0.04) 0%, rgba(185,86,49,0.04) 100%)",
         "flashcard-back": "linear-gradient(160deg, rgba(185,86,49,0.07) 0%, rgba(36,59,44,0.05) 100%)",
+        "sidebar-bg": "rgba(251, 244, 233, 0.96)",
+        "button-bg": "linear-gradient(180deg, #be633c 0%, #9d4526 100%)",
+        "button-bg-hover": "linear-gradient(180deg, #c86d45 0%, #8f3d22 100%)",
+        "button-shadow": "0 10px 24px rgba(185, 86, 49, 0.18)",
+        "accent-soft": "rgba(185, 86, 49, 0.10)",
     },
     "ocean": {
         "bg-panel": "rgba(240, 248, 252, 0.92)",
@@ -72,6 +77,11 @@ THEME_TOKENS: Final[dict[str, dict[str, str]]] = {
         "chip-border": "rgba(26, 122, 140, 0.14)",
         "flashcard-front": "linear-gradient(160deg, rgba(15,60,80,0.04) 0%, rgba(26,122,140,0.04) 100%)",
         "flashcard-back": "linear-gradient(160deg, rgba(26,122,140,0.07) 0%, rgba(15,60,80,0.05) 100%)",
+        "sidebar-bg": "rgba(232, 244, 250, 0.96)",
+        "button-bg": "linear-gradient(180deg, #1a7a8c 0%, #0f4f5c 100%)",
+        "button-bg-hover": "linear-gradient(180deg, #228a9c 0%, #12596c 100%)",
+        "button-shadow": "0 10px 24px rgba(26, 122, 140, 0.18)",
+        "accent-soft": "rgba(26, 122, 140, 0.10)",
     },
     "sunset": {
         "bg-panel": "rgba(255, 247, 240, 0.92)",
@@ -97,6 +107,11 @@ THEME_TOKENS: Final[dict[str, dict[str, str]]] = {
         "chip-border": "rgba(196, 74, 58, 0.14)",
         "flashcard-front": "linear-gradient(160deg, rgba(80,35,25,0.04) 0%, rgba(196,74,58,0.04) 100%)",
         "flashcard-back": "linear-gradient(160deg, rgba(196,74,58,0.07) 0%, rgba(80,35,25,0.05) 100%)",
+        "sidebar-bg": "rgba(255, 245, 240, 0.96)",
+        "button-bg": "linear-gradient(180deg, #c44a3a 0%, #8a2e22 100%)",
+        "button-bg-hover": "linear-gradient(180deg, #d05a4a 0%, #9a3e32 100%)",
+        "button-shadow": "0 10px 24px rgba(196, 74, 58, 0.18)",
+        "accent-soft": "rgba(196, 74, 58, 0.10)",
     },
     "cosmos": {
         "bg-panel": "rgba(245, 240, 250, 0.92)",
@@ -122,6 +137,11 @@ THEME_TOKENS: Final[dict[str, dict[str, str]]] = {
         "chip-border": "rgba(122, 63, 160, 0.14)",
         "flashcard-front": "linear-gradient(160deg, rgba(30,10,60,0.04) 0%, rgba(122,63,160,0.04) 100%)",
         "flashcard-back": "linear-gradient(160deg, rgba(122,63,160,0.07) 0%, rgba(30,10,60,0.05) 100%)",
+        "sidebar-bg": "rgba(242, 235, 248, 0.96)",
+        "button-bg": "linear-gradient(180deg, #7a3fa0 0%, #4f2570 100%)",
+        "button-bg-hover": "linear-gradient(180deg, #8a4fb0 0%, #5f2f80 100%)",
+        "button-shadow": "0 10px 24px rgba(122, 63, 160, 0.18)",
+        "accent-soft": "rgba(122, 63, 160, 0.10)",
     },
     "berry": {
         "bg-panel": "rgba(255, 245, 245, 0.92)",
@@ -147,12 +167,19 @@ THEME_TOKENS: Final[dict[str, dict[str, str]]] = {
         "chip-border": "rgba(184, 52, 90, 0.14)",
         "flashcard-front": "linear-gradient(160deg, rgba(60,15,30,0.04) 0%, rgba(184,52,90,0.04) 100%)",
         "flashcard-back": "linear-gradient(160deg, rgba(184,52,90,0.07) 0%, rgba(60,15,30,0.05) 100%)",
+        "sidebar-bg": "rgba(255, 242, 245, 0.96)",
+        "button-bg": "linear-gradient(180deg, #b8345a 0%, #7a1e3a 100%)",
+        "button-bg-hover": "linear-gradient(180deg, #c8446a 0%, #8a2e4a 100%)",
+        "button-shadow": "0 10px 24px rgba(184, 52, 90, 0.18)",
+        "accent-soft": "rgba(184, 52, 90, 0.10)",
     },
 }
 
 
 def css_vars_for_theme(theme_id: str) -> str:
     """Render ``:root { --key: value; ... }`` CSS block for a theme preset."""
+    if theme_id not in VALID_UI_THEMES:
+        return ""
     tokens = THEME_TOKENS.get(theme_id)
     if not tokens:
         return ""

@@ -144,10 +144,10 @@ def _rating_chips_html(interval_preview: dict[str, int]) -> str:
     return "".join(chips)
 
 
-_STYLE = f"""<style>
+_STYLE = """<style>
   * {{ box-sizing: border-box; }}
   html, body {{
-    margin: 0; padding: 0; background: transparent; font-family: {_MONO};
+    margin: 0; padding: 0; background: transparent; font-family: {MONO};
     height: 100%; width: 100%;
   }}
   .fc3-scene {{
@@ -162,42 +162,42 @@ _STYLE = f"""<style>
   .fc3-card.is-flipped {{ transform: rotateY(180deg); }}
   .fc3-face {{
     position: absolute; inset: 0; backface-visibility: hidden;
-    border-radius: 20px; border: 1px solid rgba(19, 32, 25, 0.12);
-    box-shadow: 0 18px 40px rgba(19, 32, 25, 0.12);
+    border-radius: 20px; border: 1px solid {INK}22;
+    box-shadow: 0 18px 40px {INK}22;
     padding: 1.6rem 1.6rem 1.2rem; display: flex; flex-direction: column;
-    overflow-y: auto; color: {_INK};
+    overflow-y: auto; color: {INK};
   }}
   .fc3-face.fc3-front {{
-    background: linear-gradient(160deg, rgba(36,59,44,0.05) 0%, rgba(185,86,49,0.05) 100%);
+    background: {FRONT_BG};
   }}
   .fc3-face.fc3-back {{
-    background: linear-gradient(160deg, rgba(185,86,49,0.08) 0%, rgba(36,59,44,0.06) 100%);
-    border-left: 4px solid {_ACCENT};
+    background: {BACK_BG};
+    border-left: 4px solid {ACCENT};
     transform: rotateY(180deg);
   }}
   .fc3-top-row {{ display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }}
   .fc3-deck-badge {{
-    font-size: 0.72rem; color: {_MUTED}; text-transform: uppercase; letter-spacing: 0.05em;
+    font-size: 0.72rem; color: {MUTED}; text-transform: uppercase; letter-spacing: 0.05em;
   }}
-  .fc3-counter {{ font-size: 0.72rem; color: {_MUTED}; }}
+  .fc3-counter {{ font-size: 0.72rem; color: {MUTED}; }}
   .fc3-label {{
-    font-size: 0.72rem; color: {_MUTED}; text-transform: uppercase; letter-spacing: 0.08em;
+    font-size: 0.72rem; color: {MUTED}; text-transform: uppercase; letter-spacing: 0.08em;
     margin: 0.9rem 0 0.6rem; font-weight: 600;
   }}
   .fc3-text {{ font-size: 1.15rem; font-weight: 600; line-height: 1.55; flex: 0 0 auto; }}
   .fc3-tags {{ margin-top: 0.9rem; }}
   .fc3-tag-chips {{ display: flex; flex-wrap: wrap; gap: 0.35rem; }}
   .fc3-tag-chip {{
-    font-size: 0.7rem; color: {_ACCENT}; background: rgba(185,86,49,0.10);
-    border: 1px solid rgba(185,86,49,0.22); border-radius: 999px; padding: 2px 9px;
+    font-size: 0.7rem; color: {ACCENT}; background: transparent;
+    border: 1px solid {ACCENT}; border-radius: 999px; padding: 2px 9px;
   }}
-  .fc3-source {{ font-size: 0.68rem; color: {_MUTED}; margin-top: 0.4rem; }}
+  .fc3-source {{ font-size: 0.68rem; color: {MUTED}; margin-top: 0.4rem; }}
   .fc3-memory-row {{ display: flex; align-items: center; gap: 0.8rem; margin-top: 1rem; }}
   .fc3-ring {{ position: relative; width: 64px; height: 64px; flex: 0 0 auto; }}
   .fc3-ring svg {{ transform: rotate(-90deg); }}
-  .fc3-ring-track {{ fill: none; stroke: rgba(19,32,25,0.10); stroke-width: 6; }}
+  .fc3-ring-track {{ fill: none; stroke: {INK}; stroke-width: 6; opacity: 0.12; }}
   .fc3-ring-fill {{
-    fill: none; stroke: {_ACCENT}; stroke-width: 6; stroke-linecap: round;
+    fill: none; stroke: {ACCENT}; stroke-width: 6; stroke-linecap: round;
     transition: stroke-dashoffset 0.9s ease;
   }}
   .fc3-ring-label {{
@@ -209,24 +209,24 @@ _STYLE = f"""<style>
     display: inline-block; font-size: 0.68rem; font-weight: 700; padding: 2px 9px;
     border-radius: 999px; color: #fff;
   }}
-  .fc3-forecast {{ font-size: 0.72rem; color: {_MUTED}; margin-top: 0.3rem; }}
-  .fc3-details {{ margin-top: 0.9rem; font-size: 0.75rem; color: {_MUTED}; }}
-  .fc3-details summary {{ cursor: pointer; color: {_ACCENT}; font-weight: 600; }}
+  .fc3-forecast {{ font-size: 0.72rem; color: {MUTED}; margin-top: 0.3rem; }}
+  .fc3-details {{ margin-top: 0.9rem; font-size: 0.75rem; color: {MUTED}; }}
+  .fc3-details summary {{ cursor: pointer; color: {ACCENT}; font-weight: 600; }}
   .fc3-details-grid {{
     display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem 0.8rem; margin-top: 0.5rem;
   }}
   .fc3-details-grid > div {{ display: flex; flex-direction: column; }}
   .fc3-details-k {{ font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.04em; }}
-  .fc3-details-v {{ font-size: 0.85rem; color: {_INK}; font-weight: 600; }}
-  .fc3-hint {{ margin-top: auto; padding-top: 0.8rem; font-size: 0.68rem; color: {_MUTED}; text-align: center; }}
+  .fc3-details-v {{ font-size: 0.85rem; color: {INK}; font-weight: 600; }}
+  .fc3-hint {{ margin-top: auto; padding-top: 0.8rem; font-size: 0.68rem; color: {MUTED}; text-align: center; }}
   .fc3-rate-row {{ display: flex; gap: 0.5rem; margin-top: 0.9rem; flex-wrap: wrap; }}
   .fc3-rate-chip {{
     flex: 1 1 0; min-width: 90px; display: flex; flex-direction: column; align-items: center;
     gap: 0.15rem; padding: 0.55rem 0.4rem; border-radius: 14px; border: none; cursor: pointer;
-    background: var(--fc3-rate-color, {_ACCENT}); color: #fff; font-family: {_MONO};
+    background: var(--fc3-rate-color, {ACCENT}); color: #fff; font-family: {MONO};
     transition: transform 0.12s ease, box-shadow 0.12s ease;
   }}
-  .fc3-rate-chip:hover {{ transform: translateY(-2px); box-shadow: 0 8px 18px rgba(19,32,25,0.22); }}
+  .fc3-rate-chip:hover {{ transform: translateY(-2px); box-shadow: 0 8px 18px {INK}; }}
   .fc3-rate-chip:active {{ transform: scale(0.94); }}
   .fc3-rate-chip.fc3-pop {{ animation: fc3-pop 0.22s ease; }}
   @keyframes fc3-pop {{ 0% {{ transform: scale(1); }} 50% {{ transform: scale(0.88); }} 100% {{ transform: scale(1); }} }}
@@ -234,15 +234,15 @@ _STYLE = f"""<style>
   .fc3-rate-meaning {{ font-size: 0.65rem; opacity: 0.9; }}
   .fc3-rate-eta {{ font-size: 0.68rem; font-weight: 700; opacity: 0.95; }}
   .fc3-explain-chip {{
-    margin-top: 0.6rem; width: 100%; padding: 0.5rem; border-radius: 12px; border: 1px solid rgba(19,32,25,0.18);
-    background: transparent; color: {_MUTED}; font-family: {_MONO}; font-size: 0.78rem; cursor: pointer;
+    margin-top: 0.6rem; width: 100%; padding: 0.5rem; border-radius: 12px; border: 1px solid {INK};
+    background: transparent; color: {MUTED}; font-family: {MONO}; font-size: 0.78rem; cursor: pointer;
   }}
-  .fc3-explain-chip:hover {{ color: {_ACCENT}; border-color: {_ACCENT}; }}
+  .fc3-explain-chip:hover {{ color: {ACCENT}; border-color: {ACCENT}; }}
   .fc3-flip-back {{
     margin-top: 0.5rem; align-self: flex-start; background: none; border: none; cursor: pointer;
-    color: {_MUTED}; font-family: {_MONO}; font-size: 0.72rem; padding: 0;
+    color: {MUTED}; font-family: {MONO}; font-size: 0.72rem; padding: 0;
   }}
-  .fc3-flip-back:hover {{ color: {_ACCENT}; }}
+  .fc3-flip-back:hover {{ color: {ACCENT}; }}
 </style>"""
 
 
@@ -259,6 +259,8 @@ def build_interactive_card_html(
     muted: str = "#59685f",
     accent: str = "#b95631",
     mono: str = "ui-monospace,'IBM Plex Mono',monospace",
+    front_bg: str = "linear-gradient(160deg, rgba(36,59,44,0.04) 0%, rgba(185,86,49,0.04) 100%)",
+    back_bg: str = "linear-gradient(160deg, rgba(185,86,49,0.07) 0%, rgba(36,59,44,0.05) 100%)",
 ) -> str:
     """Self-contained iframe markup for the review card's flip scene.
 
@@ -267,8 +269,8 @@ def build_interactive_card_html(
     leaks onto a card that reappears after a filter change / "Начать снова"
     (see the review view's ``flashcards_review_queue_nonce``).
 
-    ``ink``/``muted``/``accent``/``mono`` — theme colours passed from the caller
-    (see :func:`app.ui_preferences.get_ui_theme` and
+    ``ink``/``muted``/``accent``/``mono``/``front_bg``/``back_bg`` — theme colours
+    passed from the caller (see :func:`app.ui_preferences.get_ui_theme` and
     :data:`app.ui.theme_presets.THEME_TOKENS`); default to forest palette.
     """
     # Shadow module-level constants with per-call parameters for theme support.
@@ -277,6 +279,15 @@ def build_interactive_card_html(
     _MUTED = muted  # noqa: N806
     _ACCENT = accent  # noqa: N806
     _MONO = mono  # noqa: N806
+
+    style = _STYLE.format(
+        MONO=mono,
+        INK=ink,
+        MUTED=muted,
+        ACCENT=accent,
+        FRONT_BG=front_bg,
+        BACK_BG=back_bg,
+    )
 
     card_id = int(card.get("id") or 0)
     front_html = escape_multiline(card.get("front"))
@@ -296,7 +307,7 @@ def build_interactive_card_html(
         {q_label: f"st-key-fc_rate_{q_label}" for _label, q_label, _quality, _color in RATING_BUTTONS}
     )
 
-    body = f"""{_STYLE}
+    body = f"""{style}
 <div class="fc3-scene" id="fc3-scene">
   <div class="fc3-card" id="fc3-card">
     <div class="fc3-face fc3-front">

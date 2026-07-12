@@ -129,19 +129,19 @@ def set_ui_level(level: str) -> None:
 
 
 def get_ui_theme() -> str:
-    from app.ui.theme_presets import THEME_TOKENS
+    from app.ui.theme_presets import VALID_UI_THEMES
 
     raw = str(_safe_get_kv(UI_THEME_KEY, "") or "").strip().lower()
-    if raw in THEME_TOKENS:
+    if raw in VALID_UI_THEMES:
         return raw
     return "forest"
 
 
 def set_ui_theme(theme_id: str) -> None:
-    from app.ui.theme_presets import THEME_TOKENS
+    from app.ui.theme_presets import VALID_UI_THEMES
 
     value = str(theme_id or "").strip().lower()
-    if value not in THEME_TOKENS:
+    if value not in VALID_UI_THEMES:
         raise ValueError(f"unsupported UI theme: {theme_id!r}")
     _safe_set_kv(UI_THEME_KEY, value)
 

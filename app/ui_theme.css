@@ -25,6 +25,11 @@
     --head-fc: linear-gradient(135deg, #1a3a4a 0%, #b95631 100%);
     --flashcard-front: linear-gradient(160deg, rgba(36,59,44,0.04) 0%, rgba(185,86,49,0.04) 100%);
     --flashcard-back: linear-gradient(160deg, rgba(185,86,49,0.07) 0%, rgba(36,59,44,0.05) 100%);
+    --sidebar-bg: rgba(251, 244, 233, 0.96);
+    --button-bg: linear-gradient(180deg, #be633c 0%, #9d4526 100%);
+    --button-bg-hover: linear-gradient(180deg, #c86d45 0%, #8f3d22 100%);
+    --button-shadow: 0 10px 24px rgba(185, 86, 49, 0.18);
+    --accent-soft: rgba(185, 86, 49, 0.10);
 }
 
 /* Ligatures for Mission Control tiles (unsafe_allow_html blocks skip Streamlit :material_* markdown). */
@@ -65,7 +70,7 @@
 }
 
 [data-testid="stSidebar"] {
-    background: rgba(251, 244, 233, 0.96);
+    background: var(--sidebar-bg);
     border-right: 1px solid var(--line);
 }
 
@@ -259,17 +264,17 @@ p, span, li, div, .stMarkdown, [data-testid="stMarkdownContainer"] {
 .stButton > button {
     border-radius: 14px;
     border: 1px solid rgba(125, 53, 31, 0.16);
-    background: linear-gradient(180deg, #be633c 0%, #9d4526 100%);
+    background: var(--button-bg);
     color: #fff7ef;
     font-weight: 800;
-    box-shadow: 0 10px 24px rgba(185, 86, 49, 0.18);
+    box-shadow: var(--button-shadow);
     min-height: 2.85rem;
     padding: 0.5rem 0.95rem;
 }
 
 .stButton > button:hover {
     color: #fff7ef;
-    background: linear-gradient(180deg, #c86d45 0%, #8f3d22 100%);
+    background: var(--button-bg-hover);
 }
 
 .stDownloadButton > button {
@@ -720,7 +725,7 @@ div[data-testid="stChatMessage"] .stButton > button[kind="secondary"] {
 .home-dash-card.smart-study-next-step {
     box-shadow:
         0 24px 56px rgba(19, 32, 25, 0.18),
-        0 0 0 1px rgba(185, 86, 49, 0.10);
+        0 0 0 1px var(--accent-soft);
 }
 .home-dash-card.smart-study-next-step .home-dash-head.home-dash-head-continue {
     position: relative;
@@ -853,7 +858,7 @@ div[data-testid="stChatMessage"] .stButton > button[kind="secondary"] {
 .mode-preview-body {
     margin-top: 0.25rem;
     padding-left: 0.35rem;
-    border-left: 2px solid rgba(185, 86, 49, 0.35);
+    border-left: 2px solid var(--accent);
 }
 
 .mode-preview-line {
@@ -865,7 +870,7 @@ div[data-testid="stChatMessage"] .stButton > button[kind="secondary"] {
     position: absolute;
     top: 0.6rem;
     right: 0.6rem;
-    background: linear-gradient(135deg, #b95631, #e07040);
+    background: linear-gradient(135deg, var(--accent), var(--accent-dark));
     color: #fff;
     font-size: 0.72rem;
     font-weight: 800;
@@ -1327,8 +1332,8 @@ div[data-testid="stButton"] > button:focus-visible {
    ───────────────────────────────────────────────────────────── */
 
 .kg-mc-card {
-    background: linear-gradient(135deg, rgba(185, 86, 49, 0.07) 0%, rgba(36, 59, 44, 0.05) 100%);
-    border: 1px solid rgba(185, 86, 49, 0.22);
+    background: linear-gradient(135deg, var(--chip-bg) 0%, var(--bg-card) 100%);
+    border: 1px solid var(--chip-border);
     border-radius: 20px;
     padding: 1.35rem 1.4rem 1.1rem;
     margin: 0.5rem 0 0.25rem;

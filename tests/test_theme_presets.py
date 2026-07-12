@@ -47,6 +47,11 @@ def test_forest_values_match_current_css() -> None:
         "chip-border": "rgba(185, 86, 49, 0.14)",
         "flashcard-front": "linear-gradient(160deg, rgba(36,59,44,0.04) 0%, rgba(185,86,49,0.04) 100%)",
         "flashcard-back": "linear-gradient(160deg, rgba(185,86,49,0.07) 0%, rgba(36,59,44,0.05) 100%)",
+        "sidebar-bg": "rgba(251, 244, 233, 0.96)",
+        "button-bg": "linear-gradient(180deg, #be633c 0%, #9d4526 100%)",
+        "button-bg-hover": "linear-gradient(180deg, #c86d45 0%, #8f3d22 100%)",
+        "button-shadow": "0 10px 24px rgba(185, 86, 49, 0.18)",
+        "accent-soft": "rgba(185, 86, 49, 0.10)",
     }
     assert forest == forest_expected, (
         f"forest preset mismatch: {set(forest.keys()) ^ set(forest_expected.keys())}"
@@ -60,6 +65,8 @@ def test_css_vars_for_theme_produces_valid_block() -> None:
         assert block.endswith("}")
         assert "--bg-panel" in block
         assert "--ink" in block
+        assert "--sidebar-bg" in block
+        assert "--accent-soft" in block
 
 
 def test_no_empty_tokens() -> None:

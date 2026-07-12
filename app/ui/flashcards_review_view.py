@@ -845,6 +845,14 @@ def _render_active_review_card(
         ink=_theme_tokens.get("ink", "#132019"),
         muted=_theme_tokens.get("muted", "#59685f"),
         accent=_theme_tokens.get("accent", "#b95631"),
+        front_bg=_theme_tokens.get(
+            "flashcard-front",
+            "linear-gradient(160deg, rgba(36,59,44,0.04) 0%, rgba(185,86,49,0.04) 100%)",
+        ),
+        back_bg=_theme_tokens.get(
+            "flashcard-back",
+            "linear-gradient(160deg, rgba(185,86,49,0.07) 0%, rgba(36,59,44,0.05) 100%)",
+        ),
     )
     # scrolling=True is a safety net, not the primary sizing mechanism: the
     # JS resize inside the card (see flashcards_interactive_card.py) can only

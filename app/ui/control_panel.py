@@ -9,6 +9,7 @@ from app.ui.feature_registry import FEATURES
 from app.ui.theme_presets import (
     THEME_META,
     THEME_TOKENS,
+    VALID_UI_THEMES,
     get_theme_title,
 )
 from app.ui_preferences import (
@@ -149,7 +150,7 @@ def _render_theme_cards() -> None:
     current = get_ui_theme()
     st.markdown("**Выбор цветовой схемы**")
     st.caption(f"Сейчас активна схема **{get_theme_title(current)}**.")
-    theme_ids = sorted(THEME_TOKENS.keys())
+    theme_ids = sorted(VALID_UI_THEMES)
     for row_start in range(0, len(theme_ids), 3):
         cols = st.columns(3)
         for col, tid in zip(cols, theme_ids[row_start : row_start + 3]):

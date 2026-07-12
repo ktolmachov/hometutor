@@ -10,7 +10,7 @@ def _settings(*, profile: str) -> SimpleNamespace:
         openai_api_base="https://openrouter.ai/api/v1",
         lmstudio_api_base="http://127.0.0.1:8080/v1",
         llm_api_base="http://127.0.0.1:8080/v1",
-        llm_model="mistralai/mistral-7b-instruct:free",
+        llm_model="meta-llama/llama-3.2-3b-instruct:free",
     )
 
 
@@ -28,7 +28,7 @@ def test_healthcheck_llm_uses_cloud_base_for_cloud_fast(monkeypatch) -> None:
     provider.get_healthcheck_llm(timeout_sec=1.0)
 
     assert captured["api_base"] == "https://openrouter.ai/api/v1"
-    assert captured["model"] == "mistralai/mistral-7b-instruct:free"
+    assert captured["model"] == "meta-llama/llama-3.2-3b-instruct:free"
     assert captured["timeout"] == 1.0
 
 

@@ -52,12 +52,12 @@
 | `HOME_RAG_LOCAL_PROFILE` | `cloud_fast` | Primary chat идёт сразу в облачный OpenAI-compatible endpoint |
 | `OFFLINE_PROBE_LLM_ENDPOINT` | `false` | Не проверять loopback LM Studio/llama.cpp внутри Space |
 | `LLM_LOCAL_WARMUP` | `false` | Не запускать startup-probe локального SSR endpoint |
-| `LLM_MODEL` | `mistralai/mistral-7b-instruct:free` | Модель тьютора/объяснений |
-| `QUIZ_LLM_MODEL` | `mistralai/mistral-7b-instruct:free` | Модель генерации квизов; по умолчанию в HF берётся из `LLM_MODEL` |
+| `LLM_MODEL` | `meta-llama/llama-3.2-3b-instruct:free` | Модель тьютора/объяснений |
+| `QUIZ_LLM_MODEL` | `meta-llama/llama-3.2-3b-instruct:free` | Модель генерации квизов; по умолчанию в HF берётся из `LLM_MODEL` |
 | `GRAPH_LLM_API_BASE` | `https://openrouter.ai/api/v1` | Endpoint для graph/concept LLM; по умолчанию в HF берётся из `OPENAI_API_BASE` |
-| `GRAPH_MODEL` | `mistralai/mistral-7b-instruct:free` | Graph/concept модель; по умолчанию в HF берётся из `LLM_MODEL` |
+| `GRAPH_MODEL` | `meta-llama/llama-3.2-3b-instruct:free` | Graph/concept модель; по умолчанию в HF берётся из `LLM_MODEL` |
 | `SSR_LLM_API_BASE` | `https://openrouter.ai/api/v1` | Endpoint Smart Study Router; по умолчанию в HF берётся из `OPENAI_API_BASE` |
-| `SSR_LLM_MODEL` | `mistralai/mistral-7b-instruct:free` | SSR-модель; по умолчанию в HF берётся из `LLM_MODEL` |
+| `SSR_LLM_MODEL` | `meta-llama/llama-3.2-3b-instruct:free` | SSR-модель; по умолчанию в HF берётся из `LLM_MODEL` |
 | `EMBED_API_BASE` | `https://openrouter.ai/api/v1` | Endpoint embeddings; должен соответствовать `EMBED_MODEL` |
 | `EMBED_MODEL` | `perplexity/pplx-embed-v1-0.6b` | Модель эмбеддингов (должна совпадать с использованной при сборке `demo_chroma_db/`) |
 | `EMBED_DIMENSIONS` | `1024` | Размерность векторов |

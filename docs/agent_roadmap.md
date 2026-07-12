@@ -145,16 +145,8 @@ app/agent/
   `agent_max_run_tokens`, `agent_max_run_cost_usd`, `agent_max_run_seconds`.
   Эти флаги уже заведены в `app/config.py`, `.env.example` и `config.env`;
   дальнейшие настройки добавлять во все три места одновременно.
-- Будущий роутер `app/routers/agent.py`: `GET /agent/runs/{run_id}`,
-  `GET /agent/runs` (интроспекция) и `POST /agent/runs/{run_id}/resume`
-  (**HITL-approval, Wave 5** — не путать с recovery-resume внутри `state.py`);
-  регистрация в `app/api.py` с `_protected_dependencies`.
-- UI-фича: низкоуровневая поддержка готова — ветка `agent_enabled` в
-  `requirement_context_ok` (`feature_registry.py:128`) уже добавлена и
-  покрыта тестами (`tests/test_feature_registry.py`); неизвестные требования
-  по-прежнему возвращают `False`. Но ни один `FeatureSpec` в `FEATURES` пока
-  не объявлен с `requires=("agent_enabled",)` — конкретной UI-фичи (кнопки/CTA),
-  подключённой к этому флагу, в коде ещё нет.
+- Read-only роутер `app/routers/agent.py` (A2): `GET /agent/runs`, `GET /agent/runs/{run_id}` реализован и зарегистрирован с `_protected_dependencies`. (POST /resume — Wave 5 HITL, не в scope.)
+- UI-фича: `FeatureSpec("view:agent_session")` с `requires=("agent_enabled",)` объявлен в `feature_registry.py`, плитка «Агент» на Mission Control и dedicated view присутствуют. Ветка `agent_enabled` в `requirement_context_ok` покрыта тестами.
 
 ### 2.3 Стартовый набор инструментов (read-only в Wave 1 / 1A–1C)
 
@@ -305,12 +297,10 @@ DoD: `query_mode="agent"` отвечает на 10 технических сце
   (всего 10 кейсов), покрыт `tests/agent/test_agent_golden_cases.py`.
   Проверки: источники, quiz, карточки (draft), stop_reason.
 - A1 Polish — **реализовано**: префилл текущей темы/курса из Mission Control в view агента.
-- B2 (save cards) — **подготовлено**: парсинг «## Карточки-кандидаты» + кнопки «Сохранить» с использованием add_flashcard + create_deck.
-- C1 (student history) — **подготовлено**: компактная секция «Что агент собирал для вас» в dashboards_progress.py (использует /agent/runs).
+- B2 (save cards) — **реализовано**: парсинг «## Карточки-кандидаты» + кнопки «Сохранить» с использованием add_flashcard + create_deck.
+- C1 (student history) — **реализовано**: компактная секция «Что агент собирал для вас» в dashboards_progress.py (использует /agent/runs).
 
-DoD: пользователь получает цельную read-only сессию за один запуск; ни один
-candidate не сохраняется без явного будущего HITL. Non-goals: автосохранение
-карточек, запись quiz-result, долгий multi-session plan.
+DoD: пользователь получает цельную read-only сессию за один запуск. Карточки-кандидаты сохраняются только по явному действию пользователя (B2). Non-goals: автосохранение карточек агентом, запись quiz-result, долгий multi-session plan.
 
 ### Wave 1B — Graph Gap Finder
 

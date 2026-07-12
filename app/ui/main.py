@@ -408,7 +408,7 @@ elif selected_view == "Собрать учебную сессию":
                 sc = get_active_scope()
                 if sc:
                     current_topic = str(sc.get("title") or sc.get("folder_rel") or "").strip()
-            except Exception:
+            except Exception:  # noqa: BLE001 - graceful degradation for optional scope lookup in prefill
                 pass
         if current_topic and "agent_session_input" not in st.session_state:
             st.session_state["agent_session_input"] = current_topic
@@ -474,9 +474,9 @@ elif selected_view == "Собрать учебную сессию":
                                     f"{str(t.get('status') or t.get('result') or '')[ :120]}"
                                 )
 
-            # B2 (prepared): buttons to save card candidates from the agent draft answer.
-            # Parses the "## Карточки-кандидаты" section and offers one-click save via the existing flashcards deck API.
-            # Cards are saved as drafts (front/back based on the candidate text).
+            # B2: buttons to save card candidates from the agent draft answer.
+            # User-initiated save of the shown candidates (via add_flashcard).
+            # Parses the "## Карточки-кандидаты" section.
             ans = st.session_state.get("last_answer", {}) or {}
             answer_text = ans.get("answer", "") or ""
             if "## Карточки-кандидаты" in answer_text:
@@ -517,11 +517,11 @@ elif selected_view == "Собрать учебную сессию":
                                     try:
                                         from app.ui.flashcards_read_cache import invalidate_flashcards_read_cache
                                         invalidate_flashcards_read_cache()
-                                    except Exception:
+                                    except Exception:  # noqa: BLE001 - cache invalidation is best-effort after save
                                         pass
                                 except Exception as exc:
                                     st.error(f"Не удалось сохранить карточку: {exc}")
-                except Exception:
+                except Exception:  # noqa: BLE001 - best-effort parsing of agent answer for B2 cards UI
                     pass
 else:
     _fragment_print_view()

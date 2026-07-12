@@ -2,6 +2,7 @@
 
 from fastapi.testclient import TestClient
 
+from app.agent.contracts import AgentRunResult, AgentState, AgentStep, StopReason, ToolResult
 from app.api import app
 from app.user_state_agent_runs import persist_agent_run
 
@@ -9,12 +10,60 @@ from app.user_state_agent_runs import persist_agent_run
 client = TestClient(app)
 
 
+def _minimal_run(run_id: str) -> AgentRunResult:
+    return AgentRunResult(
+        answer="## Диагностика\nTest answer",
+        sources=[{"file": "lesson.md"}],
+        steps=[
+            AgentStep(
+                step_index=1,
+                state=AgentState.TOOL_CALL,
+                tool_name="learner.get_profile",
+                tool_args={},
+                tool_result=ToolResult.success({"level": "beginner"}),
+            )
+        ],
+        stop_reason=StopReason.COMPLETED,
+        state=AgentState.COMPLETED,
+        trace={"step_count": 1},
+    )
+
+
 def test_list_agent_runs_returns_list():
-    # Smoke: endpoint exists and returns a list (may be empty)
+    # Smoke + positive: after persist we see the run in list
+    run_id = "test-a2-list-001"
+    persist_agent_run(
+        run_id=run_id,
+        scenario_id="study_session",
+        question="Test question for list",
+        answer_status="ok",
+        result=_minimal_run(run_id),
+    )
     resp = client.get("/agent/runs?limit=5")
     assert resp.status_code == 200
     data = resp.json()
     assert isinstance(data, list)
+    ids = [r.get("run_id") for r in data]
+    assert run_id in ids
+
+
+def test_get_agent_run_returns_full_data():
+    # Positive test for GET /{run_id} with steps
+    run_id = "test-a2-get-002"
+    persist_agent_run(
+        run_id=run_id,
+        scenario_id="study_session",
+        question="Test question for get",
+        answer_status="ok",
+        result=_minimal_run(run_id),
+    )
+    resp = client.get(f"/agent/runs/{run_id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["run_id"] == run_id
+    assert "steps" in data
+    assert len(data["steps"]) >= 1
+    assert data.get("question")
 
 
 def test_get_agent_run_404_for_missing():

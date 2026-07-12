@@ -196,8 +196,19 @@ Agent tools получают `user_id` и `session_id` только через `
 harness; модель не передаёт эти поля в args. Agent mode пишет только compact
 observability в per-user `user_state.db`: `agent_runs` и `agent_steps` через
 `app/user_state_agent_runs.py`. Он не сохраняет карточки, quiz-result, graph
-edits или workbench changes. `run_id` доступен в `debug.agent_trace` и
-`debug.answer_path`, выбранный сценарий — в `debug.answer_path.scenario_id`.
+edits или workbench changes.
+
+UI-поверхность (A1+):
+- Плитка «Агент» на Mission Control gated через `FeatureSpec` с `requires=("agent_enabled",)`.
+- View «Собрать учебную сессию» с префиллом текущей темы/курса из контекста (A1 Polish).
+- После ответа — кнопки сохранения draft-карточек из секции «## Карточки-кандидаты» (B2, через `create_flashcard_deck` + `add_flashcard`).
+- В «Прогресс обучения» — компактная история «Что агент собирал для вас» (C1).
+
+Read-only observability (A2):
+- `app/routers/agent.py`: `GET /agent/runs`, `GET /agent/runs/{run_id}`.
+- `run_id` доступен в `debug.agent_trace` и `debug.answer_path`, выбранный сценарий — в `debug.answer_path.scenario_id`.
+
+Golden-набор расширен (B1).
 
 ## Indexing
 

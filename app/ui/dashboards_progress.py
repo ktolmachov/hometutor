@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 from typing import Any
-
-import pandas as pd
 import streamlit as st
 
 from app.course_metrics import collect_course_progress, record_course_workflow_event
@@ -207,8 +205,11 @@ def _render_learning_progress_tab() -> None:
     qs = load_quiz_ui_stats()
     try:
         from app.user_state import get_flashcard_progress_stats
-    except Exception:
-        pass
+    except Exception as _exc:  # noqa: BLE001 - robust visualization fallback if user-state import fails
+        import logging
+
+        logging.getLogger(__name__).debug("flashcard progress import failed: %s", _exc)
+        get_flashcard_progress_stats = None
 
     # C1: Student-facing agent runs history (compact, after A2 router)
     try:
@@ -222,15 +223,17 @@ def _render_learning_progress_tab() -> None:
                     status = r.get("answer_status") or r.get("stop_reason") or ""
                     st.markdown(f"- **{q}** · `{status}` · run `{rid}`")
                 st.caption("Полная история и детали — через API /agent/runs (для команды).")
-    except Exception:
+    except Exception:  # noqa: BLE001 - best-effort UI history must not break progress tab
         pass  # best effort, don't break progress tab
 
+    _fc_prog = {"total": 0, "mastered": 0, "due": 0}
+    if get_flashcard_progress_stats is not None:
+        try:
+            _fc_prog = get_flashcard_progress_stats()
+        except Exception as _exc:  # noqa: BLE001 - robust visualization fallback if flashcards database lock occurs
+            import logging
 
-        _fc_prog = get_flashcard_progress_stats()
-    except Exception as _exc:  # noqa: BLE001 - robust visualization fallback if flashcards database lock occurs
-        import logging  # noqa: BLE001
-        logging.getLogger(__name__).debug("! caught exception: %s", _exc)
-        _fc_prog = {"total": 0, "mastered": 0, "due": 0}
+            logging.getLogger(__name__).debug("! caught exception: %s", _exc)
     from app.ui.adaptive_plan_card import adaptive_plan_progress_teaser_caption as _adp_progress_teaser
     from app.visualization_service import dashboard as _mastery_dashboard
 
@@ -438,10 +441,8 @@ def _render_learning_progress_tab() -> None:
     st.subheader("Недавно изученное")
     tl = stats["recent_timeline"]
     if tl:
-        df_tl = pd.DataFrame(
-            [{"Дата": str(d).split("T")[0], "Концепт": n} for d, n in tl]
-        )
-        st.dataframe(df_tl, width='stretch', hide_index=True)
+        rows_tl = [{"Дата": str(d).split("T")[0], "Концепт": n} for d, n in tl]
+        st.dataframe(rows_tl, width='stretch', hide_index=True)
     else:
         st.info("Пока нет записей с learned_at у изученных концептов.")
 

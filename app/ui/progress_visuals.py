@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
-
-import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from streamlit_agraph import Config, Edge, Node
@@ -81,6 +79,8 @@ def build_emotional_heatmap_figure(
     for c in concepts:
         for d in days:
             data.append({"concept": c, "date": d, "emotional_score": score})
+    import pandas as pd
+
     df = pd.DataFrame(data)
     pt = df.pivot(index="concept", columns="date", values="emotional_score")
     fig = px.imshow(

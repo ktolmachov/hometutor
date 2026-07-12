@@ -1,10 +1,23 @@
 """Targeted tests for the agent runs read API (A2)."""
 
+import pytest
 from fastapi.testclient import TestClient
 
+from app import config, user_state_db
 from app.agent.contracts import AgentRunResult, AgentState, AgentStep, StopReason, ToolResult
 from app.api import app
 from app.user_state_agent_runs import persist_agent_run
+
+
+@pytest.fixture()
+def agent_runs_db_env(tmp_path, monkeypatch):
+    """Isolate agent runs persistence to a temporary DB (like other user_state tests)."""
+    monkeypatch.setenv("USER_STATE_DB", str(tmp_path / "user_state.db"))
+    config.reset_settings_cache()
+    user_state_db.reset_schema_cache_for_tests()
+    yield
+    config.reset_settings_cache()
+    user_state_db.reset_schema_cache_for_tests()
 
 
 client = TestClient(app)
@@ -29,8 +42,9 @@ def _minimal_run(run_id: str) -> AgentRunResult:
     )
 
 
+@pytest.mark.usefixtures("agent_runs_db_env")
 def test_list_agent_runs_returns_list():
-    # Smoke + positive: after persist we see the run in list
+    # Smoke + positive: after persist we see the run in list (isolated DB)
     run_id = "test-a2-list-001"
     persist_agent_run(
         run_id=run_id,
@@ -47,8 +61,9 @@ def test_list_agent_runs_returns_list():
     assert run_id in ids
 
 
+@pytest.mark.usefixtures("agent_runs_db_env")
 def test_get_agent_run_returns_full_data():
-    # Positive test for GET /{run_id} with steps
+    # Positive test for GET /{run_id} with steps (isolated DB)
     run_id = "test-a2-get-002"
     persist_agent_run(
         run_id=run_id,

@@ -201,7 +201,7 @@ edits или workbench changes.
 UI-поверхность (A1+):
 - Плитка «Агент» на Mission Control gated через `FeatureSpec` с `requires=("agent_enabled",)`.
 - View «Собрать учебную сессию» с префиллом текущей темы/курса из контекста (A1 Polish).
-- После ответа — кнопки сохранения draft-карточек из секции «## Карточки-кандидаты» (B2, через `create_flashcard_deck` + `add_flashcard`).
+- После ответа — кнопки сохранения карточек-кандидатов (user-initiated) из секции «## Карточки-кандидаты» (B2, через `create_flashcard_deck` + `add_flashcard`).
 - В «Прогресс обучения» — компактная история «Что агент собирал для вас» (C1).
 
 Read-only observability (A2):

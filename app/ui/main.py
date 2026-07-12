@@ -519,7 +519,7 @@ elif selected_view == "Собрать учебную сессию":
                                         invalidate_flashcards_read_cache()
                                     except Exception:  # noqa: BLE001 - cache invalidation is best-effort after save
                                         pass
-                                except Exception as exc:
+                                except Exception as exc:  # noqa: BLE001 - show user-friendly error for card save failures (best-effort UI)
                                     st.error(f"Не удалось сохранить карточку: {exc}")
                 except Exception:  # noqa: BLE001 - best-effort parsing of agent answer for B2 cards UI
                     pass

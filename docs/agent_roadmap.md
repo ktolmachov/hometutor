@@ -94,8 +94,8 @@ agent → tool → agent.
 Важно про trace: `history_service.get_pipeline_trace(request_id)` читает
 `debug.pipeline_trace` из history JSONL (`app/history_service.py:204`) — агентная
 траектория туда сама не попадает. Текущий Wave 2 slice пишет компактный
-`debug.agent_trace.run_id` и append-only записи `agent_runs`/`agent_steps`;
-публичный `GET /agent/runs/{run_id}` остаётся следующим observability-шагом.
+`debug.agent_trace.run_id` и append-only записи `agent_runs`/`agent_steps`.
+Публичный read-only `GET /agent/runs` и `GET /agent/runs/{run_id}` реализован в A2 (этот документ описывает состояние на момент написания более ранних секций).
 Старый pipeline-trace не ломается.
 
 ### 2.2 Пакет `app/agent/`

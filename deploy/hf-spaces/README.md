@@ -116,7 +116,7 @@ git remote add space https://huggingface.co/spaces/ВАШ_ЛОГИН_HF/hometuto
 # если remote уже существует:
 # git remote set-url space https://huggingface.co/spaces/ВАШ_ЛОГИН_HF/hometutor
 
-# snapshot-дерево без docs/screenshots (через временный индекс, рабочая копия не трогается);
+# snapshot-дерево без doc/screenshots и docs/screenshots (через временный индекс, рабочая копия не трогается);
 # finally гарантирует сброс GIT_INDEX_FILE — иначе все последующие git-команды
 # в этой сессии молча работали бы с временным индексом
 try {

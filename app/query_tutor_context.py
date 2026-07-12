@@ -21,6 +21,7 @@ def _build_tutor_payload(
     inline_quiz: list[dict[str, Any]] | None,
     socratic_followup: dict[str, Any] | None,
     learner_profile: dict[str, Any] | None,
+    learner_trace: dict[str, Any] | None = None,
     tutor_cycle: dict[str, Any] | None = None,
     orchestration_state: dict[str, Any] | None = None,
     socratic: dict[str, Any] | None = None,
@@ -63,6 +64,8 @@ def _build_tutor_payload(
         _enrich_tutor_payload_pipeline_scalars(out, tutor_orchestration_pipeline)
     if tutor_pipeline:
         out["tutor_pipeline"] = tutor_pipeline
+    if learner_trace:
+        out["learner_trace"] = learner_trace
     return out
 
 

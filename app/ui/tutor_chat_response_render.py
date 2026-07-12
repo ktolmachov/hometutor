@@ -32,6 +32,14 @@ def render_tutor_structured_response(
 
     render_tutor_visibility_badge(meta)
 
+    lt = meta.get("learner_trace") if isinstance(meta, dict) else None
+    if isinstance(lt, dict) and lt.get("concept"):
+        st.caption(
+            f"След записан: **{lt['concept']}** · "
+            f"источников: {lt.get('source_count', 0)} · "
+            f"mastery {float(lt.get('mastery_score', 0)):.0%}"
+        )
+
     render_teaching_summary_block(payload.get("teaching_summary") or "")
 
     orchestration_summary = build_tutor_orchestration_summary(

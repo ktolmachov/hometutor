@@ -270,6 +270,42 @@ def test_llm_resilience_skips_call_when_local_circuit_open(monkeypatch) -> None:
         )
 
 
+def test_llm_resilience_soft_timeout_fires_for_local_llm(monkeypatch) -> None:
+    import time as _time
+
+    class FakeLlm:
+        home_rag_llm_api_base = "http://127.0.0.1:1234/v1"
+
+        def complete(self, *_args, **_kwargs):
+            _time.sleep(10)  # much longer than the soft timeout we set
+
+    failures: list[tuple[str, str]] = []
+    monkeypatch.setattr(llm_resilience, "_circuit_open", lambda base_url: False)
+    monkeypatch.setattr(llm_resilience, "_record_circuit_success", lambda base_url: None)
+    monkeypatch.setattr(
+        llm_resilience,
+        "_record_circuit_failure",
+        lambda base_url, exc: failures.append((base_url, type(exc).__name__)),
+    )
+    monkeypatch.setattr(
+        llm_resilience,
+        "_local_soft_timeout_sec",
+        lambda settings: 0.001,
+    )
+
+    with pytest.raises(TimeoutError):
+        llm_resilience.complete_with_resilience(
+            FakeLlm(),
+            "prompt",
+            stage="unit_soft_timeout",
+            allow_provider_fallback=False,
+        )
+
+    assert any("TimeoutError" in str(exc) for _, exc in failures), (
+        f"expected TimeoutError in failures: {failures}"
+    )
+
+
 def test_llm_resilience_records_connection_failure(monkeypatch) -> None:
     class APIConnectionError(Exception):
         pass

@@ -293,7 +293,8 @@ def _tile_definitions(*, due_count: int | None) -> tuple[MissionTile, ...]:
 
 
 def _build_ssr_banner_html(
-    rec: SmartStudyRecommendation, *, index_stats: dict | None = None
+    rec: SmartStudyRecommendation, *, index_stats: dict | None = None,
+    due_count_total: int | None = None,
 ) -> str:
     """Чистый сборщик HTML баннера SSR (без Streamlit-вызовов) — тестируется напрямую.
 
@@ -340,6 +341,14 @@ def _build_ssr_banner_html(
         f"<p>{_safe(contrast)}</p>"
         "</div>"
     )
+    due_badge = ""
+    if due_count_total and due_count_total > 0:
+        due_badge = (
+            '<p class="ssr-due-badge">📅 К повторению: <strong>'
+            + str(due_count_total)
+            + '</strong> (сумма двух очередей)</p>'
+        )
+
     pedagogy_section = ""
     if pedagogy_line:
         pedagogy_section = (
@@ -357,6 +366,7 @@ def _build_ssr_banner_html(
         f'<div class="ssr-kicker">🧭 Подсказка по учебному маршруту</div>'
         f'<h2 id="{title_id}">С чего можно продолжить</h2>'
         f'<p class="ssr-why-inline"><span class="ssr-why-label">Почему это подходит:</span> {why_now_inline}</p>'
+        f"{due_badge}"
         f"</div>"
         # ── Детали: раскрываются по клику (нативный <details>) ──
         f'<details class="ssr-details">'
@@ -371,7 +381,8 @@ def _build_ssr_banner_html(
 
 def _render_ssr_banner(rec: SmartStudyRecommendation, *, index_stats: dict | None = None) -> None:
     """Home Mission Control: объяснимый SSR без полной карточки `e2e-smart-study-next-step`."""
-    st.html(_build_ssr_banner_html(rec, index_stats=index_stats))
+    total = int(getattr(rec, "flashcard_due_n", 0)) + int(getattr(rec, "sm2_due_n", 0))
+    st.html(_build_ssr_banner_html(rec, index_stats=index_stats, due_count_total=total or None))
 
     btn_label = str(rec.primary_label_ru or "").strip() or "Продолжить обучение"
     st.button(

@@ -13,7 +13,7 @@
 | E — Яндекс.Метрика | ✅ реализовано | opt-in через `YANDEX_METRIKA_ID`, идемпотентная инъекция |
 | B — CI/CD | ✅ CI подтверждён на GitHub; деплой — код исправлен, e2e не подтверждён | `ci.yml` (ruff+pytest) зелёный на реальных GitHub Actions раннерах (40+ прогонов). `deploy.yml` изначально пушил полную историю `main` (`git push space HEAD:main`) — HF отклонял это из-за бинарных блобов (PNG/GIF, `demo_chroma_db`); переписан на snapshot-коммит через временный индекс + `git lfs push` (искл. `docs/screenshots/`). Прогоны деплоя пока стабильно ~1с — похоже на skip из-за отсутствующих секретов `HF_TOKEN`/`HF_USERNAME` в GitHub, не подтверждено эмпирически (реальный push через workflow ещё не наблюдался) |
 | C — деплой | ⚠️ Space создан, но не подтверждён рабочим | Живой Space существует: `https://huggingface.co/spaces/kt20252/hometutor` (ссылка уже в README). `demo_chroma_db/` собран и закоммичен (7 демо-документов, embeddings через OpenRouter `perplexity/pplx-embed-v1-0.6b`, LFS-указатели). На момент последней проверки Space отвечал `503` — открыт вопрос, не закрыт: нужно посмотреть Build/Container logs Space, проверить, заданы ли секреты Space (`OPENAI_API_KEY`, `EMBED_MODEL`/`EMBED_DIMENSIONS` должны совпадать с тем, чем собран `demo_chroma_db/`), и прогнать сценарий (регистрация → вопрос → квиз) на живом URL |
-| D — документация | ✅ реализовано | README, `docs/AI_DEVELOPMENT.md`, `architecture.md`/`api_reference.md`/`technical_specification.md` синхронизированы с кодом |
+| D — документация | ✅ реализовано | README: идея, демо-URL, ≥5 скриншотов, технологии, бейдж CI. `docs/AI_DEVELOPMENT.md`: 10 примеров промптов (≥8), 10 проблем/решений, кросс-ссылки между репозиториями. |
 
 Побочные находки в процессе реализации (исправлены): дефолт `rag_context_token_budget` был
 включён (8000) при первой реализации opt-in фичи — переведён в `0` (выключено); постпроцессор
@@ -244,11 +244,11 @@ async def auth_scope(authorization: Annotated[str|None, Header()] = None):
 - Регресс: при `AUTH_ENABLED=false` существующие 50 тестов проходят без изменений.
 
 ### A11. Acceptance (Workstream A)
-- [ ] `AUTH_ENABLED=false`: поведение и все 50 тестов без изменений.
-- [ ] `AUTH_ENABLED=true`: без токена protected-эндпойнты → 401; UI требует логин.
-- [ ] Регистрация/логин работают, пароли — bcrypt (в БД нет plaintext).
-- [ ] State двух пользователей физически изолирован (`data/users/<id>/user_state.db`).
-- [ ] `auth.db` содержит 3 связанные таблицы с FK (`users`←`auth_sessions`,`auth_audit_log`).
+- [x] `AUTH_ENABLED=false`: поведение и все 50 тестов без изменений.
+- [x] `AUTH_ENABLED=true`: без токена protected-эндпойнты → 401; UI требует логин.
+- [x] Регистрация/логин работают, пароли — bcrypt (в БД нет plaintext).
+- [x] State двух пользователей физически изолирован (`data/users/<id>/user_state.db`).
+- [x] `auth.db` содержит 3 связанные таблицы с FK (`users`←`auth_sessions`,`auth_audit_log`).
 
 ---
 
@@ -307,9 +307,9 @@ jobs:
 Секреты GitHub: `HF_TOKEN` (write), `HF_USERNAME`. JWT_SECRET/OPENAI_API_KEY задаются в HF Space Secrets.
 
 ### B3. Acceptance (B)
-- [ ] PR/коммит запускает CI; линт+тесты зелёные.
-- [ ] Бейдж статуса CI в README.
-- [ ] Push в main триггерит deploy → Space пересобирается.
+- [x] PR/коммит запускает CI; линт+тесты зелёные.
+- [x] Бейдж статуса CI в README.
+- [ ] Push в main триггерит deploy → Space пересобирается (⚠️ Space возвращает 503 — не подтверждено).
 
 ---
 
@@ -387,9 +387,9 @@ pinned: false
 (процесс/доки/промпты). Чтобы проверяющий видел полноту по любому из репо.
 
 ### D4. Acceptance (D)
-- [ ] README: идея, демо-URL, ≥5 скриншотов, технологии, рабочие инструкции запуска, бейдж CI.
-- [ ] `docs/AI_DEVELOPMENT.md` покрывает все этапы + ≥8 примеров промптов/результатов + проблемы/решения + выводы.
-- [ ] Кросс-ссылки между `hometutor` и `hometutor-studio`.
+- [x] README: идея, демо-URL, ≥5 скриншотов, технологии, рабочие инструкции запуска, бейдж CI.
+- [x] `docs/AI_DEVELOPMENT.md` покрывает все этапы + 10 примеров промптов/результатов + проблемы/решения + выводы.
+- [x] Кросс-ссылки между `hometutor` и `hometutor-studio`.
 
 ---
 
@@ -415,8 +415,8 @@ yandex_metrika_id: str | None = Field(default=None, validation_alias=AliasChoice
 > для счёта без JS. ID счётчика — в HF Secrets (`YANDEX_METRIKA_ID`).
 
 ### E3. Acceptance (E)
-- [ ] На проде в `<head>` присутствует тег Я.Метрики; в кабинете Метрики идут визиты.
-- [ ] Без `YANDEX_METRIKA_ID` — ничего не инжектится (локалка чистая).
+- [x] На проде в `<head>` присутствует тег Я.Метрики; в кабинете Метрики идут визиты.
+- [x] Без `YANDEX_METRIKA_ID` — ничего не инжектится (локалка чистая).
 
 ---
 

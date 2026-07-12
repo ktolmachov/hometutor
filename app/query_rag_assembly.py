@@ -404,6 +404,7 @@ def build_tutor_payloads(
         if isinstance(tr, dict) and isinstance(tr.get("tutor_pipeline"), list):
             pipe_steps = tr["tutor_pipeline"]
 
+    learner_trace = (ctx.metadata if isinstance(getattr(ctx, "metadata", None), dict) else {}).get("learner_trace")
     tutor_payload = _build_tutor_payload(
         tutor_teaching=tutor_teaching,
         tutor_decision=tutor_decision,
@@ -411,6 +412,7 @@ def build_tutor_payloads(
         inline_quiz=inline_quiz,
         socratic_followup=socratic_followup,
         learner_profile=learner_profile,
+        learner_trace=learner_trace,
         tutor_cycle=tutor_cycle_dict,
         orchestration_state=orchestration_state_dict,
         socratic=socratic_exposed,

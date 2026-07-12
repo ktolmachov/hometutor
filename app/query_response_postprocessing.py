@@ -428,6 +428,14 @@ def _apply_tutor_teaching_postprocessing(
             update_outcome,
             session_id=getattr(options, "session_id", None),
         )
+        if ctx is not None:
+            ctx.metadata["learner_trace"] = {
+                "concept": topic,
+                "mastery_score": mastery_hint,
+                "source_count": len(sources),
+                "cognitive_load_delta": update_outcome.get("cognitive_load_delta"),
+                "confidence_delta": update_outcome.get("confidence_delta"),
+            }
     except Exception:  # noqa: BLE001 - learner model update is best-effort.
         logger.warning(
             "update_learner_model_after_interaction tutor failed",

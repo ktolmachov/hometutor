@@ -1,6 +1,6 @@
 # Правила и соглашения по разработке
 
-Актуализировано: 2026-06-24.
+Актуализировано: 2026-07-12.
 
 Роль документа: короткий live-набор правил для runtime-репозитория `hometutor`. Подробности вынесены в [conventions_architecture.md](conventions_architecture.md) и [conventions_reference.md](conventions_reference.md).
 Инженерный стиль маленьких проверяемых волн описан отдельно:
@@ -14,8 +14,11 @@
 - HTTP: роутеры в `app/routers/*`, сборка приложения в `app/api.py`.
 - UI: Streamlit-модули в `app/ui/*`; бизнес-логику не дублировать во view-коде.
 - Persistence: user-state через `app/user_state*.py`; не открывать SQLite напрямую из UI/роутеров.
-- Retrieval: profiles и modes проводить через существующие registry/contract modules.
+- Входы: все entry points (API, CLI, UI, Telegram) проходят `app/guardrails.py` / `app/input_validation.py`.
+- Retrieval: profiles и modes проводить через существующие registry/contract modules (`app/retrieval_strategies.py`).
 - Prompts: использовать пакет `app/prompts/`.
+- Ошибки: без bare `except:`; широкий `except Exception` — только осознанный fallback с rationale.
+- Проверки: targeted pytest по затронутой области + `ruff check` (конфигурация в `pyproject.toml`); полный прогон — только по явной просьбе.
 - Документация: при изменении runtime-поведения обновлять `docs/`.
 
 ## Основные принципы

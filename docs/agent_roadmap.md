@@ -294,10 +294,10 @@ DoD: `query_mode="agent"` отвечает на 10 технических сце
   `## Диагностика`, `## Что изучать сейчас`, `## План на 10–20 минут`,
   `## Проверочные вопросы`, `## Карточки-кандидаты`, `## Следующие шаги`, плюс
   `## Источники`, если использовался RAG.
-- UI-поверхность — **не реализовано** (backlog, не в этом MVP-слайсе): CTA в
-  Mission Control / Tutor chat «Собрать учебную сессию» за `agent_enabled`;
-  результат должен отображаться как draft, без записи в базы. Строка
-  «Собрать учебную сессию» пока не встречается ни в одном UI-модуле.
+- UI-поверхность — **реализовано**: `FeatureSpec("view:agent_session")` с
+  `requires=("agent_enabled",)` в `feature_registry.py`, плитка «Агент» на
+  Mission Control и view «Собрать учебную сессию» с текстовым вводом и
+  `POST /ask` + `query_mode:"agent"`.
 - Evals — **частично**: golden-набор существует
   (`eval_data/agent_scenarios_golden_v1.json`, покрыт
   `tests/agent/test_agent_golden_cases.py`), но на дату аудита содержит 2
@@ -550,9 +550,8 @@ golden set (A/B через eval_baseline).
 Решённые блокеры:
 - **Feature flag** (§2.2): низкоуровневая ветка `agent_enabled` внутри
   `requirement_context_ok` (`feature_registry.py:128`) **решена кодом** и покрыта
-  тестами (`tests/test_feature_registry.py`). **Но** ни один `FeatureSpec` в
-  `FEATURES` пока не объявлен с `requires=("agent_enabled",)` — конкретной
-  UI-фичи, подключённой к флагу, ещё нет; это остаётся открытым для Wave 1A.
+  тестами (`tests/test_feature_registry.py`). `FeatureSpec("view:agent_session")`
+  объявлен с `requires=("agent_enabled",)` — Wave 1A UI-фича подключена к флагу.
 - **Оценка токенов** (§2.4): input-токены схем инструментов оцениваются в
   provider-layer через `_estimate_structured_kwargs_tokens()`
   (`provider_openai.py:91-109`, вызов на `:276-277`), а не в

@@ -438,7 +438,7 @@ def _render_tile(tile: MissionTile, *, recommended_tile: str, due_count: int | N
 
 
 def tile_feature_visible(tile_id: str, *, level: str | None = None, overrides: dict[str, bool] | None = None) -> bool:
-    from app.ui.feature_registry import TILE_FEATURE_IDS, feature_by_id
+    from app.ui.feature_registry import TILE_FEATURE_IDS, context_ok_for_feature, feature_by_id
 
     feature_id = TILE_FEATURE_IDS.get(tile_id)
     if not feature_id:
@@ -446,7 +446,12 @@ def tile_feature_visible(tile_id: str, *, level: str | None = None, overrides: d
     spec = feature_by_id(feature_id)
     if spec is None:
         return True
-    return feature_visible(spec, level=level or get_ui_level(), overrides=overrides if overrides is not None else get_overrides())
+    return feature_visible(
+        spec,
+        level=level or get_ui_level(),
+        overrides=overrides if overrides is not None else get_overrides(),
+        context_ok=context_ok_for_feature(spec),
+    )
 
 
 def _tile_rows_for_grid(tiles: tuple[MissionTile, ...]) -> tuple[tuple[MissionTile, ...], ...]:

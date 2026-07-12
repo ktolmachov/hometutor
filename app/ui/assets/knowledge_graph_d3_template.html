@@ -308,6 +308,7 @@ document.getElementById('stats').innerHTML=
   `<div class="st" style="color:#fcd34d"><b>${STATS.frontier}</b><span>доступно</span></div>`+
   (STATS.missing?`<div class="st" style="color:#fca5a5"><b>${STATS.missing}</b><span>с пробелами</span></div>`:'')+
   `<div class="st"><b>${STATS.clusters}</b><span>кластеров</span></div>`+
+  `<div class="st"><b>${STATS.sessions||0}</b><span>сессий</span></div>`+
   `<div class="st"><b>${STATS.velocity||0}%</b><span>скорость</span></div>`+
   `<div class="st"><b>${STATS.interactions||0}</b><span>взаимодействий</span></div>`;
 

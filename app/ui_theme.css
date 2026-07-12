@@ -30,6 +30,23 @@
     --button-bg-hover: linear-gradient(180deg, #c86d45 0%, #8f3d22 100%);
     --button-shadow: 0 10px 24px rgba(185, 86, 49, 0.18);
     --accent-soft: rgba(185, 86, 49, 0.10);
+    --input-border: rgba(19, 32, 25, 0.16);
+    --select-bg: #fffcf6;
+    --button-border: rgba(125, 53, 31, 0.16);
+    --select-hover-bg: rgba(36, 59, 44, 0.12);
+    --accent-divider: linear-gradient(90deg, transparent, rgba(255, 211, 158, 0.3), transparent);
+    --accent-glow: rgba(185, 86, 49, 0.30);
+    --accent-border: rgba(185, 86, 49, 0.25);
+    --accent-wash: rgba(185, 86, 49, 0.08);
+    --accent-outline: rgba(185, 86, 49, 0.55);
+    --accent-cta-shadow: 0 10px 22px rgba(185, 86, 49, 0.18);
+    --mission-hover-border: rgba(185, 86, 49, 0.68);
+    --recommended-border: rgba(185, 86, 49, 0.82);
+    --recommended-shadow: 0 0 0 3px rgba(185, 86, 49, 0.12), 0 16px 40px rgba(185, 86, 49, 0.16);
+    --smart-pulse-bg: linear-gradient(135deg, rgba(185, 86, 49, 0.18), rgba(255, 211, 158, 0));
+    --skeleton-bg: linear-gradient(90deg, rgba(185, 86, 49, 0.16), rgba(255, 211, 158, 0.44), rgba(185, 86, 49, 0.16));
+    --flashcard-chip-border: rgba(185, 86, 49, 0.22);
+    --flashcard-summary-bg: linear-gradient(135deg, rgba(30,132,73,0.08) 0%, rgba(185,86,49,0.06) 100%);
 }
 
 /* Ligatures for Mission Control tiles (unsafe_allow_html blocks skip Streamlit :material_* markdown). */
@@ -263,7 +280,7 @@ p, span, li, div, .stMarkdown, [data-testid="stMarkdownContainer"] {
 
 .stButton > button {
     border-radius: 14px;
-    border: 1px solid rgba(125, 53, 31, 0.16);
+    border: 1px solid var(--button-border);
     background: var(--button-bg);
     color: #fff7ef;
     font-weight: 800;
@@ -321,7 +338,7 @@ h3 {
 .stTextInput input, .stTextArea textarea, div[data-baseweb="select"] > div {
     background: rgba(255,255,255,0.94) !important;
     color: var(--ink) !important;
-    border-color: rgba(19, 32, 25, 0.16) !important;
+    border-color: var(--input-border) !important;
 }
 
 /*
@@ -340,9 +357,9 @@ body [data-baseweb="popover"] > div,
 body [data-baseweb="popover"] > div > div,
 body [data-baseweb="popover"] [data-baseweb="menu"],
 body [data-baseweb="popover"] ul[role="listbox"] {
-    background-color: #fffcf6 !important;
+    background-color: var(--select-bg) !important;
     background-image: none !important;
-    color: #132019 !important;
+    color: var(--ink) !important;
 }
 body [data-baseweb="popover"] li,
 body [data-baseweb="popover"] [role="option"],
@@ -350,47 +367,47 @@ body [data-baseweb="popover"] [role="option"] span,
 body [data-baseweb="popover"] [role="option"] div,
 body [data-baseweb="popover"] ul[role="listbox"] li > div,
 body [data-baseweb="popover"] [data-baseweb="block"] {
-    color: #132019 !important;
-    -webkit-text-fill-color: #132019 !important;
+    color: var(--ink) !important;
+    -webkit-text-fill-color: var(--ink) !important;
     background-color: transparent !important;
 }
 body [data-baseweb="popover"] li:hover,
 body [data-baseweb="popover"] [role="option"]:hover,
 body [data-baseweb="popover"] li[data-highlighted="true"],
 body [data-baseweb="popover"] [aria-selected="true"] {
-    background-color: rgba(36, 59, 44, 0.12) !important;
-    color: #132019 !important;
-    -webkit-text-fill-color: #132019 !important;
+    background-color: var(--select-hover-bg) !important;
+    color: var(--ink) !important;
+    -webkit-text-fill-color: var(--ink) !important;
 }
 /* Fallback: любой listbox на странице (новые версии Streamlit / другой контейнер) */
 body ul[role="listbox"] {
-    background-color: #fffcf6 !important;
+    background-color: var(--select-bg) !important;
     background-image: none !important;
-    color: #132019 !important;
+    color: var(--ink) !important;
 }
 body ul[role="listbox"] li,
 body ul[role="listbox"] li *,
 body [role="listbox"] [role="option"],
 body [role="listbox"] [role="option"] * {
-    color: #132019 !important;
-    -webkit-text-fill-color: #132019 !important;
+    color: var(--ink) !important;
+    -webkit-text-fill-color: var(--ink) !important;
 }
 body ul[role="listbox"] li:hover,
 body [role="listbox"] [role="option"]:hover {
-    background-color: rgba(36, 59, 44, 0.12) !important;
+    background-color: var(--select-hover-bg) !important;
 }
 /* VirtualDropdown: строки в react-window — div внутри menu / listbox */
 body [data-baseweb="popover"] [data-baseweb="menu"],
 body [data-baseweb="popover"] [data-baseweb="menu"] div,
 body [data-baseweb="popover"] ul[role="listbox"] div {
-    background-color: #fffcf6 !important;
-    color: #132019 !important;
-    -webkit-text-fill-color: #132019 !important;
+    background-color: var(--select-bg) !important;
+    color: var(--ink) !important;
+    -webkit-text-fill-color: var(--ink) !important;
 }
 body [data-baseweb="popover"] div[role="listbox"],
 body [data-baseweb="popover"] div[role="listbox"] > div {
-    background-color: #fffcf6 !important;
-    color: #132019 !important;
+    background-color: var(--select-bg) !important;
+    color: var(--ink) !important;
 }
 
 @media (max-width: 900px) {
@@ -737,7 +754,7 @@ div[data-testid="stChatMessage"] .stButton > button[kind="secondary"] {
     position: absolute;
     bottom: 0; left: 1.25rem; right: 1.25rem;
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(255, 211, 158, 0.3), transparent);
+    background: var(--accent-divider);
 }
 .home-dash-card.smart-study-next-step .home-dash-body p {
     line-height: 1.65;
@@ -878,15 +895,15 @@ div[data-testid="stChatMessage"] .stButton > button[kind="secondary"] {
     padding: 0.16rem 0.52rem;
     min-width: 1.35rem;
     text-align: center;
-    box-shadow: 0 3px 8px rgba(185, 86, 49, 0.3);
+    box-shadow: 0 3px 8px var(--accent-glow);
     line-height: 1.4;
 }
 
 /* Interactive tutorial guide */
 .tutorial-ribbon {
     margin: 0.3rem 0 0.8rem;
-    border: 1px solid rgba(185, 86, 49, 0.25);
-    background: rgba(185, 86, 49, 0.08);
+    border: 1px solid var(--accent-border);
+    background: var(--accent-wash);
     border-radius: 999px;
     padding: 0.38rem 0.8rem;
     font-size: 0.82rem;
@@ -943,7 +960,7 @@ div[data-testid="stChatMessage"] .stButton > button[kind="secondary"] {
 }
 
 .tutorial-highlight {
-    outline: 2px solid rgba(185, 86, 49, 0.55);
+    outline: 2px solid var(--accent-outline);
     border-radius: 12px;
 }
 
@@ -1066,7 +1083,7 @@ div[data-testid="stChatMessage"] .stButton > button[kind="secondary"] {
     border-radius: 12px !important;
     font-weight: 800 !important;
     letter-spacing: 0 !important;
-    box-shadow: 0 10px 22px rgba(185, 86, 49, 0.18) !important;
+    box-shadow: var(--accent-cta-shadow) !important;
 }
 
 /* Inline "Почему это подходит" — compact single line */
@@ -1226,7 +1243,7 @@ div[data-testid="stChatMessage"] .stButton > button[kind="secondary"] {
 
 .hero-grid--4-3 .mission-tile:hover {
     transform: scale(1.02);
-    border-color: rgba(185, 86, 49, 0.68);
+    border-color: var(--mission-hover-border);
     box-shadow: 0 14px 34px rgba(19, 32, 25, 0.14);
 }
 
@@ -1257,8 +1274,8 @@ div[data-testid="stChatMessage"] .stButton > button[kind="secondary"] {
 }
 
 .mode-card.smart-recommended {
-    border-color: rgba(185, 86, 49, 0.82);
-    box-shadow: 0 0 0 3px rgba(185, 86, 49, 0.12), 0 16px 40px rgba(185, 86, 49, 0.16);
+    border-color: var(--recommended-border);
+    box-shadow: var(--recommended-shadow);
 }
 
 .mode-card.smart-recommended::before {
@@ -1267,7 +1284,7 @@ div[data-testid="stChatMessage"] .stButton > button[kind="secondary"] {
     inset: -1px;
     border-radius: 8px;
     pointer-events: none;
-    background: linear-gradient(135deg, rgba(185, 86, 49, 0.18), rgba(255, 211, 158, 0));
+    background: var(--smart-pulse-bg);
     animation: smart-pulse 3.2s ease-in-out infinite;
 }
 
@@ -1279,7 +1296,7 @@ div[data-testid="stChatMessage"] .stButton > button[kind="secondary"] {
 .skeleton {
     color: transparent !important;
     min-width: 2rem;
-    background: linear-gradient(90deg, rgba(185, 86, 49, 0.16), rgba(255, 211, 158, 0.44), rgba(185, 86, 49, 0.16)) !important;
+    background: var(--skeleton-bg) !important;
     background-size: 180% 100% !important;
     animation: skeleton-shimmer 1.25s linear infinite;
 }
@@ -1294,7 +1311,7 @@ div[data-testid="stChatMessage"] .stButton > button[kind="secondary"] {
 }
 
 div[data-testid="stButton"] > button:focus-visible {
-    outline: 2px solid #b95631 !important;
+    outline: 2px solid var(--accent) !important;
     outline-offset: 2px !important;
 }
 
@@ -1475,8 +1492,8 @@ div[data-testid="stButton"] > button:focus-visible {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 0.72rem;
     color: var(--accent);
-    background: rgba(185, 86, 49, 0.10);
-    border: 1px solid rgba(185, 86, 49, 0.22);
+    background: var(--accent-soft);
+    border: 1px solid var(--flashcard-chip-border);
     border-radius: 999px;
     padding: 2px 10px;
     max-width: 100%;
@@ -1561,7 +1578,7 @@ div[data-testid="stButton"] > button:focus-visible {
 .fc-review-summary {
     border-radius: 20px;
     padding: 2rem;
-    background: linear-gradient(135deg, rgba(30,132,73,0.08) 0%, rgba(185,86,49,0.06) 100%);
+    background: var(--flashcard-summary-bg);
     border: 1px solid var(--line);
     text-align: center;
     margin: 1rem 0;

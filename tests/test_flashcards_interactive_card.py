@@ -121,6 +121,13 @@ def test_ease_factor_alias_card_does_not_crash() -> None:
     assert "fc3-scene" in html_out
 
 
+def test_non_hex_ink_does_not_get_raw_alpha_suffix() -> None:
+    html_out = _build(ink="rgb(1, 2, 3)")
+
+    assert "rgb(1, 2, 3)22" not in html_out
+    assert "border: 1px solid rgb(1, 2, 3)" in html_out
+
+
 def test_rating_quality_matches_scheduling_quality_map() -> None:
     # If these diverge, a chip would show one rating's projected interval
     # while the bridge click sends a different `quality` to the server.

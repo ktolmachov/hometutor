@@ -9,10 +9,9 @@ client-side (no Streamlit rerun); rating clicks bridge to the server by
 (``st-key-fc_rate_<q>`` / ``st-key-fc_gap_to_tutor``) — see
 ``app.ui.flashcards_review_view._render_review_rating_bridge``.
 
-The iframe does not inherit host CSS, so every colour/font is passed as
-a parameter from the current theme preset (``ink``/``muted``/``accent``/
-``mono`` in :func:`build_interactive_card_html`), not a CSS variable from
-``app/ui_theme.css``.
+The iframe does not inherit host CSS, so its palette is passed as parameters
+from the current theme preset and small derived colours are computed inside
+``build_interactive_card_html`` instead of relying on ``app/ui_theme.css``.
 """
 
 from __future__ import annotations
@@ -42,6 +41,18 @@ _RING_CIRCUMFERENCE = round(2 * 3.14159265358979 * _RING_RADIUS, 2)
 _BASE_HEIGHT = 360
 _MAX_HEIGHT = 900
 _MIN_HEIGHT = 220
+
+
+def _with_hex_alpha(color: str, alpha_hex: str) -> str:
+    value = str(color or "").strip()
+    if (
+        len(value) == 7
+        and value.startswith("#")
+        and len(alpha_hex) == 2
+        and all(ch in "0123456789abcdefABCDEF" for ch in value[1:] + alpha_hex)
+    ):
+        return f"{value}{alpha_hex}"
+    return value
 
 
 def estimate_interactive_card_height(card: dict[str, Any]) -> int:
@@ -162,8 +173,8 @@ _STYLE = """<style>
   .fc3-card.is-flipped {{ transform: rotateY(180deg); }}
   .fc3-face {{
     position: absolute; inset: 0; backface-visibility: hidden;
-    border-radius: 20px; border: 1px solid {INK}22;
-    box-shadow: 0 18px 40px {INK}22;
+    border-radius: 20px; border: 1px solid {INK_SOFT};
+    box-shadow: 0 18px 40px {INK_SOFT};
     padding: 1.6rem 1.6rem 1.2rem; display: flex; flex-direction: column;
     overflow-y: auto; color: {INK};
   }}
@@ -283,6 +294,7 @@ def build_interactive_card_html(
     style = _STYLE.format(
         MONO=mono,
         INK=ink,
+        INK_SOFT=_with_hex_alpha(ink, "22"),
         MUTED=muted,
         ACCENT=accent,
         FRONT_BG=front_bg,

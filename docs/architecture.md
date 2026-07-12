@@ -387,8 +387,11 @@ Public demo:
   процесс, от которого зависит UI; `deploy/docker/docker_entrypoint.sh` поднимает оба процесса
   (uvicorn на `127.0.0.1:8000` внутренний, Streamlit на `0.0.0.0:8501` публичный) и при пустом
   `data/`/`chroma_db/` подкладывает demo-корпус (`deploy/hf-spaces/bootstrap_demo_paths.sh`).
-- Контейнерный FS на HF эфемерный: `data/auth.db` и per-user `user_state.db` не персистентны
-  между рестартами Space — задокументированное ограничение демо, не баг.
+- Контейнерный FS на HF эфемерный без attached volume: `data/auth.db` и per-user
+  `user_state.db` не персистентны между рестартами Space. Для persistent demo-state
+  подключите read-write Storage Bucket и смонтируйте его в `/data`; entrypoint автоматически
+  использует `/data/hometutor` как `HOME_RAG_HOME`. Если mount path другой, задайте
+  `HOME_RAG_HOME` явно.
 
 CI/CD (`.github/workflows/`):
 

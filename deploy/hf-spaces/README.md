@@ -32,9 +32,12 @@
 1. **Только облачные LLM:** бесплатный тариф не запускает локальные модели (Ollama/LM Studio) — нет GPU/достаточного CPU.
 2. **Эфемерный FS:** диск контейнера сбрасывается при каждом рестарте/пересборке Space.
    - Демо-корпус восстанавливается автоматически из `demo_data/`/`demo_chroma_db/` (см. выше).
-   - `data/auth.db` (пользователи) и per-user `data/users/<id>/user_state.db` **не персистентны** —
-     демо-аккаунты и прогресс обучения пропадают при рестарте контейнера. Для постоянного
-     хранения нужен HF Persistent Storage (платный) или внешний volume — вне объёма демо.
+   - Без attached volume `data/auth.db` (пользователи) и per-user
+     `data/users/<id>/user_state.db` **не персистентны** — демо-аккаунты и прогресс обучения
+     пропадают при рестарте контейнера.
+   - Для постоянного хранения подключите Hugging Face Storage Bucket как read-write volume
+     и смонтируйте его в `/data` (entrypoint автоматически использует `/data/hometutor`), либо
+     задайте `HOME_RAG_HOME` на ваш mount path.
 
 ---
 
@@ -44,6 +47,7 @@
 |---|---|---|
 | `OPENAI_API_KEY` | `sk-or-v1-abc...` | API-ключ OpenRouter/OpenAI-совместимого провайдера |
 | `OPENAI_API_BASE` | `https://openrouter.ai/api/v1` | URL провайдера |
+| `HOME_RAG_HOME` | `/data/hometutor` | Корень persistent runtime-данных. Нужен, если bucket смонтирован не в `/data`; при mount `/data` выставляется автоматически |
 | `HOME_RAG_DATA_MODE` | `demo` | Демо-режим данных; для HF выставляется автоматически, если переменная не задана |
 | `HOME_RAG_LOCAL_PROFILE` | `cloud_fast` | Primary chat идёт сразу в облачный OpenAI-compatible endpoint |
 | `OFFLINE_PROBE_LLM_ENDPOINT` | `false` | Не проверять loopback LM Studio/llama.cpp внутри Space |
@@ -68,7 +72,10 @@
 `deploy/docker/docker_entrypoint.sh` выставляет HF-safe defaults для `HOME_RAG_*`,
 `OFFLINE_PROBE_LLM_ENDPOINT`, `LLM_LOCAL_WARMUP`, `QUIZ_*`, `GRAPH_*`, `SSR_*` и
 `EMBED_API_BASE`, когда контейнер запущен в Hugging Face Space (`SPACE_ID` или
-`SPACE_HOST` присутствует). Явно заданные Space Variables/Secrets имеют приоритет.
+`SPACE_HOST` присутствует). Если в контейнере есть writable `/data`, entrypoint также
+направляет runtime-состояние в `/data/hometutor`: там окажутся `data/auth.db`,
+`data/users/<id>/user_state.db`, `chroma_db/` и `logs/`. Явно заданные Space
+Variables/Secrets имеют приоритет.
 
 ---
 

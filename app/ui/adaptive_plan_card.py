@@ -23,6 +23,7 @@ from app.gamification_service import award_xp_for_block, count_completed_plan_bl
 from app.ssr_context_builder import build_ssr_llm_learning_context as _build_ssr_llm_learning_context
 from app.ui_client import stream_ssr_explain as _stream_ssr_explain
 from app.learning_plan_service import (
+    ADAPTIVE_DAILY_PLAN_KV_KEY,
     AdaptiveDailyPlan,
     get_adaptive_daily_plan_history,
     get_primary_adaptive_daily_plan_block,
@@ -381,12 +382,43 @@ def _tutor_session_id() -> str | None:
     s = str(sid).strip()
     return s or None
 
+def _refresh_plan_lp_context(plan: dict[str, Any]) -> bool:
+    """Refresh learning_plan_context from current resume. Returns True if changed."""
+    try:
+        from app.user_state import get_latest_learning_plan_resume
+        lp_resume = get_latest_learning_plan_resume()
+        new_ctx = None
+        if lp_resume:
+            new_ctx = {
+                "display_title": str(lp_resume.get("display_title") or ""),
+                "step_index": lp_resume.get("step_index"),
+                "step_label": str(lp_resume.get("step_label") or "")[:120],
+                "progress": lp_resume.get("progress"),
+            }
+        old_ctx = plan.get("learning_plan_context")
+        if old_ctx != new_ctx:
+            if new_ctx:
+                plan["learning_plan_context"] = new_ctx
+            else:
+                plan.pop("learning_plan_context", None)
+            return True
+    except Exception:  # noqa: BLE001 — context refresh is best-effort
+        pass
+    return False
+
+
 def _effective_plan(user_id: str, plan_override: dict[str, Any] | None) -> dict[str, Any]:
     if isinstance(plan_override, dict) and plan_override:
         return plan_override
     today = datetime.now(timezone.utc).date().isoformat()
     saved = get_saved_adaptive_daily_plan()
     if saved and str(saved.get("date") or "") == today:
+        if _refresh_plan_lp_context(saved):
+            try:
+                from app.user_state import set_kv
+                set_kv(ADAPTIVE_DAILY_PLAN_KV_KEY, json.dumps(saved, ensure_ascii=False))
+            except Exception:  # noqa: BLE001 — context refresh is best-effort
+                pass
         return saved
     return AdaptiveDailyPlan(user_id, session_id=_tutor_session_id()).build_adaptive_daily_plan()
 

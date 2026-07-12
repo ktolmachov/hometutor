@@ -311,8 +311,10 @@ report, чтобы distinguish published graph, previous fallback и diagnostic-
 - По умолчанию `config.env` направляет embeddings на локальный loopback endpoint; облачный embedding provider должен быть явным `.env` override.
 - `HOME_RAG_API_KEY` защищает REST endpoints только если задан; `AUTH_ENABLED=true` требует
   реального `JWT_SECRET` (fail-fast guard — дефолтный dev-секрет отклоняется на старте).
-- HF Spaces demo-деплой работает на эфемерном FS контейнера: аккаунты и прогресс не персистентны
-  между перезапусками Space.
+- HF Spaces demo-деплой без attached volume работает на эфемерном FS контейнера: аккаунты
+  и прогресс не персистентны между перезапусками Space. Если к Space подключён read-write
+  Storage Bucket и он смонтирован в `/data`, entrypoint направляет runtime state в
+  `/data/hometutor`; для другого mount path задайте `HOME_RAG_HOME`.
 - Multimodal M0a/M0.3 — это metadata plumbing и media panel. M1 (ASR + автоматическое
   создание sidecar) существует как offline maintainer-конвейер
   (`scripts/transcribe_media.py`, `scripts/build_media_sidecar.py`, `app/media_alignment.py`,

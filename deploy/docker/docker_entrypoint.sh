@@ -10,16 +10,11 @@ cleanup() {
 
 trap cleanup SIGTERM SIGINT EXIT
 
-# HF Spaces (Docker SDK) / demo: эфемерный FS контейнера — на каждом старте подкладываем
-# demo_data/ + demo_chroma_db/, если data/ и chroma_db/ ещё пусты. На постоянном volume
-# (docker-compose с HOME_RAG_HOME) это no-op после первого запуска. Путь относительно
-# WORKDIR (/app в образе, см. Dockerfile), не относительно расположения этого скрипта —
-# entrypoint копируется в /usr/local/bin отдельно от остального репозитория.
-if [[ -f "deploy/hf-spaces/bootstrap_demo_paths.sh" ]]; then
-  bash "deploy/hf-spaces/bootstrap_demo_paths.sh" || true
-fi
-
 if [[ -n "${SPACE_ID:-}" || -n "${SPACE_HOST:-}" ]]; then
+  if [[ -z "${HOME_RAG_HOME:-}" && -d "/data" && -w "/data" ]]; then
+    export HOME_RAG_HOME="/data/hometutor"
+  fi
+
   export HOME_RAG_DATA_MODE="${HOME_RAG_DATA_MODE:-demo}"
   export HOME_RAG_LOCAL_PROFILE="${HOME_RAG_LOCAL_PROFILE:-cloud_fast}"
   export HOME_RAG_LLM_CLOUD_CONSENT="${HOME_RAG_LLM_CLOUD_CONSENT:-true}"
@@ -35,6 +30,15 @@ if [[ -n "${SPACE_ID:-}" || -n "${SPACE_HOST:-}" ]]; then
   export SSR_LLM_API_BASE="${SSR_LLM_API_BASE:-${OPENAI_API_BASE}}"
   export SSR_LLM_MODEL="${SSR_LLM_MODEL:-${LLM_MODEL}}"
   export EMBED_API_BASE="${EMBED_API_BASE:-${OPENAI_API_BASE}}"
+fi
+
+# HF Spaces (Docker SDK) / demo: эфемерный FS контейнера — на каждом старте подкладываем
+# demo_data/ + demo_chroma_db/, если data/ и chroma_db/ ещё пусты. На постоянном volume
+# (docker-compose с HOME_RAG_HOME) это no-op после первого запуска. Путь относительно
+# WORKDIR (/app в образе, см. Dockerfile), не относительно расположения этого скрипта —
+# entrypoint копируется в /usr/local/bin отдельно от остального репозитория.
+if [[ -f "deploy/hf-spaces/bootstrap_demo_paths.sh" ]]; then
+  bash "deploy/hf-spaces/bootstrap_demo_paths.sh" || true
 fi
 
 uvicorn app.api:app --host 0.0.0.0 --port 8000 &

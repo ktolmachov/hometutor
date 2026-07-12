@@ -9,8 +9,10 @@ client-side (no Streamlit rerun); rating clicks bridge to the server by
 (``st-key-fc_rate_<q>`` / ``st-key-fc_gap_to_tutor``) — see
 ``app.ui.flashcards_review_view._render_review_rating_bridge``.
 
-The iframe does not inherit host CSS, so every colour/font used here is a
-mirrored literal, not a CSS variable from ``app/ui_theme.css``.
+The iframe does not inherit host CSS, so every colour/font is passed as
+a parameter from the current theme preset (``ink``/``muted``/``accent``/
+``mono`` in :func:`build_interactive_card_html`), not a CSS variable from
+``app/ui_theme.css``.
 """
 
 from __future__ import annotations
@@ -253,6 +255,10 @@ def build_interactive_card_html(
     memory: dict[str, Any],
     initial_flipped: bool,
     session_nonce: int,
+    ink: str = "#132019",
+    muted: str = "#59685f",
+    accent: str = "#b95631",
+    mono: str = "ui-monospace,'IBM Plex Mono',monospace",
 ) -> str:
     """Self-contained iframe markup for the review card's flip scene.
 
@@ -260,7 +266,18 @@ def build_interactive_card_html(
     ``sessionStorage`` so a stale flip from a previous queue load never
     leaks onto a card that reappears after a filter change / "Начать снова"
     (see the review view's ``flashcards_review_queue_nonce``).
+
+    ``ink``/``muted``/``accent``/``mono`` — theme colours passed from the caller
+    (see :func:`app.ui_preferences.get_ui_theme` and
+    :data:`app.ui.theme_presets.THEME_TOKENS`); default to forest palette.
     """
+    # Shadow module-level constants with per-call parameters for theme support.
+    # pylint: disable=redefined-outer-name
+    _INK = ink  # noqa: N806
+    _MUTED = muted  # noqa: N806
+    _ACCENT = accent  # noqa: N806
+    _MONO = mono  # noqa: N806
+
     card_id = int(card.get("id") or 0)
     front_html = escape_multiline(card.get("front"))
     back_html = escape_multiline(card.get("back"))

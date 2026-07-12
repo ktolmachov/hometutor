@@ -78,6 +78,27 @@ def test_ui_prefs_migrate_from_global_db_for_auth_user(tmp_path, monkeypatch) ->
         reset_schema_cache_for_tests()
 
 
+def test_get_ui_theme_defaults_to_forest(kv_store) -> None:
+    assert prefs.get_ui_theme() == "forest"
+    assert prefs.UI_THEME_KEY not in kv_store
+
+
+def test_set_ui_theme_persists(kv_store) -> None:
+    prefs.set_ui_theme("ocean")
+    assert kv_store[prefs.UI_THEME_KEY] == "ocean"
+    assert prefs.get_ui_theme() == "ocean"
+
+
+def test_set_ui_theme_rejects_unknown(kv_store) -> None:
+    with pytest.raises(ValueError, match="unsupported UI theme"):
+        prefs.set_ui_theme("vaporwave")
+
+
+def test_get_ui_theme_falls_back_on_invalid_stored(kv_store) -> None:
+    kv_store[prefs.UI_THEME_KEY] = "vaporwave"
+    assert prefs.get_ui_theme() == "forest"
+
+
 def test_feature_visible_honors_level_and_override() -> None:
     spec = feature_by_id("view:metrics")
     assert spec is not None

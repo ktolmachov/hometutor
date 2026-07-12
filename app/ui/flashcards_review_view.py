@@ -18,6 +18,15 @@ from app.flashcard_handoff import (
 )
 from app.flashcard_handoff_timing import record_handoff_click
 from app.flashcards_tag_display import source_path_from_card
+
+
+def _current_theme_tokens() -> dict[str, str]:
+    try:
+        from app.ui.theme_presets import THEME_TOKENS
+        from app.ui_preferences import get_ui_theme
+        return dict(THEME_TOKENS.get(get_ui_theme(), {}))
+    except Exception:  # noqa: BLE001 - theme fallback must not break review
+        return {}
 from app.flashcard_service import (
     build_flashcard_review_undo_snapshot,
     build_flashcards_session_audit_export,
@@ -824,6 +833,7 @@ def _render_active_review_card(
     memory = compute_card_memory_signals(card)
     initial_flipped = bool(st.session_state.get("flashcards_card_flipped", False))
     session_nonce = int(st.session_state.get("flashcards_review_queue_nonce", 0))
+    _theme_tokens = _current_theme_tokens()
     card_html = build_interactive_card_html(
         card=card,
         idx=idx,
@@ -832,6 +842,9 @@ def _render_active_review_card(
         memory=memory,
         initial_flipped=initial_flipped,
         session_nonce=session_nonce,
+        ink=_theme_tokens.get("ink", "#132019"),
+        muted=_theme_tokens.get("muted", "#59685f"),
+        accent=_theme_tokens.get("accent", "#b95631"),
     )
     # scrolling=True is a safety net, not the primary sizing mechanism: the
     # JS resize inside the card (see flashcards_interactive_card.py) can only

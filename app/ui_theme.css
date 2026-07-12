@@ -11,6 +11,20 @@
     --forest: #243b2c;
     --line: rgba(19, 32, 25, 0.12);
     --shadow: 0 20px 48px rgba(49, 29, 15, 0.08);
+    --bg-app-1: rgba(231, 177, 104, 0.18);
+    --bg-app-2: rgba(86, 126, 89, 0.12);
+    --bg-app-3: #f8f2e7;
+    --bg-app-4: #f4ede0;
+    --bg-hero: linear-gradient(135deg, rgba(34, 61, 44, 0.97), rgba(101, 56, 35, 0.95));
+    --bg-hero-text: #fff6ea;
+    --head-text: #fffef8;
+    --chip-bg: rgba(185, 86, 49, 0.1);
+    --chip-border: rgba(185, 86, 49, 0.14);
+    --head-continue: linear-gradient(135deg, #1b3224 0%, #2e4a39 40%, #6b3820 100%);
+    --head-due: linear-gradient(135deg, #5c3564 0%, #b95631 100%);
+    --head-fc: linear-gradient(135deg, #1a3a4a 0%, #b95631 100%);
+    --flashcard-front: linear-gradient(160deg, rgba(36,59,44,0.04) 0%, rgba(185,86,49,0.04) 100%);
+    --flashcard-back: linear-gradient(160deg, rgba(185,86,49,0.07) 0%, rgba(36,59,44,0.05) 100%);
 }
 
 /* Ligatures for Mission Control tiles (unsafe_allow_html blocks skip Streamlit :material_* markdown). */
@@ -37,9 +51,9 @@
 
 .stApp {
     background:
-        radial-gradient(circle at top left, rgba(231, 177, 104, 0.18), transparent 30%),
-        radial-gradient(circle at top right, rgba(86, 126, 89, 0.12), transparent 26%),
-        linear-gradient(180deg, #f8f2e7 0%, #f4ede0 100%);
+        radial-gradient(circle at top left, var(--bg-app-1), transparent 30%),
+        radial-gradient(circle at top right, var(--bg-app-2), transparent 26%),
+        linear-gradient(180deg, var(--bg-app-3) 0%, var(--bg-app-4) 100%);
     color: var(--ink);
     font-family: 'Manrope', sans-serif;
 }
@@ -65,23 +79,23 @@ p, span, li, div, .stMarkdown, [data-testid="stMarkdownContainer"] {
 }
 
 .hero {
-    background: linear-gradient(135deg, rgba(34, 61, 44, 0.97), rgba(101, 56, 35, 0.95));
+    background: var(--bg-hero);
     border-radius: 30px;
     padding: 1.6rem 1.8rem;
-    color: #fff6ea;
+    color: var(--bg-hero-text);
     box-shadow: var(--shadow);
     margin-bottom: 1rem;
 }
 
 .hero h1 {
-    color: #fff6ea !important;
+    color: var(--bg-hero-text) !important;
     margin: 0.25rem 0 0.45rem 0;
     font-size: 2.15rem;
     letter-spacing: -0.04em;
 }
 
 .hero p {
-    color: rgba(255, 246, 234, 0.88);
+    color: var(--bg-hero-text);
     margin: 0;
     line-height: 1.55;
     max-width: 920px;
@@ -164,9 +178,9 @@ p, span, li, div, .stMarkdown, [data-testid="stMarkdownContainer"] {
 
 .chip {
     display: inline-block;
-    background: rgba(185, 86, 49, 0.1);
+    background: var(--chip-bg);
     color: var(--accent-dark);
-    border: 1px solid rgba(185, 86, 49, 0.14);
+    border: 1px solid var(--chip-border);
     border-radius: 999px;
     padding: 0.32rem 0.7rem;
     font-size: 0.82rem;
@@ -675,7 +689,7 @@ div[data-testid="stChatMessage"] .stButton > button[kind="secondary"] {
 }
 .home-dash-head {
     padding: 1rem 1.25rem;
-    color: #fffef8;
+    color: var(--head-text);
     margin: 0;
 }
 .home-dash-head h3 {
@@ -683,20 +697,20 @@ div[data-testid="stChatMessage"] .stButton > button[kind="secondary"] {
     font-size: 1.15rem;
     font-weight: 800;
     letter-spacing: -0.02em;
-    color: #fffef8 !important;
+    color: var(--head-text) !important;
 }
 .home-dash-head h4 {
     margin: 0;
     font-size: 1.05rem;
     font-weight: 800;
     letter-spacing: -0.02em;
-    color: #fffef8 !important;
+    color: var(--head-text) !important;
 }
 .home-dash-head-continue {
-    background: linear-gradient(135deg, #1b3224 0%, #2e4a39 40%, #6b3820 100%);
+    background: var(--head-continue);
 }
 .home-dash-head-due {
-    background: linear-gradient(135deg, #5c3564 0%, #b95631 100%);
+    background: var(--head-due);
 }
 .home-dash-body {
     padding: 1rem 1.25rem 1.1rem 1.25rem;
@@ -1391,7 +1405,7 @@ div[data-testid="stButton"] > button:focus-visible {
    ───────────────────────────────────────────────────────────── */
 
 .home-dash-head-fc {
-    background: linear-gradient(135deg, #1a3a4a 0%, #b95631 100%);
+    background: var(--head-fc);
 }
 
 .flashcard {
@@ -1411,11 +1425,11 @@ div[data-testid="stButton"] > button:focus-visible {
 }
 
 .flashcard-front {
-    background: linear-gradient(160deg, rgba(36,59,44,0.04) 0%, rgba(185,86,49,0.04) 100%);
+    background: var(--flashcard-front);
 }
 
 .flashcard-back {
-    background: linear-gradient(160deg, rgba(185,86,49,0.07) 0%, rgba(36,59,44,0.05) 100%);
+    background: var(--flashcard-back);
     border-left: 4px solid var(--accent);
 }
 

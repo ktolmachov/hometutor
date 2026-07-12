@@ -19,7 +19,6 @@ from app.konspekt_artifact import (  # noqa: F401 - реэкспорт стар�
     _check_questions_block,
     _lecture_main_ideas,
     _row_konspekt_label,
-    _sidecar_stale_reasons,
     _sources_footer,
     _stitch_verbatim,
     _study_pack_tail,

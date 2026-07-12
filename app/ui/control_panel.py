@@ -6,14 +6,21 @@ from collections import defaultdict
 import streamlit as st
 
 from app.ui.feature_registry import FEATURES
+from app.ui.theme_presets import (
+    THEME_META,
+    THEME_TOKENS,
+    get_theme_title,
+)
 from app.ui_preferences import (
     LEVEL_ALL,
     clear_overrides,
     feature_visible,
     get_overrides,
     get_ui_level,
+    get_ui_theme,
     set_override,
     set_ui_level,
+    set_ui_theme,
 )
 
 
@@ -106,15 +113,62 @@ def _render_overrides(level: str, overrides: dict[str, bool]) -> None:
             st.rerun()
 
 
+def _render_theme_card(theme_id: str, *, current_theme: str) -> None:
+    meta = THEME_META.get(theme_id, {})
+    title = meta.get("title_ru", theme_id)
+    desc = meta.get("description_ru", "")
+    active = current_theme == theme_id
+    tokens = THEME_TOKENS.get(theme_id, {})
+    preview_bg = tokens.get("bg-app-3", "#f4ede0")
+    preview_accent = tokens.get("accent", "#b95631")
+    with st.container(border=True):
+        st.markdown(
+            f'<div style="height:2.5rem;border-radius:8px;'
+            f'background:{preview_bg};'
+            f'margin-bottom:0.5rem;'
+            f'border-left:4px solid {preview_accent};'
+            f'padding:0.2rem 0.5rem;'
+            f'font-size:1.2rem;">{title[0]}</div>'
+            f"**{title}**",
+            unsafe_allow_html=True,
+        )
+        st.caption(desc)
+        if st.button(
+            "Выбрано" if active else "Выбрать",
+            key=f"ui_theme_{theme_id}",
+            disabled=active,
+            type="primary" if active else "secondary",
+            width="stretch",
+        ):
+            if not active:
+                set_ui_theme(theme_id)
+                st.rerun()
+
+
+def _render_theme_cards() -> None:
+    current = get_ui_theme()
+    st.markdown("**Выбор цветовой схемы**")
+    st.caption(f"Сейчас активна схема **{get_theme_title(current)}**.")
+    theme_ids = sorted(THEME_TOKENS.keys())
+    for row_start in range(0, len(theme_ids), 3):
+        cols = st.columns(3)
+        for col, tid in zip(cols, theme_ids[row_start : row_start + 3]):
+            with col:
+                _render_theme_card(tid, current_theme=current)
+
+
 @st.dialog("Панель управления", width="large")
 def render_control_panel_dialog() -> None:
-    ui_tab, rag_tab = st.tabs(["Интерфейс", "RAG и ingest"])
+    ui_tab, theme_tab, rag_tab = st.tabs(["Интерфейс", "Оформление", "RAG и ingest"])
     with ui_tab:
         level = get_ui_level()
         overrides = get_overrides()
         _render_level_cards(level, overrides)
         _render_overrides(level, overrides)
         st.caption("Настройки интерфейса хранятся локально в профиле и попадают в backup.")
+    with theme_tab:
+        _render_theme_cards()
+        st.caption("Цветовая схема хранится локально в профиле и попадает в backup.")
     with rag_tab:
         from app.ui.rag_settings_panel import render_rag_settings_section
 

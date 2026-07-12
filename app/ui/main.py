@@ -37,7 +37,8 @@ from app.ui.session_state import (
 )
 from app.ui.sidebar import render_sidebar as _render_sidebar
 from app.ui.streamlit_activity import touch_streamlit_session as _touch_streamlit_session
-from app.ui.styles import inject_styles as _inject_styles
+from app.ui.styles import inject_styles as _inject_styles, inject_theme_overrides as _inject_theme_overrides
+from app.ui_preferences import get_ui_theme as _get_ui_theme
 from app.ui.tutorial_guide import (
     hydrate_tutorial_progress_once as _hydrate_tutorial_progress_once,
     render_tutorial_overlay as _render_tutorial_overlay,
@@ -87,6 +88,7 @@ _render_offline_banner()
 _render_config_env_banner()
 _init_state()
 require_ui_auth_or_stop()
+_inject_theme_overrides(_get_ui_theme())
 _touch_streamlit_session()
 _hydrate_tutor_mastery_from_db()
 _hydrate_tutor_goal_snapshot_once()
@@ -439,6 +441,24 @@ elif selected_view == "Собрать учебную сессию":
                 st.info("Введите вопрос или тему для сессии.")
         if st.session_state.get("agent_session_result"):
             _agent_render_answer()
+            _debug = st.session_state.get("last_debug") or {}
+            _at = _debug.get("agent_trace") if isinstance(_debug, dict) else None
+            if isinstance(_at, dict):
+                scenario = str(_at.get("scenario") or "").strip()
+                stop_reason = str(_at.get("stop_reason") or "").strip()
+                tools = _at.get("tool_calls")
+                with st.expander("🧠 Трассировка агента", expanded=False):
+                    if scenario:
+                        st.caption(f"**Сценарий:** {scenario}")
+                    if stop_reason:
+                        st.caption(f"**Причина останова:** {stop_reason}")
+                    if isinstance(tools, list) and tools:
+                        for t in tools:
+                            if isinstance(t, dict):
+                                st.caption(
+                                    f"🛠 {t.get('tool', '?')} — "
+                                    f"{str(t.get('status') or t.get('result') or '')[ :120]}"
+                                )
 else:
     _fragment_print_view()
 

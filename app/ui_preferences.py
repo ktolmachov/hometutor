@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 UI_LEVEL_KEY = "ui_level"
 UI_OVERRIDES_KEY = "ui_feature_overrides"
+UI_THEME_KEY = "ui_theme"
 LEVEL_ALL = "all"
 VALID_UI_LEVELS = frozenset({"1", "2", "3", "4", "5", LEVEL_ALL})
 
@@ -37,17 +38,20 @@ def _read_global_kv(key: str, default: str | None = None) -> str | None:
 
 
 def _maybe_migrate_global_ui_prefs() -> None:
-    """Один раз скопировать ui_level/overrides из глобальной БД в per-user профиль."""
+    """Один раз скопировать ui_level/overrides/theme из глобальной БД в per-user профиль."""
     if not (get_current_user_id() or "").strip():
         return
     if _read_raw_kv(UI_LEVEL_KEY):
         return
     global_level = _read_global_kv(UI_LEVEL_KEY)
     global_overrides = _read_global_kv(UI_OVERRIDES_KEY)
+    global_theme = _read_global_kv(UI_THEME_KEY)
     if global_level:
         _write_raw_kv(UI_LEVEL_KEY, global_level)
     if global_overrides:
         _write_raw_kv(UI_OVERRIDES_KEY, global_overrides)
+    if global_theme:
+        _write_raw_kv(UI_THEME_KEY, global_theme)
 
 
 def _read_raw_kv(key: str, default: str | None = None) -> str | None:
@@ -66,7 +70,7 @@ def _write_raw_kv(key: str, value: str) -> None:
 
 def _safe_get_kv(key: str, default: str | None = None) -> str | None:
     _ensure_auth_context()
-    if key in (UI_LEVEL_KEY, UI_OVERRIDES_KEY):
+    if key in (UI_LEVEL_KEY, UI_OVERRIDES_KEY, UI_THEME_KEY):
         _maybe_migrate_global_ui_prefs()
     return _read_raw_kv(key, default)
 
@@ -122,6 +126,24 @@ def set_ui_level(level: str) -> None:
         raise ValueError(f"unsupported UI level: {level!r}")
     _safe_set_kv(UI_LEVEL_KEY, value)
     clear_overrides()
+
+
+def get_ui_theme() -> str:
+    from app.ui.theme_presets import THEME_TOKENS
+
+    raw = str(_safe_get_kv(UI_THEME_KEY, "") or "").strip().lower()
+    if raw in THEME_TOKENS:
+        return raw
+    return "forest"
+
+
+def set_ui_theme(theme_id: str) -> None:
+    from app.ui.theme_presets import THEME_TOKENS
+
+    value = str(theme_id or "").strip().lower()
+    if value not in THEME_TOKENS:
+        raise ValueError(f"unsupported UI theme: {theme_id!r}")
+    _safe_set_kv(UI_THEME_KEY, value)
 
 
 def get_overrides() -> dict[str, bool]:

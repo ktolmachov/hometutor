@@ -678,9 +678,19 @@ def _render_graph_quality_audit(audit: dict[str, object]) -> None:
     for item in findings:
         if not isinstance(item, dict):
             continue
-        st.caption(
-            f"{item.get('severity')} · {item.get('title')} — {item.get('detail')}"
-        )
+        kind = str(item.get("kind") or "")
+        title = str(item.get("title") or "")
+        detail = str(item.get("detail") or "")
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            st.caption(f"{item.get('severity')} · {title} — {detail}")
+        with col2:
+            if kind == "no_sections":
+                cid = title.replace("Нет точных разделов для ", "").strip()
+                if st.button("🔎", key=f"audit_fix_{kind}_{hash(title)}", help="Выбрать концепт для поиска разделов"):
+                    st.session_state["kg_action_concept"] = cid
+                    st.toast(f"Концепт **{cid}** выбран в панели действий ниже", icon="🎯")
+                    st.rerun()
 
 
 def _render_graph_publish_status() -> dict | None:

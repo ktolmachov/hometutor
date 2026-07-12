@@ -53,7 +53,13 @@ def _normalize_mermaid_block(text: str) -> str:
     if not lines:
         return ""
     first = lines[0].strip().lower()
-    if not (first.startswith("flowchart") or first.startswith("graph ") or first == "mindmap"):
+    allowed_mermaid_directives = (
+        "flowchart", "graph ", "mindmap",
+        "sequencediagram", "classdiagram", "statediagram", "statediagram-v2",
+        "erdiagram", "gantt", "pie", "gitgraph", "journey",
+        "requirementdiagram", "block",
+    )
+    if not any(first.startswith(d) for d in allowed_mermaid_directives):
         return ""
     return "```mermaid\n" + "\n".join(lines) + "\n```"
 

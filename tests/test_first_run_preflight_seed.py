@@ -74,6 +74,42 @@ def test_preflight_rows_status_matrix(monkeypatch) -> None:
                 assert "local-model" in text
 
 
+def test_preflight_rows_cloud_llm_failure_hint(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.ui.preflight.get_settings",
+        lambda: SimpleNamespace(
+            llm_model="meta-llama/llama-3.2-3b-instruct:free",
+            llm_api_base="http://127.0.0.1:8080/v1",
+            openai_api_base="https://openrouter.ai/api/v1",
+            home_rag_local_profile="cloud_fast",
+        ),
+    )
+
+    rows = preflight_rows(
+        {
+            "status": "degraded",
+            "components": {
+                "index": {"status": "ok", "documents_count": 7},
+                "llm": {
+                    "status": "error",
+                    "llm_source": "cloud",
+                    "llm_profile": "cloud_fast",
+                    "llm_model": "meta-llama/llama-3.2-3b-instruct:free",
+                    "llm_api_base": "https://openrouter.ai/api/v1",
+                },
+                "api": {"status": "ok"},
+            },
+        }
+    )
+
+    text = " ".join(row[2] for row in rows)
+    assert "Cloud LLM недоступен" in text
+    assert "OPENAI_API_KEY" in text
+    assert "https://openrouter.ai/api/v1" in text
+    assert "LM Studio" not in text
+    assert "127.0.0.1" not in text
+
+
 def test_preflight_check_again_clears_all_ui_api_caches(monkeypatch) -> None:
     import app.ui.preflight as preflight
 

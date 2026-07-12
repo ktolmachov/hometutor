@@ -560,14 +560,25 @@ def get_healthcheck_llm(*, timeout_sec: float = 2.0):
     if not s.openai_api_key:
         raise ValueError("OPENAI_API_KEY не найден в .env")
     timeout = max(0.1, float(timeout_sec))
-    return OpenAI(
+    profile = str(getattr(s, "home_rag_local_profile", "balanced") or "balanced").strip().lower()
+    api_base = _primary_chat_api_base_for_profile(s)
+    llm = OpenAI(
         model=s.llm_model,
         api_key=s.openai_api_key,
-        api_base=_primary_chat_api_base_for_profile(s),
+        api_base=api_base,
         max_retries=0,
         timeout=timeout,
         reuse_client=False,
         http_client=httpx.Client(timeout=_fixed_http_timeout(timeout)),
+    )
+    source = "cloud" if profile == "cloud_fast" else "local"
+    return _annotate_llm_source(
+        llm,
+        source=source,
+        model=s.llm_model,
+        api_base=api_base,
+        fallback_used=False,
+        profile=profile,
     )
 
 

@@ -11,7 +11,7 @@ from app.api_models import HealthResponse, RootResponse
 from app.api_helpers import record_api_error
 from app.api_services import get_index_stats, get_learner_state_health, get_ui_bootstrap
 from app.logging_config import setup_logging
-from app.provider import get_healthcheck_llm
+from app.provider import get_healthcheck_llm, llm_source_metadata
 
 router = APIRouter(tags=["core"])
 logger = setup_logging()
@@ -99,25 +99,29 @@ def health_deep():
         overall_status = "degraded"
 
     health_deep_llm_timeout_sec = 2.0
+    llm_meta: dict = {}
     try:
         llm = get_healthcheck_llm(timeout_sec=health_deep_llm_timeout_sec)
+        llm_meta = llm_source_metadata(llm)
         t1 = time.perf_counter()
         _ = llm.complete("health check", max_tokens=1)
         latency_ms = (time.perf_counter() - t1) * 1000
         components["llm"] = {
             "status": "ok",
             "latency_ms": round(latency_ms, 3),
+            **llm_meta,
         }
     except (TimeoutError, TimeoutException, APITimeoutError):
         record_api_error(endpoint="/health/deep", exc=TimeoutError("health_deep_llm_timeout"), status_code=503)
         components["llm"] = {
             "status": "timeout",
             "timeout_sec": health_deep_llm_timeout_sec,
+            **llm_meta,
         }
         overall_status = "degraded"
     except Exception as e:  # noqa: BLE001 - deep health must degrade instead of failing the whole endpoint.
         record_api_error(endpoint="/health/deep", exc=e, status_code=500)
-        components["llm"] = {"status": "error", "error": str(e)}
+        components["llm"] = {"status": "error", "error": str(e), **llm_meta}
         overall_status = "degraded"
 
     components["api"] = {"status": "ok"}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlparse
 
 import requests
 import streamlit as st
@@ -16,6 +17,37 @@ def _short_error(value: object) -> str:
     if "Traceback" in text:
         text = text.split("Traceback", 1)[0].strip()
     return text[:180] or "неизвестная ошибка"
+
+
+def _is_loopback_base(base_url: str) -> bool:
+    host = (urlparse(base_url or "").hostname or "").strip().lower()
+    return host in {"127.0.0.1", "localhost", "::1"} or host.endswith(".local")
+
+
+def _llm_failure_hint(llm: dict[str, Any], settings: Any) -> str:
+    model = str(llm.get("llm_model") or getattr(settings, "llm_model", "") or "").strip() or "не задана"
+    base = str(
+        llm.get("llm_api_base")
+        or getattr(settings, "openai_api_base", "")
+        or getattr(settings, "llm_api_base", "")
+        or ""
+    ).strip()
+    profile = str(llm.get("llm_profile") or getattr(settings, "home_rag_local_profile", "") or "").strip().lower()
+    source = str(llm.get("llm_source") or "").strip().lower()
+
+    if (base and not _is_loopback_base(base)) or profile == "cloud_fast" or source == "cloud":
+        hint = (
+            "Cloud LLM недоступен: проверьте `OPENAI_API_KEY`, `OPENAI_API_BASE` "
+            f"и `LLM_MODEL` в HF Space Secrets/Variables. Модель: {model}; endpoint: {base or 'не задан'}."
+        )
+        if str(llm.get("status") or "").strip().lower() == "timeout":
+            hint += " Provider не ответил в лимит health-check."
+        return hint
+
+    return (
+        "Запустите LM Studio или совместимый сервер и загрузите модель "
+        f"{model}; адрес: {base or getattr(settings, 'llm_api_base', 'не задан')}"
+    )
 
 
 @st.cache_data(ttl=45, show_spinner=False)
@@ -71,8 +103,7 @@ def preflight_rows(payload: dict | None) -> list[tuple[str, str, str]]:
             (
                 "Модель",
                 "⚠️",
-                "Запустите LM Studio или совместимый сервер и загрузите модель "
-                f"{settings.llm_model}; адрес: {settings.llm_api_base}",
+                _llm_failure_hint(llm, settings),
             )
         )
     else:

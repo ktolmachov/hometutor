@@ -18,14 +18,14 @@ from pathlib import Path
 
 import streamlit as st
 
-from app.section_index import IndexedSection, parse_sections, top_sections_for
+from app.section_index import IndexedSection, parse_sections, section_role, top_sections_for
 
 _MAX_DOCUMENTS = 50
 _SEARCH_DOCUMENTS = 20
 _SEARCH_RESULTS = 8
 _PER_DOC_RESULTS = 3
 _MIN_SECTION_LEVEL = 2
-_NOISE_HEADINGS = {"оглавление", "содержание", "toc"}
+_NOISE_HEADINGS = {"оглавление", "содержание", "toc", "рубрика качества конспекта", "рубрика качества"}
 
 
 @dataclass(frozen=True)
@@ -66,6 +66,7 @@ def _content_sections(sections: list[IndexedSection]) -> list[IndexedSection]:
         if s.level >= _MIN_SECTION_LEVEL
         and (s.own_text or s.text).strip()
         and _normalized_heading(s.heading_text) not in _NOISE_HEADINGS
+        and section_role(s) != "quality_rubric"  # B3 (A1 role)
     ]
 
 

@@ -363,7 +363,7 @@ def main(argv: list[str] | None = None) -> int:
     # P0 audio podcasts (wave-audio-03): extract .m4a sibling after possible remux.
     # Cheap (0.3s), no re-encode, uses convention next to playable video.
     # Safe to run always: idempotent + graceful when no ffmpeg/audio-track.
-    _ = extract_audio_to_m4a(media)
+    extract_audio_to_m4a(media)
 
     segments_path = media.with_suffix(".segments.json")
     txt_path = media.with_suffix(".txt")

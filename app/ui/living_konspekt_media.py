@@ -158,32 +158,39 @@ def render_playlist_panel(rows: list[dict[str, Any]]) -> None:
         else:
             st.caption(f"{label} · {item['source']}")
 
-    # A2: single release m4a from basket (wave-audio-04).
-    # Only for items that have extracted audio (local). Uses concat of clips.
+    _render_basket_audio_release(items)
+
+
+def _render_basket_audio_release(items: list[dict[str, Any]]) -> None:
+    """A2 UI: button to build+download single m4a from current playlist audio items.
+
+    Extracted to keep render_playlist_panel lean. Only appears when usable audio
+    siblings exist. ffmpeg work happens only on explicit user click.
+    """
     audio_items = [it for it in items if it.get("audio_path")]
-    if audio_items:
-        st.markdown("---")
-        if st.button("⬇️ Скачать выпуск (m4a)", key="download_basket_release"):
-            release_path, toc = make_basket_audio_release(
-                audio_items,
-                suggested_name="hometutor_basket_release.m4a",
+    if not audio_items:
+        return
+    st.markdown("---")
+    if st.button("⬇️ Скачать выпуск (m4a)", key="download_basket_release"):
+        release_path, toc = make_basket_audio_release(
+            audio_items, suggested_name="hometutor_basket_release.m4a"
+        )
+        if release_path and release_path.exists():
+            data = release_path.read_bytes()
+            st.download_button(
+                "Скачать готовый выпуск .m4a",
+                data=data,
+                file_name=release_path.name,
+                mime="audio/mp4",
+                key="do_download_release",
             )
-            if release_path and release_path.exists():
-                data = release_path.read_bytes()
-                st.download_button(
-                    "Скачать готовый выпуск .m4a",
-                    data=data,
-                    file_name=release_path.name,
-                    mime="audio/mp4",
-                    key="do_download_release",
-                )
-                st.caption("Выпуск готов. Время сборки — секунды (copy, без перекодирования).")
-                with st.expander("Оглавление таймкодов (текст)", expanded=False):
-                    st.text(toc)
-            else:
-                st.caption(toc or "Не удалось собрать выпуск (см. логи).")
+            st.caption("Выпуск готов. Время сборки — секунды (copy, без перекодирования).")
+            with st.expander("Оглавление таймкодов (текст)", expanded=False):
+                st.text(toc)
         else:
-            st.caption("Собери ≥1 аудио-фрагмент в корзину и нажми кнопку для склейки в один файл (ffmpeg concat).")
+            st.caption(toc or "Не удалось собрать выпуск (см. логи).")
+    else:
+        st.caption("Собери ≥1 аудио-фрагмент в корзину и нажми кнопку для склейки в один файл (ffmpeg concat).")
 
 
 def _playlist_video_url(video: LocalVideoSource | UrlVideoSource, start: int) -> str | None:

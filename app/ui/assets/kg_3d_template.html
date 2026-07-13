@@ -44,8 +44,10 @@
 <script>
 // Inlined by build_kg_3d_html
 const NODES = __NODES__;
+const EDGES = __EDGES__ || [];
 const STATS = __STATS__ || {};
 const HEALTH = __HEALTH__ || null;
+const DAY_ROUTE = __DAY_ROUTE__ || [];
 
 const canvas = document.getElementById('cv');
 const ctx = canvas.getContext('2d');
@@ -74,13 +76,25 @@ function project(x,y,z){
 }
 
 function nodePos(n, i){
-  // Layered layout: lessons near y= -80 floor, concepts higher by worth
+  // Improved floors (P2): distinct vertical layers ("этажи") for each lesson node.
+  // Concepts are placed in a content band + height from worth.
+  // If a concept directly references a lesson via prereqs/unlocks, bias toward that lesson's floor.
   const isL = !!n.is_lesson;
-  const baseY = isL ? -70 : 10;
-  const h = (n.worth||0) * 22;
-  const y = baseY + h;
+  let y;
+  if (isL) {
+    // Each lesson gets its own floor, spaced vertically
+    y = -160 + (i % 7) * 55;  // spread lessons; stable enough with render order
+  } else {
+    // base content band + worth elevation
+    y = 20 + (n.worth || 0) * 18;
+  }
 
-  // Spread in xz using cluster + hash of id for stable "positions"
+  // Try to anchor concept near a lesson floor if linked
+  const links = [...(n.prereqs || []), ...(n.unlocks || [])];
+  // (simple; full ancestry would be heavier)
+  // For now the per-lesson y for lessons + worth for others gives visual "floors + height"
+
+  // Spread in xz using cluster + hash of id
   const c = (n.cluster||0);
   let hsh = 0; for(let j=0;j<n.id.length;j++) hsh = (hsh*31 + n.id.charCodeAt(j))|0;
   const spread = 140;
@@ -106,11 +120,11 @@ function draw(){
     ctx.beginPath(); ctx.moveTo(c2.sx,c2.sy); ctx.lineTo(d.sx,d.sy); ctx.stroke();
   }
 
-  // edges (faded)
+  // edges (faded) — real graph connections from payload (P2 fix)
   ctx.strokeStyle = 'rgba(160,140,255,0.18)';
   ctx.lineWidth = 0.7;
   const id2node = new Map(nodes3d.map(o=>[o.n.id,o]));
-  for(const e of (window.__EDGES||[])){
+  for(const e of (EDGES||[])){
     const a = id2node.get(e.source), b=id2node.get(e.target);
     if(!a||!b) continue;
     const pa = project(a.p.x,a.p.y,a.p.z);
@@ -198,7 +212,8 @@ function focus(n){
 function buildTopList(){
   const cont = document.getElementById('toplist');
   cont.innerHTML='';
-  const sorted = [...NODES].filter(n=>!n.learned).sort((a,b)=>(b.worth||0)-(a.worth||0)).slice(0,7);
+  const sorted = [...NODES].filter(n => !n.is_lesson && ((n.due||0) > 0 || n.frontier))
+                 .sort((a,b)=>(b.worth||0)-(a.worth||0)).slice(0,7);
   sorted.forEach(n=>{
     const d=document.createElement('div');
     d.className='stop';
@@ -218,14 +233,18 @@ function updateStats(){
 let flyTimer=null;
 function flyRoute(){
   if(flyTimer){ clearInterval(flyTimer); flyTimer=null; }
-  const route = [...NODES].filter(n=>!n.learned && (n.worth||0)>0.1)
-                 .sort((a,b)=>(b.worth||0)-(a.worth||0)).slice(0,6);
+  let route = DAY_ROUTE;
+  if (!route || route.length === 0) {
+    // fallback: compute from nodes (for older exports)
+    route = [...NODES].filter(n => !n.is_lesson && ((n.due||0) > 0 || n.frontier))
+                   .sort((a,b)=>(b.worth||0)-(a.worth||0)).slice(0,6).map(n => n.id);
+  }
   if(!route.length){ alert('Нет достойных остановок'); return; }
   let i=0;
   flyTimer = setInterval(()=>{
     if(i>=route.length){ clearInterval(flyTimer); flyTimer=null; return; }
-    const tgt = route[i];
-    const o = nodes3d.find(x=>x.n.id===tgt.id);
+    const id = typeof route[i] === 'string' ? route[i] : route[i].id;
+    const o = nodes3d.find(x=>x.n.id===id);
     if(o){
       // lerp camera toward it
       cx = cx*0.4 + (-o.p.x*0.65)*0.6;
@@ -234,7 +253,8 @@ function flyRoute(){
       pitch = pitch*0.6 + 0.25*0.4;
       zoom = zoom*0.7 + 1.1*0.3;
       render();
-      focus(tgt); // updates hint
+      const nodeObj = NODES.find(nn => nn.id === id);
+      if (nodeObj) focus(nodeObj);
     }
     i++;
   }, 620);
@@ -247,8 +267,7 @@ document.getElementById('resetbtn').onclick = ()=>{
 };
 
 function init(){
-  // attach edges if present in future
-  window.__EDGES__ = []; // placeholder; full graph edges not required for demo
+  // EDGES already declared from __EDGES__ replacement at build time (P2)
   updateStats();
   buildTopList();
   // initial positions already computed

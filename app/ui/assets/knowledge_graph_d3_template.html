@@ -490,7 +490,7 @@ nodeSel.on('mouseenter',(e,d)=>{
   const retVal=DECAY_VECTOR[d.id];
   const retLine=decayMode&&retVal!=null?`<div style="font-size:10px;color:#94a3b8;margin-top:4px">🧠 Retention: <b>${Math.round(retVal*100)}%</b> (Ebbinghaus)</div>`:'';
   // A1: surface price reasons next to existing mastery/reach info (honest, visible)
-  const dueLine = (d.due && d.due>0) ? `<div style="font-size:10px;color:#60a5fa;margin-top:2px">🃏 ждут ${d.due} карточек</div>` : '';
+  const dueLine = (d.due && d.due>0) ? `<div style="font-size:10px;color:#60a5fa;margin-top:2px">🃏 ${d.due} к повторению</div>` : '';
   const novelLine = d.novel ? `<div style="font-size:10px;color:#67e8f9;margin-top:2px">✨ новое для тебя</div>` : '';
   const worthLine = (d.worth && d.worth > 0.5) ? `<div style="font-size:9px;color:#c4b5fd;margin-top:1px">W=${d.worth} · ${d.worth_reason||''}</div>` : '';
   tip.innerHTML=`<h3>${d.label}</h3><span class="lvl" style="background:${lv.color}22;color:${lv.color};border:1px solid ${lv.color}44">${lv.label}</span>`+
@@ -762,32 +762,67 @@ document.getElementById('rp-find').addEventListener('click',()=>{
   const startNode=simNodes.find(n=>n.id===s);if(startNode)focusNode(startNode);
 });
 
-// A2: day route by worth (top-K non-learned, greedily chained via unlocks when possible)
+// A2: "Маршрут дня" — топ-K actionable по worth, соединённых по возможности в prereq-порядке.
+// Actionable = due (повтор, даже learned) ИЛИ frontier.
+// Пытаемся строить coherent последовательность: от высокого worth стартуем и жадно
+// добавляем лучший unlock среди оставшихся actionable (как в оригинальном замысле плана).
 function computeDayRoute(k=6){
-  let cands = NODES.filter(n=> !n.learned && !(n.is_lesson)).map(n=>({...n, w: (n.worth||0)}));
-  if(!cands.length) return [];
-  cands.sort((a,b)=>(b.w||0)-(a.w||0));
-  cands = cands.slice(0, k);
-  if(!cands.length) return [];
-  const selected = [cands[0]];
-  const remain = new Set(cands.slice(1).map(x=>x.id));
-  while(remain.size && selected.length < k){
-    const last = selected[selected.length-1];
-    let best=null, bestW=-1;
-    for(const u of (last.unlocks||[])){
-      if(remain.has(u)){
-        const c = cands.find(x=>x.id===u); if(c && (c.w||0)>bestW){best=c; bestW=c.w||0;}
+  let cands = NODES.filter(n => {
+    if (n.is_lesson) return false;
+    const hasDue = (n.due || 0) > 0;
+    return hasDue || n.frontier;
+  }).map(n => ({...n, w: (n.worth || 0)}));
+
+  if (!cands.length) return [];
+  cands.sort((a, b) => (b.w || 0) - (a.w || 0));
+
+  const top = cands.slice(0, Math.max(k, 8)); // берём чуть больше для chaining
+  const idSet = new Set(top.map(x => x.id));
+
+  const selected = [];
+  const used = new Set();
+
+  // стартуем с самого высокого worth
+  if (top.length) {
+    selected.push(top[0].id);
+    used.add(top[0].id);
+  }
+
+  while (selected.length < k && used.size < top.length) {
+    const lastId = selected[selected.length - 1];
+    const lastNode = top.find(x => x.id === lastId) || {};
+
+    let best = null;
+    let bestW = -1;
+
+    // пытаемся продолжить по unlocks (prereq-порядок вперёд)
+    for (const u of (lastNode.unlocks || [])) {
+      if (idSet.has(u) && !used.has(u)) {
+        const cand = top.find(x => x.id === u);
+        if (cand && (cand.w || 0) > bestW) {
+          best = cand;
+          bestW = cand.w || 0;
+        }
       }
     }
-    if(best){
-      selected.push(best); remain.delete(best.id);
-    } else {
-      // fallback: next highest worth remaining
-      const nxt = cands.find(x=>remain.has(x.id));
-      if(nxt){ selected.push(nxt); remain.delete(nxt.id); } else break;
+
+    if (best) {
+      selected.push(best.id);
+      used.add(best.id);
+      continue;
+    }
+
+    // fallback: следующий по worth среди ещё не использованных actionable
+    for (const cand of top) {
+      if (!used.has(cand.id)) {
+        selected.push(cand.id);
+        used.add(cand.id);
+        break;
+      }
     }
   }
-  return selected;
+
+  return selected.slice(0, k);
 }
 
 document.getElementById('rp-day').addEventListener('click',()=>{
@@ -947,7 +982,7 @@ MODES.forEach(m=>{const b=document.createElement('button');b.className='mode-btn
 function applyMode(k,keepLinks){
   if(k==='all'){resetModeVisual();return;}
   let test;
-  if(k==='next')test=n=>n.frontier;
+  if(k==='next')test=n=> ((n.due || 0) > 0) || n.frontier;  // include due reviews (even on learned) + frontier
   else if(k==='gaps')test=n=>(n.missing&&n.missing.length)||(n.mastery>0&&n.mastery<50);
   else test=()=>true; // progress: show all but scale opacity by mastery
   nodeSel.select('.core').attr('fill-opacity',n=>{if(courseHidden(n))return 0.05;if(k==='progress')return 0.2+0.8*(n.mastery/100);return test(n)?1:0.06;});

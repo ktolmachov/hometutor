@@ -235,11 +235,10 @@ def node_worth(n: Dict[str, Any]) -> float:
 
     Pure function. Higher = stop here sooner on "маршрут дня".
     Respects A1 signals (due, novel) + decay + frontier + reach.
-    Learned nodes get 0 (no point stopping).
+    IMPORTANT: due (scheduled review) contributes to worth EVEN for learned nodes,
+    because due means "time to repeat" (maintenance). Learned + due is valid repeat stop.
     """
     if not isinstance(n, dict):
-        return 0.0
-    if n.get("learned"):
         return 0.0
     if n.get("is_lesson"):
         # lessons are anchors; worth mainly on concepts
@@ -264,20 +263,81 @@ def node_worth(n: Dict[str, Any]) -> float:
 
 def top_worth_factor(n: Dict[str, Any]) -> str:
     """Human label for the single largest contributor to worth (for route step)."""
-    if not isinstance(n, dict) or n.get("learned"):
+    if not isinstance(n, dict):
         return ""
     parts = []
     due = float(n.get("due") or 0)
     if due > 0:
-        parts.append((DUE_WEIGHT * min(due, 5.0), "🃏 ждут карточек"))
-    if n.get("novel"):
+        parts.append((DUE_WEIGHT * min(due, 5.0), "🃏 к повторению"))
+    if n.get("novel") and not n.get("learned"):
         parts.append((NOVEL_WEIGHT, "✨ новое для тебя"))
     dec = n.get("decay")
     if isinstance(dec, (int, float)) and dec < 0.65:
         parts.append((DECAY_WEIGHT * (1.0 - dec), "🧠 низкий retention"))
-    if n.get("frontier"):
+    if n.get("frontier") and not n.get("learned"):
         parts.append((FRONTIER_WEIGHT, "✦ prereqs готовы"))
     if not parts:
         return "структурная важность"
     parts.sort(reverse=True)
     return parts[0][1]
+
+
+def select_day_route(
+    nodes: list[Dict[str, Any]],
+    k: int = 6,
+) -> list[str]:
+    """Select top actionable nodes by worth and try to chain them in prereq order.
+
+    Actionable = has due > 0 or is frontier (and not lesson).
+    Used by both 2D auto-route and 3D flight for consistency.
+    """
+    actionable = [
+        n for n in nodes
+        if not n.get("is_lesson")
+        and ((n.get("due") or 0) > 0 or n.get("frontier"))
+    ]
+    if not actionable:
+        return []
+
+    # sort by worth desc (worth already attached)
+    actionable = sorted(actionable, key=lambda n: n.get("worth") or 0, reverse=True)
+
+    if len(actionable) <= k:
+        return [n["id"] for n in actionable]
+
+    selected: list[str] = []
+    used: set[str] = set()
+    top = actionable[: max(k, 10)]  # a bit more for chaining opportunities
+    id_to_node = {n["id"]: n for n in top}
+
+    if top:
+        selected.append(top[0]["id"])
+        used.add(top[0]["id"])
+
+    while len(selected) < k and len(used) < len(top):
+        last_id = selected[-1]
+        last = id_to_node.get(last_id, {})
+        unlocks = last.get("unlocks") or []
+
+        best = None
+        best_w = -1.0
+        for u in unlocks:
+            if u in id_to_node and u not in used:
+                w = id_to_node[u].get("worth") or 0
+                if w > best_w:
+                    best = u
+                    best_w = w
+
+        if best:
+            selected.append(best)
+            used.add(best)
+            continue
+
+        # fallback to next highest worth not used
+        for cand in top:
+            if cand["id"] not in used:
+                selected.append(cand["id"])
+                used.add(cand["id"])
+                break
+
+    return selected[:k]

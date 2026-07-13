@@ -34,6 +34,7 @@ from app.ui.knowledge_graph_d3_analysis import (
     build_mastery_history,
     compute_decay,
     node_worth,
+    select_day_route,
     top_worth_factor,
 )
 
@@ -534,14 +535,29 @@ def build_kg_payload(
     clusters = skel.clusters
     max_reach = max(reach.values()) if reach else 0
 
-    # A1 (wave-kg-node-worth): price on node — due (from already-fetched due_reviews)
-    # and novel (never touched in personal mastery/decay layer). 0 extra DB cost.
-    # Canonical cid match via id_set (same resolver as skeleton).
+    # Build label->id map and resolver exactly like in _build_kg_skeleton so due
+    # from SR (which may store labels or aliases) attaches to canonical cid.
+    label_to_id = {
+        str(data.get("label") or cid).strip(): cid
+        for cid, data in valid.items()
+        if str(data.get("label") or cid).strip()
+    }
+
+    def _resolve_cid(ref: Any) -> str | None:
+        s = str(ref or "").strip()
+        if s in id_set:
+            return s
+        return label_to_id.get(s)
+
+    # A1/A2: price on node. Scope to this graph only (ignore dues for concepts
+    # not present in current bundle). Use the shared resolver.
     due_map: dict[str, int] = {}
     for r in (due_reviews or []):
         c = str(r.get("concept") or "").strip()
-        if c and c in id_set:
-            due_map[c] = due_map.get(c, 0) + 1
+        if c:
+            cid = _resolve_cid(c)
+            if cid:
+                due_map[cid] = due_map.get(cid, 0) + 1
 
     def _is_novel(cid: str, is_lesson_flag: bool) -> bool:
         if is_lesson_flag:
@@ -620,6 +636,8 @@ def build_kg_payload(
         nd["worth"] = node_worth(nd)
         nd["worth_reason"] = top_worth_factor(nd)
 
+    day_route = select_day_route(nodes, k=6)
+
     stats = _kg_counters_from_skeleton(skel, mastery_vector, learned)
 
     _enrich_stats_with_learner_velocity(stats)
@@ -636,6 +654,7 @@ def build_kg_payload(
         "cluster_labels": build_cluster_labels(nodes),
         # Wave 2 enrichments
         "decay_vector": decay_vector,          # KG-06: {concept_id: retention 0..1}
+        "day_route": day_route,                # A2: precomputed top actionable stops (for 3D + consistency)
         # Wave 3 enrichments
         "mastery_history": build_mastery_history(quiz_rows or [], ids),  # KG-07
         "compiler_health": dict(compiler_health) if isinstance(compiler_health, Mapping) else None,
@@ -644,7 +663,12 @@ def build_kg_payload(
 
 def build_kg_html(payload: Mapping[str, Any]) -> str:
     d3_src = _load_d3_source()
-    d3_tag = f"<script>{d3_src}</script>" if d3_src else '<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>'
+    if d3_src:
+        d3_tag = f"<script>{d3_src}</script>"
+    else:
+        # Local-first / offline contract for exported self-contained HTML.
+        # No CDN fallback (would break the "скачать и открыть без интернета" promise).
+        d3_tag = '<script>/* d3.v7.min.js missing from assets — self-contained export requires the vendored file */</script>'
     return (
         _load_html_template()
         .replace("__D3_TAG__", d3_tag)
@@ -661,15 +685,17 @@ def build_kg_html(payload: Mapping[str, Any]) -> str:
 
 
 def build_kg_3d_html(payload: Mapping[str, Any]) -> str:
-    """B1: self-contained 3D Knowledge Graph hall (floors by lessons, height/glow ~ worth).
-    Uses same payload contract (worth/due/novel already present from A1/A2).
-    Pure offline HTML (no CDN). Canvas-based minimal 3D to keep vendoring cost out of P1 wave.
+    """B1: self-contained 3D Knowledge Graph hall.
+    Uses same payload (nodes + edges + worth signals from A1/A2).
+    Edges are passed so the 3D view renders actual graph connections, not just a node cloud.
     """
     t = _load_3d_template()
     return (
         t.replace("__NODES__", json.dumps(payload.get("nodes", []), ensure_ascii=False))
+         .replace("__EDGES__", json.dumps(payload.get("edges", []), ensure_ascii=False))
          .replace("__STATS__", json.dumps(payload.get("stats", {}), ensure_ascii=False))
          .replace("__HEALTH__", json.dumps(payload.get("health"), ensure_ascii=False))
+         .replace("__DAY_ROUTE__", json.dumps(payload.get("day_route", []), ensure_ascii=False))
     )
 
 
@@ -697,7 +723,10 @@ def render_d3_knowledge_graph(
     try:
         from app.spaced_repetition import get_due_reviews, get_all_sr_concepts
         from app.user_state import _with_db
-        due_reviews = get_due_reviews(limit=20)
+        # Higher limit + scoping+resolve happens in build_kg_payload using the
+        # same resolver as skeleton and filtering to current graph concepts only.
+        # (Previously limit=20 + only direct id match missed many + resolver mismatch.)
+        due_reviews = get_due_reviews(limit=200)
         sr_records = get_all_sr_concepts()
     except Exception:  # noqa: BLE001 - missing review state leaves the optional overlay empty.
         pass

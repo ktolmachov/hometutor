@@ -61,6 +61,15 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
 
+          # Ensure choco-installed ffmpeg is on PATH for this step
+          $chocoBin = "C:\ProgramData\chocolatey\bin"
+          if (Test-Path $chocoBin) {
+            $env:Path = "$chocoBin;$env:Path"
+          }
+
+          # Verify ffmpeg is available (real binary, not mocked)
+          ffmpeg -version | Select-Object -First 1
+
           $tempData = Join-Path $env:RUNNER_TEMP "hometutor-ci-data"
           New-Item -ItemType Directory -Force -Path $tempData | Out-Null
           $env:HOME_RAG_DATA_DIR = $tempData

@@ -947,3 +947,54 @@ After block."""
         
         assert "../Course/assets/pic.png" in rewritten or "..\\Course\\assets\\pic.png" in rewritten
         assert "https://example.com/logo.png" in rewritten
+
+
+class TestA2KnowledgeStatusAndQuestion:
+    """A2 fields per konspekt_quality_plan: persistence, state helpers, DoD (survive rebuild)."""
+
+    def test_update_section_fields_accepts_new_fields(self):
+        rows = [{"row_key": "r1", "heading_text": "t"}]
+        updated = workbench_service.update_section_fields(
+            rows, "r1",
+            knowledge_status="understood",
+            open_question="Что дальше?",
+        )
+        assert updated[0]["knowledge_status"] == "understood"
+        assert updated[0]["open_question"] == "Что дальше?"
+
+    def test_invalid_status_becomes_none(self):
+        rows = [{"row_key": "r1"}]
+        updated = workbench_service.update_section_fields(rows, "r1", knowledge_status="invalid")
+        assert updated[0].get("knowledge_status") is None
+
+    def test_set_helpers_via_injected_state(self):
+        # use injected state to avoid DB
+        from app.ui.living_konspekt_state import (
+            set_knowledge_status_in_workbench,
+            set_open_question_in_workbench,
+            get_workbench_rows,
+            set_workbench_rows,
+        )
+        state = {}
+        set_workbench_rows([{"row_key": "r1", "heading_text": "Demo"}], state=state)
+        set_knowledge_status_in_workbench("r1", "unsure", state=state)
+        set_open_question_in_workbench("r1", "Мой вопрос?", state=state)
+        rows = get_workbench_rows(state)
+        assert rows[0]["knowledge_status"] == "unsure"
+        assert rows[0]["open_question"] == "Мой вопрос?"
+
+    def test_new_fields_survive_normalize_and_persist_roundtrip(self):
+        # simulate rebuild
+        from app.ui.living_konspekt_state import (
+            set_knowledge_status_in_workbench,
+            set_open_question_in_workbench,
+        )
+        state = {}
+        initial = [{"row_key": "r1", "heading_text": "T", "knowledge_status": "understood", "open_question": "Q?"}]
+        set_workbench_rows(initial, state=state)
+        # "rebuild" via normalize
+        from app import workbench_service as ws
+        norm = ws.normalize_runtime_rows(get_workbench_rows(state))
+        set_workbench_rows(norm, state=state)
+        assert get_workbench_rows(state)[0].get("knowledge_status") == "understood"
+        assert get_workbench_rows(state)[0].get("open_question") == "Q?"

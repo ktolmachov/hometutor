@@ -131,11 +131,17 @@ def build_artifact_body(rows: list[dict[str, Any]]) -> str:
         note_block = f"\n\n### 💬 Моими словами\n\n{note}" if note else ""
         q = str(row.get("open_question") or "").strip()
         q_block = f"\n\n### ❓ Мой открытый вопрос\n\n{q}" if q else ""
+        # A2.3: status marker in caption (per plan)
+        status = row.get("knowledge_status")
+        status_marker = ""
+        if status:
+            status_label = {"understood": "Понял", "unsure": "Сомневаюсь", "unclear": "Не понял"}.get(status, status)
+            status_marker = f" **[Статус: {status_label}]**"
         row_text = str(row.get("text") or "")
         md_abs = row.get("konspekt_md_abs")
         if md_abs:
             row_text = _rewrite_image_paths_for_artifact(row_text, Path(md_abs).parent)
-        parts.append(f"## {heading}\n\n{source_block}\n\n{row_text}{note_block}{q_block}")
+        parts.append(f"## {heading}{status_marker}\n\n{source_block}\n\n{row_text}{note_block}{q_block}")
 
     blocks: list[str] = []
     if header_parts:

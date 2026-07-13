@@ -417,6 +417,10 @@ def render_collected_sections(
                     badges.append("✅")
                 if str(row.get("note") or "").strip():
                     badges.append("📝")
+                if row.get("knowledge_status"):
+                    badges.append("🧠")
+                if str(row.get("open_question") or "").strip():
+                    badges.append("❓")
                 badge_str = " " + " ".join(badges) if badges else ""
                 st.markdown(f"**{heading_text or '—'}**{badge_str}")
                 st.caption(f"{_row_konspekt_label(row)} · строки {line_start}-{row.get('line_end')}")

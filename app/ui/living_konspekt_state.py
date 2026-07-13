@@ -251,16 +251,20 @@ def set_knowledge_status_in_workbench(
     status: str | None,
     state: MutableMapping[str, Any] | None = None,
 ) -> None:
-    """A2: understood / unsure / unclear (or None to clear)."""
+    """A2: understood / unsure / unclear (or None to clear).
+    Per plan: also updates read_at as date of last status.
+    """
     target = _state(state)
     rows = workbench_service.normalize_runtime_rows(get_workbench_rows(target))
     storage = None if state is None else workbench_service.InMemoryWorkbenchStorage()
     if state is None:
         _ensure_auth_context()
+    read_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     target[WORKBENCH_SECTIONS_KEY] = workbench_service.update_section_fields(
         rows,
         row_key,
         knowledge_status=status,
+        read_at=read_at,
         storage=storage,
     )
 

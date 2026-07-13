@@ -133,3 +133,12 @@ def test_quality_rubric_parser(tmp_path: Path) -> None:
 
     cached = get_konspekt_quality_rubric(md)
     assert cached and cached["average"] == res["average"]
+
+    # negative cases per DoD
+    bad = tmp_path / "bad.md"
+    bad.write_text("## Обычный текст без рубрики\n| a | 1 | 5 | x |", encoding="utf-8")
+    assert parse_konspekt_quality_rubric(bad) is None
+
+    no_table = tmp_path / "no_table.md"
+    no_table.write_text("## ✅ Рубрика качества конспекта\n\nПросто текст.", encoding="utf-8")
+    assert parse_konspekt_quality_rubric(no_table) is None

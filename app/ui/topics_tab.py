@@ -48,21 +48,28 @@ def _render_course_obsidian_button(topics_catalog: dict | None) -> None:
         cov = None
 
     if cov is not None and cov.pct >= 1.0:
-        # A1: passport вместо простой галочки (konspekt_quality_plan)
+        # A1: passport по плану «N/M с конспектом · рубрика в K · средняя X/5»
         rubric_info = ""
         try:
-            # A1: passport — средняя рубрика из первого покрытого (честная деградация)
             from app.konspekt_discovery import find_konspekt_for_source_in_data, get_konspekt_quality_rubric
+            rubric_avgs = []
             for p in all_paths:
                 km = find_konspekt_for_source_in_data(p)
                 if km:
                     r = get_konspekt_quality_rubric(km.path)
                     if r and r.get("average") is not None:
-                        rubric_info = f" · рубрика {r['average']}/5 ({r.get('count', '?')} критериев)"
-                        break
+                        rubric_avgs.append(r["average"])
+            if rubric_avgs:
+                k = len(rubric_avgs)
+                overall = round(sum(rubric_avgs) / k, 1)
+                rubric_info = f" · рубрика в {k} · средняя {overall}/5"
         except Exception:  # noqa: BLE001
             pass
-        label = f"✅ Все конспекты готовы{rubric_info}"
+        label = f"{cov.covered}/{cov.total} с конспектом{rubric_info}"
+        st.markdown(
+            f'<div style="font-size:12px;color:#4ade80;padding:6px 0">✅ {label}</div>',
+            unsafe_allow_html=True,
+        )
         st.markdown(
             f'<div style="font-size:12px;color:#4ade80;padding:6px 0">{label}</div>',
             unsafe_allow_html=True,

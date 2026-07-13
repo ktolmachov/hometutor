@@ -387,7 +387,7 @@ def update_section_fields(
         if not isinstance(listened_at, _UnsetValue):
             updated["listened_at"] = listened_at
         if not isinstance(knowledge_status, _UnsetValue):
-            # A2: validated simple enum or None (backward safe)
+            # A2: validated simple enum or None (backward safe). Invalid -> None (silent to not break UI).
             valid = {"understood", "unsure", "unclear"}
             updated["knowledge_status"] = knowledge_status if (knowledge_status in valid or knowledge_status is None) else None
         if not isinstance(open_question, _UnsetValue):

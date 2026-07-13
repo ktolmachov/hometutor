@@ -153,9 +153,10 @@ def _render_section_progress_controls(
     set_status: Any = None,
     set_question: Any = None,
 ) -> None:
-    """A2: knowledge status (3 buttons) + open_question field (konspekt_quality_plan).
+    """A2: knowledge status (3 buttons + соседство «Прочитано») + open_question field (konspekt_quality_plan).
 
-    read_at / listened_at preserved as before.
+    read_at is updated as date of last status (plan A2.2) and by the "Прочитано" button.
+    mark_read remains fully functional.
     """
     row_key = str(row.get("row_key") or "")
     note_value = str(row.get("note") or "")
@@ -175,8 +176,8 @@ def _render_section_progress_controls(
         st.toast("Вопрос сохранён.", icon="❓")
         st.rerun()
 
-    # A2: three status buttons (replaces or augments "Прочитано")
-    cols = st.columns(4)
+    # A2: three status buttons (соседство с «Прочитано» per plan)
+    cols = st.columns(5)
     with cols[0]:
         if st.button("Понял", key=f"lk_status_understood_{row_key}", width="stretch", disabled=set_status is None):
             set_status(row_key, "understood")
@@ -193,6 +194,12 @@ def _render_section_progress_controls(
             st.toast("Статус: Не понял", icon="❓")
             st.rerun()
     with cols[3]:
+        if st.button("Прочитано", key=f"lk_reader_mark_read_{row_key}", width="stretch", disabled=mark_read is None):
+            # Restore legacy "Прочитано" button (critical regression fix)
+            mark_read(row_key)
+            st.toast("Фрагмент отмечен как прочитанный.", icon="✓")
+            st.rerun()
+    with cols[4]:
         if st.button("Сохранить мысль", key=f"lk_reader_save_note_{row_key}", width="stretch", disabled=save_note is None):
             save_note(row_key, str(st.session_state.get(note_key) or ""))
             st.toast("Мысль сохранена.", icon="💬")
@@ -205,7 +212,8 @@ def _render_section_progress_controls(
     if listened_at:
         meta.append(f"Прослушано: {listened_at}")
     if current_status:
-        meta.append(f"Статус: {current_status}")
+        status_label = {"understood": "Понял", "unsure": "Сомневаюсь", "unclear": "Не понял"}.get(current_status, current_status)
+        meta.append(f"Статус: {status_label}")
     if meta:
         st.caption(" · ".join(meta))
 

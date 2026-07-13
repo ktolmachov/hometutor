@@ -25,7 +25,14 @@ _SEARCH_DOCUMENTS = 20
 _SEARCH_RESULTS = 8
 _PER_DOC_RESULTS = 3
 _MIN_SECTION_LEVEL = 2
-_NOISE_HEADINGS = {"оглавление", "содержание", "toc", "рубрика качества конспекта", "рубрика качества"}
+_NOISE_HEADINGS = {
+    "оглавление", "содержание", "toc",
+    "рубрика качества конспекта", "рубрика качества",
+    # B3 full per plan: service sections
+    "flashcards", "карточки", "flash cards",
+    "quiz", "тест", "контрольные вопросы", "вопросы для самопроверки",
+    "план повторения", "spaced repetition", "повторения", "srs",
+}
 
 
 @dataclass(frozen=True)

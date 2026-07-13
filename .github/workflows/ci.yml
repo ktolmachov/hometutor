@@ -79,7 +79,7 @@ jobs:
 
           # Minimal konspekt (required even with -SkipSidecar)
           $konspektPath = Join-Path $courseDir "lesson.md"
-          @"
+          Set-Content -Path $konspektPath -Encoding UTF8 -Value @"
 ---
 media_sidecar: test-audio-ci/lesson.media.json
 ---
@@ -87,7 +87,7 @@ media_sidecar: test-audio-ci/lesson.media.json
 # CI Audio Extraction Test Lesson
 
 Minimal file to exercise the PowerShell pipeline.
-"@ | Set-Content -Path $konspektPath -Encoding UTF8
+"@
 
           # Generate a tiny video that contains an audio track (sine wave + solid color)
           $videoPath = Join-Path $courseDir "lesson.mp4"

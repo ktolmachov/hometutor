@@ -122,7 +122,7 @@ def test_make_basket_audio_release_no_ffmpeg_graceful(monkeypatch: pytest.Monkey
     from app import media_audio as ma
 
     monkeypatch.setattr(ma, "_has_ffmpeg", lambda: False)
-    items = [{"audio_path": "/x.m4a", "start": 0, "heading": "t1"}]
+    items = [{"audio_path": "/x.m4a", "start": 0, "end": 30, "heading": "t1"}]
     path, toc = ma.make_basket_audio_release(items)
     assert path is None
     assert "ffmpeg не найден" in toc

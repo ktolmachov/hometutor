@@ -150,9 +150,9 @@ def render_playlist_panel(rows: list[dict[str, Any]]) -> None:
                     ap = Path(audio_path)
                     end = item.get("end")
                     if end is not None and end > item["start"]:
-                        st.audio(str(ap), start_time=item["start"], end_time=end)
+                        st.audio(str(ap), start_time=item["start"], end_time=end, format="audio/mp4")
                     else:
-                        st.audio(str(ap), start_time=item["start"])
+                        st.audio(str(ap), start_time=item["start"], format="audio/mp4")
                 except Exception as exc:  # noqa: BLE001 - playlist render must degrade
                     st.caption(f"Аудио плейлиста недоступно: {format_request_error(exc)}")
         else:
@@ -167,7 +167,10 @@ def _render_basket_audio_release(items: list[dict[str, Any]]) -> None:
     Extracted to keep render_playlist_panel lean. Only appears when usable audio
     siblings exist. ffmpeg work happens only on explicit user click.
     """
-    audio_items = [it for it in items if it.get("audio_path")]
+    audio_items = [
+        it for it in items
+        if it.get("audio_path") and it.get("end") is not None
+    ]
     if not audio_items:
         return
     st.markdown("---")
@@ -375,9 +378,9 @@ def _render_local_audio_player(
             return
         # end_time is keyword-only in Streamlit; pass only if present
         if end_time is not None and end_time > start_time:
-            st.audio(str(audio_path), start_time=start_time, end_time=end_time)
+            st.audio(str(audio_path), start_time=start_time, end_time=end_time, format="audio/mp4")
         else:
-            st.audio(str(audio_path), start_time=start_time)
+            st.audio(str(audio_path), start_time=start_time, format="audio/mp4")
     except Exception as exc:  # noqa: BLE001 - audio render must not break the whole panel
         st.caption(f"Аудио недоступно: {format_request_error(exc)}")
 

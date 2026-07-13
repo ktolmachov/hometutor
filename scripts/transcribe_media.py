@@ -253,13 +253,15 @@ def remux_to_mp4(media: Path) -> Path | None:
     return target
 
 
-def extract_audio_to_m4a(media: Path) -> Path | None:
+def extract_audio_to_m4a(media: str | Path) -> Path | None:
     """Извлечь аудиодорожку в sibling .m4a (ffmpeg -vn -c:a copy, без перекодирования).
 
     Используется после ремукса/транскрибации для P0 audio podcasts.
     Идемпотентно: если .m4a уже есть — пропуск.
     Если ffmpeg отсутствует — честное сообщение + возврат None (как remux).
     Не меняет схему sidecar, не требует LLM.
+
+    Accepts str or Path (PowerShell pipeline passes str via -c).
     """
     ffmpeg = shutil.which("ffmpeg")
     if ffmpeg is None:
@@ -269,6 +271,7 @@ def extract_audio_to_m4a(media: Path) -> Path | None:
             file=sys.stderr,
         )
         return None
+    media = Path(media)
     target = media.with_suffix(".m4a")
     if target.exists():
         print(f"extract audio пропущен: {target.name} уже существует.")

@@ -23,7 +23,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from app.path_safety import resolve_data_relative_path
+from app.path_safety import data_relative_from_path, resolve_data_relative_path
 
 if TYPE_CHECKING:  # avoid runtime import cycle for type checkers only
     from app.media_sidecar import LocalVideoSource
@@ -32,17 +32,19 @@ if TYPE_CHECKING:  # avoid runtime import cycle for type checkers only
 def find_audio_sibling(video_path: str | Path) -> Path | None:
     """Return absolute Path to sibling ``.m4a`` if it exists next to video.
 
-    - Accepts data-relative path (from sidecar) or already-resolved absolute.
-    - Resolution uses the same ``path_safety`` contract as video.
-    - Returns None (never raises) when sibling is absent or resolution fails.
-    - The convention is co-location + ``with_suffix(".m4a")``; no sidecar field.
+    Always enforces the project path-safety contract (DATA_DIR only).
+    Accepts data-relative (preferred, from LocalVideoSource) or absolute path
+    that resolves inside DATA_DIR (via data_relative_from_path for validation).
+    Returns None (never raises) on missing sibling or any safety violation.
     """
     try:
         p = Path(video_path)
         if p.is_absolute():
-            video_abs = p
+            # Force validation through data safety (raises if outside DATA_DIR)
+            rel = data_relative_from_path(p)
+            video_abs = resolve_data_relative_path(rel)
         else:
-            video_abs = resolve_data_relative_path(str(video_path))
+            video_abs = resolve_data_relative_path(str(p))
         audio_abs = video_abs.with_suffix(".m4a")
         if audio_abs.is_file():
             return audio_abs
@@ -149,7 +151,10 @@ def make_basket_audio_release(
     Returns (final_m4a or None, toc_text or error/hint message).
     Never raises for missing ffmpeg (graceful per A2 plan).
     """
-    usable = [it for it in items if it.get("audio_path")]
+    usable = [
+        it for it in items
+        if it.get("audio_path") and it.get("end") is not None
+    ]
     if not usable:
         return None, "Нет аудио-фрагментов в корзине для сборки выпуска."
 

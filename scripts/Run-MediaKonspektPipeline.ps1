@@ -223,13 +223,8 @@ if (-not $SkipSidecar) {
 # Uses the shared python helper (idempotent + graceful no-ffmpeg).
 # This makes "data ready" for the new st.audio players without manual steps.
 Invoke-Step "Extract audio .m4a ($playableAbs → .m4a)" {
-    $pycode = @"
-import sys
-sys.path.insert(0, r'$root')
-from scripts.transcribe_media import extract_audio_to_m4a
-extract_audio_to_m4a(r'''$playableAbs''')
-"@
-    & $python -c $pycode
+    # Use -c with ; separators + raw triple quotes for path safety (spaces, unicode).
+    & $python -c "import sys; sys.path.insert(0, r'$root'); from scripts.transcribe_media import extract_audio_to_m4a; extract_audio_to_m4a(r'''$playableAbs''')"
 }
 
 Write-Host ""

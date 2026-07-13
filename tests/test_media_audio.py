@@ -102,3 +102,78 @@ def test_audio_for_local_video_none_for_missing(monkeypatch: pytest.MonkeyPatch)
 
 def test_audio_for_local_video_handles_none():
     assert audio_for_local_video(None) is None  # type: ignore[arg-type]
+
+
+# --- A2 release tests (command/TOC, no real ffmpeg execution) ---
+
+def test_build_release_toc_basic():
+    from app.media_audio import build_release_toc
+    items = [
+        {"heading": "Введение", "start": 120, "end": 300, "duration": 180, "audio_path": "/tmp/a.m4a"},
+        {"heading": "Выводы", "start": 600, "end": 660, "duration": 60, "audio_path": "/tmp/b.m4a"},
+    ]
+    toc = build_release_toc(items)
+    assert "Введение" in toc
+    assert "3:00" in toc  # cursor after first 180s segment
+    assert "Оглавление" in toc or "таймкод" in toc.lower()
+
+
+def test_make_basket_audio_release_no_ffmpeg_graceful(monkeypatch: pytest.MonkeyPatch):
+    from app import media_audio as ma
+
+    monkeypatch.setattr(ma, "_has_ffmpeg", lambda: False)
+    items = [{"audio_path": "/x.m4a", "start": 0, "heading": "t1"}]
+    path, toc = ma.make_basket_audio_release(items)
+    assert path is None
+    assert "ffmpeg не найден" in toc
+
+
+def test_make_basket_audio_release_no_items():
+    from app import media_audio as ma
+    path, toc = ma.make_basket_audio_release([])
+    assert path is None
+    assert "Нет аудио" in toc
+
+
+def test_make_basket_audio_release_builds_and_mocks_concat(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """Verify concat flow + TOC without executing real ffmpeg (mock run + which)."""
+    from app import media_audio as ma
+    import time
+
+    # prepare two fake source audios in a temp 'data'
+    base = tmp_path / "d"
+    base.mkdir()
+    src1 = base / "v1.m4a"
+    src2 = base / "v2.m4a"
+    src1.write_bytes(b"\x00" * 100)
+    src2.write_bytes(b"\x00" * 80)
+
+    items = [
+        {"audio_path": str(src1), "start": 0, "end": 10, "heading": "Part1", "duration": 10},
+        {"audio_path": str(src2), "start": 5, "end": 12, "heading": "Part2", "duration": 7},
+    ]
+
+    calls: list = []
+
+    def fake_which(name):
+        return "/f/ffmpeg" if name == "ffmpeg" else None
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        # simulate success: touch the last arg as 'output'
+        outp = Path(cmd[-1])
+        outp.parent.mkdir(parents=True, exist_ok=True)
+        outp.write_bytes(b"FAKEAUDIO")
+        class R: returncode = 0
+        return R()
+
+    monkeypatch.setattr(ma, "_has_ffmpeg", lambda: True)
+    monkeypatch.setattr(ma.shutil, "which", fake_which)
+    monkeypatch.setattr(ma.subprocess, "run", fake_run)
+
+    rel_path, toc = ma.make_basket_audio_release(items, suggested_name="test_release.m4a")
+    assert rel_path is not None
+    assert rel_path.name.endswith(".m4a")
+    assert "Part1" in toc and "Part2" in toc
+    # At least 2 cuts + 1 concat = 3 calls
+    assert len([c for c in calls if "ffmpeg" in str(c)]) >= 2

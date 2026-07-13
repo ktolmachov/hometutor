@@ -32,10 +32,11 @@ The `.txt` artifact is consumed by the existing smart-konspekt path. The
 Use `faster-whisper` as the first supported ASR backend, behind an optional
 `asr` dependency extra and an explicit runtime setting such as `ASR_ENABLED`.
 
-`ffmpeg` is a system dependency for container remux only (`--remux`: `.ts` →
-browser-playable `.mp4` without re-encoding). Audio decoding for ASR itself goes
-through PyAV bundled with faster-whisper, so transcription works without system
-ffmpeg. ffmpeg must not be vendored into the repository.
+`ffmpeg` is a system dependency for container remux (`--remux`) and audio track
+operations (P0 podcasts: `extract_audio_to_m4a` + A2 basket concat). Both use
+`-c copy` / `-vn -c:a copy` / concat (no re-encoding of content). Audio
+decoding for ASR itself goes through PyAV bundled with faster-whisper.
+ffmpeg must not be vendored into the repository.
 
 The script entrypoint is:
 
@@ -67,8 +68,17 @@ Positive:
 Tradeoffs:
 
 - users need compatible CUDA/runtime packages for GPU speed;
-- `ffmpeg` is operationally required only for `--remux` / container normalization;
+- `ffmpeg` is operationally required for `--remux`, audio extraction for podcasts
+  (A1) and basket release concat (A2); all operations are copy-only;
 - a small benchmark spike is required before promising processing time.
+
+## Amendment (2026-07-13, audio podcasts P0)
+
+ffmpeg scope expanded from remux-only to include deterministic audio remux/extract
+and concat for the local-first "Audio Podcasts" feature (waves A1+A2).
+No change to sidecar schema, no new Python deps, graceful degradation when
+absent (honest hints in UI/scripts). See evolutionary plan wave-audio-first-sound
+and wave-audio-release.
 
 ## Required Spike Before M1 Merge
 

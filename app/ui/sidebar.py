@@ -521,7 +521,8 @@ def render_sidebar(index_stats: dict | None):
                         st.caption(
                             f"SpeechRecognition: {'да' if deps['speech_recognition'] else 'нет'} · "
                             f"pyttsx3: {'да' if deps['pyttsx3'] else 'нет'} · "
-                            f"PyAudio: {'да' if deps['pyaudio'] else 'нет'}"
+                            f"PyAudio: {'да' if deps['pyaudio'] else 'нет'} · "
+                            f"faster_whisper (asr): {'да' if deps.get('faster_whisper') else 'нет'}"
                         )
                         av = st.audio_input("Запись вопроса (предпочтительно WAV)", key="sidebar_voice_audio")
                         if av is not None and st.button("Распознать запись", key="sidebar_voice_transcribe"):

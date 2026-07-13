@@ -298,8 +298,9 @@ async def cmd_link(message: Message) -> None:
 @router.message(F.voice)
 async def handle_voice(message: Message) -> None:
     await message.answer(
-        "Голос: Telegram отдаёт OGG/Opus; текущий VoiceService ориентирован на WAV/микрофон в Streamlit. "
-        "Используйте текст или добавьте конвертацию (ffmpeg/pydub) / Whisper API."
+        "Голосовое сообщение: поддержка локального ASR (faster-whisper из [asr]) улучшена. "
+        "OGG/Opus/WebM теперь обрабатываются через временный файл + Whisper при наличии extra. "
+        "Полная интеграция голоса в tutor — в следующих волнах. Пока используйте текст."
     )
 
 

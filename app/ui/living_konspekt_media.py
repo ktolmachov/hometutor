@@ -24,6 +24,7 @@ from app.media_sidecar import (
     load_media_sidecar_for_konspekt,
     sidecar_stale_reasons as _sidecar_stale_reasons,
 )
+from app.media_audio import audio_for_local_video
 from app.media_urls import NormalizedVideoUrl, normalize_video_url
 from app.path_safety import resolve_data_relative_path
 from app.section_index import row_to_section
@@ -281,6 +282,16 @@ def _render_local_video_media(
         start_time = int(media_section.t_start or 0)
         _render_local_video_player(video, title, start_time=start_time)
 
+    # Audio sibling (wave-audio-01): discovered by convention next to video file.
+    # No schema change. Render only if .m4a present (graceful, same lazy checkbox).
+    audio_path = audio_for_local_video(video)
+    if audio_path is not None:
+        audio_key = f"lk_play_audio_{checkbox_key}"
+        if st.checkbox("🎧 Слушать раздел", key=audio_key):
+            start_time = int(media_section.t_start or 0)
+            end_time = int(media_section.t_end) if media_section.t_end is not None else None
+            _render_local_audio_player(audio_path, title, start_time=start_time, end_time=end_time)
+
 
 def _render_local_video_player(video: LocalVideoSource, title: str, *, start_time: int = 0) -> None:
     try:
@@ -293,6 +304,28 @@ def _render_local_video_player(video: LocalVideoSource, title: str, *, start_tim
         return
 
     st.video(str(video_path), start_time=start_time)
+
+
+def _render_local_audio_player(
+    audio_path: Path,
+    title: str,
+    *,
+    start_time: int = 0,
+    end_time: int | None = None,
+) -> None:
+    """Render clipped st.audio for local .m4a sibling (P0 first-sound)."""
+    try:
+        # audio_path is already absolute resolved from helper
+        if not audio_path.exists():
+            st.caption(f"Аудио не найдено: `{audio_path}`")
+            return
+        # end_time is keyword-only in Streamlit; pass only if present
+        if end_time is not None and end_time > start_time:
+            st.audio(str(audio_path), start_time=start_time, end_time=end_time)
+        else:
+            st.audio(str(audio_path), start_time=start_time)
+    except Exception as exc:  # noqa: BLE001 - audio render must not break the whole panel
+        st.caption(f"Аудио недоступно: {format_request_error(exc)}")
 
 
 def _unique_document_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:

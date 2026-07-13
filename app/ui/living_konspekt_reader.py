@@ -156,7 +156,11 @@ def render_reader(
                 if r and r.get("items"):
                     with st.expander(f"📋 Рубрика качества ({r.get('average')}/5)", expanded=False):
                         for crit, sc, mx, comm in r["items"]:
-                            st.caption(f"**{crit}**: {sc}/{mx} — {comm or '—'}")
+                            if "проверка точности" in crit.lower() or "accuracy" in crit.lower():
+                                # C3: special visual for accuracy_check role / проверка точности
+                                st.markdown(f"**🔍 {crit}**: {sc}/{mx} — {comm or '—'}")
+                            else:
+                                st.caption(f"**{crit}**: {sc}/{mx} — {comm or '—'}")
         except Exception:
             pass
 

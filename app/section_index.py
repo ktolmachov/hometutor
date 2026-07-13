@@ -357,6 +357,8 @@ _ROLE_BY_NORMALIZED_HEADING: dict[str, str] = {
     "рубрика качества конспекта": "quality_rubric",
     "рубрика качества": "quality_rubric",
     "quality rubric": "quality_rubric",
+    # C3 / A1: for visual distinction of accuracy check in rubric
+    "проверка точности": "accuracy_check",
 }
 
 
@@ -375,6 +377,24 @@ def sections_by_role(
         if role is not None and role not in out:
             out[role] = section
     return out
+
+
+# C1: грейд фабрики по фактическим ролям (derived, не frontmatter)
+_BASE_ROLES = {"main_idea", "terms", "summary"}
+
+
+def get_konspekt_grade(sections: list[ParsedSection] | list[IndexedSection]) -> str:
+    """'базовый' / 'богатый' / 'богатый + рубрика' по наличию ролей."""
+    roles = set(sections_by_role(sections).keys())
+    if not roles:
+        return "базовый"
+    has_rubric = "quality_rubric" in roles
+    is_rich = len(roles - _BASE_ROLES) > 0
+    if has_rubric:
+        return "богатый + рубрика"
+    if is_rich:
+        return "богатый"
+    return "базовый"
 
 
 def heading_repeats_in_document(md_abs: Path, heading_text: str) -> bool:

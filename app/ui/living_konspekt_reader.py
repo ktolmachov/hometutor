@@ -114,6 +114,18 @@ def render_reader(
         except Exception:  # noqa: BLE001
             pass
 
+        # C1: грейд фабрики (derived от ролей)
+        try:
+            from app.section_index import _cached_parse_sections, get_konspekt_grade
+            md_abs = row.get("konspekt_md_abs")
+            if md_abs:
+                secs = _cached_parse_sections(Path(md_abs))
+                grade = get_konspekt_grade(secs)
+                if grade != "базовый":
+                    meta_text += f" · {grade}"
+        except Exception:  # noqa: BLE001
+            pass
+
         st.markdown(f"<span id='{_reader_anchor(index)}'></span>", unsafe_allow_html=True)
         st.markdown(f"## {heading}")
         st.caption(meta_text)

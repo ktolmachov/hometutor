@@ -1,6 +1,7 @@
 """Поиск готовых cloud-конспектов в data/<course>/ по YAML-frontmatter type=konspekt."""
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass
 from functools import lru_cache
@@ -44,11 +45,38 @@ def _normalize(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip()
 
 
-def scan_konspekts(course_dir: Path) -> list[KonspektMeta]:
-    """Вернуть все .md-файлы в course_dir с type: konspekt в frontmatter."""
-    results: list[KonspektMeta] = []
+# Полноценный перф-кеш для scan_konspekts (pre-existing perf issue noted in review)
+# Signature по файлам .md в курсе (mtime + size) — как _cached_parse_sections по контенту.
+_KONSPEKT_SCAN_CACHE: dict[Path, tuple[str, list[KonspektMeta]]] = {}
+
+
+def _konspekt_scan_signature(course_dir: Path) -> str:
     if not course_dir.is_dir():
-        return results
+        return ""
+    parts: list[str] = []
+    for md in sorted(course_dir.glob("*.md")):
+        try:
+            st = md.stat()
+            parts.append(f"{md.name}:{st.st_mtime_ns}:{st.st_size}")
+        except OSError:
+            parts.append(f"{md.name}:err")
+    raw = "|".join(parts).encode("utf-8", errors="replace")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def scan_konspekts(course_dir: Path) -> list[KonspektMeta]:
+    """Вернуть все .md-файлы в course_dir с type: konspekt в frontmatter.
+
+    Полноценный кэш по сигнатуре содержимого dir (pre-existing perf fix).
+    """
+    if not course_dir.is_dir():
+        return []
+    sig = _konspekt_scan_signature(course_dir)
+    cached = _KONSPEKT_SCAN_CACHE.get(course_dir)
+    if cached is not None and cached[0] == sig:
+        return cached[1]
+
+    results: list[KonspektMeta] = []
     for md in course_dir.glob("*.md"):
         try:
             text = md.read_text(encoding="utf-8", errors="replace")
@@ -66,6 +94,8 @@ def scan_konspekts(course_dir: Path) -> list[KonspektMeta]:
             generated=fm.get("generated", "").strip().strip('"').strip("'") or None,
             tags=tags,
         ))
+
+    _KONSPEKT_SCAN_CACHE[course_dir] = (sig, results)
     return results
 
 

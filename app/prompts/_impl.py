@@ -1429,6 +1429,7 @@ DEEP_STUDY_PROMPT = """Ты — экспертный репетитор. Изу�
 
 
 def get_smart_lecture_konspekt_universal_prompt(prompt_path: str | Path | None = None) -> str:
+    # C2: this is currently a 'homeless' module per konspekt_quality_plan; owner decision pending (move prompt + CLI or deprecate)
     """Load the universal smart-konspekt prompt through the prompt package boundary."""
     path = Path(prompt_path) if prompt_path else Path("doc/prompts/smart_lecture_konspekt_universal.md")
     if not path.is_absolute():

@@ -148,7 +148,7 @@ class Settings(BaseSettings):
     # Должен быть больше HOME_RAG_LLM_LOCAL_HARD_TIMEOUT_SEC.
     obsidian_export_llm_timeout_sec: int = Field(default=600, ge=30, le=3600)
     # Universal smart-konspekt generation inputs and budgets.
-    obsidian_export_prompt_path: str = "doc/prompts/smart_lecture_konspekt_universal.md"
+    obsidian_export_prompt_path: str = "doc/prompts/smart_lecture_konspekt_universal.md"  # C2: candidate for move to studio or documented CLI (see konspekt_quality_plan)
     obsidian_export_materials_dir: str = "materials"
     smart_konspekt_transcript_budget: int = Field(default=12000, ge=1000, le=64000)
     smart_konspekt_draft_budget: int = Field(default=8000, ge=0, le=64000)

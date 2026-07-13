@@ -30,3 +30,85 @@ jobs:
 
       - name: Tests (pytest)
         run: pytest tests/ -q
+
+  test-media-pipeline-audio:
+    # Real end-to-end run of the media pipeline PowerShell script (with audio extraction step).
+    # Exercises the PS -> python call path for extract_audio_to_m4a using actual ffmpeg.
+    # Uses skips for ASR/sidecar to keep CI fast and lightweight (no heavy models).
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Create venv (required by pipeline script)
+        run: python -m venv .venv
+
+      - name: Install package (for app.* imports used by scripts)
+        run: |
+          .\.venv\Scripts\python -m pip install --upgrade pip
+          .\.venv\Scripts\python -m pip install -e .
+
+      - name: Install ffmpeg
+        run: choco install ffmpeg -y --no-progress
+        shell: pwsh
+
+      - name: Prepare minimal test data and run real pipeline
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $tempData = Join-Path $env:RUNNER_TEMP "hometutor-ci-data"
+          New-Item -ItemType Directory -Force -Path $tempData | Out-Null
+          $env:HOME_RAG_DATA_DIR = $tempData
+
+          $courseDir = Join-Path $tempData "test-audio-ci"
+          New-Item -ItemType Directory -Force -Path $courseDir | Out-Null
+
+          # Minimal konspekt (required even with -SkipSidecar)
+          $konspektPath = Join-Path $courseDir "lesson.md"
+          @"
+---
+media_sidecar: test-audio-ci/lesson.media.json
+---
+
+# CI Audio Extraction Test Lesson
+
+Minimal file to exercise the PowerShell pipeline.
+"@ | Set-Content -Path $konspektPath -Encoding UTF8
+
+          # Generate a tiny video that contains an audio track (sine wave + solid color)
+          $videoPath = Join-Path $courseDir "lesson.mp4"
+          ffmpeg -y `
+            -f lavfi -i "sine=frequency=440:duration=2" `
+            -f lavfi -i "color=c=blue:s=160x120:d=2" `
+            -shortest -c:v libx264 -preset ultrafast -crf 28 `
+            -c:a aac -b:a 48k `
+            $videoPath 2>&1 | Out-String | Write-Host
+
+          if (-not (Test-Path $videoPath)) {
+            throw "Failed to generate test video with ffmpeg"
+          }
+
+          Write-Host "Running real pipeline (skipping ASR and sidecar)..."
+          & .\scripts\Run-MediaKonspektPipeline.ps1 `
+            -Konspekt "test-audio-ci/lesson.md" `
+            -Media $videoPath `
+            -SkipAsr `
+            -SkipSidecar
+
+          # Verify the extraction step produced the .m4a sibling
+          $audioPath = [System.IO.Path]::ChangeExtension($videoPath, ".m4a")
+          if (-not (Test-Path $audioPath)) {
+            throw "Pipeline did not produce expected audio file: $audioPath"
+          }
+
+          $size = (Get-Item $audioPath).Length
+          if ($size -lt 1000) {
+            throw "Extracted .m4a is suspiciously small ($size bytes)"
+          }
+
+          Write-Host "SUCCESS: Real PowerShell pipeline produced $audioPath ($size bytes)"

@@ -96,7 +96,7 @@ def _cached_kb_overview(api_base: str) -> dict[str, Any]:
 @st.cache_data(ttl=_UI_BOOTSTRAP_CACHE_TTL_SEC, show_spinner="Загрузка базы знаний…")
 def _cached_ui_bootstrap(api_base: str) -> dict[str, Any]:
     """Один запрос: index_stats + kb_overview + topics (меньше латентности главной)."""
-    r = _http_session().get(f"{api_base}/ui/bootstrap", timeout=45)
+    r = _http_session().get(f"{api_base}/ui/bootstrap", headers=_auth_headers(), timeout=45)
     r.raise_for_status()
     return r.json()
 

@@ -107,6 +107,11 @@ def playlist_items_from_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]
         start = int(media_section.t_start)
         end = int(media_section.t_end) if media_section.t_end is not None else None
         url = _playlist_video_url(video, start)
+        audio_path = None
+        if isinstance(video, LocalVideoSource):
+            ap = audio_for_local_video(video)
+            if ap is not None:
+                audio_path = str(ap)
         items.append(
             {
                 "heading": str(row.get("heading_text") or "Без названия"),
@@ -116,6 +121,7 @@ def playlist_items_from_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]
                 "end": end,
                 "duration": max(0, end - start) if end is not None else 0,
                 "url": url,
+                "audio_path": audio_path,
             }
         )
     return items
@@ -133,8 +139,22 @@ def render_playlist_panel(rows: list[dict[str, Any]]) -> None:
         label = f"{idx}. {item['heading']} · {item['title']} · {_format_timestamp(item['start'])}"
         if item.get("end") is not None:
             label += f"–{_format_timestamp(item['end'])}"
+        audio_path = item.get("audio_path")
         if item.get("url"):
             st.link_button(label, str(item["url"]), width="stretch")
+        elif audio_path:
+            # Local audio now playable (wave 2). Lazy checkbox to match video cost concern.
+            cb_key = f"pl_audio_{idx}_{item.get('start', 0)}"
+            if st.checkbox(f"🎧 {label}", key=cb_key):
+                try:
+                    ap = Path(audio_path)
+                    end = item.get("end")
+                    if end is not None and end > item["start"]:
+                        st.audio(str(ap), start_time=item["start"], end_time=end)
+                    else:
+                        st.audio(str(ap), start_time=item["start"])
+                except Exception as exc:  # noqa: BLE001 - playlist render must degrade
+                    st.caption(f"Аудио плейлиста недоступно: {format_request_error(exc)}")
         else:
             st.caption(f"{label} · {item['source']}")
 

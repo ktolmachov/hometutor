@@ -204,6 +204,8 @@
     <select id="rp-start"><option value="">— Старт —</option></select>
     <select id="rp-end"><option value="">— Цель —</option></select>
     <button class="rp-find" id="rp-find">Найти путь ▶</button>
+    <div style="margin:6px 0 4px;font-size:10px;opacity:.85">или</div>
+    <button class="rp-find" id="rp-day" title="A2: топ по worth (due+novel+decay+frontier+reach)">Авто: маршрут дня ▶</button>
     <div id="rp-steps"></div>
   </div>
   <!-- KG-02 diagnostics panel -->
@@ -301,8 +303,11 @@ function R(d){const base=d.level==='lesson'?11:7;return base+Math.sqrt(d.reach||
 function arcPath(r,frac){frac=Math.max(0,Math.min(0.99999,frac));if(!frac)return'';const a=frac*2*Math.PI-Math.PI/2,sx=r*Math.cos(-Math.PI/2),sy=r*Math.sin(-Math.PI/2),ex=r*Math.cos(a),ey=r*Math.sin(a),lg=frac>.5?1:0;return`M${sx},${sy} A${r},${r} 0 ${lg} 1 ${ex},${ey}`;}
 
 // ── stats pill ──
+// A1: use total_concepts (excl. lessons) + explicit lessons tile. Matches Streamlit
+// caption and compute_kg_counters. Avoids "89 концептов" when 13 are lessons.
 document.getElementById('stats').innerHTML=
-  `<div class="st"><b>${STATS.total}</b><span>концептов</span></div>`+
+  `<div class="st"><b>${STATS.total_concepts||STATS.total||0}</b><span>концептов</span></div>`+
+  `<div class="st"><b>${STATS.total_lessons||0}</b><span>уроков</span></div>`+
   `<div class="st"><b>${STATS.avg_mastery}%</b><span>ср. mastery</span></div>`+
   `<div class="st" style="color:#86efac"><b>${STATS.learned}</b><span>освоено</span></div>`+
   `<div class="st" style="color:#fcd34d"><b>${STATS.frontier}</b><span>доступно</span></div>`+
@@ -484,10 +489,14 @@ nodeSel.on('mouseenter',(e,d)=>{
   const lv=LEVELS[d.level]||LEVELS.unknown;
   const retVal=DECAY_VECTOR[d.id];
   const retLine=decayMode&&retVal!=null?`<div style="font-size:10px;color:#94a3b8;margin-top:4px">🧠 Retention: <b>${Math.round(retVal*100)}%</b> (Ebbinghaus)</div>`:'';
+  // A1: surface price reasons next to existing mastery/reach info (honest, visible)
+  const dueLine = (d.due && d.due>0) ? `<div style="font-size:10px;color:#60a5fa;margin-top:2px">🃏 ждут ${d.due} карточек</div>` : '';
+  const novelLine = d.novel ? `<div style="font-size:10px;color:#67e8f9;margin-top:2px">✨ новое для тебя</div>` : '';
+  const worthLine = (d.worth && d.worth > 0.5) ? `<div style="font-size:9px;color:#c4b5fd;margin-top:1px">W=${d.worth} · ${d.worth_reason||''}</div>` : '';
   tip.innerHTML=`<h3>${d.label}</h3><span class="lvl" style="background:${lv.color}22;color:${lv.color};border:1px solid ${lv.color}44">${lv.label}</span>`+
     `<div class="bar"><i style="width:${d.mastery}%;background:${masteryColor(d.mastery)}"></i></div>`+
     `<div style="font-size:10px;color:var(--txt3)">mastery ${d.mastery}% · открывает ${d.reach} концептов</div>`+
-    retLine+
+    dueLine + novelLine + worthLine + retLine +
     (d.desc?`<div style="color:var(--txt2);margin-top:7px">${d.desc.slice(0,160)}${d.desc.length>160?'…':''}</div>`:'')+
     `<div class="mut">← нужно: ${d.prereqs.length} · открывает →: ${d.unlocks.length}</div>`;
   tip.classList.add('show');highlight(d);
@@ -751,6 +760,51 @@ document.getElementById('rp-find').addEventListener('click',()=>{
   animatePath(path);
   // focus on start node
   const startNode=simNodes.find(n=>n.id===s);if(startNode)focusNode(startNode);
+});
+
+// A2: day route by worth (top-K non-learned, greedily chained via unlocks when possible)
+function computeDayRoute(k=6){
+  let cands = NODES.filter(n=> !n.learned && !(n.is_lesson)).map(n=>({...n, w: (n.worth||0)}));
+  if(!cands.length) return [];
+  cands.sort((a,b)=>(b.w||0)-(a.w||0));
+  cands = cands.slice(0, k);
+  if(!cands.length) return [];
+  const selected = [cands[0]];
+  const remain = new Set(cands.slice(1).map(x=>x.id));
+  while(remain.size && selected.length < k){
+    const last = selected[selected.length-1];
+    let best=null, bestW=-1;
+    for(const u of (last.unlocks||[])){
+      if(remain.has(u)){
+        const c = cands.find(x=>x.id===u); if(c && (c.w||0)>bestW){best=c; bestW=c.w||0;}
+      }
+    }
+    if(best){
+      selected.push(best); remain.delete(best.id);
+    } else {
+      // fallback: next highest worth remaining
+      const nxt = cands.find(x=>remain.has(x.id));
+      if(nxt){ selected.push(nxt); remain.delete(nxt.id); } else break;
+    }
+  }
+  return selected;
+}
+
+document.getElementById('rp-day').addEventListener('click',()=>{
+  const stepsEl=document.getElementById('rp-steps');
+  const route = computeDayRoute(6);
+  if(!route.length){stepsEl.innerHTML='<div class="rp-msg rp-err">Нет кандидатов (все изучены?)</div>';return;}
+  const html = route.map((id,i)=>{
+    const n = nodeMap.get(id);
+    const reason = (n && n.worth_reason) ? n.worth_reason : '';
+    return (i>0?'<div class="rp-arrow">↓</div>':'') +
+      `<div class="rp-step"><div class="rs-dot" style="background:${ROUTE_COLORS[i%ROUTE_COLORS.length]}"></div><span>${n?n.label:id}</span>` +
+      (reason?`<span style="margin-left:6px;font-size:9px;opacity:.75">${reason}</span>`:'') + `</div>`;
+  }).join('');
+  stepsEl.innerHTML = `<div class="rp-msg rp-ok">Маршрут дня (${route.length} остановок по ценности)</div>` + html;
+  animatePath(route);
+  const first = simNodes.find(n=>n.id===route[0]); if(first) focusNode(first);
+  showToast('Авто-маршрут по worth');
 });
 
 const routeBtn=document.getElementById('routebtn'),rpPanel=document.getElementById('rp');

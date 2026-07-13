@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>3D Knowledge Graph — HomeTutor</title>
+<style>
+  :root { --bg:#0a0a0f; --glass:rgba(255,255,255,0.06); --acc:#8b5cf6; }
+  html,body{margin:0;height:100%;background:var(--bg);color:#e8e8f0;font-family:system-ui,-apple-system,sans-serif;overflow:hidden}
+  #wrap{display:flex;height:100%}
+  #cv{flex:1 1 auto;display:block;background:#050508}
+  #side{width:280px;border-left:1px solid #222;padding:12px 14px;box-sizing:border-box;overflow:auto;font-size:12px;background:#0c0c12}
+  .hd{font-weight:700;margin:0 0 8px;font-size:13px;letter-spacing:.3px}
+  .btn{background:var(--glass);border:1px solid #333;color:#ddd;padding:6px 10px;border-radius:6px;cursor:pointer;margin:4px 2px;font-size:11px}
+  .btn:hover{border-color:var(--acc)}
+  .st{display:flex;gap:6px;margin:4px 0;font-size:11px}
+  .list{max-height:240px;overflow:auto;border:1px solid #222;border-radius:6px;padding:4px}
+  .stop{padding:3px 5px;margin:2px 0;border-radius:4px;background:#111}
+  .stop b{color:#c4b5fd}
+  .legend{font-size:10px;opacity:.7;margin-top:10px}
+  .mini{font-size:10px;opacity:.6;margin-top:8px}
+  canvas{cursor:grab}
+  .topbar{position:absolute;top:8px;left:12px;z-index:10;background:rgba(10,10,15,.8);padding:4px 8px;border-radius:6px;border:1px solid #222;font-size:11px}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv" width="900" height="700"></canvas>
+  <div id="side">
+    <div class="hd">🏛 3D Knowledge Graph</div>
+    <div id="statsline" class="st"></div>
+    <button class="btn" id="flybtn">▶ Полёт по маршруту дня</button>
+    <button class="btn" id="resetbtn">Сброс вида</button>
+    <div class="hd" style="margin-top:10px">Высокая ценность (worth)</div>
+    <div id="toplist" class="list"></div>
+    <div class="legend">
+      Высота / яркость ≈ worth (due + novel + decay + frontier + reach)<br>
+      Этажи: уроки внизу, концепты выше.<br>
+      Перетаскивай мышью • колесо — зум • клик — фокус
+    </div>
+    <div class="mini" id="hint"></div>
+  </div>
+</div>
+<div class="topbar" id="topbar">3D зал (экспорт) — офлайн</div>
+<script>
+// Inlined by build_kg_3d_html
+const NODES = __NODES__;
+const STATS = __STATS__ || {};
+const HEALTH = __HEALTH__ || null;
+
+const canvas = document.getElementById('cv');
+const ctx = canvas.getContext('2d');
+let W = canvas.width, H = canvas.height;
+let yaw = 0.6, pitch = 0.35, zoom = 1.0;
+let cx=0, cy=0, cz=0; // camera target (center)
+let dragging = false, lx=0, ly=0;
+
+function resize(){ W=canvas.width = canvas.clientWidth||900; H=canvas.height=canvas.clientHeight||700; }
+window.addEventListener('resize', ()=>{resize(); render();}); resize();
+
+function project(x,y,z){
+  // simple perspective + rotation
+  const cosY=Math.cos(yaw), sinY=Math.sin(yaw);
+  const cosP=Math.cos(pitch), sinP=Math.sin(pitch);
+  let rx = x*cosY - z*sinY;
+  let rz = x*sinY + z*cosY;
+  let ry = y;
+  // pitch around X
+  let ry2 = ry*cosP - rz*sinP;
+  let rz2 = ry*sinP + rz*cosP;
+  const dist = 380 / (Math.max(40, 260 + rz2*zoom));
+  const sx = W/2 + rx * dist * zoom + cx;
+  const sy = H/2 + ry2 * dist * zoom + cy;
+  return {sx, sy, z: rz2, scale: dist};
+}
+
+function nodePos(n, i){
+  // Layered layout: lessons near y= -80 floor, concepts higher by worth
+  const isL = !!n.is_lesson;
+  const baseY = isL ? -70 : 10;
+  const h = (n.worth||0) * 22;
+  const y = baseY + h;
+
+  // Spread in xz using cluster + hash of id for stable "positions"
+  const c = (n.cluster||0);
+  let hsh = 0; for(let j=0;j<n.id.length;j++) hsh = (hsh*31 + n.id.charCodeAt(j))|0;
+  const spread = 140;
+  const x = ((c*37 + (hsh%19)) % 23 - 11) * (spread/11) + (isL?0: (hsh%5-2)*6);
+  const z = ((c*19 + (hsh%29)) % 29 - 14) * (spread/14) + (hsh%7-3)*4;
+  return {x, y, z};
+}
+
+let nodes3d = NODES.map((n,i)=>({n, p: nodePos(n,i)}));
+
+function draw(){
+  ctx.fillStyle = '#050508';
+  ctx.fillRect(0,0,W,H);
+
+  // faint grid "floors"
+  ctx.strokeStyle = 'rgba(120,120,180,0.12)';
+  ctx.lineWidth=1;
+  for(let f=-1;f<=2;f++){
+    const yy = (f===0 ? -70 : (f===1? 30 : (f===2?90:-140)));
+    const a = project(-220,yy,-180), b=project(220,yy,-180);
+    const c2=project(-220,yy,180), d=project(220,yy,180);
+    ctx.beginPath(); ctx.moveTo(a.sx,a.sy); ctx.lineTo(b.sx,b.sy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(c2.sx,c2.sy); ctx.lineTo(d.sx,d.sy); ctx.stroke();
+  }
+
+  // edges (faded)
+  ctx.strokeStyle = 'rgba(160,140,255,0.18)';
+  ctx.lineWidth = 0.7;
+  const id2node = new Map(nodes3d.map(o=>[o.n.id,o]));
+  for(const e of (window.__EDGES||[])){
+    const a = id2node.get(e.source), b=id2node.get(e.target);
+    if(!a||!b) continue;
+    const pa = project(a.p.x,a.p.y,a.p.z);
+    const pb = project(b.p.x,b.p.y,b.p.z);
+    ctx.beginPath(); ctx.moveTo(pa.sx,pa.sy); ctx.lineTo(pb.sx,pb.sy); ctx.stroke();
+  }
+
+  // nodes sorted back to front
+  const proj = nodes3d.map(o=>{
+    const pr = project(o.p.x, o.p.y, o.p.z);
+    return {o, pr, z:pr.z};
+  }).sort((u,v)=> u.z - v.z);
+
+  for(const item of proj){
+    const {o, pr} = item;
+    const nn = o.n;
+    const r = Math.max(2.5, 3.5 + Math.sqrt(nn.reach||1)*1.6 + (nn.worth||0)*0.6 ) * (0.6 + pr.scale*0.7);
+    const alpha = Math.max(0.35, 0.55 + (nn.worth||0)*0.04);
+    const col = nn.level==='lesson' ? '#64748b' : (nn.novel?'#67e8f9': (nn.due>0?'#60a5fa':'#a5b4fc'));
+    ctx.fillStyle = col;
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.arc(pr.sx, pr.sy, r, 0, Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha=1;
+
+    // glow for high worth
+    if((nn.worth||0)>4){
+      ctx.strokeStyle = 'rgba(196,181,253,0.45)';
+      ctx.lineWidth=2.5;
+      ctx.beginPath(); ctx.arc(pr.sx,pr.sy, r*1.55,0,Math.PI*2); ctx.stroke();
+    }
+    // label for top
+    if((nn.worth||0)>3.5 || nn.is_lesson){
+      ctx.fillStyle='#ddd';
+      ctx.font='9px system-ui';
+      ctx.fillText((nn.label||nn.id).slice(0,18), pr.sx+ r+3, pr.sy+3);
+    }
+  }
+  ctx.globalAlpha=1;
+}
+
+function render(){ draw(); }
+
+canvas.addEventListener('mousedown', e=>{dragging=true; lx=e.clientX; ly=e.clientY; canvas.style.cursor='grabbing';});
+window.addEventListener('mouseup', ()=>{dragging=false; canvas.style.cursor='grab';});
+window.addEventListener('mousemove', e=>{
+  if(!dragging) return;
+  const dx=e.clientX-lx, dy=e.clientY-ly;
+  yaw += dx*0.0045;
+  pitch = Math.max(-1.2, Math.min(1.2, pitch - dy*0.004));
+  lx=e.clientX; ly=e.clientY;
+  render();
+});
+canvas.addEventListener('wheel', e=>{ zoom = Math.max(0.4, Math.min(2.8, zoom - e.deltaY*0.0015)); render(); e.preventDefault(); }, {passive:false});
+
+canvas.addEventListener('click', e=>{
+  // hit test nearest
+  let best=null, bd=1e9;
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  for(const o of nodes3d){
+    const pr=project(o.p.x,o.p.y,o.p.z);
+    const d=Math.hypot(pr.sx-mx, pr.sy-my);
+    if(d<bd){bd=d; best=o;}
+  }
+  if(best && bd<38){
+    focus(best.n);
+  }
+});
+
+function focus(n){
+  const o = nodes3d.find(x=>x.n.id===n.id); if(!o) return;
+  // center camera target on it
+  cx = -o.p.x * 0.6;
+  cy = -o.p.y * 0.3;
+  cz = -o.p.z * 0.6;
+  render();
+  // flash info
+  const s=document.getElementById('hint');
+  s.textContent = `${n.label} · W=${(n.worth||0).toFixed(1)} ${n.worth_reason||''}`;
+  setTimeout(()=>{ if(s.textContent.includes(n.label)) s.textContent=''; }, 1600);
+}
+
+function buildTopList(){
+  const cont = document.getElementById('toplist');
+  cont.innerHTML='';
+  const sorted = [...NODES].filter(n=>!n.learned).sort((a,b)=>(b.worth||0)-(a.worth||0)).slice(0,7);
+  sorted.forEach(n=>{
+    const d=document.createElement('div');
+    d.className='stop';
+    d.innerHTML = `<b>${(n.label||n.id).slice(0,22)}</b> <span style="opacity:.6">W=${(n.worth||0).toFixed(1)}</span><br><span style="font-size:10px;color:#94a3b8">${n.worth_reason||''}</span>`;
+    d.onclick=()=>focus(n);
+    cont.appendChild(d);
+  });
+}
+
+function updateStats(){
+  const el=document.getElementById('statsline');
+  const tc=STATS.total_concepts||STATS.total||0;
+  const tl=STATS.total_lessons||0;
+  el.innerHTML = `<div class="st"><b>${tc}</b> концептов · <b>${tl}</b> уроков</div>`;
+}
+
+let flyTimer=null;
+function flyRoute(){
+  if(flyTimer){ clearInterval(flyTimer); flyTimer=null; }
+  const route = [...NODES].filter(n=>!n.learned && (n.worth||0)>0.1)
+                 .sort((a,b)=>(b.worth||0)-(a.worth||0)).slice(0,6);
+  if(!route.length){ alert('Нет достойных остановок'); return; }
+  let i=0;
+  flyTimer = setInterval(()=>{
+    if(i>=route.length){ clearInterval(flyTimer); flyTimer=null; return; }
+    const tgt = route[i];
+    const o = nodes3d.find(x=>x.n.id===tgt.id);
+    if(o){
+      // lerp camera toward it
+      cx = cx*0.4 + (-o.p.x*0.65)*0.6;
+      cy = cy*0.4 + (-o.p.y*0.25)*0.6;
+      yaw = yaw*0.6 + (0.4 + i*0.12)*0.4;
+      pitch = pitch*0.6 + 0.25*0.4;
+      zoom = zoom*0.7 + 1.1*0.3;
+      render();
+      focus(tgt); // updates hint
+    }
+    i++;
+  }, 620);
+}
+
+document.getElementById('flybtn').onclick = flyRoute;
+document.getElementById('resetbtn').onclick = ()=>{
+  yaw=0.6; pitch=0.35; zoom=1.0; cx=cy=cz=0;
+  render();
+};
+
+function init(){
+  // attach edges if present in future
+  window.__EDGES__ = []; // placeholder; full graph edges not required for demo
+  updateStats();
+  buildTopList();
+  // initial positions already computed
+  render();
+  // gentle auto rotate hint
+  setTimeout(()=>{ if(!dragging) { yaw += 0.3; render(); } }, 900);
+  document.getElementById('hint').textContent = `${NODES.length} узлов · worth от A2`;
+}
+init();
+</script>
+</body>
+</html>

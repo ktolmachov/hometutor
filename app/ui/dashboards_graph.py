@@ -26,6 +26,7 @@ from app.ui.home_hub import (
 )
 from app.ui.knowledge_graph_d3 import (
     _is_lesson_node as _is_lesson_concept,
+    build_kg_3d_html,
     build_kg_html,
     collect_kg_learned_set,
     render_d3_knowledge_graph,
@@ -1104,6 +1105,16 @@ def _render_knowledge_graph_tab() -> None:
         mime="text/html",
         key="kg_download_live_html",
         help="Самодостаточная интерактивная карта курса для локального открытия без приложения.",
+    )
+
+    # B1: 3D hall export (same payload, worth from A2 used for height/glow + route flight)
+    st.download_button(
+        "⬇ Скачать 3D-зал (HTML)",
+        data=build_kg_3d_html(payload),
+        file_name="knowledge_graph_3d.html",
+        mime="text/html",
+        key="kg_download_3d_html",
+        help="Офлайн 3D-визуализация: этажи по урокам, высота по worth. Полёт по маршруту дня.",
     )
 
     with st.expander("🔬 Качество графа", expanded=False):

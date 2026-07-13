@@ -13,10 +13,12 @@ from __future__ import annotations
 import inspect
 
 from app.ui.knowledge_graph_d3 import (
+    build_kg_html,
     build_kg_payload,
     collect_kg_learned_set,
     compute_kg_counters,
 )
+from app.ui.knowledge_graph_d3_analysis import node_worth, top_worth_factor, DUE_WEIGHT, NOVEL_WEIGHT
 
 
 class TestComputeKgCounters:
@@ -358,3 +360,91 @@ class TestMissionControlCounterFallback:
         assert "typed_relations = []" in source
         # an honest neutral placeholder replaces synthetic zeros on counter failure
         assert "Счётчики недоступны" in source
+
+
+class TestA2WorthScoring:
+    """A2: worth() must be deterministic, pure, favor due/novel/decay over pure reach.
+    top_worth_factor reports the largest term.
+    """
+
+    def test_worth_zero_for_learned(self):
+        assert node_worth({"id": "x", "learned": True, "due": 10, "novel": True}) == 0.0
+
+    def test_worth_higher_for_due_and_novel(self):
+        n_due = {"id": "d", "due": 3, "frontier": True, "centrality": 0.2}
+        n_novel = {"id": "n", "novel": True, "centrality": 0.2}
+        n_struct = {"id": "s", "centrality": 0.95}  # high reach but nothing personal
+
+        w_due = node_worth(n_due)
+        w_novel = node_worth(n_novel)
+        w_struct = node_worth(n_struct)
+
+        assert w_due > w_struct + 1.0
+        assert w_novel > w_struct + 1.0
+        # due has bigger weight
+        assert w_due > w_novel
+
+    def test_top_factor_reports_due_or_novel(self):
+        assert "ждут карточек" in top_worth_factor({"due": 4})
+        assert "новое для тебя" in top_worth_factor({"novel": True})
+        assert top_worth_factor({"learned": True}) == ""
+
+    def test_worth_attached_in_payload(self):
+        payload = build_kg_payload({"c": {"label": "C"}, "l": {"label": "L", "level": "lesson"}})
+        ns = {n["id"]: n for n in payload["nodes"]}
+        assert "worth" in ns["c"]
+        assert isinstance(ns["c"]["worth"], (int, float))
+        assert "worth_reason" in ns["c"]
+        # lesson has low worth
+        assert ns["l"]["worth"] <= 1.0
+
+
+class TestA1NodePriceSignals:
+    """A1 (wave-kg-node-worth): due_reviews and novel must be wired into node payload.
+    due is aggregated count by canonical cid; novel = absent from mastery+decay for
+    non-lesson nodes. Tests use the heavy path so exported HTML sees the fields too.
+    """
+
+    def test_payload_nodes_carry_due_and_novel(self):
+        concepts = {
+            "known": {"label": "Known"},
+            "newbie": {"label": "Newbie"},
+            "lesson:lec": {"label": "Lec", "level": "lesson"},
+        }
+        mastery_vector = {"known": 0.85}
+        due_reviews = [
+            {"concept": "known"}, {"concept": "known"},  # 2 due for known
+            {"concept": "newbie"},
+            # lesson has no due entry here; even if present we surface it (rare)
+        ]
+
+        payload = build_kg_payload(
+            concepts,
+            mastery_vector=mastery_vector,
+            due_reviews=due_reviews,
+        )
+
+        nodes_by_id = {n["id"]: n for n in payload["nodes"]}
+        assert nodes_by_id["known"]["due"] == 2
+        assert nodes_by_id["known"]["novel"] is False  # has mastery
+
+        assert nodes_by_id["newbie"]["due"] == 1
+        assert nodes_by_id["newbie"]["novel"] is True  # no mastery, no decay, not lesson
+
+        assert nodes_by_id["lesson:lec"]["due"] == 0
+        assert nodes_by_id["lesson:lec"]["novel"] is False  # lessons never novel
+        assert nodes_by_id["lesson:lec"]["is_lesson"] is True
+
+    def test_build_kg_html_includes_price_fields(self):
+        # Smoke: the HTML template receives nodes with due/novel and renders without crash.
+        # Placeholders are replaced; check data presence via the JSON that ends up in HTML.
+        payload = build_kg_payload(
+            {"c1": {"label": "C1"}, "c2": {"label": "C2"}},
+            due_reviews=[{"concept": "c1"}],
+        )
+        html = build_kg_html(payload)
+        assert any(n.get("due") == 1 for n in payload["nodes"])
+        # The serialized nodes (with due/novel) are embedded in the final self-contained HTML
+        assert '"due": 1' in html or '"due":1' in html
+        assert "C1" in html  # label present after template processing
+        # No crash and fields survive to renderer (JS uses d.due ?? 0 etc)

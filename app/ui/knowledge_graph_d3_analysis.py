@@ -218,3 +218,66 @@ def build_mastery_history(
         _take_snapshot(last_date)
 
     return snapshots
+
+
+# ── A2: node worth for value-based routing (wave-kg-node-worth) ────────
+
+# Weights (documented, tunable only with tests). Personal urgency first.
+DUE_WEIGHT = 5.0          # each due card (capped)
+NOVEL_WEIGHT = 4.0        # brand new concept for this learner
+DECAY_WEIGHT = 3.5        # penalty for low retention (1 - decay)
+FRONTIER_WEIGHT = 2.0     # prereqs ready, not yet learned
+REACH_WEIGHT = 1.0        # structural (centrality already normalized 0..1)
+
+
+def node_worth(n: Dict[str, Any]) -> float:
+    """Compute scalar worth of a study stop.
+
+    Pure function. Higher = stop here sooner on "маршрут дня".
+    Respects A1 signals (due, novel) + decay + frontier + reach.
+    Learned nodes get 0 (no point stopping).
+    """
+    if not isinstance(n, dict):
+        return 0.0
+    if n.get("learned"):
+        return 0.0
+    if n.get("is_lesson"):
+        # lessons are anchors; worth mainly on concepts
+        return 0.5 * (float(n.get("centrality") or 0))
+
+    due = float(n.get("due") or 0)
+    novel = 1.0 if n.get("novel") else 0.0
+    decay = n.get("decay")
+    decay_p = (1.0 - float(decay)) if isinstance(decay, (int, float)) else 0.0
+    frontier = 1.0 if n.get("frontier") else 0.0
+    reach_n = float(n.get("centrality") or 0.0)
+
+    w = (
+        DUE_WEIGHT * min(due, 5.0)
+        + NOVEL_WEIGHT * novel
+        + DECAY_WEIGHT * decay_p
+        + FRONTIER_WEIGHT * frontier
+        + REACH_WEIGHT * reach_n
+    )
+    return round(max(0.0, w), 3)
+
+
+def top_worth_factor(n: Dict[str, Any]) -> str:
+    """Human label for the single largest contributor to worth (for route step)."""
+    if not isinstance(n, dict) or n.get("learned"):
+        return ""
+    parts = []
+    due = float(n.get("due") or 0)
+    if due > 0:
+        parts.append((DUE_WEIGHT * min(due, 5.0), "🃏 ждут карточек"))
+    if n.get("novel"):
+        parts.append((NOVEL_WEIGHT, "✨ новое для тебя"))
+    dec = n.get("decay")
+    if isinstance(dec, (int, float)) and dec < 0.65:
+        parts.append((DECAY_WEIGHT * (1.0 - dec), "🧠 низкий retention"))
+    if n.get("frontier"):
+        parts.append((FRONTIER_WEIGHT, "✦ prereqs готовы"))
+    if not parts:
+        return "структурная важность"
+    parts.sort(reverse=True)
+    return parts[0][1]

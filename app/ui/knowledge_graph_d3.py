@@ -33,6 +33,8 @@ from app.ui.knowledge_graph_d3_analysis import (
     build_graph_health,
     build_mastery_history,
     compute_decay,
+    node_worth,
+    top_worth_factor,
 )
 
 # Canonical lesson-node detection lives in the data layer (B1): every surface —
@@ -41,6 +43,7 @@ from app.knowledge_graph import is_lesson_node as _is_lesson_node
 
 _D3_PATH = Path(__file__).resolve().parent / "assets" / "d3.v7.min.js"
 _HTML_TEMPLATE_PATH = Path(__file__).resolve().parent / "assets" / "knowledge_graph_d3_template.html"
+_3D_TEMPLATE_PATH = Path(__file__).resolve().parent / "assets" / "kg_3d_template.html"
 _COMPONENT_PATH = Path(__file__).resolve().parent / "assets" / "kg_d3_component"
 _MISSING_TEMPLATE_HTML = """<!DOCTYPE html>
 <html lang="ru">
@@ -83,6 +86,15 @@ def _load_html_template() -> str:
         return _HTML_TEMPLATE_PATH.read_text(encoding="utf-8")
     except OSError:
         return _MISSING_TEMPLATE_HTML
+
+
+@lru_cache(maxsize=1)
+def _load_3d_template() -> str:
+    """Self-contained 3D hall template (B1). No CDN; must be fully offline."""
+    try:
+        return _3D_TEMPLATE_PATH.read_text(encoding="utf-8")
+    except OSError:
+        return "<!doctype html><title>3D Knowledge Graph</title><body style='font-family:sans-serif;background:#0a0a0f;color:#ddd;padding:2rem'>3D template not found. Place kg_3d_template.html next to the 2D one.</body>"
 
 
 def _norm_level(raw: Any) -> str:
@@ -522,6 +534,20 @@ def build_kg_payload(
     clusters = skel.clusters
     max_reach = max(reach.values()) if reach else 0
 
+    # A1 (wave-kg-node-worth): price on node — due (from already-fetched due_reviews)
+    # and novel (never touched in personal mastery/decay layer). 0 extra DB cost.
+    # Canonical cid match via id_set (same resolver as skeleton).
+    due_map: dict[str, int] = {}
+    for r in (due_reviews or []):
+        c = str(r.get("concept") or "").strip()
+        if c and c in id_set:
+            due_map[c] = due_map.get(c, 0) + 1
+
+    def _is_novel(cid: str, is_lesson_flag: bool) -> bool:
+        if is_lesson_flag:
+            return False
+        return (cid not in mastery_vector) and (cid not in decay_vector)
+
     nodes: List[Dict[str, Any]] = []
     for cid, data in valid.items():
         prereqs = prereqs_map[cid]
@@ -566,6 +592,9 @@ def build_kg_payload(
                 "needs_konspekt": bool(src_abs and not md_abs),
             })
 
+        is_lesson = _is_lesson_node(cid, data)
+        novel = _is_novel(cid, is_lesson)
+
         nodes.append({
             "id": cid, "label": str(data.get("label") or cid),
             "level": _norm_level(data.get("level")),
@@ -580,7 +609,16 @@ def build_kg_payload(
             "related": related_cards,
             # KG-06: forgetting decay — null when no SRS record exists yet
             "decay": decay_vector.get(cid),
+            # A1: price signals (due already fetched upstream; novel = untouched non-lesson)
+            "due": due_map.get(cid, 0),
+            "novel": bool(novel),
+            "is_lesson": bool(is_lesson),
         })
+
+    # A2: attach worth + dominant reason (post-process; pure, cheap)
+    for nd in nodes:
+        nd["worth"] = node_worth(nd)
+        nd["worth_reason"] = top_worth_factor(nd)
 
     stats = _kg_counters_from_skeleton(skel, mastery_vector, learned)
 
@@ -619,6 +657,19 @@ def build_kg_html(payload: Mapping[str, Any]) -> str:
         .replace("__DECAY_VECTOR__",    json.dumps(payload.get("decay_vector", {}),    ensure_ascii=False))
         .replace("__MASTERY_HISTORY__", json.dumps(payload.get("mastery_history", []), ensure_ascii=False))
         .replace("__COMPILER_HEALTH__", json.dumps(payload.get("compiler_health"), ensure_ascii=False))
+    )
+
+
+def build_kg_3d_html(payload: Mapping[str, Any]) -> str:
+    """B1: self-contained 3D Knowledge Graph hall (floors by lessons, height/glow ~ worth).
+    Uses same payload contract (worth/due/novel already present from A1/A2).
+    Pure offline HTML (no CDN). Canvas-based minimal 3D to keep vendoring cost out of P1 wave.
+    """
+    t = _load_3d_template()
+    return (
+        t.replace("__NODES__", json.dumps(payload.get("nodes", []), ensure_ascii=False))
+         .replace("__STATS__", json.dumps(payload.get("stats", {}), ensure_ascii=False))
+         .replace("__HEALTH__", json.dumps(payload.get("health"), ensure_ascii=False))
     )
 
 

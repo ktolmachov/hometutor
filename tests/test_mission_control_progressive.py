@@ -100,11 +100,11 @@ def test_agent_tile_visible_only_when_agent_enabled(monkeypatch) -> None:
 
     # disabled
     monkeypatch.setattr("app.config.get_settings", lambda: types.SimpleNamespace(agent_enabled=False))
-    assert not tile_feature_visible("agent_session")
+    assert not tile_feature_visible("agent_session", level="all", overrides={})
 
     # enabled
     monkeypatch.setattr("app.config.get_settings", lambda: types.SimpleNamespace(agent_enabled=True))
-    assert tile_feature_visible("agent_session")
+    assert tile_feature_visible("agent_session", level="all", overrides={})
 
 
 def test_a1_agent_prefill_logic() -> None:

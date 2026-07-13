@@ -176,6 +176,36 @@ def _render_section_progress_controls(
         st.toast("Вопрос сохранён.", icon="❓")
         st.rerun()
 
+    # B1: кнопка «Спросить тьютора» у открытого вопроса + префилл (konspekt_quality_plan)
+    if current_q and set_question:
+        col_tutor, col_close = st.columns(2)
+        with col_tutor:
+            if st.button("Спросить тьютора", key=f"lk_ask_tutor_{row_key}", width="stretch"):
+                try:
+                    from app.ui.continuity_bridge import store_qa_tutor_handoff_context
+                    import streamlit as st2  # avoid name clash
+                    # context from row
+                    src = str(row.get("konspekt_md_abs") or "")
+                    hdg = str(row.get("heading_text") or "")
+                    topic = f"{Path(src).name} — {hdg}" if hdg else src
+                    last_q = current_q
+                    if store_qa_tutor_handoff_context(
+                        st.session_state,
+                        topic=topic,
+                        last_question=last_q,
+                        source="living_konspekt_open_question",
+                    ):
+                        st2.session_state["tutor_pending_prompt"] = last_q[:240]
+                        st2.session_state["current_view"] = "Тьютор"
+                        st2.rerun()
+                except Exception:  # noqa: BLE001 - navigation best effort
+                    st.toast("Не удалось открыть тьютора. Перейдите во вкладку «Тьютор» вручную.", icon="⚠️")
+        with col_close:
+            if st.button("Закрыть вопрос", key=f"lk_close_q_{row_key}", width="stretch"):
+                set_question(row_key, None)
+                st.toast("Вопрос закрыт.", icon="✓")
+                st.rerun()
+
     # A2: three status buttons (соседство с «Прочитано» per plan)
     cols = st.columns(5)
     with cols[0]:

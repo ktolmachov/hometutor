@@ -61,6 +61,7 @@
 - 2026-07-03: добавлена модель видимости UI по уровням опыта, панель управления
   интерфейсом, онбординг-выбор режима и sync-перенос настроек через `app_kv`.
 - 2026-07-12: полное закрытие плана "Agent as One Button" (A1: UI-дверь + префилл темы из MC; A2: read-only `/agent/runs` + `/agent/runs/{run_id}`; B1: golden расширен до 8 study_session; B2: кнопки сохранения карточек-кандидатов (user-initiated); C1: история агента в Прогрессе). Обновлены: api_reference.md (новые эндпоинты), architecture.md, user_guide.md, agent_roadmap.md, docs/index.md, quickstart.md. Добавлены/усилены targeted тесты на префилл, save cards, C1, A2 positive cases.
+- 2026-07-13: Audio Podcasts (P0): sibling `.m4a` discovery (`app/media_audio.py`), `st.audio` в Живом конспекте + «Скачать выпуск (m4a)» (A1+A2), оффлайн-экстракция в `transcribe_media.py` + `Run-MediaKonspektPipeline.ps1`. Обновлены: user_guide.md, quickstart.md, multimodal_konspekt_plan.md, architecture.md, technical_specification.md, adr/0002, CI (реальный PS-тест на windows). Добавлены регрессионные пины и интеграционный тест пайплайна.
 - 2026-06-30: синхронизация после добавления опциональной аутентификации (JWT + bcrypt,
   per-user state isolation), CI/CD (`.github/workflows/`), Яндекс.Метрики и opt-in
   `RAG_CONTEXT_TOKEN_BUDGET`. Обновлены `api_reference.md`, `architecture.md`,

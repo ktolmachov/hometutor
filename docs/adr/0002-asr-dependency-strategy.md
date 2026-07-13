@@ -75,10 +75,20 @@ Tradeoffs:
 ## Amendment (2026-07-13, audio podcasts P0)
 
 ffmpeg scope expanded from remux-only to include deterministic audio remux/extract
-and concat for the local-first "Audio Podcasts" feature (waves A1+A2).
-No change to sidecar schema, no new Python deps, graceful degradation when
-absent (honest hints in UI/scripts). See evolutionary plan wave-audio-first-sound
-and wave-audio-release.
+(`extract_audio_to_m4a`: `-vn -c:a copy`) and basket concat (A2) for the
+local-first "Audio Podcasts" feature (waves A1+A2).
+
+- Runtime: `app/media_audio.py` (discovery + `make_basket_audio_release`), 
+  `app/ui/living_konspekt_media.py` (`st.audio(..., format="audio/mp4")` + download button).
+- Pipeline: `scripts/transcribe_media.py` + `Run-MediaKonspektPipeline.ps1` (always
+  after sidecar; `-Skip*` флаги не влияют на extract).
+- Нет изменения схемы sidecar v1, нет новых Python-зависимостей, graceful
+  деградация (честные подсказки в UI/скриптах).
+- См. `user_guide.md` (Живой конспект), `multimodal_konspekt_plan.md`,
+  `evolutionary_development.md`.
+
+Тесты: unit-регрессии на str-путь, outside-DATA abs, `end=None` + реальный
+PS-пайплайн в CI (`test-media-pipeline-audio`).
 
 ## Required Spike Before M1 Merge
 

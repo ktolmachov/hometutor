@@ -215,6 +215,9 @@ M0a/M0.3 реализуют проверяемый media metadata contract и UI
   frontmatter, stale detection, строгая lightweight validation;
 - `app/media_urls.py` — нормализация YouTube URL (`watch`, `youtu.be`, `embed`) и
   timestamp parsing; unknown `http(s)` URL остаётся external link;
+- `app/media_audio.py` — discovery `.m4a` sibling (через `data_relative_from_path` +
+  resolve), `make_basket_audio_release` (cuts + ffmpeg concat), TOC. Лёгкий runtime
+  helper; реальная работа с ffmpeg — в offline скриптах и PS-пайплайне.
 - `app/path_safety.py` — запрет persisted absolute, drive-relative и traversal paths.
 - `app/ui/living_konspekt_view.py` — рабочая поверхность «Живого конспекта»:
   корзина разделов, reorder, сохранение и media panel внутри собранного раздела;

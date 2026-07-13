@@ -319,6 +319,10 @@ M0a/M0.3 мультимодального конспекта добавляют 
   sidecar v1, включая опциональные `semantic_blocks`;
 - `app/media_urls.py` — нормализация внешних video URL, включая YouTube `watch`,
   `youtu.be`, `embed` и timestamp-параметры;
+- `app/media_audio.py` — тонкий helper для P0 Audio Podcasts: обнаружение sibling
+  `.m4a` (по конвенции рядом с видео), `find_audio_sibling` с полным path-safety,
+  сборка «выпуска» (`make_basket_audio_release` + cuts/concat), генерация TOC.
+  Используется только UI (`living_konspekt_media.py`); ffmpeg-логика graceful.
 - `app/path_safety.py` — единая проверка persisted `DATA_DIR`-relative paths.
 - `app/ui/living_konspekt_view.py` — рабочая поверхность «Живого конспекта»:
   тонкий Streamlit-координатор вкладок, session_state-адаптеры, сохранение и

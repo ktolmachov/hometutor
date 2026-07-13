@@ -27,7 +27,9 @@ _CONTENT_FIELDS = (
     "own_text",
     "concept",
 )
-_RESERVED_FIELDS = ("note", "read_at", "listened_at", "knowledge_status", "open_question")
+_BASE_RESERVED_FIELDS = ("note", "read_at")
+_SPARSE_RESERVED_FIELDS = ("listened_at", "knowledge_status", "open_question")
+_RESERVED_FIELDS = _BASE_RESERVED_FIELDS + _SPARSE_RESERVED_FIELDS
 
 
 class _UnsetValue:
@@ -92,6 +94,15 @@ def _content_from_row(row: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _copy_reserved_fields(out: dict[str, Any], row: dict[str, Any]) -> None:
+    for field in _BASE_RESERVED_FIELDS:
+        out[field] = row.get(field) if row.get(field) is not None else None
+    for field in _SPARSE_RESERVED_FIELDS:
+        value = row.get(field)
+        if field in row or value is not None:
+            out[field] = value
+
+
 def _basename_label(value: Any) -> str:
     raw = str(value or "").strip()
     if not raw:
@@ -126,8 +137,7 @@ def _non_portable_persisted_from_row(row: dict[str, Any], *, resolve_error: str)
         "resolve_error": resolve_error,
     }
     out.update(_content_from_row(row))
-    for field in _RESERVED_FIELDS:
-        out[field] = row.get(field) if row.get(field) is not None else None
+    _copy_reserved_fields(out, row)
     out["row_key"] = str(row.get("row_key") or _non_portable_row_key(out))
     return out
 
@@ -151,8 +161,7 @@ def persisted_row_from_runtime(row: dict[str, Any]) -> dict[str, Any]:
         "portability_status": PORTABLE,
     }
     out.update(_content_from_row(row))
-    for field in _RESERVED_FIELDS:
-        out[field] = row.get(field) if row.get(field) is not None else None
+    _copy_reserved_fields(out, row)
     return out
 
 
@@ -170,8 +179,7 @@ def runtime_row_from_persisted(row: dict[str, Any]) -> dict[str, Any]:
             "resolve_error": str(row.get("resolve_error") or "non_portable"),
         }
         out.update(_content_from_row(row))
-        for field in _RESERVED_FIELDS:
-            out[field] = row.get(field) if row.get(field) is not None else None
+        _copy_reserved_fields(out, row)
         return out
 
     try:
@@ -197,8 +205,7 @@ def runtime_row_from_persisted(row: dict[str, Any]) -> dict[str, Any]:
         "portability_status": PORTABLE,
     }
     out.update(_content_from_row(row))
-    for field in _RESERVED_FIELDS:
-        out[field] = row.get(field) if row.get(field) is not None else None
+    _copy_reserved_fields(out, row)
     return out
 
 

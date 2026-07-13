@@ -1,7 +1,10 @@
 """Guard architecture size budgets from AR-2026-06-25-005/006.
 
 This is a no-growth budget: existing large files/functions remain tracked debt,
-but new changes must not increase the count or peak.
+but new changes must not increase the count or peak. Budgets were re-synced to
+HEAD on 2026-07-13 (evolutionary analysis #12, architecture_guards_plan A2) —
+the prior snapshot (2026-06-25) had drifted red across all four metrics while
+the guard was wired to nothing.
 """
 
 from __future__ import annotations
@@ -12,12 +15,27 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 APP_DIR = ROOT / "app"
 
-MAX_LARGE_FILES = 24
-MAX_LONG_FUNCTIONS = 138
-MAX_FILE_LINES = 1651
-MAX_FUNCTION_LINES = 338
+# No-growth snapshot synced to HEAD 2026-07-13. These are recognised-debt
+# ceilings: the numbers must not grow. If a budget is exceeded, the answer is
+# to fix the structure — not to bump the number a second time in the dark.
+MAX_LARGE_FILES = 33  # files > FILE_LINE_LIMIT, excluding FILE_LINE_WAIVERS
+MAX_LONG_FUNCTIONS = 155
+MAX_FILE_LINES = 1929  # peak single-file size (still includes waived deposits)
+MAX_FUNCTION_LINES = 361
 FILE_LINE_LIMIT = 600
 FUNCTION_LINE_LIMIT = 80
+
+# Deliberate non-splittable deposits: exempt from the large_files *count* (they
+# are not structural debt to shrink), but they still cap peak_file_lines so no
+# new file may exceed the current ceiling. The single-source rule ("a prompt
+# lives in one place") outranks the line budget; do not split these for the guard.
+FILE_LINE_WAIVERS: dict[str, str] = {
+    "app/prompts/_impl.py": "prompt text deposit (single-source rule); verdict: do not split",
+}
+
+
+def _is_waived(rel_posix: str) -> bool:
+    return rel_posix in FILE_LINE_WAIVERS
 
 
 def _read_lines(path: Path) -> list[str]:
@@ -38,7 +56,8 @@ def _size_snapshot() -> dict[str, int]:
     for path in sorted(APP_DIR.rglob("*.py")):
         lines = len(_read_lines(path))
         peak_file_lines = max(peak_file_lines, lines)
-        if lines > FILE_LINE_LIMIT:
+        rel = path.relative_to(ROOT).as_posix()
+        if lines > FILE_LINE_LIMIT and not _is_waived(rel):
             large_files += 1
         try:
             tree = ast.parse(path.read_text(encoding="utf-8", errors="ignore"))

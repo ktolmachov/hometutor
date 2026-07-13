@@ -31,3 +31,15 @@ class TestBuildLivingKonspektCardStats:
         stats = build_living_konspekt_card_stats(rows)
         assert stats["concepts"] == 0
         assert stats["recent_headings"] == []
+
+    # A2 tests (konspekt_quality_plan)
+    def test_understood_and_open_questions_counts(self):
+        rows = [
+            {"knowledge_status": "understood"},
+            {"knowledge_status": "understood"},
+            {"knowledge_status": "unsure", "open_question": "Почему так?"},
+            {"open_question": "Что дальше?"},
+        ]
+        stats = build_living_konspekt_card_stats(rows)
+        assert stats.get("understood") == 2
+        assert stats.get("open_questions") == 2

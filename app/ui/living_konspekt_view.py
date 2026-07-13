@@ -149,6 +149,8 @@ from app.ui.living_konspekt_state import (  # noqa: F401 - реэкспорт а
     get_workbench_rows,
     mark_section_read_in_workbench,
     mark_section_listened_in_workbench,
+    set_knowledge_status_in_workbench,
+    set_open_question_in_workbench,
     move_section_in_workbench,
     remove_section_from_workbench,
     remove_sections_from_workbench,
@@ -509,6 +511,8 @@ def render_living_konspekt_view() -> None:
             move_section=move_section_in_workbench,
             remove_section=remove_section_from_workbench,
             mark_listened=mark_section_listened_in_workbench,
+            set_status=set_knowledge_status_in_workbench,
+            set_question=set_open_question_in_workbench,
         )
     with tab_reader:
         render_reader(
@@ -517,6 +521,8 @@ def render_living_konspekt_view() -> None:
             save_note=update_section_note_in_workbench,
             mark_read=mark_section_read_in_workbench,
             mark_listened=mark_section_listened_in_workbench,
+            set_status=set_knowledge_status_in_workbench,
+            set_question=set_open_question_in_workbench,
         )
     with tab_memory:
         render_memory_panel(rows)

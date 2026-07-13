@@ -392,6 +392,8 @@ def render_collected_sections(
     move_section: MoveSection,
     remove_section: RemoveSection,
     mark_listened: Any = None,
+    set_status: Any = None,
+    set_question: Any = None,
 ) -> None:
     from app.obsidian_export import obsidian_uri, vscode_uri
 

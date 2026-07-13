@@ -129,11 +129,13 @@ def build_artifact_body(rows: list[dict[str, Any]]) -> str:
         source_block = f"*Источник: {location}*" + (f"\n\n{media_line}" if media_line else "")
         note = str(row.get("note") or "").strip()
         note_block = f"\n\n### 💬 Моими словами\n\n{note}" if note else ""
+        q = str(row.get("open_question") or "").strip()
+        q_block = f"\n\n### ❓ Мой открытый вопрос\n\n{q}" if q else ""
         row_text = str(row.get("text") or "")
         md_abs = row.get("konspekt_md_abs")
         if md_abs:
             row_text = _rewrite_image_paths_for_artifact(row_text, Path(md_abs).parent)
-        parts.append(f"## {heading}\n\n{source_block}\n\n{row_text}{note_block}")
+        parts.append(f"## {heading}\n\n{source_block}\n\n{row_text}{note_block}{q_block}")
 
     blocks: list[str] = []
     if header_parts:

@@ -63,6 +63,8 @@ def render_reader(
     save_note: SaveNote | None = None,
     mark_read: MarkRead | None = None,
     mark_listened: Any = None,
+    set_status: Any = None,
+    set_question: Any = None,
 ) -> None:
     """Отрендерить собранный конспект как документ для чтения."""
     if not rows:
@@ -125,7 +127,14 @@ def render_reader(
                 media_renderer(row, False)
             row_key = str(row.get("row_key") or "")
             if row_key and (save_note is not None or mark_read is not None):
-                _render_section_progress_controls(row, save_note=save_note, mark_read=mark_read, mark_listened=mark_listened)
+                _render_section_progress_controls(
+                    row,
+                    save_note=save_note,
+                    mark_read=mark_read,
+                    mark_listened=mark_listened,
+                    set_status=set_status,
+                    set_question=set_question,
+                )
         st.divider()
 
 
@@ -141,29 +150,64 @@ def _render_section_progress_controls(
     save_note: SaveNote | None,
     mark_read: MarkRead | None,
     mark_listened: Any = None,
+    set_status: Any = None,
+    set_question: Any = None,
 ) -> None:
+    """A2: knowledge status (3 buttons) + open_question field (konspekt_quality_plan).
+
+    read_at / listened_at preserved as before.
+    """
     row_key = str(row.get("row_key") or "")
     note_value = str(row.get("note") or "")
     read_at = str(row.get("read_at") or "")
     listened_at = str(row.get("listened_at") or "")
+    current_status = row.get("knowledge_status")
+    current_q = str(row.get("open_question") or "")
     note_key = f"lk_reader_note_{row_key}"
+    q_key = f"lk_reader_open_q_{row_key}"
+
     st.text_area("Моя мысль", value=note_value, key=note_key, height=90)
-    cols = st.columns([1, 1, 3])
+
+    # A2: open question field
+    q_val = st.text_input("Мой вопрос", value=current_q, key=q_key, placeholder="Что осталось неясным?")
+    if set_question and st.button("Сохранить вопрос", key=f"lk_save_q_{row_key}", width="stretch"):
+        set_question(row_key, st.session_state.get(q_key) or None)
+        st.toast("Вопрос сохранён.", icon="❓")
+        st.rerun()
+
+    # A2: three status buttons (replaces or augments "Прочитано")
+    cols = st.columns(4)
     with cols[0]:
-        if st.button("Сохранить", key=f"lk_reader_save_note_{row_key}", width="stretch", disabled=save_note is None):
+        if st.button("Понял", key=f"lk_status_understood_{row_key}", width="stretch", disabled=set_status is None):
+            set_status(row_key, "understood")
+            st.toast("Статус: Понял", icon="✅")
+            st.rerun()
+    with cols[1]:
+        if st.button("Сомневаюсь", key=f"lk_status_unsure_{row_key}", width="stretch", disabled=set_status is None):
+            set_status(row_key, "unsure")
+            st.toast("Статус: Сомневаюсь", icon="🤔")
+            st.rerun()
+    with cols[2]:
+        if st.button("Не понял", key=f"lk_status_unclear_{row_key}", width="stretch", disabled=set_status is None):
+            set_status(row_key, "unclear")
+            st.toast("Статус: Не понял", icon="❓")
+            st.rerun()
+    with cols[3]:
+        if st.button("Сохранить мысль", key=f"lk_reader_save_note_{row_key}", width="stretch", disabled=save_note is None):
             save_note(row_key, str(st.session_state.get(note_key) or ""))
             st.toast("Мысль сохранена.", icon="💬")
             st.rerun()
-    with cols[1]:
-        if st.button("Прочитано", key=f"lk_reader_mark_read_{row_key}", width="stretch", disabled=mark_read is None):
-            mark_read(row_key)
-            st.toast("Фрагмент отмечен как прочитанный.", icon="✓")
-            st.rerun()
-    with cols[2]:
-        if read_at:
-            st.caption(f"Прочитано: {read_at}")
-        if listened_at:
-            st.caption(f"Прослушано: {listened_at}")
+
+    # legacy + new receipts
+    meta = []
+    if read_at:
+        meta.append(f"Прочитано: {read_at}")
+    if listened_at:
+        meta.append(f"Прослушано: {listened_at}")
+    if current_status:
+        meta.append(f"Статус: {current_status}")
+    if meta:
+        st.caption(" · ".join(meta))
 
 
 _MERMAID_RE = re.compile(r"```(?:mermaid|flowchart).*?\n(.*?)\n```", re.DOTALL | re.IGNORECASE)

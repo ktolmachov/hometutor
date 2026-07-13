@@ -244,3 +244,41 @@ def mark_section_listened_in_workbench(
         listened_at=listened_at,
         storage=storage,
     )
+
+
+def set_knowledge_status_in_workbench(
+    row_key: str,
+    status: str | None,
+    state: MutableMapping[str, Any] | None = None,
+) -> None:
+    """A2: understood / unsure / unclear (or None to clear)."""
+    target = _state(state)
+    rows = workbench_service.normalize_runtime_rows(get_workbench_rows(target))
+    storage = None if state is None else workbench_service.InMemoryWorkbenchStorage()
+    if state is None:
+        _ensure_auth_context()
+    target[WORKBENCH_SECTIONS_KEY] = workbench_service.update_section_fields(
+        rows,
+        row_key,
+        knowledge_status=status,
+        storage=storage,
+    )
+
+
+def set_open_question_in_workbench(
+    row_key: str,
+    question: str | None,
+    state: MutableMapping[str, Any] | None = None,
+) -> None:
+    """A2: student's open question for the section."""
+    target = _state(state)
+    rows = workbench_service.normalize_runtime_rows(get_workbench_rows(target))
+    storage = None if state is None else workbench_service.InMemoryWorkbenchStorage()
+    if state is None:
+        _ensure_auth_context()
+    target[WORKBENCH_SECTIONS_KEY] = workbench_service.update_section_fields(
+        rows,
+        row_key,
+        open_question=question,
+        storage=storage,
+    )

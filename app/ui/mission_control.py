@@ -855,11 +855,16 @@ def build_living_konspekt_card_stats(rows: list[dict[str, Any]]) -> dict[str, An
         for heading in (str(row.get("heading_text") or "").strip() for row in reversed(rows))
         if heading
     ][:2]
+    # A2: add understanding stats (pure, no side effects)
+    understood = sum(1 for r in rows if str(r.get("knowledge_status") or "") == "understood")
+    open_qs = sum(1 for r in rows if str(r.get("open_question") or "").strip())
     return {
         "sections": len(rows),
         "documents": len(documents),
         "concepts": len(concepts),
         "recent_headings": recent_headings,
+        "understood": understood,
+        "open_questions": open_qs,
     }
 
 
@@ -905,6 +910,10 @@ def render_living_konspekt_mission_card() -> None:
         f'<span class="kg-mc-lbl">лекций</span></div>'
         f'<div class="kg-mc-stat"><span class="kg-mc-num">{stats["concepts"]}</span>'
         f'<span class="kg-mc-lbl">концептов</span></div>'
+        f'<div class="kg-mc-stat"><span class="kg-mc-num">{stats.get("understood", 0)}</span>'
+        f'<span class="kg-mc-lbl">понято</span></div>'
+        f'<div class="kg-mc-stat"><span class="kg-mc-num">{stats.get("open_questions", 0)}</span>'
+        f'<span class="kg-mc-lbl">вопросов</span></div>'
         f'</div></div>'
     )
     st.button(

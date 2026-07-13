@@ -27,7 +27,7 @@ _CONTENT_FIELDS = (
     "own_text",
     "concept",
 )
-_RESERVED_FIELDS = ("note", "read_at", "listened_at")
+_RESERVED_FIELDS = ("note", "read_at", "listened_at", "knowledge_status", "open_question")
 
 
 class _UnsetValue:
@@ -368,6 +368,8 @@ def update_section_fields(
     note: str | None | _UnsetValue = _UNSET,
     read_at: str | None | _UnsetValue = _UNSET,
     listened_at: str | None | _UnsetValue = _UNSET,
+    knowledge_status: str | None | _UnsetValue = _UNSET,
+    open_question: str | None | _UnsetValue = _UNSET,
     storage: WorkbenchStorage | None = None,
 ) -> list[dict[str, Any]]:
     rows = normalize_runtime_rows(current_rows)
@@ -384,6 +386,12 @@ def update_section_fields(
             updated["read_at"] = read_at
         if not isinstance(listened_at, _UnsetValue):
             updated["listened_at"] = listened_at
+        if not isinstance(knowledge_status, _UnsetValue):
+            # A2: validated simple enum or None (backward safe)
+            valid = {"understood", "unsure", "unclear"}
+            updated["knowledge_status"] = knowledge_status if (knowledge_status in valid or knowledge_status is None) else None
+        if not isinstance(open_question, _UnsetValue):
+            updated["open_question"] = (open_question or "").strip() or None
         changed = changed or updated != row
         new_rows.append(updated)
     if changed:

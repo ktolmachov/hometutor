@@ -76,6 +76,21 @@ def render_reader(
     for doc_name, idea in _lecture_main_ideas(rows):
         st.markdown(f"> **Главная мысль ({doc_name}):** {idea}")
 
+    # B2: derived novelty for the whole сборка (доля концептов ниже порога)
+    try:
+        from app.quiz_adaptive import get_all_mastery_levels, mastery_percent_for_level
+        concepts = [str(r.get("concept") or "").strip() for r in rows if r.get("concept")]
+        unique = list(dict.fromkeys([c for c in concepts if c]))  # unique preserve order
+        if unique:
+            levels = get_all_mastery_levels()
+            low = sum(1 for c in unique if mastery_percent_for_level(levels.get(c, "recognition")) < 60)
+            n = len(unique)
+            if low > 0:
+                pct = round(low / n * 100)
+                st.caption(f"🆕 Нового для тебя ~{pct}% ({low} из {n} концептов в сборке)")
+    except Exception:  # noqa: BLE001
+        pass
+
     toc = reader_toc(rows)
     if toc:
         st.markdown("### Оглавление")
@@ -102,15 +117,17 @@ def render_reader(
         except Exception:  # noqa: BLE001
             pass
 
-        # B2: derived «нового для тебя» (per plan, using current mastery levels)
+        # B2: derived «нового для тебя ~N%» (per plan: доля концептов раздела с mastery ниже порога)
         try:
-            from app.quiz_adaptive import get_all_mastery_levels
+            from app.quiz_adaptive import get_all_mastery_levels, mastery_percent_for_level
             c = str(row.get("concept") or "").strip()
             if c:
                 levels = get_all_mastery_levels()
                 lvl = levels.get(c, "recognition")
-                if lvl != "transfer":
-                    meta_text += " · нового для тебя"
+                pct = mastery_percent_for_level(lvl)
+                if pct < 60:  # threshold как в get_weak_concepts
+                    novelty = 100 - pct
+                    meta_text += f" · нового для тебя ~{novelty}%"
         except Exception:  # noqa: BLE001
             pass
 

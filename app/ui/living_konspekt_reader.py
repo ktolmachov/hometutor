@@ -89,10 +89,33 @@ def render_reader(
         heading = str(row.get("heading_text") or "Без названия")
         source = Path(str(row.get("konspekt_md_abs") or "")).name
         meta_text = f"{source} · строки {row.get('line_start')}-{row.get('line_end')}"
+        # A1: rubric in reader source caption (plan)
+        try:
+            from app.konspekt_discovery import get_konspekt_quality_rubric
+            md_abs = row.get("konspekt_md_abs")
+            if md_abs:
+                r = get_konspekt_quality_rubric(md_abs)
+                if r and r.get("average") is not None:
+                    meta_text += f" · рубрика {r['average']}/5"
+        except Exception:  # noqa: BLE001
+            pass
 
         st.markdown(f"<span id='{_reader_anchor(index)}'></span>", unsafe_allow_html=True)
         st.markdown(f"## {heading}")
         st.caption(meta_text)
+
+        # A1: раскрытие рубрики по клику (в reader)
+        try:
+            from app.konspekt_discovery import get_konspekt_quality_rubric
+            md_abs = row.get("konspekt_md_abs")
+            if md_abs:
+                r = get_konspekt_quality_rubric(md_abs)
+                if r and r.get("items"):
+                    with st.expander(f"📋 Рубрика качества ({r.get('average')}/5)", expanded=False):
+                        for crit, sc, mx, comm in r["items"]:
+                            st.caption(f"**{crit}**: {sc}/{mx} — {comm or '—'}")
+        except Exception:
+            pass
 
         with st.expander("Содержимое раздела", expanded=False):
             md_abs = row.get("konspekt_md_abs")

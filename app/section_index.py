@@ -353,6 +353,10 @@ _ROLE_BY_NORMALIZED_HEADING: dict[str, str] = {
     "шпаргалка": "cheatsheet",
     "cheat sheet": "cheatsheet",
     "cheatsheet": "cheatsheet",
+    # A1 (konspekt_quality_plan): качество конспекта из cloud pipeline
+    "рубрика качества конспекта": "quality_rubric",
+    "рубрика качества": "quality_rubric",
+    "quality rubric": "quality_rubric",
 }
 
 

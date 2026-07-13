@@ -48,8 +48,23 @@ def _render_course_obsidian_button(topics_catalog: dict | None) -> None:
         cov = None
 
     if cov is not None and cov.pct >= 1.0:
+        # A1: passport вместо простой галочки (konspekt_quality_plan)
+        rubric_info = ""
+        try:
+            # A1: passport — средняя рубрика из первого покрытого (честная деградация)
+            from app.konspekt_discovery import find_konspekt_for_source_in_data, get_konspekt_quality_rubric
+            for p in all_paths:
+                km = find_konspekt_for_source_in_data(p)
+                if km:
+                    r = get_konspekt_quality_rubric(km.path)
+                    if r and r.get("average") is not None:
+                        rubric_info = f" · рубрика {r['average']}/5 ({r.get('count', '?')} критериев)"
+                        break
+        except Exception:  # noqa: BLE001
+            pass
+        label = f"✅ Все конспекты готовы{rubric_info}"
         st.markdown(
-            '<div style="font-size:12px;color:#4ade80;padding:6px 0">✅ Все конспекты готовы</div>',
+            f'<div style="font-size:12px;color:#4ade80;padding:6px 0">{label}</div>',
             unsafe_allow_html=True,
         )
     else:

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 from app.config import DATA_DIR
@@ -96,3 +97,71 @@ def coverage_summary(doc_paths: list[str]) -> CoverageSummary:
     """Подсчитать, сколько из doc_paths имеют готовый конспект."""
     covered = sum(1 for p in doc_paths if find_konspekt_for_source_in_data(p) is not None)
     return CoverageSummary(covered=covered, total=len(doc_paths))
+
+
+# ── A1: парсер рубрики качества конспекта (детерминированный, без LLM) ─────
+# Ищет таблицу после «## ✅ Рубрика качества конспекта» (или вариации).
+# Формат: | Критерий | Оценка | Макс | Комментарий |
+# Кривая таблица → None (graceful degradation).
+
+_RUBRIC_HEADING_RE = re.compile(
+    r"^##\s*✅?\s*Рубрика качества(?:\s+конспекта)?", re.IGNORECASE | re.MULTILINE
+)
+_TABLE_ROW_RE = re.compile(r"^\s*\|\s*(.+?)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(.*?)\s*\|", re.MULTILINE)
+
+
+def parse_konspekt_quality_rubric(md_path: Path | str) -> dict | None:
+    """Parse quality rubric table from a konspekt .md.
+
+    Returns {'items': [(criterion, score, max_score, comment), ...], 'average': float | None}
+    or None if heading/table not found or malformed.
+    """
+    try:
+        p = Path(md_path)
+        text = p.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return None
+
+    # Find rubric section start
+    match = _RUBRIC_HEADING_RE.search(text)
+    if not match:
+        return None
+
+    start = match.end()
+    # Look for table rows after the heading (take first plausible table)
+    rows = _TABLE_ROW_RE.findall(text[start : start + 4000])  # limit scan window
+    if not rows:
+        return None
+
+    items: list[tuple[str, int, int, str]] = []
+    for crit, score_s, max_s, comment in rows:
+        try:
+            score = int(score_s)
+            max_score = int(max_s)
+            if score < 0 or max_score <= 0:
+                continue
+            items.append((crit.strip(), score, max_score, comment.strip()))
+        except ValueError:
+            continue
+
+    if not items:
+        return None
+
+    avg = round(sum(s for _, s, _, _ in items) / len(items), 1)
+    return {"items": items, "average": avg, "count": len(items)}
+
+
+@lru_cache(maxsize=64)
+def _cached_quality_rubric(path_str: str, mtime_ns: int) -> dict | None:
+    """LRU cache by (path, mtime) per plan guidance (A1)."""
+    return parse_konspekt_quality_rubric(path_str)
+
+
+def get_konspekt_quality_rubric(md_path: Path | str) -> dict | None:
+    """Cached entry point for UI (A1). Uses mtime for invalidation (cheap)."""
+    try:
+        p = Path(md_path)
+        mtime = p.stat().st_mtime_ns if p.exists() else 0
+        return _cached_quality_rubric(str(p), mtime)
+    except Exception:
+        return None

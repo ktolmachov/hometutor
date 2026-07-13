@@ -107,3 +107,29 @@ class TestReaderBlocks:
         assert [item["label"] for item in toc] == [f"Тема {index}" for index in range(1, 9)]
         assert toc[0]["anchor"] == "lk-reader-1"
         assert reader_toc(rows[:7]) == []
+
+
+# ── A1: narrow test for quality rubric parser (konspekt_quality_plan) ─────
+def test_quality_rubric_parser(tmp_path: Path) -> None:
+    """Fixture table like real cloud lesson_2 rubric."""
+    from app.konspekt_discovery import parse_konspekt_quality_rubric, get_konspekt_quality_rubric
+
+    sample = """
+## ✅ Рубрика качества конспекта
+
+| Критерий                  | Оценка | Макс | Комментарий                     |
+|---------------------------|--------|------|---------------------------------|
+| Проверка точности         | 4      | 5    | Хорошо, но можно точнее по примерам |
+| Структурированность       | 5      | 5    | Отлично                         |
+| Полнота покрытия          | 5      | 5    | Полностью                       |
+"""
+    md = tmp_path / "lesson_2.md"
+    md.write_text(sample, encoding="utf-8")
+
+    res = parse_konspekt_quality_rubric(md)
+    assert res is not None
+    assert res["count"] == 3
+    assert abs(res["average"] - 4.7) < 0.1  # (4+5+5)/3
+
+    cached = get_konspekt_quality_rubric(md)
+    assert cached and cached["average"] == res["average"]

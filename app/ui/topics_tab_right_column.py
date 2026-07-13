@@ -356,8 +356,17 @@ def _render_konspekt_badge(rel_path: str, *, key_prefix: str) -> None:
     if km is None:
         return
     date_str = f" · {km.generated}" if km.generated else ""
+    badge = f"✅ конспект готов{date_str}"
+    try:
+        # A1: rubric badge next to konspekt (konspekt_quality_plan)
+        from app.konspekt_discovery import get_konspekt_quality_rubric
+        r = get_konspekt_quality_rubric(km.path)
+        if r and r.get("average") is not None:
+            badge += f" · рубрика {r['average']}/5"
+    except Exception:  # noqa: BLE001
+        pass
     st.markdown(
-        f'<div style="font-size:12px;color:#4ade80;margin:2px 0 4px">✅ конспект готов{date_str}</div>',
+        f'<div style="font-size:12px;color:#4ade80;margin:2px 0 4px">{badge}</div>',
         unsafe_allow_html=True,
     )
     try:
@@ -405,13 +414,24 @@ def _render_obsidian_export_button(rel_path: str, *, key: str) -> None:
 
 
 def _vault_status_badge(rel_path: str) -> str:
-    """Вернуть HTML-бейдж статуса конспекта в vault: ✅ готов / 📝 нет."""
+    """Вернуть HTML-бейдж статуса конспекта в vault: ✅ готов / 📝 нет. + A1 rubric."""
     try:
         from app.obsidian_export import obsidian_uri, resolve_source, vault_target
+        from app.konspekt_discovery import find_konspekt_for_source_in_data, get_konspekt_quality_rubric
         src = resolve_source(rel_path)
         if src is not None and vault_target(src).exists():
             uri = obsidian_uri(vault_target(src))
-            return f'<a href="{uri}" title="Открыть конспект в Obsidian" style="color:#4ade80;font-size:13px;text-decoration:none">✅</a>'
+            badge = f'<a href="{uri}" title="Открыть конспект в Obsidian" style="color:#4ade80;font-size:13px;text-decoration:none">✅</a>'
+            # A1: rubric рядом с ✅ (plan)
+            try:
+                km = find_konspekt_for_source_in_data(rel_path)
+                if km:
+                    r = get_konspekt_quality_rubric(km.path)
+                    if r and r.get("average") is not None:
+                        badge += f' <span style="font-size:11px;color:#64748b">рубрика {r["average"]}/5</span>'
+            except Exception:
+                pass
+            return badge
         if src is not None and src.suffix.lower() == ".txt":
             return '<span title="txt без конспекта — нажмите Подготовить" style="color:#94a3b8;font-size:11px">📝 txt</span>'
     except Exception:  # noqa: BLE001 — vault badge lookup failure must return empty string, not crash the doc card

@@ -123,3 +123,31 @@ def test_extract_audio_to_m4a_builds_correct_ffmpeg_cmd(monkeypatch: pytest.Monk
     assert "-c:a" in cmd and "copy" in cmd
     assert str(media) in cmd
     assert str(res) in cmd
+
+
+def test_extract_audio_to_m4a_accepts_str_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """Narrow regression for PowerShell pipeline (which passes str, not Path)."""
+    calls: list[list[str]] = []
+
+    def fake_which(x):
+        return "/fake/ffmpeg" if x == "ffmpeg" else None
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        Path(cmd[-1]).touch()
+        class R: returncode = 0
+        return R()
+
+    monkeypatch.setattr(transcribe_media.shutil, "which", fake_which)
+    monkeypatch.setattr(transcribe_media.subprocess, "run", fake_run)
+
+    media_path = tmp_path / "lecture_from_ps.mp4"
+    media_path.touch()
+
+    # Explicitly pass str (as PS -c does)
+    res = transcribe_media.extract_audio_to_m4a(str(media_path))
+    assert res is not None
+    assert res.name == "lecture_from_ps.m4a"
+    assert len(calls) == 1
+    # Robust check for str input being passed through (Windows path separators vary)
+    assert any(str(media_path) in str(arg) for arg in calls[0])

@@ -177,3 +177,43 @@ def test_make_basket_audio_release_builds_and_mocks_concat(monkeypatch: pytest.M
     assert "Part1" in toc and "Part2" in toc
     # At least 2 cuts + 1 concat = 3 calls
     assert len([c for c in calls if "ffmpeg" in str(c)]) >= 2
+
+
+# --- Regression pins for previously regressed contracts (per audit) ---
+
+def test_find_audio_sibling_returns_none_for_absolute_path_outside_data_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """Regression: absolute paths outside DATA_DIR must be rejected (path-safety invariant)."""
+    import app.path_safety as path_safety
+    import shutil
+
+    data_dir = tmp_path / "safe_data"
+    data_dir.mkdir(parents=True)
+    monkeypatch.setattr(path_safety, "DATA_DIR", data_dir)
+
+    # File outside the DATA_DIR
+    outside_dir = tmp_path / "outside"
+    outside_dir.mkdir()
+    outside_video = outside_dir / "lecture.mp4"
+    outside_video.touch()
+
+    result = find_audio_sibling(outside_video)
+    assert result is None
+
+
+def test_make_basket_audio_release_ignores_items_without_end(monkeypatch: pytest.MonkeyPatch):
+    """Regression: items with audio_path but end=None must be excluded from basket release."""
+    from app import media_audio as ma
+
+    monkeypatch.setattr(ma, "_has_ffmpeg", lambda: False)
+
+    items = [
+        {"audio_path": "/good.m4a", "start": 10, "end": 40, "heading": "Valid Clip"},
+        {"audio_path": "/bad.m4a", "start": 100, "heading": "Missing End"},  # no end
+    ]
+
+    path, toc = ma.make_basket_audio_release(items)
+    assert path is None
+    assert "Valid Clip" in toc
+    assert "Missing End" not in toc
+    # Should behave as if only the valid item existed for the no-ffmpeg case
+    assert "ffmpeg не найден" in toc

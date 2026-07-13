@@ -102,6 +102,18 @@ def render_reader(
         except Exception:  # noqa: BLE001
             pass
 
+        # B2: derived «нового для тебя» (per plan, using current mastery levels)
+        try:
+            from app.quiz_adaptive import get_all_mastery_levels
+            c = str(row.get("concept") or "").strip()
+            if c:
+                levels = get_all_mastery_levels()
+                lvl = levels.get(c, "recognition")
+                if lvl != "transfer":
+                    meta_text += " · нового для тебя"
+        except Exception:  # noqa: BLE001
+            pass
+
         st.markdown(f"<span id='{_reader_anchor(index)}'></span>", unsafe_allow_html=True)
         st.markdown(f"## {heading}")
         st.caption(meta_text)

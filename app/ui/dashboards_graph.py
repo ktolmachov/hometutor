@@ -1079,6 +1079,17 @@ def _render_knowledge_graph_tab() -> None:
     except Exception:  # noqa: BLE001 - scope optional for graph render
         source_paths = []
 
+    # P1: use scoped due with high scan (5000) so that due for nodes in this graph
+    # are not missed when there are many due outside the active bundle.
+    due_reviews: list[dict] = []
+    try:
+        from app.learner_state_scope import filter_due_reviews_for_kg
+        due_reviews = filter_due_reviews_for_kg(
+            knowledge_graph, limit=200, scan_limit=5000
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
     payload = render_d3_knowledge_graph(
         concepts,
         mastery_vector=mastery_vector,
@@ -1086,6 +1097,7 @@ def _render_knowledge_graph_tab() -> None:
         doc_index=doc_index,
         typed_relations=typed_relations,
         source_paths=source_paths,
+        due_reviews=due_reviews,
         height=740,
     )
 

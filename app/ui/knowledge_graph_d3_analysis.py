@@ -251,6 +251,11 @@ def node_worth(n: Dict[str, Any]) -> float:
     frontier = 1.0 if n.get("frontier") else 0.0
     reach_n = float(n.get("centrality") or 0.0)
 
+    # P2: learned node without due and without retention problem (no low decay_p)
+    # should not get pure structural worth (centrality). Only urgency gives value.
+    if n.get("learned") and due <= 0 and decay_p < 0.25:
+        return 0.0
+
     w = (
         DUE_WEIGHT * min(due, 5.0)
         + NOVEL_WEIGHT * novel
@@ -265,13 +270,19 @@ def top_worth_factor(n: Dict[str, Any]) -> str:
     """Human label for the single largest contributor to worth (for route step)."""
     if not isinstance(n, dict):
         return ""
-    parts = []
     due = float(n.get("due") or 0)
+    dec = n.get("decay")
+    decay_p = (1.0 - float(dec)) if isinstance(dec, (int, float)) else 0.0
+
+    # Consistent with node_worth: learned without due and without low retention has no factor
+    if n.get("learned") and due <= 0 and decay_p < 0.25:
+        return ""
+
+    parts = []
     if due > 0:
         parts.append((DUE_WEIGHT * min(due, 5.0), "🃏 к повторению"))
     if n.get("novel") and not n.get("learned"):
         parts.append((NOVEL_WEIGHT, "✨ новое для тебя"))
-    dec = n.get("decay")
     if isinstance(dec, (int, float)) and dec < 0.65:
         parts.append((DECAY_WEIGHT * (1.0 - dec), "🧠 низкий retention"))
     if n.get("frontier") and not n.get("learned"):

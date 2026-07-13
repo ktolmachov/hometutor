@@ -393,8 +393,10 @@ class TestA2WorthScoring:
     def test_top_factor_reports_due_or_novel(self):
         assert "к повторению" in top_worth_factor({"due": 4})
         assert "новое для тебя" in top_worth_factor({"novel": True})
-        # learned with no due -> no strong factor
-        assert top_worth_factor({"learned": True}) == "" or "структурная" in top_worth_factor({"learned": True, "centrality": 0.9})
+        # learned without due and without retention issue -> no factor (worth will be 0)
+        assert top_worth_factor({"learned": True}) == ""
+        # even with centrality, no urgency => no factor
+        assert top_worth_factor({"learned": True, "centrality": 0.9}) == ""
 
     def test_worth_attached_in_payload(self):
         payload = build_kg_payload({"c": {"label": "C"}, "l": {"label": "L", "level": "lesson"}})
@@ -436,10 +438,14 @@ class Test3DCoverageAndContracts:
         relations = [{"source_concept_id": "a", "target_concept_id": "b", "relation_type": "prereq"}]
         payload = build_kg_payload(concepts, typed_relations=relations)
         assert len(payload.get("edges", [])) >= 1
+        edge = payload["edges"][0]
 
         html3 = build_kg_3d_html(payload)
-        # must embed the edges so 3D draws real connections (not hardcoded [])
-        assert "EDGES" in html3 or "__EDGES__" not in html3  # replaced
+        # Actual edge data must be embedded (not the placeholder [])
+        assert f'"source": "{edge["source"]}"' in html3 or f'"source":"{edge["source"]}"' in html3
+        assert f'"target": "{edge["target"]}"' in html3 or f'"target":"{edge["target"]}"' in html3
+        # No old hardcoded placeholder left in output
+        assert 'window.__EDGES__ = []' not in html3
         # nodes data present
         assert '"id": "a"' in html3 or '"id":"a"' in html3
 
@@ -459,8 +465,10 @@ class Test3DCoverageAndContracts:
         p = {"nodes": [{"id": "x", "worth": 1.2}], "edges": [{"source": "x", "target": "y"}], "stats": {}}
         h = build_kg_3d_html(p)
         assert "x" in h
-        # edges json should appear
-        assert "source" in h and "target" in h
+        # specific edge data embedded, not placeholder
+        assert '"source":"x"' in h or '"source": "x"' in h
+        assert '"target":"y"' in h or '"target": "y"' in h
+        assert 'window.__EDGES__ = []' not in h
 
 
 class TestA1NodePriceSignals:

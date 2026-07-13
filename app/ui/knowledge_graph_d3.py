@@ -713,22 +713,28 @@ def render_d3_knowledge_graph(
     doc_index: Mapping[str, Any] | None = None,
     typed_relations: Iterable[Mapping[str, Any]] | None = None,
     source_paths: list[str] | None = None,
+    due_reviews: List[Dict[str, Any]] | None = None,
     *,
     height: int = 720,
 ) -> Dict[str, Any]:
     """Render via a local Streamlit component; return payload for companion widgets."""
-    due_reviews: List[Dict[str, Any]] = []
     sr_records: List[Dict[str, Any]] = []
     quiz_rows: List[Dict[str, Any]] = []
+    if due_reviews is None:
+        try:
+            from app.spaced_repetition import get_due_reviews, get_all_sr_concepts
+            from app.user_state import _with_db
+            # Fallback for callers without kg (tests etc.). Prefer caller to pass
+            # scoped list via filter_due_reviews_for_kg(..., scan_limit=5000)
+            due_reviews = get_due_reviews(limit=200)
+        except Exception:  # noqa: BLE001 - missing review state leaves the optional overlay empty.
+            due_reviews = []
+    due_reviews = due_reviews or []
     try:
-        from app.spaced_repetition import get_due_reviews, get_all_sr_concepts
+        from app.spaced_repetition import get_all_sr_concepts
         from app.user_state import _with_db
-        # Higher limit + scoping+resolve happens in build_kg_payload using the
-        # same resolver as skeleton and filtering to current graph concepts only.
-        # (Previously limit=20 + only direct id match missed many + resolver mismatch.)
-        due_reviews = get_due_reviews(limit=200)
         sr_records = get_all_sr_concepts()
-    except Exception:  # noqa: BLE001 - missing review state leaves the optional overlay empty.
+    except Exception:  # noqa: BLE001
         pass
     try:
         def _load_quiz(conn: Any) -> List[Dict[str, Any]]:

@@ -62,8 +62,8 @@ def _render_course_obsidian_button(topics_catalog: dict | None) -> None:
             if rubric_avgs:
                 k = len(rubric_avgs)
                 overall = round(sum(rubric_avgs) / k, 1)
-                rubric_info = f" · рубрика в {k} · средняя {overall}/5"
-        except Exception:  # noqa: BLE001
+                rubric_info = f" · рубрика в {k} · средняя {overall}"  # /5 convention in source tables (see rubric expander)
+        except Exception:  # noqa: BLE001 - optional rubric lookup must not break the Topics tab
             pass
         label = f"{cov.covered}/{cov.total} с конспектом{rubric_info}"
         st.markdown(

@@ -59,6 +59,20 @@ class TestAddPanelSectionSearch:
 
         assert [section.heading_text for section in sections] == ["Семплирование"]
 
+    def test_sections_of_document_filters_service_study_pack_sections(self, tmp_path: Path):
+        md = _write_md(
+            tmp_path / "lesson.md",
+            "# Lesson\n\n"
+            "## Flashcards и SM-2\n\nСлужебные карточки.\n\n"
+            "## Интерактивный Quiz\n\nСлужебный quiz.\n\n"
+            "## План повторения на неделю\n\nСлужебный план.\n\n"
+            "## Семплирование\n\nТемпература управляет случайностью.\n",
+        )
+
+        sections = sections_of_document(md)
+
+        assert [section.heading_text for section in sections] == ["Семплирование"]
+
     def test_search_sections_across_returns_relevant_sections(self, tmp_path: Path):
         md = _write_md(
             tmp_path / "lesson.md",

@@ -33,6 +33,11 @@ _NOISE_HEADINGS = {
     "quiz", "тест", "контрольные вопросы", "вопросы для самопроверки",
     "план повторения", "spaced repetition", "повторения", "srs",
 }
+_NOISE_HEADING_PREFIXES = (
+    "flashcards", "flash cards", "карточки",
+    "quiz", "интерактивный quiz", "тест",
+    "план повторения", "spaced repetition", "повторения", "srs",
+)
 
 
 @dataclass(frozen=True)
@@ -66,13 +71,21 @@ def _normalized_heading(heading: str) -> str:
     return heading.strip().lower().strip("📑#:- ")
 
 
+def _is_noise_heading(heading: str) -> bool:
+    normalized = _normalized_heading(heading)
+    return normalized in _NOISE_HEADINGS or any(
+        normalized == prefix or normalized.startswith(f"{prefix} ")
+        for prefix in _NOISE_HEADING_PREFIXES
+    )
+
+
 def _content_sections(sections: list[IndexedSection]) -> list[IndexedSection]:
     return [
         s
         for s in sections
         if s.level >= _MIN_SECTION_LEVEL
         and (s.own_text or s.text).strip()
-        and _normalized_heading(s.heading_text) not in _NOISE_HEADINGS
+        and not _is_noise_heading(s.heading_text)
         and section_role(s) != "quality_rubric"  # B3 (A1 role)
     ]
 

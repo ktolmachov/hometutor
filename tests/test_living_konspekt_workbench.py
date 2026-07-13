@@ -998,3 +998,28 @@ class TestA2KnowledgeStatusAndQuestion:
         set_workbench_rows(norm, state=state)
         assert get_workbench_rows(state)[0].get("knowledge_status") == "understood"
         assert get_workbench_rows(state)[0].get("open_question") == "Q?"
+
+    def test_new_fields_survive_manifest_reassemble_roundtrip(self):
+        md = DATA_DIR / "_test_workbench" / "a2-roundtrip.md"
+        md.parent.mkdir(parents=True, exist_ok=True)
+        body_text = "Текст для reanchor.\nЕщё строка."
+        md.write_text(f"# Конспект\n\n## Тема\n\n{body_text}\n", encoding="utf-8")
+
+        section = replace(_section(md, 3, heading="Тема", text=body_text), own_text=body_text)
+        state: dict = {}
+        add_section_to_workbench(section, state)
+        row_key = get_workbench_rows(state)[0]["row_key"]
+
+        rows = workbench_service.update_section_fields(
+            get_workbench_rows(state),
+            row_key,
+            knowledge_status="understood",
+            open_question="Q?",
+            read_at="2026-07-13T10:00:00Z",
+        )
+        manifest_yaml = serialize_manifest("T", workbench_service.persisted_rows_from_runtime(rows), [])
+        reassembled = reassemble_rows(parse_manifest(manifest_yaml), data_dir=DATA_DIR)
+
+        assert reassembled[0]["knowledge_status"] == "understood"
+        assert reassembled[0]["open_question"] == "Q?"
+        assert reassembled[0]["read_at"] == "2026-07-13T10:00:00Z"

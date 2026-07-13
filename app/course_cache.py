@@ -7,7 +7,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Iterable, Literal
 
 from app.config import DATA_DIR, get_settings
 from app.course_folder_filter import is_user_course_folder_rel
@@ -546,6 +546,29 @@ def list_course_candidates(
             except ValueError:
                 rel = child.name
             candidates.append({"folder_rel": rel, "supported_file_count": n})
+    return candidates
+
+
+def list_course_candidates_from_index(
+    indexed_rel_files: Iterable[str] | None,
+) -> list[dict[str, Any]]:
+    """Course candidates derived from actually-indexed relative file paths.
+
+    Mirrors ``_course_options_from_index_stats`` (the hero resolver) so the ingest
+    precompute tail builds First Session artifacts for exactly the folders the hero
+    will show: demo/uploads/user folders qualify, service folders (users/, cache/,
+    graph_generations/, …) never do. Each top-level user folder with >=1 indexed file
+    is a candidate carrying its ``source_paths`` — no ``data/docs`` hard-coding, so all
+    three first-run doors reach the same hero (evolutionary analysis #2, A1).
+    """
+    files = [str(p).strip().replace("\\", "/") for p in (indexed_rel_files or []) if str(p).strip()]
+    candidates: list[dict[str, Any]] = []
+    for folder in sorted({f.split("/", 1)[0] for f in files if f}):
+        if not is_user_course_folder_rel(folder):
+            continue
+        source_paths = sorted({f for f in files if f == folder or f.startswith(folder + "/")})
+        if source_paths:
+            candidates.append({"folder_rel": folder, "source_paths": source_paths})
     return candidates
 
 

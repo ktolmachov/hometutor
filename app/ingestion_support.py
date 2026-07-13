@@ -11,6 +11,7 @@ from llama_index.core.schema import QueryBundle
 
 from app.course_cache import (
     list_course_candidates,
+    list_course_candidates_from_index,
     normalize_source_paths,
     save_first_session_artifact,
 )
@@ -244,7 +245,11 @@ def _build_and_save_first_session_candidate(
     folder_rel = str(candidate.get("folder_rel") or "").strip()
     if not folder_rel:
         return
-    source_paths = _source_paths_for_candidate(docs_root, folder_rel)
+    # A1: prefer source_paths derived from the indexed file set (covers demo/uploads);
+    # fall back to a docs_root scan for legacy candidates without source_paths.
+    source_paths = list(candidate.get("source_paths") or [])
+    if not source_paths:
+        source_paths = _source_paths_for_candidate(docs_root, folder_rel)
     if not source_paths:
         logger.warning("first_session_precompute_skip | course_id=%s | reason=no_source_paths", folder_rel)
         return
@@ -285,11 +290,26 @@ def run_first_session_precompute_tail(
         return
 
     fn = retrieve_fn or _noop_retrieve_fn
+    # A1 (wave-onboarding-closure): derive candidates from the actually-indexed file
+    # set (same source the hero resolver uses), so demo/uploads/user folders qualify —
+    # not only data/docs/*. The manifest is built over the whole DATA_DIR; service
+    # folders are filtered by is_user_course_folder_rel inside the helper.
+    candidates: list[dict[str, Any]] = []
     try:
-        candidates = list_course_candidates(docs_root=docs_root)
+        from app.config import DATA_DIR
+        from app.ingestion_content_state import build_file_manifest
+        import app.ingestion as _ingestion_mod  # lazy: avoid import cycle at module load
+
+        manifest = build_file_manifest(DATA_DIR, _ingestion_mod.get_doc_supported_exts())
+        candidates = list_course_candidates_from_index((manifest.get("files") or {}).keys())
     except Exception as exc:  # noqa: BLE001 - tail must never abort ingest finalize.
-        log.warning("first_session_precompute_list_failed | error=%s", exc)
-        return
+        log.warning("first_session_manifest_failed | error=%s", exc)
+    if not candidates:
+        try:
+            candidates = list_course_candidates(docs_root=docs_root)
+        except Exception as exc:  # noqa: BLE001 - tail must never abort ingest finalize.
+            log.warning("first_session_precompute_list_failed | error=%s", exc)
+            return
     for candidate in candidates:
         folder_rel = str(candidate.get("folder_rel") or "").strip()
         try:

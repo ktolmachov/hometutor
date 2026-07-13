@@ -214,7 +214,17 @@ def render_first_session_hero(
     st.session_state["first_session_cold_open_done"] = True
     rendered_cta = False
     if load_status == "empty":
-        st.info("Первый обзор курса готовится — ниже есть подсказка, с чего начать")
+        # A2 (wave-onboarding-closure): never promise a build that isn't happening.
+        # The First Session Artifact is opt-in (enable_first_session_precompute, off
+        # by default), so it is built only when a reindex is actually running AND the
+        # precompute tail is enabled. In every other case "готовится" was a false
+        # promise — say nothing false; the seed chips below already give the next step.
+        precompute_on = bool(get_settings().enable_first_session_precompute)
+        reindex_running = bool(st.session_state.get("poll_reindex_status"))
+        if precompute_on and reindex_running:
+            st.info("Первый обзор курса собирается после индексации — это займёт немного времени.")
+        else:
+            st.caption("Первый обзор курса пока не собран. Начните с вопроса ниже — ответ появится сразу.")
     elif load_status == "error":
         st.warning("Не удалось прочитать сохранённый обзор курса.")
         st.caption("Показан обычный режим")

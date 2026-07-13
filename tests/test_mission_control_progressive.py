@@ -252,3 +252,54 @@ def test_non_cold_hero_cards_are_kg_and_living_konspekt() -> None:
         render_kg_mission_card,
         render_living_konspekt_mission_card,
     }
+
+
+def _patch_hero_deps(monkeypatch, *, precompute_on: bool, reindex_running: bool, load_status: str = "empty") -> dict:
+    """Stub the non-Streamlit dependencies of render_first_session_hero; return msg capture."""
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    import app.ui.mission_control_first_session as mfs
+
+    monkeypatch.setattr(mfs, "_sync_first_session_scope_cache", lambda stats: None)
+    monkeypatch.setattr(mfs, "resolve_first_session_scope_for_home", lambda **kw: {"folder_rel": "demo"})
+    monkeypatch.setattr(mfs, "get_active_scope", lambda: None)
+    monkeypatch.setattr(mfs, "load_first_session_artifact_cached_for_scope", lambda scope: (None, load_status))
+    monkeypatch.setattr(
+        mfs, "get_settings",
+        lambda: SimpleNamespace(enable_first_session_precompute=precompute_on, home_rag_e2e_offline=False),
+    )
+    monkeypatch.setattr(mfs, "get_e2e_primary_chat_call_count", lambda: 0)
+
+    messages: dict[str, list[str]] = {"info": [], "caption": []}
+    monkeypatch.setattr(mfs.st, "spinner", MagicMock())
+    monkeypatch.setattr(mfs.st, "markdown", MagicMock())
+    monkeypatch.setattr(mfs.st, "info", lambda *a, **k: messages["info"].append(a[0] if a else ""))
+    monkeypatch.setattr(mfs.st, "caption", lambda *a, **k: messages["caption"].append(a[0] if a else ""))
+    monkeypatch.setattr(mfs.st, "session_state", {"poll_reindex_status": reindex_running})
+    return messages
+
+
+def test_first_session_hero_no_promise_when_no_build_scheduled(monkeypatch) -> None:
+    # A2: default config (precompute off, no reindex running) must NOT say "готовится/собирается".
+    import app.ui.mission_control_first_session as mfs
+
+    messages = _patch_hero_deps(monkeypatch, precompute_on=False, reindex_running=False)
+
+    rendered = mfs.render_first_session_hero({"folder_rel_options": ["demo"]}, navigate_to_question=lambda q: None)
+
+    assert rendered is False
+    assert not messages["info"], f"hero must not promise a build when none is scheduled: {messages['info']}"
+    assert messages["caption"], "hero should give a neutral non-promise when the artifact is empty"
+
+
+def test_first_session_hero_honest_progress_when_build_in_flight(monkeypatch) -> None:
+    # A2: when precompute is on AND a reindex is running, "собирается" is truthful.
+    import app.ui.mission_control_first_session as mfs
+
+    messages = _patch_hero_deps(monkeypatch, precompute_on=True, reindex_running=True)
+
+    mfs.render_first_session_hero({"folder_rel_options": ["demo"]}, navigate_to_question=lambda q: None)
+
+    assert messages["info"], "hero should show an honest in-progress message when a build is running"
+    assert any("собирается" in m for m in messages["info"]), messages["info"]

@@ -53,6 +53,9 @@ voice = [
     "SpeechRecognition==3.15.1",
     "pyttsx3==2.99",
 ]
+tts = [
+    "pyttsx3==2.99",  # local TTS to audio file for text-only sections (wave-audio-b2); see ADR
+]
 ocr = [
     "docling==2.31.0",
     "pymupdf==1.27.2.3",

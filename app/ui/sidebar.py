@@ -520,7 +520,7 @@ def render_sidebar(index_stats: dict | None):
                         deps = voice_dependencies_available()
                         st.caption(
                             f"SpeechRecognition: {'да' if deps['speech_recognition'] else 'нет'} · "
-                            f"pyttsx3: {'да' if deps['pyttsx3'] else 'нет'} · "
+                            f"pyttsx3 (tts): {'да' if deps['pyttsx3'] else 'нет'} · "
                             f"PyAudio: {'да' if deps['pyaudio'] else 'нет'} · "
                             f"faster_whisper (asr): {'да' if deps.get('faster_whisper') else 'нет'}"
                         )
@@ -536,6 +536,15 @@ def render_sidebar(index_stats: dict | None):
                             st.info(vt)
                         if vt and st.button("Озвучить последний текст", key="sidebar_voice_speak"):
                             VoiceService().speak(str(vt))
+                        # B2 (TTS file): demo of text->audio file for "on the go" or text sections (no live speaker required)
+                        if vt and st.button("Сгенерировать TTS файл (B2)", key="sidebar_tts_file"):
+                            from pathlib import Path
+                            p = VoiceService().tts_text_to_audio_file(str(vt), suggested_name="sidebar_tts_demo.wav")
+                            if p and p.exists():
+                                st.audio(str(p))
+                                st.caption(f"TTS файл: {p.name}")
+                            else:
+                                st.caption("TTS файл не создан (pyttsx3 недоступен или ошибка). Установите [tts] или [voice].")
                     st.markdown("---")
                 with st.expander("Область поиска для Q&A", expanded=False):
                     folder = st.text_input("Последняя папка")

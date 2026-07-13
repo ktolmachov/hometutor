@@ -12,6 +12,8 @@ Streamlit: предпочтительно ``st.audio_input`` + ``transcribe_audi
 from __future__ import annotations
 
 import logging
+import tempfile
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -171,6 +173,33 @@ class VoiceService:
         if txt is not None:
             return txt
         return "Локальный ASR недоступен (нужен [asr])."
+
+    def tts_text_to_audio_file(
+        self, text: str, *, suggested_name: str = "section_tts.wav"
+    ) -> Path | None:
+        """Generate spoken audio file from text using pyttsx3 (if TTS extra / voice installed).
+
+        Returns path to .wav (or .mp3 if engine supports) in a temp releases dir, or None + no raise.
+        Used for B2: озвучка разделов без медиа-файла. File only (no live speak here).
+        """
+        if not self._engine:
+            return None
+        t = (text or "").strip()
+        if not t:
+            return None
+        try:
+            final_dir = Path(tempfile.gettempdir()) / "hometutor_tts"
+            final_dir.mkdir(parents=True, exist_ok=True)
+            out = final_dir / suggested_name
+            # pyttsx3 save is fire-and-forget with runAndWait
+            self._engine.save_to_file(t[:4000], str(out))
+            self._engine.runAndWait()
+            if out.exists() and out.stat().st_size > 100:
+                return out
+            return None
+        except Exception as e:  # noqa: BLE001
+            logger.debug("tts_text_to_audio_file failed: %s", e)
+            return None
 
     def speak(self, text: str) -> None:
         """Синтез речи (локально, pyttsx3)."""

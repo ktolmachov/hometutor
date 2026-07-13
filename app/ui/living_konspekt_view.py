@@ -148,6 +148,7 @@ from app.ui.living_konspekt_state import (  # noqa: F401 - реэкспорт а
     get_project_goal,
     get_workbench_rows,
     mark_section_read_in_workbench,
+    mark_section_listened_in_workbench,
     move_section_in_workbench,
     remove_section_from_workbench,
     remove_sections_from_workbench,
@@ -456,7 +457,7 @@ def _render_project_goal_panel() -> None:
 def _reader_media_renderer(row: dict[str, Any], is_first: bool) -> None:
     # key_prefix отличает чекбоксы "Показать видео" от вкладки «Разделы»: одна и та же
     # строка рендерится в обеих вкладках за один rerun, ключи виджетов не могут совпадать.
-    _render_media_panel(row, is_first, key_prefix="reader")
+    _render_media_panel(row, is_first, key_prefix="reader", mark_listened=mark_section_listened_in_workbench)
 
 
 def render_living_konspekt_view() -> None:
@@ -507,6 +508,7 @@ def render_living_konspekt_view() -> None:
             rows,
             move_section=move_section_in_workbench,
             remove_section=remove_section_from_workbench,
+            mark_listened=mark_section_listened_in_workbench,
         )
     with tab_reader:
         render_reader(
@@ -514,6 +516,7 @@ def render_living_konspekt_view() -> None:
             media_renderer=_reader_media_renderer,
             save_note=update_section_note_in_workbench,
             mark_read=mark_section_read_in_workbench,
+            mark_listened=mark_section_listened_in_workbench,
         )
     with tab_memory:
         render_memory_panel(rows)

@@ -27,7 +27,7 @@ _CONTENT_FIELDS = (
     "own_text",
     "concept",
 )
-_RESERVED_FIELDS = ("note", "read_at")
+_RESERVED_FIELDS = ("note", "read_at", "listened_at")
 
 
 class _UnsetValue:
@@ -367,6 +367,7 @@ def update_section_fields(
     *,
     note: str | None | _UnsetValue = _UNSET,
     read_at: str | None | _UnsetValue = _UNSET,
+    listened_at: str | None | _UnsetValue = _UNSET,
     storage: WorkbenchStorage | None = None,
 ) -> list[dict[str, Any]]:
     rows = normalize_runtime_rows(current_rows)
@@ -381,6 +382,8 @@ def update_section_fields(
             updated["note"] = (note or "").strip() or None
         if not isinstance(read_at, _UnsetValue):
             updated["read_at"] = read_at
+        if not isinstance(listened_at, _UnsetValue):
+            updated["listened_at"] = listened_at
         changed = changed or updated != row
         new_rows.append(updated)
     if changed:

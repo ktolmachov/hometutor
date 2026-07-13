@@ -225,3 +225,22 @@ def mark_section_read_in_workbench(
         read_at=read_at,
         storage=storage,
     )
+
+
+def mark_section_listened_in_workbench(
+    row_key: str,
+    state: MutableMapping[str, Any] | None = None,
+) -> None:
+    """Record that an audio fragment for the section was activated (listened)."""
+    target = _state(state)
+    rows = workbench_service.normalize_runtime_rows(get_workbench_rows(target))
+    storage = None if state is None else workbench_service.InMemoryWorkbenchStorage()
+    if state is None:
+        _ensure_auth_context()
+    listened_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    target[WORKBENCH_SECTIONS_KEY] = workbench_service.update_section_fields(
+        rows,
+        row_key,
+        listened_at=listened_at,
+        storage=storage,
+    )

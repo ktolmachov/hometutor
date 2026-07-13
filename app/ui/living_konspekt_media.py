@@ -208,7 +208,13 @@ def _playlist_video_url(video: LocalVideoSource | UrlVideoSource, start: int) ->
     return normalized.canonical_url
 
 
-def _render_media_panel(row: dict[str, Any], is_first: bool = False, *, key_prefix: str = "wb") -> None:
+def _render_media_panel(
+    row: dict[str, Any],
+    is_first: bool = False,
+    *,
+    key_prefix: str = "wb",
+    mark_listened: Any = None,
+) -> None:
     """Render optional section media from sidecar; never block the plain konspekt row."""
     md_abs = str(row.get("konspekt_md_abs") or "")
     if not md_abs:
@@ -257,7 +263,7 @@ def _render_media_panel(row: dict[str, Any], is_first: bool = False, *, key_pref
         elif isinstance(video, LocalVideoSource):
             row_key = str(row.get("row_key") or f"{row.get('line_start')}_{row.get('heading_text')}")
             checkbox_key = f"lk_play_video_{key_prefix}_{row_key}"
-            _render_local_video_media(video, media_section, title, checkbox_key)
+            _render_local_video_media(video, media_section, title, checkbox_key, mark_listened=mark_listened, row_key=row_key)
 
 
 
@@ -330,6 +336,9 @@ def _render_local_video_media(
     media_section: MediaSection,
     title: str,
     checkbox_key: str,
+    *,
+    mark_listened: Any = None,
+    row_key: str | None = None,
 ) -> None:
     # Локальный st.video() читает весь файл в память при КАЖДОМ вызове (Streamlit
     # хэширует контент, чтобы определить file_id — кэша по mtime у него нет). При
@@ -345,6 +354,13 @@ def _render_local_video_media(
     if audio_path is not None:
         audio_key = f"lk_play_audio_{checkbox_key}"
         if st.checkbox("🎧 Слушать раздел", key=audio_key):
+            # B1: write exposure trace (listened) on explicit activation of audio player.
+            # Same per-section row persistence as "read_at". No effect on mastery.
+            if mark_listened and row_key:
+                try:
+                    mark_listened(row_key)
+                except Exception:  # noqa: BLE001 - trace is best-effort, do not break playback
+                    pass
             start_time = int(media_section.t_start or 0)
             end_time = int(media_section.t_end) if media_section.t_end is not None else None
             _render_local_audio_player(audio_path, title, start_time=start_time, end_time=end_time)

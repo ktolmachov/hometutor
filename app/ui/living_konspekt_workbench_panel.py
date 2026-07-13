@@ -391,6 +391,7 @@ def render_collected_sections(
     *,
     move_section: MoveSection,
     remove_section: RemoveSection,
+    mark_listened: Any = None,
 ) -> None:
     from app.obsidian_export import obsidian_uri, vscode_uri
 
@@ -426,7 +427,8 @@ def render_collected_sections(
                     from app.ui.living_konspekt_reader import render_markdown_with_mermaid
                     doc_dir = Path(md_abs).parent if md_abs else None
                     render_markdown_with_mermaid(str(row.get("text") or ""), doc_dir=doc_dir)
-                    _render_media_panel(row)
+                    from app.ui.living_konspekt_state import mark_section_listened_in_workbench
+                    _render_media_panel(row, mark_listened=mark_section_listened_in_workbench)
                     _render_section_diagram_button(row, row_list)
             with cols[1]:
                 if md_abs:

@@ -62,6 +62,7 @@ def render_reader(
     media_renderer: MediaRenderer | None = None,
     save_note: SaveNote | None = None,
     mark_read: MarkRead | None = None,
+    mark_listened: Any = None,
 ) -> None:
     """Отрендерить собранный конспект как документ для чтения."""
     if not rows:
@@ -101,7 +102,7 @@ def render_reader(
                 media_renderer(row, False)
             row_key = str(row.get("row_key") or "")
             if row_key and (save_note is not None or mark_read is not None):
-                _render_section_progress_controls(row, save_note=save_note, mark_read=mark_read)
+                _render_section_progress_controls(row, save_note=save_note, mark_read=mark_read, mark_listened=mark_listened)
         st.divider()
 
 
@@ -116,10 +117,12 @@ def _render_section_progress_controls(
     *,
     save_note: SaveNote | None,
     mark_read: MarkRead | None,
+    mark_listened: Any = None,
 ) -> None:
     row_key = str(row.get("row_key") or "")
     note_value = str(row.get("note") or "")
     read_at = str(row.get("read_at") or "")
+    listened_at = str(row.get("listened_at") or "")
     note_key = f"lk_reader_note_{row_key}"
     st.text_area("Моя мысль", value=note_value, key=note_key, height=90)
     cols = st.columns([1, 1, 3])
@@ -136,6 +139,8 @@ def _render_section_progress_controls(
     with cols[2]:
         if read_at:
             st.caption(f"Прочитано: {read_at}")
+        if listened_at:
+            st.caption(f"Прослушано: {listened_at}")
 
 
 _MERMAID_RE = re.compile(r"```(?:mermaid|flowchart).*?\n(.*?)\n```", re.DOTALL | re.IGNORECASE)

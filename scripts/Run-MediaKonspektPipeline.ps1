@@ -219,11 +219,19 @@ if (-not $SkipSidecar) {
     Write-Host "Пропуск sidecar (-SkipSidecar)." -ForegroundColor DarkGray
 }
 
+# P0 audio (wave 3): extract sibling .m4a from the playable video (after sidecar per plan).
+# Uses the shared python helper (idempotent + graceful no-ffmpeg).
+# This makes "data ready" for the new st.audio players without manual steps.
+Invoke-Step "Extract audio .m4a ($playableAbs → .m4a)" {
+    & $python -c "import sys; sys.path.insert(0, r'$root'); from scripts.transcribe_media import extract_audio_to_m4a; extract_audio_to_m4a(r'$playableAbs')"
+}
+
 Write-Host ""
 Write-Host "Готово." -ForegroundColor Green
 Write-Host "  Конспект:  $Konspekt"
 Write-Host "  Видео:     $Video"
 Write-Host "  Сегменты:  $([System.IO.Path]::ChangeExtension($playableAbs, '.segments.json'))"
 Write-Host "  Sidecar:   $([System.IO.Path]::ChangeExtension($konspektAbs, '.media.json'))"
+Write-Host "  Аудио:     $([System.IO.Path]::ChangeExtension($playableAbs, '.m4a')) (если ffmpeg присутствовал)"
 
 exit 0

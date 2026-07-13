@@ -253,6 +253,42 @@ def remux_to_mp4(media: Path) -> Path | None:
     return target
 
 
+def extract_audio_to_m4a(media: Path) -> Path | None:
+    """Извлечь аудиодорожку в sibling .m4a (ffmpeg -vn -c:a copy, без перекодирования).
+
+    Используется после ремукса/транскрибации для P0 audio podcasts.
+    Идемпотентно: если .m4a уже есть — пропуск.
+    Если ffmpeg отсутствует — честное сообщение + возврат None (как remux).
+    Не меняет схему sidecar, не требует LLM.
+    """
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg is None:
+        print(
+            "extract audio пропущен: ffmpeg не найден в PATH. "
+            "Установка: winget install Gyan.FFmpeg (или эквивалент)",
+            file=sys.stderr,
+        )
+        return None
+    target = media.with_suffix(".m4a")
+    if target.exists():
+        print(f"extract audio пропущен: {target.name} уже существует.")
+        return target
+    print(f"Извлечение аудио {media.name} → {target.name} (ffmpeg -vn -c:a copy)…")
+    result = subprocess.run(
+        [ffmpeg, "-hide_banner", "-loglevel", "error", "-i", str(media),
+         "-vn", "-c:a", "copy", str(target)],
+        check=False,
+    )
+    if result.returncode != 0:
+        print(
+            "extract audio не удался (возможно видео без аудио или кодек). "
+            f"Попробуйте вручную: ffmpeg -i \"{media}\" -vn -c:a copy \"{target}\"",
+            file=sys.stderr,
+        )
+        return None
+    return target
+
+
 def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
@@ -323,6 +359,11 @@ def main(argv: list[str] | None = None) -> int:
                 "а не к .mp4.",
                 file=sys.stderr,
             )
+
+    # P0 audio podcasts (wave-audio-03): extract .m4a sibling after possible remux.
+    # Cheap (0.3s), no re-encode, uses convention next to playable video.
+    # Safe to run always: idempotent + graceful when no ffmpeg/audio-track.
+    _ = extract_audio_to_m4a(media)
 
     segments_path = media.with_suffix(".segments.json")
     txt_path = media.with_suffix(".txt")

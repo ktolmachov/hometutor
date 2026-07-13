@@ -63,15 +63,24 @@ def _render_course_obsidian_button(topics_catalog: dict | None) -> None:
                 k = len(rubric_avgs)
                 overall = round(sum(rubric_avgs) / k, 1)
                 rubric_info = f" · рубрика в {k} · средняя {overall}"  # /5 convention in source tables (see rubric expander)
+            # C1: sample grade for passport
+            try:
+                from app.section_index import _cached_parse_sections, get_konspekt_grade
+                for p in all_paths:
+                    km = find_konspekt_for_source_in_data(p)
+                    if km:
+                        secs = _cached_parse_sections(km.path)
+                        g = get_konspekt_grade(secs)
+                        if g != "базовый":
+                            rubric_info += f" · {g}"
+                            break
+            except Exception:
+                pass
         except Exception:  # noqa: BLE001 - optional rubric lookup must not break the Topics tab
             pass
         label = f"{cov.covered}/{cov.total} с конспектом{rubric_info}"
         st.markdown(
             f'<div style="font-size:12px;color:#4ade80;padding:6px 0">✅ {label}</div>',
-            unsafe_allow_html=True,
-        )
-        st.markdown(
-            f'<div style="font-size:12px;color:#4ade80;padding:6px 0">{label}</div>',
             unsafe_allow_html=True,
         )
     else:

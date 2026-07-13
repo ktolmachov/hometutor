@@ -365,6 +365,15 @@ def _render_konspekt_badge(rel_path: str, *, key_prefix: str) -> None:
             badge += f" · рубрика {r['average']}/5"
     except Exception:  # noqa: BLE001
         pass
+    try:
+        # C1: grade badge (derived from roles, same places as A1)
+        from app.section_index import _cached_parse_sections, get_konspekt_grade
+        secs = _cached_parse_sections(km.path)
+        grade = get_konspekt_grade(secs)
+        if grade != "базовый":
+            badge += f" · {grade}"
+    except Exception:  # noqa: BLE001
+        pass
     st.markdown(
         f'<div style="font-size:12px;color:#4ade80;margin:2px 0 4px">{badge}</div>',
         unsafe_allow_html=True,

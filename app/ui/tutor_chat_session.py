@@ -496,6 +496,24 @@ def _render_tutor_handoff_context() -> None:
         st.caption(f"Почему это подходит: {reason}")
         st.caption(next_step)
 
+    # B1 completion: предложение закрыть вопрос из Живого конспекта после ответа
+    if handoff.get("source") == "living_konspekt_open_question":
+        row_key = st.session_state.get("pending_living_konspekt_close_row")
+        if row_key:
+            st.markdown("---")
+            if st.button("✅ Закрыть этот вопрос в Живом конспекте", key="b1_close_from_tutor"):
+                try:
+                    from app.ui.living_konspekt_state import set_open_question_in_workbench
+                    from app.ui.continuity_bridge import clear_qa_tutor_handoff_context
+                    set_open_question_in_workbench(row_key, None)
+                    st.session_state.pop("pending_living_konspekt_close_row", None)
+                    clear_qa_tutor_handoff_context(st.session_state)
+                    st.toast("Вопрос закрыт в конспекте.", icon="✓")
+                    # Optional: exposure trace hint (can be expanded later)
+                except Exception:  # noqa: BLE001
+                    st.toast("Не удалось закрыть вопрос.", icon="⚠️")
+                st.rerun()
+
 
 def _render_tutor_plan_expander() -> None:
     with st.expander("Адаптивный план и прогноз (Mastery Forecast)", expanded=False):

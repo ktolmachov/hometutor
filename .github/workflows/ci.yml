@@ -31,6 +31,15 @@ jobs:
       - name: Tests (pytest)
         run: pytest tests/ -q
 
+      - name: Architecture regression guards
+        # Explicit step so the 4 guards (via parametrized test + aggregator contract)
+        # are visible in CI logs and job summary. Guards are also exercised by the
+        # general pytest step above. See tests/test_architecture_guards.py and
+        # scripts/arch_regression_guards.py.
+        run: |
+          python -m pytest tests/test_architecture_guards.py -q --tb=line
+          python scripts/arch_regression_guards.py
+
   test-media-pipeline-audio:
     # Real end-to-end run of the media pipeline PowerShell script (with audio extraction step).
     # Exercises the PS -> python call path for extract_audio_to_m4a using actual ffmpeg.

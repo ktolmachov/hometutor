@@ -936,8 +936,9 @@ def build_context_row_segments(
     Returns zero, one or two plain-text segments (no HTML) — the caller escapes
     them when rendering. Missing scope/snapshot just omits that segment. A positive
     ``graph_freshness_gap`` adds a human-readable "map lags behind index" notice
-    (analysis #3, wave-material-freshness A1) so the gap is visible on the home
-    screen, not only in a log line.
+    (analysis #3, wave-material-freshness A1). The gap is now computed by *set*
+    membership of source paths (not raw counts), so renames/replaces are visible.
+    Visible on the home screen, not only in a log line.
     """
     segments: list[str] = []
     if scope:
@@ -974,6 +975,7 @@ def _render_context_row(index_stats: dict | None = None) -> None:
     except Exception:  # noqa: BLE001 - context row is optional, never block the home screen
         snapshot = None
     # A1 (wave-material-freshness): surface "map lags behind index" on the home screen.
+    # Uses set-based comparison (via source_paths list in active graph report).
     # Only fetched when there are indexed materials, so cold/empty screens stay cheap.
     gap = 0
     if _has_indexed_materials(index_stats):

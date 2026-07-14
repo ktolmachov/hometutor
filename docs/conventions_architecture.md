@@ -1,6 +1,6 @@
 # Соглашения: архитектура и слои
 
-Актуализировано: 2026-06-24.
+Актуализировано: 2026-07-14.
 
 ## Конфигурация
 
@@ -72,3 +72,11 @@
 - LLM/ML layers are enrichment/reranking/fallback-aware additions.
 - Feedback collection saves structured local signals; it must not silently change route policy in the same request.
 - SSR explainability must remain inspectable through evidence/reason fields, not only natural language.
+
+## Архитектурные стражи и бюджеты
+
+- Четыре guard'а кодируют жёсткие границы: `scripts/check_config_access.py`, `check_dead_modules.py`, `check_requirements_imports.py`, `check_size_budget.py`.
+- Стражи запускаются на каждом CI (push/PR) через явный шаг «Architecture regression guards» в `.github/workflows/ci.yml` (в дополнение к общему `pytest tests/`). Также доступны в любом локальном запуске `pytest` (через `tests/test_architecture_guards.py`, параметризованный; `main()` должен вернуть 0). Нет запланированного ежедневного (cron/schedule) задания.
+- Агрегатор: `scripts/arch_regression_guards.py` (можно запускать standalone).
+- Бюджеты size (файлы/функции/линии) — no-growth; синхронизированы с HEAD (33/155/1929/361). Waiver'ы только явные (см. `app/prompts/_impl.py`).
+- Если guard красный — фиксим структуру, не поднимаем потолок.

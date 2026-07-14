@@ -2,9 +2,11 @@
 
 The four `scripts/check_*` guards encode the framework boundaries as code, but
 before this test they were wired to nothing and drifted red for ~225 commits.
-This parametrised test is the wire into the daily pytest cycle: each guard's
-`main()` must return 0. If a guard starts failing, CI is red on the offending
-commit — no violation lives longer than one commit.
+This parametrized test wires the four architecture guards into the pytest cycle
+(and thus every CI run on push/PR). Each guard's `main()` must return 0.
+If a guard starts failing, the CI job is red on the offending commit — no
+violation lives longer than one commit. The guards are also runnable standalone
+via `scripts/arch_regression_guards.py`.
 
 See `doc/next/architecture_guards_plan.md` (wave-arch-law-power, A1) and the
 guard aggregator `scripts/arch_regression_guards.py`.

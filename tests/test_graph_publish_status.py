@@ -107,15 +107,31 @@ def test_compact_report_dedupes_fail_reasons() -> None:
     assert report["fail_reasons"] == ["Конфликт alias: LLM vs LLM"]
 
 
-def test_compact_report_preserves_source_paths_count() -> None:
-    # A1 DoD: _compact_report must not drop source_paths (used by graph_freshness_gap).
-    assert _compact_report({"source_paths": ["demo/a.md", "demo/b.md"], "published": True})["source_paths_count"] == 2
+def test_compact_report_preserves_source_paths() -> None:
+    # A1 (fixed): _compact_report must preserve the *list* (for set-based freshness),
+    # not only count. Legacy count-only reports still supported via fallback.
+    rep = _compact_report({"source_paths": ["demo/a.md", "demo/b.md"], "published": True})
+    assert rep["source_paths_count"] == 2
+    assert rep["source_paths"] == ["demo/a.md", "demo/b.md"]
+
     assert _compact_report({})["source_paths_count"] == 0
+    assert _compact_report({})["source_paths"] == []
+
     assert _compact_report({"source_paths": "not-a-list"})["source_paths_count"] == 0
+    assert _compact_report({"source_paths": "not-a-list"})["source_paths"] == []
+
+    # Hashes are also preserved (for heuristic contract + content-based checks)
+    rep2 = _compact_report({
+        "source_paths": ["f1.md"],
+        "source_content_hashes": ["h1", "h1", " h2 "],
+        "published": True
+    })
+    assert rep2["source_content_hashes"] == ["h1", "h2"]
+    assert rep2["source_content_hashes_count"] == 2
 
 
 def test_graph_freshness_gap_counts_index_minus_active_graph() -> None:
-    # 3 indexed materials, graph built from 2 → gap 1 (map lags by one).
+    # Legacy count-only path (no "source_paths" list in report): still works for back-compat.
     index_stats = {"files": ["demo/a.md", "demo/b.md", "demo/c.md"]}
     publish_status = {"active": {"report": {"source_paths_count": 2}}}
     assert graph_freshness_gap(index_stats, publish_status) == 1
@@ -127,5 +143,44 @@ def test_graph_freshness_gap_zero_when_fresh_or_no_index() -> None:
     # No indexed materials → nothing to lag behind.
     assert graph_freshness_gap({"files": []}, fresh) == 0
     assert graph_freshness_gap(None, fresh) == 0
-    # Promote skipped: active bundle has no report → whole index looks "not on the map".
+    # Promote skipped: active bundle has no report → whole index looks "not on the map" (legacy count path).
     assert graph_freshness_gap({"files": ["a.md", "b.md"]}, {"active": {"report": None}}) == 2
+
+
+def test_graph_freshness_gap_uses_actual_set_not_just_count() -> None:
+    """P1: critical fix — must detect staleness by set membership, not |count|.
+
+    Same cardinality but different members → positive gap.
+    """
+    # index has a,b,c ; graph recorded a,b,d (same count=3) → c is missing from map
+    index_stats = {"files": ["demo/a.md", "demo/b.md", "demo/c.md"]}
+    publish_status = {
+        "active": {
+            "report": {
+                "source_paths": ["demo/a.md", "demo/b.md", "demo/d.md"],
+                "source_paths_count": 3,
+            }
+        }
+    }
+    assert graph_freshness_gap(index_stats, publish_status) == 1
+
+    # Overlap but net missing
+    index_stats2 = {"files": ["x.md", "y.md", "z.md"]}
+    publish_status2 = {"active": {"report": {"source_paths": ["y.md", "z.md", "w.md"]}}}
+    assert graph_freshness_gap(index_stats2, publish_status2) == 1  # x missing
+
+
+def test_graph_freshness_gap_filters_non_user_paths() -> None:
+    """Technical/service paths in the raw index 'files' must not contribute to gap
+    (they are excluded from graph source_paths too via is_user_source_path).
+    """
+    # "cache/..." and "_tmp/..." are technical → filtered out on index side before set diff
+    index_stats = {"files": ["demo/real.md", "cache/internal.json", "_tmp/scratch.txt", "docs/lec.md"]}
+    # graph only knows the user ones
+    publish_status = {"active": {"report": {"source_paths": ["demo/real.md", "docs/lec.md"]}}}
+    # even though raw len(index)=4, after user filter len=2, and set matches graph → gap 0
+    assert graph_freshness_gap(index_stats, publish_status) == 0
+
+    # a new user file appears
+    index_stats2 = {"files": ["demo/real.md", "docs/lec.md", "uploads/new.pdf", "cache/foo"]}
+    assert graph_freshness_gap(index_stats2, publish_status) == 1  # uploads/new.pdf

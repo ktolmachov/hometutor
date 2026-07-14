@@ -236,6 +236,8 @@ def write_bundle_via_compiler(
                 heuristic_data,
                 generation_id=generation_id,
                 scope_hash=scope_hash,
+                source_paths=source_paths,
+                source_content_hashes=source_content_hashes,
                 report_overrides={
                     "compiler_fail_reasons": compiler_fail_reasons,
                     "heuristic_fallback": True,
@@ -243,8 +245,6 @@ def write_bundle_via_compiler(
                         *compiler_fail_reasons,
                         "Heuristic fallback after compiler failure (metadata-only graph)",
                     ],
-                    "source_paths": list(source_paths or []),
-                    "source_content_hashes": sorted(set(source_content_hashes or [])),
                 },
             )
             heuristic_stats["compiler_error"] = result.error
@@ -293,6 +293,8 @@ def _heuristic_bundle_stats(
     *,
     generation_id: str,
     scope_hash: str,
+    source_paths: list[str] | None = None,
+    source_content_hashes: list[str] | None = None,
     report_overrides: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     rel_count = int(data.pop("_relation_count", 0))
@@ -309,9 +311,19 @@ def _heuristic_bundle_stats(
         "gates": [],
         "fail_reasons": ["Heuristic fallback path — semantic gate не пройден"],
     }
+    # Normalize to keep contract consistent with compiler path (P4)
+    from app.course_cache import normalize_source_paths
+    paths = normalize_source_paths(source_paths) if source_paths is not None else []
+    if source_paths is not None:
+        report["source_paths"] = paths
+    if source_content_hashes is not None:
+        ch = sorted({str(h).strip() for h in source_content_hashes if str(h).strip()})
+        report["source_content_hashes"] = ch
     if report_overrides:
         report.update(report_overrides)
     write_graph_quality_report_sidecar(bundle_dir, report)
+
+    ch_for_return = sorted({str(h).strip() for h in (source_content_hashes or []) if str(h).strip()}) if source_content_hashes is not None else []
     return {
         "ok": True,
         "published": False,
@@ -327,6 +339,8 @@ def _heuristic_bundle_stats(
         "relations": rel_count,
         "path": str(bundle_dir),
         "storage": "sqlite_bundle",
+        "source_paths": paths,
+        "source_content_hashes": ch_for_return,
     }
 
 
@@ -370,6 +384,8 @@ def write_bundle_for_staging(
         data,
         generation_id=generation_id or "staging",
         scope_hash=scope_hash or "heuristic",
+        source_paths=source_paths,
+        source_content_hashes=source_content_hashes,
     )
 
 
@@ -466,4 +482,6 @@ def write_bundle_for_generation(
         data,
         generation_id=generation_id,
         scope_hash=scope_hash or "heuristic",
+        source_paths=source_paths,
+        source_content_hashes=source_content_hashes,
     )

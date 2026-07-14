@@ -582,8 +582,17 @@ _RECOVERY_CATCH_UP_KEY = "recovery_catch_up_by_scope"
 
 
 def normalize_source_paths(source_paths: list[str] | tuple[str, ...]) -> list[str]:
-    """Return stable, non-empty source paths for cache keys and payloads."""
-    return sorted({str(path).strip() for path in source_paths if str(path).strip()})
+    """Return stable, non-empty source paths for cache keys and payloads.
+
+    Normalizes separators to posix-style for cross-platform set equality
+    (Windows backslashes vs forward in graph reports / chroma metadata).
+    """
+    out = []
+    for p in source_paths:
+        s = str(p).strip().replace("\\", "/")
+        if s:
+            out.append(s)
+    return sorted(set(out))
 
 
 def course_scope_hash(source_paths: list[str] | tuple[str, ...]) -> str:

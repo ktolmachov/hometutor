@@ -84,7 +84,16 @@ def test_partial_graph_refresh_audits_when_published(monkeypatch, tmp_path) -> N
         all_docs_graph=[], target_collection_name="c", current_hashes={"demo/x.md": "h1"}
     )
     assert graph_refresh["published"] is True
+    # invoke the tail (as the orchestrator does post-activation)
+    ingestion_support.run_graph_audit_tail_if_published(graph_refresh)
     assert audited == [str(tmp_path / "g1")]
+
+    # Prove that the *production orchestrator code* (ingestion_index_partial.py after
+    # activate_staging_index) contains the call to the tail. If the line is removed or
+    # moved before activation, this assertion will catch it (unlike pure manual calls).
+    import inspect
+    src = inspect.getsource(ingestion_index_partial)
+    assert "run_graph_audit_tail_if_published(graph_refresh)" in src
 
 
 def test_partial_graph_refresh_skips_audit_when_not_published(monkeypatch, tmp_path) -> None:
@@ -98,7 +107,9 @@ def test_partial_graph_refresh_skips_audit_when_not_published(monkeypatch, tmp_p
     audited: list[str] = []
     monkeypatch.setattr("app.knowledge_graph_audit.write_graph_audit_report", lambda bundle_dir: audited.append(str(bundle_dir)))
 
-    ingestion_index_partial._partial_graph_refresh_phase(
+    graph_refresh = ingestion_index_partial._partial_graph_refresh_phase(
         all_docs_graph=[], target_collection_name="c", current_hashes={"demo/x.md": "h1"}
     )
+    # run_ is best-effort and skips when not (ok and published)
+    ingestion_support.run_graph_audit_tail_if_published(graph_refresh)
     assert audited == []

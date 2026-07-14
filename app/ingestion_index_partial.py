@@ -185,8 +185,6 @@ def _partial_graph_refresh_phase(
     except Exception as exc:  # noqa: BLE001 - graph refresh is best-effort during partial reindex.
         ing.logger.exception("knowledge_graph_refresh_failed")
         graph_refresh = {"ok": False, "error": str(exc), "gate_passed": False, "published": False}
-    # A2 (wave-material-freshness): audit duplicate concepts into the штатный partial reindex tail.
-    ing_sup.run_graph_audit_tail_if_published(graph_refresh)
     return graph_refresh
 
 
@@ -348,6 +346,10 @@ def _build_index_partial(
         target_summary_collection_name,
     )
     apply_index_activation_hooks(reset=False)
+    # A2 (wave-material-freshness): audit duplicate concepts AFTER staging activation —
+    # the helper resolves the active generation (post activate_staging_index).
+    # See tests/test_ingestion_support.py for coverage + source-presence proof of this call site.
+    ing_sup.run_graph_audit_tail_if_published(graph_refresh)
     _partial_finalization_phase(
         collection=collection,
         target_collection_name=target_collection_name,

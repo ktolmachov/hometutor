@@ -185,6 +185,8 @@ def _partial_graph_refresh_phase(
     except Exception as exc:  # noqa: BLE001 - graph refresh is best-effort during partial reindex.
         ing.logger.exception("knowledge_graph_refresh_failed")
         graph_refresh = {"ok": False, "error": str(exc), "gate_passed": False, "published": False}
+    # A2 (wave-material-freshness): audit duplicate concepts into the штатный partial reindex tail.
+    ing_sup.run_graph_audit_tail_if_published(graph_refresh)
     return graph_refresh
 
 

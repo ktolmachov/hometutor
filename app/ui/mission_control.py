@@ -926,18 +926,26 @@ def render_living_konspekt_mission_card() -> None:
 
 
 def build_context_row_segments(
-    *, scope: dict[str, Any] | None, snapshot: dict[str, Any] | None
+    *,
+    scope: dict[str, Any] | None,
+    snapshot: dict[str, Any] | None,
+    graph_freshness_gap: int = 0,
 ) -> list[str]:
     """Pure builder for the Mission Control context row (active course + XP/streak).
 
     Returns zero, one or two plain-text segments (no HTML) — the caller escapes
-    them when rendering. Missing scope/snapshot just omits that segment.
+    them when rendering. Missing scope/snapshot just omits that segment. A positive
+    ``graph_freshness_gap`` adds a human-readable "map lags behind index" notice
+    (analysis #3, wave-material-freshness A1) so the gap is visible on the home
+    screen, not only in a log line.
     """
     segments: list[str] = []
     if scope:
         title = str(scope.get("title") or scope.get("folder_rel") or "Курс")
         title = title.removeprefix("Курс: ")
         segments.append(f"🎯 Курс: {title}")
+    if graph_freshness_gap and graph_freshness_gap > 0:
+        segments.append(f"🗺 Карта отстаёт: {graph_freshness_gap} материалов не на карте")
     if snapshot:
         streak = int(snapshot.get("daily_streak") or 0)
         level_title = str(snapshot.get("level_title") or "?")
@@ -952,7 +960,7 @@ def build_context_row_segments(
     return segments
 
 
-def _render_context_row() -> None:
+def _render_context_row(index_stats: dict | None = None) -> None:
     """Compact one-line context above the SSR hero: active course + XP/streak.
 
     Best-effort: a missing gamification snapshot or active scope just drops that
@@ -965,7 +973,19 @@ def _render_context_row() -> None:
         snapshot = get_snapshot()
     except Exception:  # noqa: BLE001 - context row is optional, never block the home screen
         snapshot = None
-    segments = build_context_row_segments(scope=get_active_scope(), snapshot=snapshot)
+    # A1 (wave-material-freshness): surface "map lags behind index" on the home screen.
+    # Only fetched when there are indexed materials, so cold/empty screens stay cheap.
+    gap = 0
+    if _has_indexed_materials(index_stats):
+        try:
+            from app.graph_publish_status import get_graph_publish_status, graph_freshness_gap
+
+            gap = graph_freshness_gap(index_stats, get_graph_publish_status())
+        except Exception:  # noqa: BLE001 - freshness segment is optional
+            gap = 0
+    segments = build_context_row_segments(
+        scope=get_active_scope(), snapshot=snapshot, graph_freshness_gap=gap
+    )
     if not segments:
         return
     body = "".join(f"<span>{_safe(seg)}</span>" for seg in segments)
@@ -1096,7 +1116,7 @@ def render_mission_control(index_stats: dict | None = None) -> None:
         # Non-cold: the SSR hero must be the first learning block (A2 DoD), so the
         # context row + hero + ≤2 resume cards come before secondary CTAs and the
         # collapsed «Ещё режимы» grid (every entry point stays reachable).
-        _render_context_row()
+        _render_context_row(index_stats)
         _render_ssr_banner(rec, index_stats=index_stats)
         for card_renderer in _NON_COLD_HERO_CARDS:
             card_renderer()

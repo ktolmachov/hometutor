@@ -288,6 +288,8 @@ def _build_index_activation_phase(
         from app.hybrid_retrieval import invalidate_bm25_cache as _inv_bm25
         _inv_bm25(clear_disk=True)
         apply_index_activation_hooks(reset=True)
+    # A2 (wave-material-freshness): audit duplicate concepts into the штатный reindex tail.
+    ing_sup.run_graph_audit_tail_if_published(graph_refresh)
     return graph_refresh, activated_index_state
 
 

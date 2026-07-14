@@ -274,9 +274,12 @@ class Settings(BaseSettings):
     # Итерация 16 tail: инкрементальная переиндексация (хэш контента + копирование векторов из active)
     enable_partial_reindex: bool = True
     # Optional ingest tail: precompute first-session artifacts after index activation.
-    # Disabled by default because it can trigger several slow local LLM calls after
-    # the vector index is already successfully built.
-    enable_first_session_precompute: bool = False
+    # Enabled by default: this is the onboarding promise — the hero shows the course
+    # review right after the first reindex (analysis #2, wave-onboarding-closure). LLM
+    # draft answers are gated to the balanced profile with a healthy local LLM
+    # (should_attempt_draft_answer), so the tail never blocks on an unreachable model;
+    # it is non-fatal and timeout-bounded per candidate.
+    enable_first_session_precompute: bool = True
     # Итерация 16 tail: FAQ-хранилище в Chroma (отдельная коллекция в chroma_db), не линейный скан JSONL
     faq_memory_collection_name: str = "home_rag_faq"
     # При сохранении: если ближайший сосед в FAQ ≥ порога — не добавлять дубликат (косинусная близость)

@@ -25,6 +25,9 @@ def _compact_report(report: dict[str, Any] | None) -> dict[str, Any] | None:
         "scope_hash": str(report.get("scope_hash") or ""),
         "metrics": metrics,
         "fail_reasons": fail_reasons,
+        # A1 (wave-material-freshness): preserve how many source paths the graph was
+        # built from, so graph_freshness_gap can compare against the current index.
+        "source_paths_count": len(report.get("source_paths")) if isinstance(report.get("source_paths"), list) else 0,
     }
 
 
@@ -110,3 +113,24 @@ def get_graph_publish_status(*, staging_limit: int = 3) -> dict[str, Any]:
         "staging": staging,
         "latest_failed_staging": latest_failed_staging,
     }
+
+
+def graph_freshness_gap(
+    index_stats: dict[str, Any] | None, publish_status: dict[str, Any] | None
+) -> int:
+    """How many indexed materials are not yet on the published graph (0 = fresh).
+
+    Compares the count of currently-indexed source files against the ``source_paths``
+    count of the *active* (published) graph bundle. A positive gap means the index
+    moved ahead of the graph (new materials indexed, graph not yet rebuilt/published)
+    — the student should see this on the home screen, not only in a log line.
+    """
+    if not isinstance(index_stats, dict) or not isinstance(publish_status, dict):
+        return 0
+    indexed = sum(1 for f in (index_stats.get("files") or []) if str(f).strip())
+    if indexed <= 0:
+        return 0
+    active = publish_status.get("active") or {}
+    report = active.get("report") or {}
+    on_graph = int(report.get("source_paths_count") or 0)
+    return max(0, indexed - on_graph)

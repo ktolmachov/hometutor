@@ -59,3 +59,46 @@ def test_precompute_tail_derives_candidates_from_indexed_files(monkeypatch, tmp_
 
     ingestion_support.run_first_session_precompute_tail(docs_root=tmp_path / "missing_docs")
     assert set(built) == {"demo", "docs"}
+
+
+def test_partial_graph_refresh_audits_when_published(monkeypatch, tmp_path) -> None:
+    # A2 (wave-material-freshness): штатный partial reindex tail must write the
+    # duplicate-concept audit when the graph is published — previously only the
+    # manual scripts/rebuild_knowledge_graph.py did.
+    from types import SimpleNamespace
+
+    from app import ingestion_index_partial
+
+    monkeypatch.setattr(
+        ingestion_index_partial,
+        "write_staging_knowledge_graph_bundle",
+        lambda *a, **k: {"published": True, "gate_passed": True, "generation_id": "g1"},
+    )
+    monkeypatch.setattr("app.index_registry.get_active_generation_view", lambda: SimpleNamespace(generation_id="g1"))
+    monkeypatch.setattr("app.graph_generation_paths.generation_bundle_dir", lambda gid: tmp_path / gid)
+
+    audited: list[str] = []
+    monkeypatch.setattr("app.knowledge_graph_audit.write_graph_audit_report", lambda bundle_dir: audited.append(str(bundle_dir)))
+
+    graph_refresh = ingestion_index_partial._partial_graph_refresh_phase(
+        all_docs_graph=[], target_collection_name="c", current_hashes={"demo/x.md": "h1"}
+    )
+    assert graph_refresh["published"] is True
+    assert audited == [str(tmp_path / "g1")]
+
+
+def test_partial_graph_refresh_skips_audit_when_not_published(monkeypatch, tmp_path) -> None:
+    from app import ingestion_index_partial
+
+    monkeypatch.setattr(
+        ingestion_index_partial,
+        "write_staging_knowledge_graph_bundle",
+        lambda *a, **k: {"published": False, "gate_passed": False},
+    )
+    audited: list[str] = []
+    monkeypatch.setattr("app.knowledge_graph_audit.write_graph_audit_report", lambda bundle_dir: audited.append(str(bundle_dir)))
+
+    ingestion_index_partial._partial_graph_refresh_phase(
+        all_docs_graph=[], target_collection_name="c", current_hashes={"demo/x.md": "h1"}
+    )
+    assert audited == []

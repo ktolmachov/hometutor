@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from app.graph_publish_status import _compact_report, get_graph_publish_status
+from app.graph_publish_status import _compact_report, get_graph_publish_status, graph_freshness_gap
 
 
 def _write_registry(path: Path, *, active_gid: str, previous_gid: str | None = None) -> None:
@@ -105,3 +105,27 @@ def test_compact_report_dedupes_fail_reasons() -> None:
     )
 
     assert report["fail_reasons"] == ["Конфликт alias: LLM vs LLM"]
+
+
+def test_compact_report_preserves_source_paths_count() -> None:
+    # A1 DoD: _compact_report must not drop source_paths (used by graph_freshness_gap).
+    assert _compact_report({"source_paths": ["demo/a.md", "demo/b.md"], "published": True})["source_paths_count"] == 2
+    assert _compact_report({})["source_paths_count"] == 0
+    assert _compact_report({"source_paths": "not-a-list"})["source_paths_count"] == 0
+
+
+def test_graph_freshness_gap_counts_index_minus_active_graph() -> None:
+    # 3 indexed materials, graph built from 2 → gap 1 (map lags by one).
+    index_stats = {"files": ["demo/a.md", "demo/b.md", "demo/c.md"]}
+    publish_status = {"active": {"report": {"source_paths_count": 2}}}
+    assert graph_freshness_gap(index_stats, publish_status) == 1
+
+
+def test_graph_freshness_gap_zero_when_fresh_or_no_index() -> None:
+    fresh = {"active": {"report": {"source_paths_count": 3}}}
+    assert graph_freshness_gap({"files": ["a.md", "b.md", "c.md"]}, fresh) == 0
+    # No indexed materials → nothing to lag behind.
+    assert graph_freshness_gap({"files": []}, fresh) == 0
+    assert graph_freshness_gap(None, fresh) == 0
+    # Promote skipped: active bundle has no report → whole index looks "not on the map".
+    assert graph_freshness_gap({"files": ["a.md", "b.md"]}, {"active": {"report": None}}) == 2

@@ -296,11 +296,12 @@ def run_first_session_precompute_tail(
     # folders are filtered by is_user_course_folder_rel inside the helper.
     candidates: list[dict[str, Any]] = []
     try:
-        from app.config import DATA_DIR
         from app.ingestion_content_state import build_file_manifest
         import app.ingestion as _ingestion_mod  # lazy: avoid import cycle at module load
 
-        manifest = build_file_manifest(DATA_DIR, _ingestion_mod.get_doc_supported_exts())
+        # Use ing.DATA_DIR (not config.DATA_DIR) so test isolation that patches
+        # app.ingestion.DATA_DIR is respected — same convention as the call sites.
+        manifest = build_file_manifest(_ingestion_mod.DATA_DIR, _ingestion_mod.get_doc_supported_exts())
         candidates = list_course_candidates_from_index((manifest.get("files") or {}).keys())
     except Exception as exc:  # noqa: BLE001 - tail must never abort ingest finalize.
         log.warning("first_session_manifest_failed | error=%s", exc)
@@ -322,3 +323,25 @@ def run_first_session_precompute_tail(
             log.info("first_session_precompute_ok | course_id=%s", folder_rel)
         except Exception as exc:  # noqa: BLE001 - per-candidate failure is non-fatal.
             log.warning("first_session_precompute_failed | course_id=%s | error=%s", folder_rel, exc)
+
+
+def run_graph_audit_tail_if_published(graph_refresh: dict[str, Any]) -> None:
+    """A2 (wave-material-freshness): audit duplicate concepts when a graph was published.
+
+    Shared best-effort tail for full and partial reindex — previously only the manual
+    ``scripts/rebuild_knowledge_graph.py`` caught duplicate concepts. Runs only when a
+    graph was actually published, on the active generation's bundle dir; never blocks
+    index activation (mirrors the surrounding graph_refresh try/except).
+    """
+    if not (graph_refresh.get("ok") and graph_refresh.get("published")):
+        return
+    try:
+        from app.graph_generation_paths import generation_bundle_dir
+        from app.index_registry import get_active_generation_view
+        from app.knowledge_graph_audit import write_graph_audit_report
+
+        gid = get_active_generation_view().generation_id
+        if gid:
+            write_graph_audit_report(generation_bundle_dir(gid))
+    except Exception as exc:  # noqa: BLE001 - audit is best-effort, never blocks activation
+        logging.getLogger(__name__).warning("graph_audit_tail_failed | error=%s", exc)

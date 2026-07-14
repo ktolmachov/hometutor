@@ -120,6 +120,8 @@ def render_tutor_structured_response(
         next_action=payload.get("next_action"),
     )
 
+    _render_save_tutor_answer_as_flashcard(payload, meta, message_sources, msg_idx, session_id)
+
     if bool(meta.get("suppress_smart_study_overlay")):
         return
 
@@ -201,5 +203,107 @@ def render_tutor_structured_response(
         )
     except Exception:  # noqa: BLE001 - robust UI render, do not break tutor responses on smart study overlay failures
         pass
+
+
+_TUTOR_CARD_DECK_NAME = "Из ответов тьютора"
+_TUTOR_CARD_DECK_SOURCE_TYPE = "tutor"
+
+
+def _resolve_answer_source_tag(message_sources: list[dict[str, Any]] | None) -> str:
+    """Pick a real material path from the answer sources for the ``source:`` tag."""
+    if not isinstance(message_sources, list):
+        return ""
+    _SENTINELS = {"flashcard_front_back", "ui", "interactive_quiz"}
+    for src in message_sources:
+        if not isinstance(src, dict):
+            continue
+        rel = str(
+            src.get("relative_path")
+            or src.get("source_path")
+            or src.get("source_identifier")
+            or src.get("file_name")
+            or src.get("source")
+            or ""
+        ).strip()
+        if rel and rel not in _SENTINELS:
+            return f"source:{rel}"
+    return ""
+
+
+def _build_tutor_card_fields(
+    payload: dict[str, Any],
+    meta: dict[str, Any],
+    message_sources: list[dict[str, Any]] | None,
+    session_state: dict[str, Any],
+) -> tuple[str, str, str | None] | None:
+    """Pure: build ``(front, back, tags)`` for a tutor-answer flashcard, or None.
+
+    front = the student's question (or current topic), back = teaching_summary, tags
+    carry ``concept:`` and ``source:`` so the card keeps provenance and lands in the
+    normal review deck.
+    """
+    back = str(payload.get("teaching_summary") or "").strip()
+    if not back:
+        return None
+    last_answer = session_state.get("last_answer")
+    front = ""
+    if isinstance(last_answer, dict):
+        front = str(last_answer.get("question") or "").strip()
+    if not front:
+        front = str(session_state.get("current_topic") or "").strip()
+    if not front:
+        return None
+
+    ost = meta.get("orchestration_state") if isinstance(meta.get("orchestration_state"), dict) else {}
+    lt = meta.get("learner_trace") if isinstance(meta.get("learner_trace"), dict) else {}
+    concept = (
+        str(lt.get("concept") or "").strip()
+        or str(ost.get("current_concept") or "").strip()
+        or str(session_state.get("current_topic") or "").strip()
+    )
+    tag_parts = [
+        part for part in (f"concept:{concept}" if concept else "", _resolve_answer_source_tag(message_sources)) if part
+    ]
+    return front, back, ", ".join(tag_parts) or None
+
+
+def _render_save_tutor_answer_as_flashcard(
+    payload: dict[str, Any],
+    meta: dict[str, Any],
+    message_sources: list[dict[str, Any]] | None,
+    msg_idx: int,
+    session_id: str,
+) -> None:
+    """B1 (knowledge_fate_memory_loop): "→ в карточку" from the tutor answer.
+
+    Closes the memory loop in the UI — previously ``add_flashcard`` had no caller in
+    ``app/ui/*`` (only the API router and the agent session saved cards). Uses the
+    existing ``add_flashcard`` (no parallel insert path) into a single get-or-create
+    "Из ответов тьютора" deck. Best-effort: never breaks the tutor response.
+    """
+    fields = _build_tutor_card_fields(payload, meta, message_sources, st.session_state)
+    if fields is None:
+        return
+    front, back, tags = fields
+
+    if st.button("📥 Сохранить как карточку", key=f"tutor_save_card_{session_id}_{msg_idx}"):
+        try:
+            from app.user_state_flashcards import add_flashcard, create_flashcard_deck, list_flashcard_decks
+
+            deck_id = next(
+                (
+                    int(d["id"])
+                    for d in list_flashcard_decks()
+                    if str(d.get("name") or "") == _TUTOR_CARD_DECK_NAME
+                    and str(d.get("source_type") or "") == _TUTOR_CARD_DECK_SOURCE_TYPE
+                ),
+                None,
+            )
+            if deck_id is None:
+                deck_id = create_flashcard_deck(_TUTOR_CARD_DECK_NAME, source_type=_TUTOR_CARD_DECK_SOURCE_TYPE)
+            add_flashcard(deck_id, front[:500], back, tags=tags)
+            st.success("Карточка сохранена в колоду «Из ответов тьютора».")
+        except Exception:  # noqa: BLE001 - save-card is best-effort, never breaks the tutor response
+            st.warning("Не удалось сохранить карточку.")
 
 

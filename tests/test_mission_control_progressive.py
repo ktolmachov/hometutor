@@ -233,6 +233,14 @@ def test_context_row_segments_degrade_when_missing() -> None:
     assert "Стрик 1" in only_xp[0]
 
 
+def test_context_row_segments_show_freshness_gap_when_map_lags() -> None:
+    # A1 (wave-material-freshness): a positive gap surfaces a human-readable notice.
+    segs = build_context_row_segments(scope=None, snapshot=None, graph_freshness_gap=3)
+    assert any("Карта отстаёт" in s and "3" in s for s in segs)
+    # gap 0 (fresh) must not add noise.
+    assert build_context_row_segments(scope=None, snapshot=None, graph_freshness_gap=0) == []
+
+
 def test_non_cold_hero_cards_at_most_two() -> None:
     """A2 DoD: at most two resume cards above «Ещё режимы» for non-cold users."""
     from app.ui.mission_control import _NON_COLD_HERO_CARDS

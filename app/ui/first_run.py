@@ -94,7 +94,7 @@ def render_empty_index_hero(index_stats: dict | None) -> bool:
         st.caption(f"Положите материалы сюда: `{data_path}`")
         if st.button("Переиндексировать", key="first_run_folder_reindex_btn", type="secondary"):
             _track_door("folder")
-            _start_reindex(reset=False)
+            _start_reindex(reset=True)
             st.rerun()
 
     return True

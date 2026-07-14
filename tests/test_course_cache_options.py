@@ -38,6 +38,11 @@ def test_build_mission_control_course_options_skips_technical_folders(monkeypatc
 def test_build_mission_control_course_options_keeps_uploaded_course_pack(monkeypatch):
     monkeypatch.setattr("app.course_cache.list_course_candidates", lambda: [])
     index_stats = {
+        "folder_rel_options": [
+            "uploads/hometutor_101",
+            "uploads\\hometutor_101\\konspekts",
+            "uploads\\hometutor_101\\lectures",
+        ],
         "files": [
             "uploads/hometutor_101/README.md",
             "uploads/hometutor_101/lectures/urok_1.md",

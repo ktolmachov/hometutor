@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 import streamlit as st
+from streamlit.errors import StreamlitAPIException
 
 from app.ui.feature_registry import FEATURES
 from app.ui.theme_presets import (
@@ -174,3 +175,13 @@ def render_control_panel_dialog() -> None:
         from app.ui.rag_settings_panel import render_rag_settings_section
 
         render_rag_settings_section()
+
+
+def open_control_panel_dialog() -> None:
+    """Open the control panel without crashing if another Streamlit dialog is active."""
+    try:
+        render_control_panel_dialog()
+    except StreamlitAPIException as exc:
+        if "Only one dialog is allowed" not in str(exc):
+            raise
+        st.warning("Закройте текущее всплывающее окно и откройте настройки ещё раз.")

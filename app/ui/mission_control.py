@@ -11,7 +11,7 @@ import streamlit as st
 
 from app.config import get_settings
 from app import user_state
-from app.course_cache import build_mission_control_course_options
+from app.course_cache import build_mission_control_course_options, collapse_nested_course_folder_rels
 from app.course_folder_filter import is_user_course_folder_rel
 from app.smart_study_router import (
     SmartStudyRecommendation,
@@ -198,15 +198,32 @@ def _is_cold_user(due_count: int | None, index_stats: dict | None = None) -> boo
 def _course_options_from_index_stats(index_stats: dict | None) -> tuple[CourseOption, ...]:
     if not isinstance(index_stats, dict):
         return ()
-    folders = [
-        str(x).strip()
+    explicit_folders = [
+        str(x).strip().replace("\\", "/").strip("/")
         for x in index_stats.get("folder_rel_options") or []
         if is_user_course_folder_rel(str(x).strip())
     ]
     files = [str(x).strip() for x in index_stats.get("files") or [] if str(x).strip()]
-    if not folders:
-        inferred = sorted({path.split("/", 1)[0].split("\\", 1)[0] for path in files if path})
-        folders = [folder for folder in inferred if is_user_course_folder_rel(folder)]
+    inferred_set: set[str] = set()
+    has_upload_pack = False
+    has_root_upload_files = False
+    for path in files:
+        normalized = path.replace("\\", "/")
+        parts = normalized.split("/")
+        if len(parts) >= 3 and parts[0] == "uploads":
+            has_upload_pack = True
+            inferred_set.add("/".join(parts[:2]))
+        elif len(parts) == 2 and parts[0] == "uploads":
+            has_root_upload_files = True
+        elif parts and parts[0] and parts[0] != "uploads":
+            inferred_set.add(parts[0])
+    if has_root_upload_files and not has_upload_pack:
+        inferred_set.add("uploads")
+    folders = collapse_nested_course_folder_rels(
+        folder
+        for folder in [*explicit_folders, *inferred_set]
+        if not (folder == "uploads" and has_upload_pack) and is_user_course_folder_rel(folder)
+    )
     options: list[CourseOption] = []
     for folder in folders:
         prefix_slash = f"{folder}/"
@@ -1004,9 +1021,9 @@ def _render_context_row(index_stats: dict | None = None) -> None:
 
 def _render_configure_ui_button() -> None:
     if st.button("⚙️ Настроить интерфейс", key="mission_control_configure_ui"):
-        from app.ui.control_panel import render_control_panel_dialog
+        from app.ui.control_panel import open_control_panel_dialog
 
-        render_control_panel_dialog()
+        open_control_panel_dialog()
 
 
 # A2: resume/secondary cards shown above «Ещё режимы» for non-cold users.

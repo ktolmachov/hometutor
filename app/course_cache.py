@@ -520,6 +520,25 @@ def build_mission_control_course_options(index_stats: dict | None) -> list[dict[
     return merged
 
 
+def collapse_nested_course_folder_rels(folders: Iterable[str]) -> list[str]:
+    """Return course folder rels with child folders removed when a parent exists."""
+    normalized = sorted(
+        {
+            str(folder).strip().replace("\\", "/").strip("/")
+            for folder in folders
+            if str(folder).strip()
+        }
+    )
+    normalized_set = set(normalized)
+    collapsed: list[str] = []
+    for folder in normalized:
+        parts = folder.split("/")
+        if any("/".join(parts[:idx]) in normalized_set for idx in range(1, len(parts))):
+            continue
+        collapsed.append(folder)
+    return collapsed
+
+
 def list_course_candidates(
     *,
     docs_root: Path | None = None,
@@ -564,14 +583,22 @@ def list_course_candidates_from_index(
     files = [str(p).strip().replace("\\", "/") for p in (indexed_rel_files or []) if str(p).strip()]
     candidates: list[dict[str, Any]] = []
     folders: set[str] = set()
+    has_upload_pack = False
+    has_root_upload_files = False
     for f in files:
         if not f:
             continue
         parts = f.split("/")
         if len(parts) >= 3 and parts[0] == "uploads":
+            has_upload_pack = True
             folders.add("/".join(parts[:2]))
-        folders.add(parts[0])
-    for folder in sorted(folders):
+        elif len(parts) == 2 and parts[0] == "uploads":
+            has_root_upload_files = True
+        elif parts[0] != "uploads":
+            folders.add(parts[0])
+    if has_root_upload_files and not has_upload_pack:
+        folders.add("uploads")
+    for folder in collapse_nested_course_folder_rels(folders):
         if not is_user_course_folder_rel(folder):
             continue
         source_paths = sorted({f for f in files if f == folder or f.startswith(folder + "/")})
@@ -909,19 +936,24 @@ def _course_options_from_index_stats(index_stats: dict | None) -> list[dict[str,
     ]
     files = [str(x).strip() for x in index_stats.get("files") or [] if str(x).strip()]
     inferred_set: set[str] = set()
+    has_upload_pack = False
+    has_root_upload_files = False
     for path in files:
         normalized = path.replace("\\", "/")
         parts = normalized.split("/")
         if len(parts) >= 3 and parts[0] == "uploads":
+            has_upload_pack = True
             inferred_set.add("/".join(parts[:2]))
+        elif len(parts) == 2 and parts[0] == "uploads":
+            has_root_upload_files = True
         elif parts and parts[0] and parts[0] != "uploads":
             inferred_set.add(parts[0])
-    folders = sorted(
-        {
-            folder
-            for folder in [*explicit_folders, *inferred_set]
-            if folder != "uploads" and is_user_course_folder_rel(folder)
-        }
+    if has_root_upload_files and not has_upload_pack:
+        inferred_set.add("uploads")
+    folders = collapse_nested_course_folder_rels(
+        folder
+        for folder in [*explicit_folders, *inferred_set]
+        if not (folder == "uploads" and has_upload_pack) and is_user_course_folder_rel(folder)
     )
     options: list[dict[str, Any]] = []
     for folder in folders:

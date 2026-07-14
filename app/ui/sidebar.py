@@ -583,9 +583,9 @@ def render_sidebar(index_stats: dict | None):
             help_text=sidebar_focus_view_help_ru(),
         )
         if st.button("⚙️ Настроить интерфейс", key="sidebar_control_panel", width="stretch"):
-            from app.ui.control_panel import render_control_panel_dialog
+            from app.ui.control_panel import open_control_panel_dialog
 
-            render_control_panel_dialog()
+            open_control_panel_dialog()
         if st.session_state["history"]:
             for entry in st.session_state["history"][:8]:
                 preview = (entry.get("question") or "")[:58]

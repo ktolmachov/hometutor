@@ -300,9 +300,9 @@ def _render_hidden_nav_expander() -> None:
                 st.session_state[PENDING_CURRENT_VIEW_KEY] = _view
                 st.rerun()
         if st.button("Настроить интерфейс", key="hidden_nav_control_panel", width="stretch"):
-            from app.ui.control_panel import render_control_panel_dialog
+            from app.ui.control_panel import open_control_panel_dialog
 
-            render_control_panel_dialog()
+            open_control_panel_dialog()
 
 
 if selected_view != HOME_VIEW:

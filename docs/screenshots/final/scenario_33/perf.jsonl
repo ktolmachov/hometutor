@@ -1,0 +1,3 @@
+{"scenario_id":"scenario_33","step":1,"slug":"01_kg_panel_download_button","file":"01_kg_panel_download_button.png","timings_ms":{"wait":818,"streamlit_ready":13,"screenshot":107,"total":938},"taken_at":"2026-07-14T18:01:49.276Z"}
+{"scenario_id":"scenario_33","step":2,"slug":"02_downloaded_html_opened_standalone","file":"02_downloaded_html_opened_standalone.png","timings_ms":{"wait":815,"streamlit_ready":16,"screenshot":1120,"total":1951},"taken_at":"2026-07-14T18:01:51.227Z"}
+{"scenario_id":"scenario_33","step":3,"slug":"03_offline_share_moment","file":"03_offline_share_moment.png","timings_ms":{"wait":806,"streamlit_ready":12,"screenshot":96,"total":914},"taken_at":"2026-07-14T18:01:52.141Z"}

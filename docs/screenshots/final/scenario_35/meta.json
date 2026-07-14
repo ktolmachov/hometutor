@@ -1,0 +1,109 @@
+{
+  "scenario_id": "scenario_35",
+  "started_at": "2026-07-14T18:01:58.078Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_offline_status_diagnostics",
+      "caption": "Диагностика: локальный LLM endpoint и offline-статус",
+      "narration": "Система прозрачно показывает, какой endpoint используется и достижим ли он.",
+      "file": "01_offline_status_diagnostics.png",
+      "taken_at": "2026-07-14T18:02:00.502Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 824,
+        "streamlit_ready": 12,
+        "screenshot": 201,
+        "total": 1037
+      }
+    },
+    {
+      "step": 2,
+      "slug": "02_offline_answer_with_source",
+      "caption": "Ответ без сети: retrieval из Chroma + источник ответа",
+      "narration": "Поиск по локальному индексу, источник ответа виден явно, а не скрыт.",
+      "file": "02_offline_answer_with_source.png",
+      "taken_at": "2026-07-14T18:02:01.426Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 810,
+        "streamlit_ready": 12,
+        "screenshot": 102,
+        "total": 924
+      }
+    },
+    {
+      "step": 3,
+      "slug": "03_offline_srs_review",
+      "caption": "SM-2 повторение карточек полностью офлайн",
+      "narration": "Оценка «Легко/Хорошо/Забыл» и пересчёт интервала — чистый алгоритм, без LLM.",
+      "file": "03_offline_srs_review.png",
+      "taken_at": "2026-07-14T18:02:02.356Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 808,
+        "streamlit_ready": 14,
+        "screenshot": 108,
+        "total": 930
+      }
+    },
+    {
+      "step": 4,
+      "slug": "04_network_tab_clean",
+      "caption": "Network tab: ноль внешних запросов",
+      "narration": "Вкладка сети пуста (кроме localhost): полная изоляция.",
+      "file": "04_network_tab_clean.png",
+      "taken_at": "2026-07-14T18:02:03.276Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 811,
+        "streamlit_ready": 11,
+        "screenshot": 98,
+        "total": 920
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-07-14T18:02:03.276Z",
+  "total_duration_ms": 5198,
+  "shot_count": 4,
+  "timings_summary": {
+    "wait": {
+      "sum": 3253,
+      "avg": 813,
+      "p95": 824
+    },
+    "streamlit_ready": {
+      "sum": 49,
+      "avg": 12,
+      "p95": 14
+    },
+    "screenshot": {
+      "sum": 509,
+      "avg": 127,
+      "p95": 201
+    },
+    "total": {
+      "sum": 3811,
+      "avg": 953,
+      "p95": 1037
+    }
+  }
+}

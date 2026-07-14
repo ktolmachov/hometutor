@@ -1,0 +1,91 @@
+{
+  "scenario_id": "scenario_33",
+  "started_at": "2026-07-14T18:01:46.977Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_kg_panel_download_button",
+      "caption": "Панель Knowledge Graph: кнопка «Скачать живую карту (HTML)»",
+      "narration": "Кнопка стоит прямо под интерактивным графом — рядом со сводкой концептов.",
+      "file": "01_kg_panel_download_button.png",
+      "taken_at": "2026-07-14T18:01:49.276Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 818,
+        "streamlit_ready": 13,
+        "screenshot": 107,
+        "total": 938
+      }
+    },
+    {
+      "step": 2,
+      "slug": "02_downloaded_html_opened_standalone",
+      "caption": "knowledge_graph.html открыт отдельно в браузере",
+      "narration": "Тот же граф, та же интерактивность — но уже не внутри Streamlit, а как обычный файл.",
+      "file": "02_downloaded_html_opened_standalone.png",
+      "taken_at": "2026-07-14T18:01:51.227Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 815,
+        "streamlit_ready": 16,
+        "screenshot": 1120,
+        "total": 1951
+      }
+    },
+    {
+      "step": 3,
+      "slug": "03_offline_share_moment",
+      "caption": "Файл работает без сети и без приложения",
+      "narration": "Отключил интернет, открыл файл заново — граф на месте: можно отправить кому угодно.",
+      "file": "03_offline_share_moment.png",
+      "taken_at": "2026-07-14T18:01:52.141Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 806,
+        "streamlit_ready": 12,
+        "screenshot": 96,
+        "total": 914
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-07-14T18:01:52.141Z",
+  "total_duration_ms": 5164,
+  "shot_count": 3,
+  "timings_summary": {
+    "wait": {
+      "sum": 2439,
+      "avg": 813,
+      "p95": 818
+    },
+    "streamlit_ready": {
+      "sum": 41,
+      "avg": 14,
+      "p95": 16
+    },
+    "screenshot": {
+      "sum": 1323,
+      "avg": 441,
+      "p95": 1120
+    },
+    "total": {
+      "sum": 3803,
+      "avg": 1268,
+      "p95": 1951
+    }
+  }
+}

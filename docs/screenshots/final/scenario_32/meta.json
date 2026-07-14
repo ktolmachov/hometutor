@@ -1,0 +1,91 @@
+{
+  "scenario_id": "scenario_32",
+  "started_at": "2026-07-14T18:01:42.006Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_hf_spaces_public_url",
+      "caption": "Публичная ссылка HF Space: README и статус",
+      "narration": "Открывает ссылку — сразу видно, что это работающий, а не спящий Space.",
+      "file": "01_hf_spaces_public_url.png",
+      "taken_at": "2026-07-14T18:01:44.375Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 817,
+        "streamlit_ready": 10,
+        "screenshot": 117,
+        "total": 944
+      }
+    },
+    {
+      "step": 2,
+      "slug": "02_quick_signup",
+      "caption": "Короткая регистрация: email + пароль",
+      "narration": "AUTH_ENABLED=true — обычная быстрая регистрация, без ключей и настроек.",
+      "file": "02_quick_signup.png",
+      "taken_at": "2026-07-14T18:01:45.949Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 818,
+        "streamlit_ready": 13,
+        "screenshot": 742,
+        "total": 1573
+      }
+    },
+    {
+      "step": 3,
+      "slug": "03_demo_course_first_answer",
+      "caption": "Первый ответ по предзагруженному демо-курсу",
+      "narration": "Демо-корпус уже в индексе — вопрос и ответ с источниками сразу после входа.",
+      "file": "03_demo_course_first_answer.png",
+      "taken_at": "2026-07-14T18:01:46.890Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 817,
+        "streamlit_ready": 14,
+        "screenshot": 109,
+        "total": 940
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-07-14T18:01:46.890Z",
+  "total_duration_ms": 4884,
+  "shot_count": 3,
+  "timings_summary": {
+    "wait": {
+      "sum": 2452,
+      "avg": 817,
+      "p95": 818
+    },
+    "streamlit_ready": {
+      "sum": 37,
+      "avg": 12,
+      "p95": 14
+    },
+    "screenshot": {
+      "sum": 968,
+      "avg": 323,
+      "p95": 742
+    },
+    "total": {
+      "sum": 3457,
+      "avg": 1152,
+      "p95": 1573
+    }
+  }
+}

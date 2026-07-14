@@ -1,0 +1,4 @@
+{"scenario_id":"scenario_34","step":1,"slug":"01_video_session_started","file":"01_video_session_started.png","timings_ms":{"wait":826,"streamlit_ready":13,"screenshot":106,"total":945},"taken_at":"2026-07-14T18:01:54.561Z"}
+{"scenario_id":"scenario_34","step":2,"slug":"02_interrupted_session_state","file":"02_interrupted_session_state.png","timings_ms":{"wait":812,"streamlit_ready":14,"screenshot":754,"total":1580},"taken_at":"2026-07-14T18:01:56.142Z"}
+{"scenario_id":"scenario_34","step":3,"slug":"03_resume_video_card","file":"03_resume_video_card.png","timings_ms":{"wait":807,"streamlit_ready":11,"screenshot":97,"total":915},"taken_at":"2026-07-14T18:01:57.058Z"}
+{"scenario_id":"scenario_34","step":4,"slug":"04_qa_after_video_segment","file":"04_qa_after_video_segment.png","timings_ms":{"wait":808,"streamlit_ready":18,"screenshot":106,"total":932},"taken_at":"2026-07-14T18:01:57.990Z"}

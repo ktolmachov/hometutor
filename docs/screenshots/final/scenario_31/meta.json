@@ -1,0 +1,91 @@
+{
+  "scenario_id": "scenario_31",
+  "started_at": "2026-07-14T18:01:36.886Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_llm_local_banner_reachable_false",
+      "caption": "Баннер: локальная LLM недоступна",
+      "narration": "«Локальная LLM недоступна — SSR работает в template-режиме»: endpoint не отвечает, карточка формируется по шаблону без персонализации.",
+      "file": "01_llm_local_banner_reachable_false.png",
+      "taken_at": "2026-07-14T18:01:39.330Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 817,
+        "streamlit_ready": 12,
+        "screenshot": 118,
+        "total": 947
+      }
+    },
+    {
+      "step": 2,
+      "slug": "02_banner_action_hint",
+      "caption": "Конкретное действие: какой сервер запустить и какую модель загрузить",
+      "narration": "Баннер называет base_url и модель — запустите LM Studio и загрузите именно её.",
+      "file": "02_banner_action_hint.png",
+      "taken_at": "2026-07-14T18:01:40.981Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 812,
+        "streamlit_ready": 18,
+        "screenshot": 820,
+        "total": 1650
+      }
+    },
+    {
+      "step": 3,
+      "slug": "03_diagnostics_expander",
+      "caption": "Раскрытые детали диагностики: base_url и модель одной строкой",
+      "narration": "Expander «Подробности диагностики local LLM» — тот же base_url/model в code-блоке.",
+      "file": "03_diagnostics_expander.png",
+      "taken_at": "2026-07-14T18:01:41.911Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 819,
+        "streamlit_ready": 12,
+        "screenshot": 98,
+        "total": 929
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-07-14T18:01:41.911Z",
+  "total_duration_ms": 5025,
+  "shot_count": 3,
+  "timings_summary": {
+    "wait": {
+      "sum": 2448,
+      "avg": 816,
+      "p95": 819
+    },
+    "streamlit_ready": {
+      "sum": 42,
+      "avg": 14,
+      "p95": 18
+    },
+    "screenshot": {
+      "sum": 1036,
+      "avg": 345,
+      "p95": 820
+    },
+    "total": {
+      "sum": 3526,
+      "avg": 1175,
+      "p95": 1650
+    }
+  }
+}

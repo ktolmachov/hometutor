@@ -1,0 +1,109 @@
+{
+  "scenario_id": "scenario_34",
+  "started_at": "2026-07-14T18:01:52.228Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_video_session_started",
+      "caption": "Старт видео-сессии: плеер + конспект",
+      "narration": "Пользователь открывает лекцию; система фиксирует таймкод 00:00.",
+      "file": "01_video_session_started.png",
+      "taken_at": "2026-07-14T18:01:54.561Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 826,
+        "streamlit_ready": 13,
+        "screenshot": 106,
+        "total": 945
+      }
+    },
+    {
+      "step": 2,
+      "slug": "02_interrupted_session_state",
+      "caption": "Сессия прервана: таймкод 23:15 сохранён",
+      "narration": "После выхода learner state хранит позицию — 23:15, тема, ключевые тезисы.",
+      "file": "02_interrupted_session_state.png",
+      "taken_at": "2026-07-14T18:01:56.142Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 812,
+        "streamlit_ready": 14,
+        "screenshot": 754,
+        "total": 1580
+      }
+    },
+    {
+      "step": 3,
+      "slug": "03_resume_video_card",
+      "caption": "Resume-карта с таймкодом на главном экране",
+      "narration": "При возврате — «Продолжить с 23:15» + конспект 3–5 ключевых тезисов.",
+      "file": "03_resume_video_card.png",
+      "taken_at": "2026-07-14T18:01:57.058Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 807,
+        "streamlit_ready": 11,
+        "screenshot": 97,
+        "total": 915
+      }
+    },
+    {
+      "step": 4,
+      "slug": "04_qa_after_video_segment",
+      "caption": "Контекст готов: вопросы по просмотренному фрагменту",
+      "narration": "Система знает, о чём был фрагмент, и может ответить на вопросы.",
+      "file": "04_qa_after_video_segment.png",
+      "taken_at": "2026-07-14T18:01:57.990Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 808,
+        "streamlit_ready": 18,
+        "screenshot": 106,
+        "total": 932
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-07-14T18:01:57.990Z",
+  "total_duration_ms": 5762,
+  "shot_count": 4,
+  "timings_summary": {
+    "wait": {
+      "sum": 3253,
+      "avg": 813,
+      "p95": 826
+    },
+    "streamlit_ready": {
+      "sum": 56,
+      "avg": 14,
+      "p95": 18
+    },
+    "screenshot": {
+      "sum": 1063,
+      "avg": 266,
+      "p95": 754
+    },
+    "total": {
+      "sum": 4372,
+      "avg": 1093,
+      "p95": 1580
+    }
+  }
+}

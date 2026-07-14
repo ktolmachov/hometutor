@@ -1,0 +1,3 @@
+{"scenario_id":"scenario_31","step":1,"slug":"01_llm_local_banner_reachable_false","file":"01_llm_local_banner_reachable_false.png","timings_ms":{"wait":817,"streamlit_ready":12,"screenshot":118,"total":947},"taken_at":"2026-07-14T18:01:39.330Z"}
+{"scenario_id":"scenario_31","step":2,"slug":"02_banner_action_hint","file":"02_banner_action_hint.png","timings_ms":{"wait":812,"streamlit_ready":18,"screenshot":820,"total":1650},"taken_at":"2026-07-14T18:01:40.981Z"}
+{"scenario_id":"scenario_31","step":3,"slug":"03_diagnostics_expander","file":"03_diagnostics_expander.png","timings_ms":{"wait":819,"streamlit_ready":12,"screenshot":98,"total":929},"taken_at":"2026-07-14T18:01:41.911Z"}

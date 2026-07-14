@@ -1,0 +1,4 @@
+{"scenario_id":"scenario_35","step":1,"slug":"01_offline_status_diagnostics","file":"01_offline_status_diagnostics.png","timings_ms":{"wait":824,"streamlit_ready":12,"screenshot":201,"total":1037},"taken_at":"2026-07-14T18:02:00.502Z"}
+{"scenario_id":"scenario_35","step":2,"slug":"02_offline_answer_with_source","file":"02_offline_answer_with_source.png","timings_ms":{"wait":810,"streamlit_ready":12,"screenshot":102,"total":924},"taken_at":"2026-07-14T18:02:01.426Z"}
+{"scenario_id":"scenario_35","step":3,"slug":"03_offline_srs_review","file":"03_offline_srs_review.png","timings_ms":{"wait":808,"streamlit_ready":14,"screenshot":108,"total":930},"taken_at":"2026-07-14T18:02:02.356Z"}
+{"scenario_id":"scenario_35","step":4,"slug":"04_network_tab_clean","file":"04_network_tab_clean.png","timings_ms":{"wait":811,"streamlit_ready":11,"screenshot":98,"total":920},"taken_at":"2026-07-14T18:02:03.276Z"}

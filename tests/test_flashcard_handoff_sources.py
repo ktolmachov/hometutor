@@ -24,7 +24,7 @@ def test_flashcard_handoff_seed_attaches_section_and_video_actions(monkeypatch) 
         lambda sections, query: section,
     )
     monkeypatch.setattr(
-        "app.obsidian_export.obsidian_uri",
+        "app.obsidian_export.obsidian_uri_if_available",
         lambda path, heading_text=None: "obsidian://open",
     )
     monkeypatch.setattr(

@@ -447,8 +447,7 @@ class TestObsidianUriHeading:
         target = tmp_path / "lecture.md"
         uri = obsidian_uri(target, heading_text="🎯 Главная мысль")
         assert uri.startswith("obsidian://open?path=")
-        assert "%23" in uri
-        assert "#" not in uri.split("%23", 1)[0]  # no raw '#' before the encoded one
+        assert "%23" not in uri  # path= fallback must not treat "#heading" as part of filename
 
     def test_no_heading_keeps_legacy_uri(self, tmp_path: Path):
         from app.obsidian_export import obsidian_uri
@@ -457,7 +456,7 @@ class TestObsidianUriHeading:
         uri = obsidian_uri(target)
         assert "%23" not in uri
 
-    def test_existing_file_prefers_absolute_path_even_with_vault_name(
+    def test_existing_file_uses_vault_file_when_vault_name_is_configured(
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
@@ -468,17 +467,34 @@ class TestObsidianUriHeading:
             "app.obsidian_export.get_settings",
             lambda: SimpleNamespace(obsidian_vault_name="data"),
         )
+        monkeypatch.setattr("app.obsidian_export.vault_obsidian_root", lambda: tmp_path)
         target = tmp_path / "uploads" / "hometutor_101" / "README.md"
         target.parent.mkdir(parents=True)
         target.write_text("# hometutor 101\n", encoding="utf-8")
 
         uri = obsidian_uri(target, heading_text="Dogfood")
 
-        assert uri.startswith("obsidian://open?path=")
-        assert "vault=data" not in uri
-        assert "uploads" in uri
-        assert "hometutor_101" in uri
+        assert uri.startswith("obsidian://open?vault=data&file=")
+        assert "uploads%2Fhometutor_101%2FREADME.md" in uri
         assert "%23Dogfood" in uri
+
+    def test_safe_uri_returns_none_for_file_outside_configured_vault(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ):
+        from app.obsidian_export import obsidian_uri_if_available
+
+        monkeypatch.setattr(
+            "app.obsidian_export.get_settings",
+            lambda: SimpleNamespace(obsidian_vault_name="data"),
+        )
+        monkeypatch.setattr("app.obsidian_export.vault_obsidian_root", lambda: tmp_path / "obsidian" / "data")
+        target = tmp_path / "runtime" / "data" / "uploads" / "hometutor_101" / "README.md"
+        target.parent.mkdir(parents=True)
+        target.write_text("# hometutor 101\n", encoding="utf-8")
+
+        assert obsidian_uri_if_available(target, heading_text="Dogfood") is None
 
 
 class TestVscodeUri:

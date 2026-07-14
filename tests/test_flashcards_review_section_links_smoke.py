@@ -45,9 +45,11 @@ def _app() -> None:
 
 @pytest.fixture(autouse=True)
 def _stub_lookups(monkeypatch: pytest.MonkeyPatch) -> None:
+    import app.obsidian_export as obsidian_export
     import app.section_index as section_index
     import app.ui.flashcards_review_view as review_view
 
+    monkeypatch.setattr(obsidian_export, "obsidian_uri_if_available", lambda path, heading_text=None: "obsidian://open")
     monkeypatch.setattr(review_view, "source_path_from_card", lambda card: "docs/lecture.txt")
     monkeypatch.setattr(section_index, "build_section_index", lambda path: _fake_sections())
 

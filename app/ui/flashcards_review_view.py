@@ -669,7 +669,7 @@ def _render_card_section_links(card: dict[str, Any], idx: int) -> None:
         return
     try:
         from app import workbench_service
-        from app.obsidian_export import obsidian_uri, vscode_uri
+        from app.obsidian_export import obsidian_uri_if_available, vscode_uri
         from app.section_index import best_section_for, build_section_index
 
         sections = build_section_index(source_path)
@@ -684,8 +684,11 @@ def _render_card_section_links(card: dict[str, Any], idx: int) -> None:
     if section is None:
         return
 
+    obsidian_link = obsidian_uri_if_available(section.konspekt_md_abs, heading_text=section.heading_text)
+    vscode_link = vscode_uri(section.konspekt_md_abs, line=section.line_start)
+
     # Obsidian-якорь откроет ПЕРВЫЙ одноимённый heading — при дублях честно подсказываем.
-    if sum(1 for s in sections if s.heading_text == section.heading_text) > 1:
+    if obsidian_link and sum(1 for s in sections if s.heading_text == section.heading_text) > 1:
         st.caption("⚠️ Заголовок повторяется в документе — VS Code точнее для повторяющихся заголовков.")
 
     has_video = False
@@ -741,28 +744,29 @@ def _render_card_section_links(card: dict[str, Any], idx: int) -> None:
     except Exception:  # noqa: BLE001 - video citation lookup failure must not break card rendering
         pass
 
-    if has_video:
-        link_cols = st.columns(4)
-        obs_col, vs_col, vid_col, wb_col = link_cols[0], link_cols[1], link_cols[2], link_cols[3]
-    else:
-        link_cols = st.columns(3)
-        obs_col, vs_col, wb_col = link_cols[0], link_cols[1], link_cols[2]
-        vid_col = None
+    column_count = 2 + int(bool(obsidian_link)) + int(has_video)
+    link_cols = st.columns(column_count)
+    col_idx = 0
 
-    with obs_col:
-        st.link_button(
-            f"📄 «{section.heading_text}» · Obsidian",
-            obsidian_uri(section.konspekt_md_abs, heading_text=section.heading_text),
-            width="stretch",
-        )
-    with vs_col:
+    if obsidian_link:
+        with link_cols[col_idx]:
+            st.link_button(
+                f"📄 «{section.heading_text}» · Obsidian",
+                obsidian_link,
+                width="stretch",
+            )
+        col_idx += 1
+
+    with link_cols[col_idx]:
         st.link_button(
             f"🖥 «{section.heading_text}» · VS Code",
-            vscode_uri(section.konspekt_md_abs, line=section.line_start),
+            vscode_link,
             width="stretch",
         )
-    if vid_col is not None:
-        with vid_col:
+    col_idx += 1
+
+    if has_video:
+        with link_cols[col_idx]:
             if is_local_video:
                 show_local_key = f"fc_show_local_video_{idx}"
                 is_active = bool(st.session_state.get(show_local_key, False))
@@ -776,7 +780,9 @@ def _render_card_section_links(card: dict[str, Any], idx: int) -> None:
                     video_url,
                     width="stretch",
                 )
-    with wb_col:
+        col_idx += 1
+
+    with link_cols[col_idx]:
         if st.button("➕ В рабочий конспект", key=f"fc_section_to_workbench_{idx}", width="stretch"):
             rows = workbench_service.normalize_runtime_rows(
                 list(st.session_state.get(workbench_service.WORKBENCH_SECTIONS_KEY) or [])

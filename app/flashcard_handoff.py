@@ -188,7 +188,7 @@ def _attach_flashcard_source_actions(
     section: Any | None = None
 
     try:
-        from app.obsidian_export import obsidian_uri, resolve_source, vault_target, vscode_uri
+        from app.obsidian_export import obsidian_uri_if_available, resolve_source, vault_target, vscode_uri
 
         source_abs = resolve_source(source_path)
         if source_abs is not None:
@@ -203,16 +203,17 @@ def _attach_flashcard_source_actions(
             )
             vault_md = vault_target(source_abs)
             if vault_md.exists():
-                source_obsidian_uri = obsidian_uri(vault_md)
-                source["source_obsidian_uri"] = source_obsidian_uri
-                actions.insert(
-                    0,
-                    {
-                        "kind": "obsidian_source",
-                        "label": "Открыть конспект в Obsidian",
-                        "url": source_obsidian_uri,
-                    },
-                )
+                source_obsidian_uri = obsidian_uri_if_available(vault_md)
+                if source_obsidian_uri:
+                    source["source_obsidian_uri"] = source_obsidian_uri
+                    actions.insert(
+                        0,
+                        {
+                            "kind": "obsidian_source",
+                            "label": "Открыть конспект в Obsidian",
+                            "url": source_obsidian_uri,
+                        },
+                    )
             else:
                 source["source_action_note"] = (
                     "Раздел конспекта ещё не подготовлен; можно открыть исходный файл."
@@ -221,7 +222,7 @@ def _attach_flashcard_source_actions(
         source["source_action_note"] = "Источник карточки указан, но файл не удалось открыть автоматически."
 
     try:
-        from app.obsidian_export import obsidian_uri, vscode_uri
+        from app.obsidian_export import obsidian_uri_if_available, vscode_uri
         from app.section_index import best_section_for, build_section_index
 
         sections = build_section_index(source_path)
@@ -242,22 +243,28 @@ def _attach_flashcard_source_actions(
             return
         source["section_heading"] = section.heading_text
         source["section_line_start"] = section.line_start
-        source["obsidian_uri"] = obsidian_uri(section.konspekt_md_abs, heading_text=section.heading_text)
+        section_obsidian_uri = obsidian_uri_if_available(section.konspekt_md_abs, heading_text=section.heading_text)
+        if section_obsidian_uri:
+            source["obsidian_uri"] = section_obsidian_uri
         source["vscode_uri"] = vscode_uri(section.konspekt_md_abs, line=section.line_start)
         source.pop("source_action_note", None)
         heading = str(section.heading_text or "").strip()
-        actions = [
-            {
-                "kind": "obsidian_section",
-                "label": f"Открыть раздел «{heading}» в Obsidian" if heading else "Открыть раздел в Obsidian",
-                "url": source["obsidian_uri"],
-            },
+        actions = []
+        if section_obsidian_uri:
+            actions.append(
+                {
+                    "kind": "obsidian_section",
+                    "label": f"Открыть раздел «{heading}» в Obsidian" if heading else "Открыть раздел в Obsidian",
+                    "url": section_obsidian_uri,
+                }
+            )
+        actions.append(
             {
                 "kind": "vscode_section",
                 "label": f"Открыть раздел «{heading}» в VS Code" if heading else "Открыть раздел в VS Code",
                 "url": source["vscode_uri"],
             },
-        ]
+        )
     except Exception:  # noqa: BLE001 - source actions are optional for Tutor handoff.
         source["source_actions"] = actions
         return

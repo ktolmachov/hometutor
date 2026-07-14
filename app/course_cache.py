@@ -563,7 +563,15 @@ def list_course_candidates_from_index(
     """
     files = [str(p).strip().replace("\\", "/") for p in (indexed_rel_files or []) if str(p).strip()]
     candidates: list[dict[str, Any]] = []
-    for folder in sorted({f.split("/", 1)[0] for f in files if f}):
+    folders: set[str] = set()
+    for f in files:
+        if not f:
+            continue
+        parts = f.split("/")
+        if len(parts) >= 3 and parts[0] == "uploads":
+            folders.add("/".join(parts[:2]))
+        folders.add(parts[0])
+    for folder in sorted(folders):
         if not is_user_course_folder_rel(folder):
             continue
         source_paths = sorted({f for f in files if f == folder or f.startswith(folder + "/")})
@@ -894,15 +902,27 @@ def _course_options_from_index_stats(index_stats: dict | None) -> list[dict[str,
     """Mirror ``mission_control._course_options_from_index_stats`` without UI imports."""
     if not isinstance(index_stats, dict):
         return []
-    folders = [
+    explicit_folders = [
         str(x).strip()
         for x in index_stats.get("folder_rel_options") or []
         if is_user_course_folder_rel(str(x).strip())
     ]
     files = [str(x).strip() for x in index_stats.get("files") or [] if str(x).strip()]
-    if not folders:
-        inferred = sorted({path.split("/", 1)[0].split("\\", 1)[0] for path in files if path})
-        folders = [folder for folder in inferred if is_user_course_folder_rel(folder)]
+    inferred_set: set[str] = set()
+    for path in files:
+        normalized = path.replace("\\", "/")
+        parts = normalized.split("/")
+        if len(parts) >= 3 and parts[0] == "uploads":
+            inferred_set.add("/".join(parts[:2]))
+        elif parts and parts[0] and parts[0] != "uploads":
+            inferred_set.add(parts[0])
+    folders = sorted(
+        {
+            folder
+            for folder in [*explicit_folders, *inferred_set]
+            if folder != "uploads" and is_user_course_folder_rel(folder)
+        }
+    )
     options: list[dict[str, Any]] = []
     for folder in folders:
         prefix_slash = f"{folder}/"

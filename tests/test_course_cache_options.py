@@ -33,3 +33,24 @@ def test_build_mission_control_course_options_skips_technical_folders(monkeypatc
 
     assert [item["folder_rel"] for item in options] == ["ai-agents"]
     assert options[0]["source_paths"] == ["ai-agents/lesson-1.md", "ai-agents/lesson-2.md"]
+
+
+def test_build_mission_control_course_options_keeps_uploaded_course_pack(monkeypatch):
+    monkeypatch.setattr("app.course_cache.list_course_candidates", lambda: [])
+    index_stats = {
+        "files": [
+            "uploads/hometutor_101/README.md",
+            "uploads/hometutor_101/lectures/urok_1.md",
+            "uploads/hometutor_101/konspekts/urok_1.konspekt.md",
+            "uploads/other_note.md",
+        ],
+    }
+
+    options = build_mission_control_course_options(index_stats)
+
+    assert [item["folder_rel"] for item in options] == ["uploads/hometutor_101"]
+    assert options[0]["source_paths"] == [
+        "uploads/hometutor_101/README.md",
+        "uploads/hometutor_101/lectures/urok_1.md",
+        "uploads/hometutor_101/konspekts/urok_1.konspekt.md",
+    ]

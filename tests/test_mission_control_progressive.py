@@ -107,6 +107,12 @@ def test_agent_tile_visible_only_when_agent_enabled(monkeypatch) -> None:
     assert tile_feature_visible("agent_session", level="all", overrides={})
 
 
+def test_course_tile_visible_without_active_scope_for_activation(monkeypatch) -> None:
+    monkeypatch.setattr("app.ui.study_scope.get_active_scope", lambda: None)
+
+    assert tile_feature_visible("course", level="all", overrides={})
+
+
 def test_a1_agent_prefill_logic() -> None:
     """A1 Polish: prefill logic for agent_session_input from current_topic/scope (unit test of the exact prefill code used in the agent view)."""
     # Simulate the exact prefill logic from app/ui/main.py without touching real streamlit

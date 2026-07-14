@@ -203,3 +203,16 @@ class TestRestoreScopeFromAppKv:
         monkeypatch.setattr(user_state_core, "get_kv", lambda key, default=None: calls.append(key) or None)
         study_scope.restore_scope_from_app_kv(state={})
         assert calls == []
+
+
+def test_folder_rel_from_paths_keeps_uploaded_course_pack_scope():
+    assert (
+        study_scope.folder_rel_from_paths(
+            [
+                "uploads/hometutor_101/README.md",
+                "uploads/hometutor_101/lectures/urok_1.md",
+                "uploads/hometutor_101/konspekts/urok_1.konspekt.md",
+            ]
+        )
+        == "uploads/hometutor_101"
+    )

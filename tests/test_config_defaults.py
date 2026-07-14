@@ -1,4 +1,7 @@
 from types import SimpleNamespace
+import os
+import subprocess
+import sys
 
 from app.config import CHROMA_DIR, DEFAULT_EMBED_API_BASE, DEFAULT_EMBED_MODEL, Settings
 from app.llm_guards import HARD_TOKEN_LIMIT, RAG_CONTEXT_PROMPT_RESERVE_TOKENS, resolve_rag_context_token_budget
@@ -34,3 +37,21 @@ def test_ingest_diag_embed_base_fallback_is_local_first_for_fake_settings() -> N
     settings = SimpleNamespace(openai_api_base="https://openrouter.ai/api/v1")
 
     assert _resolve_embed_api_base(settings) == DEFAULT_EMBED_API_BASE
+
+
+def test_process_env_overrides_dotenv_paths(tmp_path) -> None:
+    env = dict(os.environ)
+    env["HOME_RAG_HOME"] = str(tmp_path / "home")
+    env["HOME_RAG_DATA_DIR"] = str(tmp_path / "home" / "data")
+    code = "from app.config import HOME_RAG_HOME, DATA_DIR; print(HOME_RAG_HOME); print(DATA_DIR)"
+
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        check=True,
+        capture_output=True,
+        encoding="utf-8",
+        env=env,
+    )
+
+    lines = [line.strip() for line in result.stdout.splitlines()]
+    assert lines == [str(tmp_path / "home"), str(tmp_path / "home" / "data")]

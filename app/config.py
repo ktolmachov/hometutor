@@ -13,8 +13,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Resolve env files from the repo root, not the caller's cwd (smoke/benchmark subprocesses).
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / "config.env")   # non-secret defaults (tracked in git)
-load_dotenv(BASE_DIR / ".env", override=True)  # machine secrets override defaults
+_PROCESS_ENV = dict(os.environ)
+load_dotenv(BASE_DIR / "config.env")  # non-secret defaults (tracked in git)
+load_dotenv(BASE_DIR / ".env", override=True)  # machine secrets override tracked defaults
+os.environ.update(_PROCESS_ENV)  # explicit process env wins over both files (shell/HF/CI)
 
 _CLOUD_MODEL_PREFIXES = ("gpt-4o", "gpt-4", "claude", "gemini")
 # Dev-only placeholder JWT secret; guard_insecure_jwt_secret() запрещает его при AUTH_ENABLED=true.

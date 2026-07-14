@@ -293,14 +293,25 @@ def apply_scope_folder_rel(
 
 
 def folder_rel_from_paths(paths: list[str]) -> str | None:
-    """Derive the most common top-level folder from a list of relative document paths."""
+    """Derive the most common course folder from relative document paths.
+
+    Plain local courses use the top-level folder (``ИИ Агенты/...``). Uploaded
+    course packs live under ``uploads/<course>/...`` and must stay a separate
+    scope; otherwise all uploaded materials collapse into one fake ``uploads``
+    course and the real activation button disappears.
+    """
     from pathlib import PurePosixPath
 
     counts: dict[str, int] = {}
     for p in paths:
         parts = PurePosixPath(p).parts
-        if len(parts) >= 2:
-            counts[parts[0]] = counts.get(parts[0], 0) + 1
+        if len(parts) >= 3 and parts[0] == "uploads":
+            folder = f"{parts[0]}/{parts[1]}"
+        elif len(parts) >= 2:
+            folder = parts[0]
+        else:
+            continue
+        counts[folder] = counts.get(folder, 0) + 1
     if not counts:
         return None
     return max(counts, key=lambda k: counts[k])

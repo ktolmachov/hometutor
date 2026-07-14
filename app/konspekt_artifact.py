@@ -367,6 +367,50 @@ def target_path_for_artifact(vault_root: Path, title: str, artifact_id: str | No
     return _artifacts_dir(vault_root) / f"{normalized_id}.md"
 
 
+# --- B1 #6: deterministic one-pager for a lecture (sections + key concepts)
+# See infographics plan: skeleton from section_index + filtered concepts for the doc.
+# No LLM. Can be extended with timestamps from media_sidecar.
+
+def build_lecture_onepager(lecture_rel_or_abs: str | Path) -> str:
+    """Build a deterministic one-pager markdown for a single lecture.
+
+    Uses section index for structure + concepts associated with this document.
+    """
+    from app.section_index import build_section_index
+    from app.knowledge_graph import get_active_knowledge_graph
+
+    sections = build_section_index(lecture_rel_or_abs) or []
+    kg = get_active_knowledge_graph()
+    all_concepts = kg.get_concepts() or {}
+
+    # Filter concepts that mention this lecture in provenance/sources (best effort)
+    lecture_str = str(lecture_rel_or_abs)
+    lecture_concepts: list[str] = []
+    for cid, info in all_concepts.items():
+        if not isinstance(info, dict):
+            continue
+        prov = info.get("provenance") or {}
+        sources = prov.get("sources") or prov.get("docs") or []
+        if any(lecture_str in str(s) for s in (sources if isinstance(sources, (list, tuple)) else [sources])):
+            lecture_concepts.append(str(cid))
+
+    # Simple markdown one-pager
+    title = Path(lecture_rel_or_abs).name or "Lecture"
+    lines = [f"# {title} — One-pager", ""]
+    lines.append("## Структура лекции")
+    for sec in sections[:15]:
+        title_sec = sec.get("title") or sec.get("slug") or "section"
+        lines.append(f"- {title_sec}")
+    lines.append("")
+    if lecture_concepts:
+        lines.append("## Ключевые концепты")
+        for c in lecture_concepts[:12]:
+            lines.append(f"- {c}")
+        lines.append("")
+    lines.append("_Детерминированный one-pager (без LLM). Расширяется таймкодами и mastery при наличии._")
+    return "\n".join(lines)
+
+
 def artifact_id_from_title(title: str) -> str:
     return _filename_slug(title)
 

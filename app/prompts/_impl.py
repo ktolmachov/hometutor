@@ -1444,7 +1444,9 @@ def get_smart_lecture_konspekt_universal_prompt(prompt_path: str | Path | None =
         return (
             "You are an expert at creating high-quality, structured educational konspekts (summaries) "
             "from lecture materials. Produce a clear, well-organized markdown konspekt with sections, "
-            "key points, and examples suitable for spaced repetition and review. Use Russian if the input is Russian."
+            "key points, and examples suitable for spaced repetition and review. "
+            "Clearly separate **Факты** (direct from source, verifiable) from **Интерпретации** (analysis, implications). "
+            "Use Russian if the input is Russian."
         )
 
 # ─────────────────────────────────────────────────────────────

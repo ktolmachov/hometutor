@@ -4,17 +4,27 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.learning_plan_service import get_today_primary_learning_item
 
-def generate_ai_coach_message(plan: dict[str, Any]) -> str:
-    """Одна строка-мотивация по структуре ``generate_personalized_plan``."""
-    daily = plan.get("daily_plan") or []
-    if not isinstance(daily, list) or not daily:
-        return "Добавьте концепты в граф и пройдите quiz — план станет персональным."
 
-    first = daily[0] if isinstance(daily[0], dict) else {}
-    concept = str(first.get("concept") or first.get("topic") or "").strip()
-    gain = first.get("mastery_gain")
-    minutes = first.get("minutes")
+def generate_ai_coach_message(plan: dict[str, Any] | None = None) -> str:
+    """Одна строка-мотивация. Унифицировано на get_today_primary_learning_item() (A3 #7)."""
+    plan = plan or {}
+    # Unify to single source for "today's primary item"
+    item = get_today_primary_learning_item()
+    if item:
+        concept = str(item.get("topic") or item.get("concept") or "").strip()
+        # minutes/gain may be in item or plan
+        minutes = item.get("minutes") or (plan.get("time_estimate") or {}).get("today_minutes")
+        gain = None  # gain not in primary item currently
+    else:
+        daily = plan.get("daily_plan") or []
+        if not isinstance(daily, list) or not daily:
+            return "Добавьте концепты в граф и пройдите quiz — план станет персональным."
+        first = daily[0] if isinstance(daily[0], dict) else {}
+        concept = str(first.get("concept") or first.get("topic") or "").strip()
+        gain = first.get("mastery_gain")
+        minutes = first.get("minutes")
 
     parts: list[str] = []
     if concept:

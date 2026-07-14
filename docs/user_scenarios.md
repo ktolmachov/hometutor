@@ -1581,48 +1581,38 @@ SSR card → micro-outcome receipt с локальными метриками du
 
 ---
 
-## Сценарий 31 — Честный сбой LLM: circuit breaker и fallback
+## Сценарий 31 — Честный сбой LLM: локальный endpoint недоступен
 > *«Сервис временно недоступен, но я всё равно могу учиться.»*
 
-Circuit breaker provider-layer перехватывает ошибку LLM, fallback на локальный retrieval
-с человечным сообщением. YAML: `scenario_31_llm_failure.yaml`. Capture pending: нужна реализация
-circuit-breaker banner в UI и мок offline-сценария.
+При недоступном локальном LLM (или circuit breaker) показывается banner с действием и fallback на retrieval-only с понятным сообщением. Полностью работает offline. Скриншоты: `screenshots/final/scenario_31/`.
 
 ---
 
-## Сценарий 32 — Гость HF Spaces: запуск без установки и ключей
+## Сценарий 32 — Публичное демо на HF Spaces: без установки и без своего LLM
 > *«Открыл в Spaces — работает без регистрации.»*
 
-Hugging Face Spaces guest mode: один клик → рабочий интерфейс с демо-данными, без .env,
-ключа и установки. YAML: `scenario_32_hf_guest.yaml`. Capture pending: нужен DEMO_MODE
-сборки Streamlit для Spaces.
+Hugging Face Spaces guest / demo mode: один клик → рабочий интерфейс с демо-данными, без .env, ключа и установки. Скриншоты: `screenshots/final/scenario_32/`.
 
 ---
 
-## Сценарий 33 — Экспорт живой карты: Knowledge Graph в Markdown
+## Сценарий 33 — Экспорт живой карты: интерактивный HTML одним кликом
 > *«Сохранил граф знаний — вставил в конспект одной строкой.»*
 
-Knowledge Graph экспортируется как Markdown с Mermaid-диаграммой: узлы, связи, mastery
-без привязки к UI. YAML: `scenario_33_export_living_map.yaml`. Capture pending: нужна
-кнопка экспорта в UI.
+Кнопка экспорта Knowledge Graph как самодостаточного HTML (D3 или 3D) или Markdown/Mermaid. Полностью оффлайн. Скриншоты: `screenshots/final/scenario_33/`.
 
 ---
 
 ## Сценарий 34 — Возврат в таймкод видео: контекст без пересмотра
 > *«Продолжить с 23:15 — и конспект пройденного готов.»*
 
-Учебное видео с таймкодами: learner state сохраняет позицию, resume-карта показывает
-«Продолжить с 23:15» + конспект 3–5 тезисов. YAML: `scenario_34_video_timestamp.yaml`.
-Capture pending: нужна имплементация video resume в learner state и UI.
+Видео с таймкодами: состояние сохраняет позицию, resume-карта предлагает продолжить с таймкода + готовый конспект сегмента. Скриншоты: `screenshots/final/scenario_34/`.
 
 ---
 
 ## Сценарий 35 — Приватность и offline-проверка: данные не покидают устройство
 > *«Отключил Wi-Fi — всё работает.»*
 
-Local-first архитектура: Chroma + SQLite + LM Studio без внешних HTTP-запросов.
-Проверка через network tab. YAML: `scenario_35_privacy_offline.yaml`. Capture pending:
-нужен offline-banner UI и/или network-tab overlay.
+Полностью local-first: все данные и LLM на устройстве. Проверка через network tab показывает отсутствие внешних запросов (кроме опционального). Offline banner и graceful degradation. Скриншоты: `screenshots/final/scenario_35/`.
 
 ---
 

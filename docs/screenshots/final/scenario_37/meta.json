@@ -1,0 +1,91 @@
+{
+  "scenario_id": "scenario_37",
+  "started_at": "2026-07-14T18:50:09.722Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_konspekt_quality_passport",
+      "caption": "Паспорт качества конспекта",
+      "narration": "В паспорте раздела видно, что конспект богатый и прошёл рубрику качества.",
+      "file": "01_konspekt_quality_passport.png",
+      "taken_at": "2026-07-14T18:50:13.926Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 734,
+        "streamlit_ready": 32,
+        "screenshot": 122,
+        "total": 888
+      }
+    },
+    {
+      "step": 2,
+      "slug": "02_konspekt_status_controls",
+      "caption": "Статусы раздела: понял, сомневаюсь, не понял",
+      "narration": "После чтения можно зафиксировать состояние знания и оставить вопрос тьютору.",
+      "file": "02_konspekt_status_controls.png",
+      "taken_at": "2026-07-14T18:50:15.527Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 726,
+        "streamlit_ready": 32,
+        "screenshot": 95,
+        "total": 853
+      }
+    },
+    {
+      "step": 3,
+      "slug": "03_konspekt_status_counters",
+      "caption": "Счётчики прогресса по конспекту",
+      "narration": "Система собирает статусы в общий обзор: что закрыто, что сомнительно, где остались вопросы.",
+      "file": "03_konspekt_status_counters.png",
+      "taken_at": "2026-07-14T18:50:16.991Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 718,
+        "streamlit_ready": 32,
+        "screenshot": 100,
+        "total": 850
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-07-14T18:50:16.991Z",
+  "total_duration_ms": 7269,
+  "shot_count": 3,
+  "timings_summary": {
+    "wait": {
+      "sum": 2178,
+      "avg": 726,
+      "p95": 734
+    },
+    "streamlit_ready": {
+      "sum": 96,
+      "avg": 32,
+      "p95": 32
+    },
+    "screenshot": {
+      "sum": 317,
+      "avg": 106,
+      "p95": 122
+    },
+    "total": {
+      "sum": 2591,
+      "avg": 864,
+      "p95": 888
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "scenario_id": "scenario_38",
+  "started_at": "2026-07-14T18:50:17.078Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_appearance_worlds",
+      "caption": "Панель оформления: миры темы",
+      "narration": "Пять цветовых миров помогают быстро подобрать комфортный режим чтения и повторения.",
+      "file": "01_appearance_worlds.png",
+      "taken_at": "2026-07-14T18:50:20.836Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 826,
+        "streamlit_ready": 26,
+        "screenshot": 97,
+        "total": 949
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-07-14T18:50:20.837Z",
+  "total_duration_ms": 3759,
+  "shot_count": 1,
+  "timings_summary": {
+    "wait": {
+      "sum": 826,
+      "avg": 826,
+      "p95": 826
+    },
+    "streamlit_ready": {
+      "sum": 26,
+      "avg": 26,
+      "p95": 26
+    },
+    "screenshot": {
+      "sum": 97,
+      "avg": 97,
+      "p95": 97
+    },
+    "total": {
+      "sum": 949,
+      "avg": 949,
+      "p95": 949
+    }
+  }
+}

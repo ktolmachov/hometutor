@@ -1,0 +1,55 @@
+{
+  "scenario_id": "scenario_36",
+  "started_at": "2026-07-14T18:49:41.800Z",
+  "status": "passed",
+  "shots": [
+    {
+      "step": 1,
+      "slug": "01_route_day_auto",
+      "caption": "Knowledge Graph: авто-маршрут дня",
+      "narration": "Один клик выбирает 4–6 узлов с максимальной учебной ценностью и подсвечивает путь на графе.",
+      "file": "01_route_day_auto.png",
+      "taken_at": "2026-07-14T18:50:09.631Z",
+      "viewport": {
+        "width": 1400,
+        "height": 900
+      },
+      "timings_ms": {
+        "wait": 825,
+        "streamlit_ready": 33,
+        "screenshot": 121,
+        "total": 979
+      }
+    }
+  ],
+  "env": {
+    "HOME_RAG_E2E_OFFLINE": "1",
+    "E2E_API_PORT": "18000",
+    "E2E_STREAMLIT_PORT": "18501"
+  },
+  "finished_at": "2026-07-14T18:50:09.631Z",
+  "total_duration_ms": 27831,
+  "shot_count": 1,
+  "timings_summary": {
+    "wait": {
+      "sum": 825,
+      "avg": 825,
+      "p95": 825
+    },
+    "streamlit_ready": {
+      "sum": 33,
+      "avg": 33,
+      "p95": 33
+    },
+    "screenshot": {
+      "sum": 121,
+      "avg": 121,
+      "p95": 121
+    },
+    "total": {
+      "sum": 979,
+      "avg": 979,
+      "p95": 979
+    }
+  }
+}

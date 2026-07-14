@@ -19,7 +19,9 @@ def _root_css_vars() -> dict[str, str]:
     for line in match.group("body").splitlines():
         var_match = _VAR_RE.match(line)
         if var_match:
-            vars_[var_match.group("key")] = var_match.group("value")
+            key = var_match.group("key")
+            if not key.startswith("font-"):  # base fonts are global, not per-world theme tokens
+                vars_[key] = var_match.group("value")
     return vars_
 
 

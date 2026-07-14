@@ -50,6 +50,6 @@ def adaptive_plan_progress_teaser_caption(
     bt = str(block.get("type") or "").strip()
     lab = _BLOCK_LABEL.get(bt, (bt or "шаг").replace("_", " "))
     c_raw = str(block.get("concept") or "").strip()
-    if _is_placeholder_plan_concept(c_raw):
+    if _is_placeholder_concept(c_raw):
         return f"Adaptive plan: следующий акцент — {lab}"
     return f"Adaptive plan: следующий акцент — {lab} — «{c_raw[:72]}»"

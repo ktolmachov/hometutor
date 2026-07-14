@@ -250,7 +250,7 @@ def _render_section_progress_controls(
         with col_close:
             if st.button("Закрыть вопрос", key=f"lk_close_q_{row_key}", width="stretch"):
                 set_question(row_key, None)
-                st.toast("Вопрос закрыт.", icon="✓")
+                st.toast("Вопрос закрыт.", icon="✅")
                 st.rerun()
 
     # A2: three status buttons (соседство с «Прочитано» per plan)
@@ -274,7 +274,7 @@ def _render_section_progress_controls(
         if st.button("Прочитано", key=f"lk_reader_mark_read_{row_key}", width="stretch", disabled=mark_read is None):
             # Restore legacy "Прочитано" button (critical regression fix)
             mark_read(row_key)
-            st.toast("Фрагмент отмечен как прочитанный.", icon="✓")
+            st.toast("Фрагмент отмечен как прочитанный.", icon="✅")
             st.rerun()
     with cols[4]:
         if st.button("Сохранить мысль", key=f"lk_reader_save_note_{row_key}", width="stretch", disabled=save_note is None):

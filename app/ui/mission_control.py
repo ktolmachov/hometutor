@@ -11,7 +11,7 @@ import streamlit as st
 
 from app.config import get_settings
 from app import user_state
-from app.course_cache import build_mission_control_course_options, collapse_nested_course_folder_rels
+from app.course_cache import build_mission_control_course_options
 from app.course_folder_filter import is_user_course_folder_rel
 from app.smart_study_router import (
     SmartStudyRecommendation,
@@ -195,6 +195,24 @@ def _is_cold_user(due_count: int | None, index_stats: dict | None = None) -> boo
     return True
 
 
+def _collapse_nested_course_folder_rels(folders) -> list[str]:
+    normalized = sorted(
+        {
+            str(folder).strip().replace("\\", "/").strip("/")
+            for folder in folders
+            if str(folder).strip()
+        }
+    )
+    normalized_set = set(normalized)
+    collapsed: list[str] = []
+    for folder in normalized:
+        parts = folder.split("/")
+        if any("/".join(parts[:idx]) in normalized_set for idx in range(1, len(parts))):
+            continue
+        collapsed.append(folder)
+    return collapsed
+
+
 def _course_options_from_index_stats(index_stats: dict | None) -> tuple[CourseOption, ...]:
     if not isinstance(index_stats, dict):
         return ()
@@ -219,7 +237,7 @@ def _course_options_from_index_stats(index_stats: dict | None) -> tuple[CourseOp
             inferred_set.add(parts[0])
     if has_root_upload_files and not has_upload_pack:
         inferred_set.add("uploads")
-    folders = collapse_nested_course_folder_rels(
+    folders = _collapse_nested_course_folder_rels(
         folder
         for folder in [*explicit_folders, *inferred_set]
         if not (folder == "uploads" and has_upload_pack) and is_user_course_folder_rel(folder)

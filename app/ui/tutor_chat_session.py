@@ -508,7 +508,7 @@ def _render_tutor_handoff_context() -> None:
                     set_open_question_in_workbench(row_key, None)
                     st.session_state.pop("pending_living_konspekt_close_row", None)
                     clear_qa_tutor_handoff_context(st.session_state)
-                    st.toast("Вопрос закрыт в конспекте.", icon="✓")
+                    st.toast("Вопрос закрыт в конспекте.", icon="✅")
                     # Optional: exposure trace hint (can be expanded later)
                 except Exception:  # noqa: BLE001
                     st.toast("Не удалось закрыть вопрос.", icon="⚠️")

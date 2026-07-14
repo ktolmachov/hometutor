@@ -184,7 +184,7 @@ def _render_section_diagram_preview_controls(row: dict[str, Any], rows: list[dic
             )
             set_workbench_rows(updated_rows)
             st.session_state.pop(_SECTION_DIAGRAM_PREVIEW_KEY, None)
-            st.toast("Схема добавлена в раздел.", icon="✓")
+            st.toast("Схема добавлена в раздел.", icon="✅")
             st.rerun()
     with cols[1]:
         if st.button("Отклонить", key=f"lk_reject_diagram_{row_key}", width="stretch"):

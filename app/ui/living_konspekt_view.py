@@ -358,14 +358,22 @@ def _render_build_panel(rows: list[dict[str, Any]]) -> None:
         key="living_konspekt_mode",
         horizontal=True,
     )
-    action_cols = st.columns([1.2, 1.1, 1])
+    action_cols = st.columns([1.35, 1.0, 1.0, 0.9])
     with action_cols[0]:
-        save_clicked = st.button("Собрать и сохранить", key="living_konspekt_build", type="primary", width="stretch")
+        save_and_map_clicked = st.button(
+            "Сохранить и обновить карту",
+            key="living_konspekt_build",
+            type="primary",
+            width="stretch",
+            help="Сохранит конспект и запустит обновление поиска и карты курса.",
+        )
     with action_cols[1]:
-        save_new_clicked = st.button("Сохранить как новый", key="living_konspekt_build_new", width="stretch")
+        save_clicked = st.button("Только сохранить", key="living_konspekt_save_only", width="stretch")
     with action_cols[2]:
+        save_new_clicked = st.button("Сохранить как новый", key="living_konspekt_build_new", width="stretch")
+    with action_cols[3]:
         print_clicked = st.button("Печать/PDF", key="living_konspekt_print", width="stretch")
-    if save_clicked or save_new_clicked:
+    if save_and_map_clicked or save_clicked or save_new_clicked:
         try:
             body = _build_living_konspekt_body(topic, rows, mode)
             target_path = konspekt_artifact.save_artifact(
@@ -394,7 +402,18 @@ def _render_build_panel(rows: list[dict[str, Any]]) -> None:
                 )
             except Exception:  # noqa: BLE001 - аналитика не должна ломать сохранение
                 pass
-            st.toast("Сохранено в vault. Войдёт в поиск и граф после обновления индекса.", icon="✅")
+            if save_and_map_clicked:
+                try:
+                    _request_reindex_from_ui()
+                except Exception as exc:  # noqa: BLE001 - показать пользователю причину отказа API
+                    st.warning(
+                        "Конспект сохранён, но обновление карты не запустилось: "
+                        f"{format_request_error(exc)}"
+                    )
+                else:
+                    st.success("Конспект сохранён. Обновляю поиск и карту курса…")
+            else:
+                st.toast("Конспект сохранён. Карту курса можно обновить отдельной кнопкой.", icon="✅")
             st.rerun()
     if print_clicked:
         try:
@@ -419,13 +438,13 @@ def _render_build_panel(rows: list[dict[str, Any]]) -> None:
         with cta_cols[1]:
             st.link_button("🖥 Открыть в VS Code", vscode_uri(saved_path), width="stretch")
         with cta_cols[2]:
-            if st.button("🔄 Обновить индекс", key="living_konspekt_reindex", width="stretch"):
+            if st.button("🔄 Обновить карту курса", key="living_konspekt_reindex", width="stretch"):
                 try:
                     _request_reindex_from_ui()
                 except Exception as exc:  # noqa: BLE001 - показать пользователю причину отказа API
-                    st.error(f"Не удалось запустить переиндексацию: {format_request_error(exc)}")
+                    st.error(f"Не удалось запустить обновление карты: {format_request_error(exc)}")
                 else:
-                    st.success("Переиндексация запущена.")
+                    st.success("Обновление поиска и карты курса запущено.")
                     st.rerun()
         with cta_cols[3]:
             saved_body = str(st.session_state.get(_LAST_SAVED_BODY_KEY) or "")

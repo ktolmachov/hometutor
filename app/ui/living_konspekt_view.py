@@ -235,11 +235,13 @@ def _open_print_living_konspekt(title: str, body: str, rows: list[dict[str, Any]
     )
 
 
-def _request_reindex_from_ui() -> None:
+def _request_reindex_from_ui(*, reset: bool = False, after_view: str | None = None) -> None:
     from app.ui_client import fetch_json
 
-    fetch_json("POST", "/reindex", timeout=30, params={"reset": False})
+    fetch_json("POST", "/reindex", timeout=30, params={"reset": reset})
     st.session_state["poll_reindex_status"] = True
+    if after_view:
+        st.session_state["_reindex_after_view"] = after_view
 
 
 def _clear_deleted_artifact_session_refs(artifact: konspekt_artifact.SavedArtifact) -> None:
@@ -404,7 +406,7 @@ def _render_build_panel(rows: list[dict[str, Any]]) -> None:
                 pass
             if save_and_map_clicked:
                 try:
-                    _request_reindex_from_ui()
+                    _request_reindex_from_ui(reset=True, after_view="Knowledge Graph")
                 except Exception as exc:  # noqa: BLE001 - показать пользователю причину отказа API
                     st.warning(
                         "Конспект сохранён, но обновление карты не запустилось: "
@@ -440,7 +442,7 @@ def _render_build_panel(rows: list[dict[str, Any]]) -> None:
         with cta_cols[2]:
             if st.button("🔄 Обновить карту курса", key="living_konspekt_reindex", width="stretch"):
                 try:
-                    _request_reindex_from_ui()
+                    _request_reindex_from_ui(reset=True, after_view="Knowledge Graph")
                 except Exception as exc:  # noqa: BLE001 - показать пользователю причину отказа API
                     st.error(f"Не удалось запустить обновление карты: {format_request_error(exc)}")
                 else:

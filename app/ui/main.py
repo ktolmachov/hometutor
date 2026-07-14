@@ -333,11 +333,11 @@ elif selected_view == "Интерактивный Quiz":
 elif selected_view == "Flashcards":
     _fragment_flashcards_tab()
 elif selected_view == "Курс":
-    from app.ui.e2e_demo_scenes import e2e_cockpit_enabled, render_e2e_demo_scene_for_view
+    from app.ui.e2e_demo_scenes import render_e2e_demo_scene_for_view
 
     _scope_course = _get_active_scope()
     render_e2e_demo_scene_for_view(selected_view)
-    if e2e_cockpit_enabled(_settings_cockpit) and _scope_course:
+    if _scope_course:
         from app.ui.course_cockpit import render_course_cockpit_scaffold
 
         st.session_state["course_cockpit_active"] = True

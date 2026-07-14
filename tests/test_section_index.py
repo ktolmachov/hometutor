@@ -457,6 +457,29 @@ class TestObsidianUriHeading:
         uri = obsidian_uri(target)
         assert "%23" not in uri
 
+    def test_existing_file_prefers_absolute_path_even_with_vault_name(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ):
+        from app.obsidian_export import obsidian_uri
+
+        monkeypatch.setattr(
+            "app.obsidian_export.get_settings",
+            lambda: SimpleNamespace(obsidian_vault_name="data"),
+        )
+        target = tmp_path / "uploads" / "hometutor_101" / "README.md"
+        target.parent.mkdir(parents=True)
+        target.write_text("# hometutor 101\n", encoding="utf-8")
+
+        uri = obsidian_uri(target, heading_text="Dogfood")
+
+        assert uri.startswith("obsidian://open?path=")
+        assert "vault=data" not in uri
+        assert "uploads" in uri
+        assert "hometutor_101" in uri
+        assert "%23Dogfood" in uri
+
 
 class TestVscodeUri:
     def test_encodes_spaces_and_cyrillic_and_appends_line(self):

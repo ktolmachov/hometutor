@@ -159,34 +159,38 @@ def vault_rel_str(target_abs: Path) -> str:
 def obsidian_uri(target_abs: Path, heading_text: str | None = None) -> str:
     """Сформировать ``obsidian://`` URI для открытия файла (опц. на разделе).
 
-    Предпочитает ``vault=<name>&file=<rel>`` (работает без регистрации пути),
-    падает обратно на ``path=<abs>`` если ``OBSIDIAN_VAULT_NAME`` не задан.
+    Для существующих локальных файлов предпочитает ``path=<abs>``: имя vault
+    в Obsidian не уникально, а значение вроде ``data`` может открыть старый
+    vault из другого проекта. ``vault=<name>&file=<rel>`` остаётся fallback для
+    ещё не созданных файлов, когда есть явное ``OBSIDIAN_VAULT_NAME``.
 
     :param heading_text: сырой текст заголовка (с эмодзи) — Obsidian-якорь ``#...``.
         Это ТЕКСТ заголовка, а НЕ github-slug (Obsidian не понимает github-slug якоря).
         При дублирующихся заголовках в документе Obsidian откроет первый одноимённый.
-        Якорь официально документирован для ``vault=&file=``-формы; в ``path=``-фолбэке
-        (когда ``OBSIDIAN_VAULT_NAME`` не задан) переход на якорь может молча не сработать —
-        Obsidian откроет файл целиком без прыжка к разделу.
+        При ``path=`` Obsidian открывает правильный файл; переход к heading может
+        зависеть от версии Obsidian и плагинов.
     """
-    try:
-        vault_name = get_settings().obsidian_vault_name
-    except Exception:  # noqa: BLE001 - URI generation can fall back when vault metadata is unavailable.
-        vault_name = None
-
-    if vault_name:
-        # file= требует прямые слеши (стандарт Obsidian URI)
-        rel = vault_rel_str(target_abs)  # уже содержит "/"
-        uri = (
-            "obsidian://open?vault="
-            + _pct_encode(vault_name)
-            + "&file="
-            + _pct_encode(rel)
-        )
-    else:
-        # path= требует обратные слеши на Windows
-        abs_str = str(target_abs).replace("/", "\\")
+    if target_abs.exists():
+        # path= требует обратные слеши на Windows.
+        abs_str = str(target_abs.resolve()).replace("/", "\\")
         uri = "obsidian://open?path=" + _pct_encode(abs_str)
+    else:
+        try:
+            vault_name = get_settings().obsidian_vault_name
+        except Exception:  # noqa: BLE001 - URI generation can fall back when vault metadata is unavailable.
+            vault_name = None
+        if not vault_name:
+            abs_str = str(target_abs).replace("/", "\\")
+            uri = "obsidian://open?path=" + _pct_encode(abs_str)
+        else:
+            # file= требует прямые слеши (стандарт Obsidian URI)
+            rel = vault_rel_str(target_abs)  # уже содержит "/"
+            uri = (
+                "obsidian://open?vault="
+                + _pct_encode(vault_name)
+                + "&file="
+                + _pct_encode(rel)
+            )
 
     if heading_text:
         # "#" закодирован как %23 (не сырой символ): некоторые обработчики URI обрежут

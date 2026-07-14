@@ -6,6 +6,7 @@ import time
 
 import streamlit as st
 
+from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
 from app.ui_client import clear_ui_api_caches, fetch_json
 
 
@@ -48,6 +49,15 @@ def _refresh_soon(delay_sec: float = 1.0) -> None:
     st.rerun()
 
 
+def _remember_graph_refresh(payload: dict) -> None:
+    cost = payload.get("cost")
+    if not isinstance(cost, dict):
+        return
+    graph_refresh = cost.get("knowledge_graph_refresh")
+    if isinstance(graph_refresh, dict):
+        st.session_state["last_ingest_graph_refresh"] = graph_refresh
+
+
 def poll_reindex_status() -> None:
     message = st.session_state.pop("_reindex_success_message", None)
     if message:
@@ -64,9 +74,13 @@ def poll_reindex_status() -> None:
     status = str(payload.get("status") or "")
     if status == "completed":
         st.session_state["poll_reindex_status"] = False
+        _remember_graph_refresh(payload)
         summary = payload.get("ingest_run_summary")
         if isinstance(summary, dict) and summary.get("human_ru"):
             st.session_state["_reindex_success_message"] = str(summary["human_ru"])
+        after_view = str(st.session_state.pop("_reindex_after_view", "") or "").strip()
+        if after_view:
+            st.session_state[PENDING_CURRENT_VIEW_KEY] = after_view
         clear_ui_api_caches()
         st.rerun()
     elif status == "failed":

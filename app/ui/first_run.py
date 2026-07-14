@@ -74,7 +74,10 @@ def render_empty_index_hero(index_stats: dict | None) -> bool:
 
     with cols[1]:
         st.markdown("#### Попробовать демо")
-        st.caption("Небольшой учебный набор, чтобы увидеть ответы с источниками без подготовки.")
+        st.caption(
+            "Встроенный курс hometutor 101 + стартовые материалы, чтобы увидеть "
+            "ответы с источниками и Living Konspekt без подготовки."
+        )
         if st.button("Установить демо-материалы", key="first_run_demo_btn", type="primary"):
             install_demo_materials()
             set_kv("demo_sandbox_active", "1")

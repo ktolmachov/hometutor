@@ -10,6 +10,7 @@ from app.config import BASE_DIR, DATA_DIR
 
 DEMO_SUBDIR = "demo"
 UPLOADS_SUBDIR = "uploads"
+BUILTIN_DEMO_COURSE_REL = Path(UPLOADS_SUBDIR) / "hometutor_101"
 ALLOWED_UPLOAD_EXTS = {".md", ".txt", ".pdf", ".docx", ".html"}
 
 _SAFE_NAME_RE = re.compile(r"[^A-Za-zА-Яа-я0-9._ -]+")
@@ -21,6 +22,14 @@ def demo_source_dir() -> Path:
 
 def demo_target_dir() -> Path:
     return DATA_DIR / DEMO_SUBDIR
+
+
+def builtin_demo_course_source_dir() -> Path:
+    return demo_source_dir() / BUILTIN_DEMO_COURSE_REL
+
+
+def builtin_demo_course_target_dir() -> Path:
+    return DATA_DIR / BUILTIN_DEMO_COURSE_REL
 
 
 def _relative_to_data(path: Path) -> str:
@@ -37,10 +46,31 @@ def _require_data_child(path: Path) -> Path:
 
 def is_demo_installed() -> bool:
     target = demo_target_dir()
-    return target.is_dir() and any(
+    mini_demo_installed = target.is_dir() and any(
         path.is_file() and path.suffix.lower() == ".md" and path.name.lower() != "readme.md"
         for path in target.rglob("*")
     )
+    course = builtin_demo_course_target_dir()
+    course_installed = (course / "README.md").is_file() and any(
+        path.is_file() and path.suffix.lower() == ".md"
+        for path in (course / "lectures").glob("*.md")
+    )
+    return mini_demo_installed or course_installed
+
+
+def _copy_tree_files(source: Path, target: Path) -> list[str]:
+    saved: list[str] = []
+    if not source.is_dir():
+        return saved
+    for path in sorted(source.rglob("*")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(source)
+        destination = _require_data_child(target / rel)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, destination)
+        saved.append(_relative_to_data(destination))
+    return saved
 
 
 def install_demo_materials() -> list[str]:
@@ -54,15 +84,23 @@ def install_demo_materials() -> list[str]:
         destination = target / path.name
         shutil.copy2(path, destination)
         saved.append(_relative_to_data(destination))
+    saved.extend(
+        _copy_tree_files(
+            builtin_demo_course_source_dir(),
+            builtin_demo_course_target_dir(),
+        )
+    )
     return saved
 
 
 def remove_demo_materials() -> int:
-    target = _require_data_child(demo_target_dir())
-    if not target.exists():
-        return 0
-    removed = sum(1 for path in target.rglob("*") if path.is_file())
-    shutil.rmtree(target)
+    removed = 0
+    for target in (demo_target_dir(), builtin_demo_course_target_dir()):
+        target = _require_data_child(target)
+        if not target.exists():
+            continue
+        removed += sum(1 for path in target.rglob("*") if path.is_file())
+        shutil.rmtree(target)
     return removed
 
 

@@ -31,19 +31,52 @@ def test_install_demo_materials_copies_six_markdown_files(monkeypatch, tmp_path)
     assert all((data / rel).exists() for rel in first)
 
 
+def test_install_demo_materials_copies_builtin_course_pack(monkeypatch, tmp_path) -> None:
+    source = tmp_path / "demo_data"
+    data = tmp_path / "data"
+    course = source / "uploads" / "hometutor_101"
+    (course / "lectures").mkdir(parents=True)
+    (course / "konspekts").mkdir()
+    (course / "videos").mkdir()
+    (source / "alpha.md").write_text("mini", encoding="utf-8")
+    (course / "README.md").write_text("course", encoding="utf-8")
+    (course / "lectures" / "urok_1.md").write_text("lecture", encoding="utf-8")
+    (course / "konspekts" / "urok_1.konspekt.md").write_text(
+        "---\nmedia_sidecar: uploads/hometutor_101/konspekts/urok_1.konspekt.media.json\n---\n",
+        encoding="utf-8",
+    )
+    (course / "konspekts" / "urok_1.konspekt.media.json").write_text("{}", encoding="utf-8")
+    (course / "videos" / "urok_1.mp4").write_bytes(b"video")
+    monkeypatch.setattr(demo_sandbox, "DATA_DIR", data)
+    monkeypatch.setattr(demo_sandbox, "demo_source_dir", lambda: source)
+
+    saved = demo_sandbox.install_demo_materials()
+
+    assert "demo/alpha.md" in saved
+    assert "uploads/hometutor_101/README.md" in saved
+    assert "uploads/hometutor_101/konspekts/urok_1.konspekt.media.json" in saved
+    assert "uploads/hometutor_101/videos/urok_1.mp4" in saved
+    assert (data / "uploads" / "hometutor_101" / "videos" / "urok_1.mp4").read_bytes() == b"video"
+    assert demo_sandbox.is_demo_installed()
+
+
 def test_remove_demo_materials_deletes_only_data_demo(monkeypatch, tmp_path) -> None:
     data = tmp_path / "data"
     demo = data / "demo"
+    course = data / "uploads" / "hometutor_101"
     other = data / "uploads"
     demo.mkdir(parents=True)
-    other.mkdir()
+    course.mkdir(parents=True)
     (demo / "a.md").write_text("demo", encoding="utf-8")
+    (course / "README.md").write_text("course", encoding="utf-8")
+    (course / "video.mp4").write_bytes(b"video")
     (other / "b.md").write_text("other", encoding="utf-8")
     monkeypatch.setattr(demo_sandbox, "DATA_DIR", data)
     monkeypatch.setattr(demo_sandbox, "demo_target_dir", lambda: demo)
 
-    assert demo_sandbox.remove_demo_materials() == 1
+    assert demo_sandbox.remove_demo_materials() == 3
     assert not demo.exists()
+    assert not course.exists()
     assert (other / "b.md").exists()
 
     monkeypatch.setattr(demo_sandbox, "demo_target_dir", lambda: tmp_path / "outside")

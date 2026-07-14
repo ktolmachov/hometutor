@@ -15,7 +15,10 @@
 (OpenRouter/OpenAI-совместимый провайдер) + заранее подготовленный демо-корпус (`demo_data/`)
 и скомпилированный векторный индекс (`demo_chroma_db/`). При старте контейнера
 [`bootstrap_demo_paths.sh`](bootstrap_demo_paths.sh) копирует их в рабочие `data/`/`chroma_db/`,
-если они ещё пусты (эфемерный FS контейнера — см. ограничения ниже).
+если они ещё пусты (эфемерный FS контейнера — см. ограничения ниже). Встроенный курс
+`demo_data/uploads/hometutor_101/` гарантированно докладывается в `data/uploads/hometutor_101/`,
+если курса там ещё нет: это self-demo курс о самом продукте с лекциями, smart-конспектами,
+`*.media.json` и короткими MP4 для панели «🎞 Все видео урока» в Living Konspekt.
 
 ---
 
@@ -88,6 +91,10 @@ Variables/Secrets имеют приоритет.
 .\.venv\Scripts\python.exe scripts/build_demo_chroma.py
 ```
 
+Пересобирайте `demo_chroma_db/` после изменения `demo_data/`, включая встроенный
+`uploads/hometutor_101/`. Иначе файлы курса будут скопированы в Space, но готовый
+прединдекс может ещё не отвечать по ним до ручного reindex из UI.
+
 ### Шаг 2: Коммит индекса
 ```bash
 git add demo_chroma_db/
@@ -103,8 +110,9 @@ git commit -m "chore: pre-build demo database index"
 
 > ⚠️ **Не делайте `git push space main`** — HF отклоняет push сырых бинарных блобов,
 > а история `main` содержит PNG/GIF скриншотов. В Space пушится **один snapshot-коммит**
-> дерева `main` без `doc/screenshots/` и `docs/screenshots/`; `demo_chroma_db/` уходит LFS-указателями
-> (правила в `.gitattributes`), их объекты заливаются `git lfs push`.
+> дерева `main` без `doc/screenshots/` и `docs/screenshots/`; `demo_chroma_db/` и
+> встроенные MP4 курса `hometutor_101` уходят LFS-указателями (правила в
+> `.gitattributes`), их объекты заливаются `git lfs push`.
 
 Требуется установленный [git-lfs](https://git-lfs.com/) (входит в Git for Windows;
 проверка: `git lfs version`, разовая настройка хуков в репозитории: `git lfs install --local`).

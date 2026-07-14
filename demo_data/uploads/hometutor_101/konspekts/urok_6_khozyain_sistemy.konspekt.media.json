@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "konspekt_sha256": "57e077bfe715b94e02c5debc0cc0e7520470954b53af514883b11e625fce65ae",
+  "media_sha256": "e1754d1b5bea2b380d184394ff1ae4a45a12fd30db3c7489db3b77c80ff8988c",
+  "generated_by": {
+    "tool": "scripts/attach_whole_lesson_video.py",
+    "created_at": "2026-07-14T19:56:32Z"
+  },
+  "media": {
+    "video": {
+      "kind": "local",
+      "path": "uploads/hometutor_101/videos/video_6_khozyain_sistemy.mp4",
+      "sha256": "e1754d1b5bea2b380d184394ff1ae4a45a12fd30db3c7489db3b77c80ff8988c",
+      "title": "Урок 6 · Хозяин системы"
+    },
+    "videos": [
+      {
+        "kind": "local",
+        "path": "uploads/hometutor_101/videos/video_6_khozyain_sistemy.mp4",
+        "sha256": "e1754d1b5bea2b380d184394ff1ae4a45a12fd30db3c7489db3b77c80ff8988c",
+        "title": "Урок 6 · Хозяин системы"
+      }
+    ]
+  },
+  "sections": [],
+  "semantic_blocks": []
+}

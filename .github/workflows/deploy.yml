@@ -18,7 +18,7 @@ jobs:
       # HF отклоняет push сырых бинарных блобов (включая старые PNG/GIF в истории),
       # поэтому пушим НЕ историю main, а один snapshot-коммит её дерева:
       #  - doc/screenshots/ и docs/screenshots/ исключаются (нужны только на GitHub, не в Space);
-      #  - demo_chroma_db/ уходит LFS-указателями (см. .gitattributes),
+      #  - demo_chroma_db/ и встроенные demo-видео уходят LFS-указателями (см. .gitattributes),
       #    объекты загружаются отдельным `git lfs push`.
       - name: Push snapshot to Hugging Face Space
         env:
@@ -33,7 +33,7 @@ jobs:
           git config user.email "ci@hometutor"
           git config user.name "CI"
           git lfs install --local
-          git lfs pull --include="demo_chroma_db/**"
+          git lfs pull --include="demo_chroma_db/**,demo_data/uploads/hometutor_101/videos/**"
           git remote add space "https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co/spaces/${HF_USERNAME}/${HF_SPACE}"
           export GIT_INDEX_FILE=.git/space-index
           git read-tree 'HEAD^{tree}'

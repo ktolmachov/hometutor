@@ -22,6 +22,7 @@ v2.1: SYSTEM_RULES — роль Home RAG, тон, границы и явный �
 
 from pathlib import Path
 from typing import Any
+import logging
 
 from llama_index.core.prompts import ChatPromptTemplate, PromptTemplate
 from llama_index.core.base.llms.types import ChatMessage, MessageRole
@@ -1429,12 +1430,22 @@ DEEP_STUDY_PROMPT = """Ты — экспертный репетитор. Изу�
 
 
 def get_smart_lecture_konspekt_universal_prompt(prompt_path: str | Path | None = None) -> str:
-    # C2: this is currently a 'homeless' module per konspekt_quality_plan; owner decision pending (move prompt + CLI or deprecate)
+    # C2 fixed: handle missing prompt file gracefully in clean checkout (see konspekt_quality_plan #14).
+    # The external prompt file may be in hometutor-studio; fallback to a minimal default.
     """Load the universal smart-konspekt prompt through the prompt package boundary."""
     path = Path(prompt_path) if prompt_path else Path("doc/prompts/smart_lecture_konspekt_universal.md")
     if not path.is_absolute():
         path = Path(__file__).resolve().parents[2] / path
-    return path.read_text(encoding="utf-8")
+    try:
+        return path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        logger = logging.getLogger(__name__)
+        logger.warning("smart_konspekt_universal_prompt_missing | path=%s | using built-in default", path)
+        return (
+            "You are an expert at creating high-quality, structured educational konspekts (summaries) "
+            "from lecture materials. Produce a clear, well-organized markdown konspekt with sections, "
+            "key points, and examples suitable for spaced repetition and review. Use Russian if the input is Russian."
+        )
 
 # ─────────────────────────────────────────────────────────────
 # AI-агент (Wave 1): JSON-decision ReAct system prompt + templates.

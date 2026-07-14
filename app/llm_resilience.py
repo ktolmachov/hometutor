@@ -28,7 +28,7 @@ _LLM_POOL = concurrent.futures.ThreadPoolExecutor(
 # Error class names (lowercased) that indicate the endpoint is unreachable rather
 # than a model/generation error. On these errors we try the cross-base fallback
 # (HOME_RAG_LLM_FALLBACK_*) instead of giving up immediately.
-_CONNECTION_ERROR_NAMES = frozenset({
+_TRANSIENT_ERROR_NAMES = frozenset({
     "apiconnectionerror",
     "connectionerror",
     "connecttimeout",
@@ -37,6 +37,15 @@ _CONNECTION_ERROR_NAMES = frozenset({
     "networkerror",
     "remotedisconnected",
     "incompleteread",
+    "timeouterror",
+    "readtimeouterror",
+    "writetimeouterror",
+    "pooltimeouterror",
+    "httpxconnecterror",
+    "httpxreaderror",
+    "httpxwritetimeouterror",
+    "httpxpooltimeouterror",
+    "httptimeouterror",
 })
 
 
@@ -119,9 +128,31 @@ def _fallback_or_raise_on_open_circuit(
     )
 
 
-def _is_connection_error(exc: Exception) -> bool:
-    """True when the error signals an unreachable endpoint (not a model/content error)."""
-    return type(exc).__name__.lower() in _CONNECTION_ERROR_NAMES
+def _is_transient_error(exc: Exception) -> bool:
+    """True when the error signals an unreachable or temporarily failing endpoint.
+
+    Includes connection errors, timeouts and 5xx responses (expanded per plan #8
+    so that circuit and cross-base fallback trigger on more transient failures).
+    """
+    name = type(exc).__name__.lower()
+    if name in _TRANSIENT_ERROR_NAMES:
+        return True
+
+    # Additional timeout detection
+    if "timeout" in name:
+        return True
+
+    # httpx / requests style 5xx
+    resp = getattr(exc, "response", None)
+    if resp is not None:
+        try:
+            status = int(getattr(resp, "status_code", 0))
+            if 500 <= status < 600:
+                return True
+        except (TypeError, ValueError):
+            pass
+
+    return False
 
 
 def _local_soft_timeout_sec(settings) -> float | None:
@@ -177,6 +208,8 @@ def complete_with_resilience(
     try:
         if _is_local_llm_base(base_url):
             soft = _local_soft_timeout_sec(settings)
+            if _circuit_open(base_url):
+                soft = min(soft or 5.0, 1.5)  # A2 (plan #5): short timeout for known-unhealthy branch
             if soft and soft > 0:
                 result = _run_with_timeout(
                     partial(llm.complete, prompt, **kwargs),
@@ -205,7 +238,7 @@ def complete_with_resilience(
             error_type=type(e).__name__,
             message=str(e),
         )
-        if _is_connection_error(e):
+        if _is_transient_error(e):
             _record_circuit_failure(base_url, e)
         # Path 1 — same-base fallback (different model, same endpoint).
         use_fb = bool(settings.enable_llm_fallback and (settings.llm_fallback_model or "").strip())
@@ -226,7 +259,7 @@ def complete_with_resilience(
 
         # Path 2 — cross-base fallback (HOME_RAG_LLM_FALLBACK_*).
         # Only for connection errors (endpoint unreachable, e.g. LM Studio offline).
-        if allow_provider_fallback is not False and _is_connection_error(e):
+        if allow_provider_fallback is not False and _is_transient_error(e):
             from app.provider import get_home_rag_primary_fallback_llm, primary_chat_fallback_ready
             if primary_chat_fallback_ready(settings):
                 try:
@@ -281,6 +314,8 @@ def chat_with_resilience(
     try:
         if _is_local_llm_base(base_url):
             soft = _local_soft_timeout_sec(settings)
+            if _circuit_open(base_url):
+                soft = min(soft or 5.0, 1.5)  # A2 (plan #5): short timeout for known-unhealthy branch
             if soft and soft > 0:
                 result = _run_with_timeout(
                     partial(llm.chat, messages, **kwargs),
@@ -309,7 +344,7 @@ def chat_with_resilience(
             error_type=type(e).__name__,
             message=str(e),
         )
-        if _is_connection_error(e):
+        if _is_transient_error(e):
             _record_circuit_failure(base_url, e)
         # Path 1 — same-base fallback.
         use_fb = bool(settings.enable_llm_fallback and (settings.llm_fallback_model or "").strip())
@@ -329,7 +364,7 @@ def chat_with_resilience(
             return fb.chat(messages, **kwargs)
 
         # Path 2 — cross-base fallback (HOME_RAG_LLM_FALLBACK_*).
-        if allow_provider_fallback is not False and _is_connection_error(e):
+        if allow_provider_fallback is not False and _is_transient_error(e):
             from app.provider import get_home_rag_primary_fallback_llm, primary_chat_fallback_ready
             if primary_chat_fallback_ready(settings):
                 try:

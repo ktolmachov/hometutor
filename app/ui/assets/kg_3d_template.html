@@ -207,6 +207,7 @@ const nFloors = Math.max(1, new Set([...lessonFloorById.values()]).size);
 const FLOOR_BASE = -80;
 const FLOOR_STEP = 48;
 const X_STEP = 88;
+const ROUTE_X_STEP = 132;
 let _routeIdsCache = null;
 
 function conceptProgressX(n) {
@@ -276,6 +277,44 @@ function nodePos(n) {
 let nodes3d = (NODES || []).map(n => ({ n, p: nodePos(n) }));
 const id2node3 = () => new Map(nodes3d.map(o => [o.n.id, o]));
 
+function routeStopPos(id) {
+  const route = dayRouteIds();
+  const i = route.indexOf(id);
+  if (i < 0) return null;
+  const mid = (route.length - 1) / 2;
+  const lanes = [-46, 28, -14, 56, -34, 12];
+  return {
+    x: (i - mid) * ROUTE_X_STEP,
+    y: (i % 2 === 0 ? 16 : -16),
+    z: lanes[i % lanes.length]
+  };
+}
+
+function lessonAnchorRoutePos(id) {
+  const n = byId.get(id);
+  if (!n || !n.is_lesson) return null;
+  const route = dayRouteIds();
+  for (let i = 0; i < route.length; i++) {
+    const stop = byId.get(route[i]);
+    if (!stop) continue;
+    const linked = [...(stop.prereqs || []), ...(stop.unlocks || [])];
+    if (!linked.includes(id)) continue;
+    const p = routeStopPos(route[i]);
+    if (!p) continue;
+    return {
+      x: p.x,
+      y: p.y - 74,
+      z: p.z + (i % 2 === 0 ? 58 : -58)
+    };
+  }
+  return null;
+}
+
+function scenePos(o) {
+  if (viewMode === 'all') return o.p;
+  return routeStopPos(o.n.id) || lessonAnchorRoutePos(o.n.id) || o.p;
+}
+
 function dayRouteIds() {
   if (_routeIdsCache) return _routeIdsCache;
   let route = DAY_ROUTE;
@@ -338,7 +377,6 @@ function visibleIdSet() {
       ids.add(id);
       addLessonAnchors(ids, id);
     }
-    if (active) addImmediateContext(ids, active);
     return ids;
   }
 
@@ -367,13 +405,16 @@ function edgeVisibleInMode(e, vis) {
   const routeAdjacent = si >= 0 && ti >= 0 && Math.abs(si - ti) === 1;
   if (routeAdjacent) return true;
   if (viewMode === 'route') {
-    return e.source === active || e.target === active;
+    const sourceLesson = byId.get(e.source) && byId.get(e.source).is_lesson;
+    const targetLesson = byId.get(e.target) && byId.get(e.target).is_lesson;
+    const touchesRoute = si >= 0 || ti >= 0;
+    return touchesRoute && (sourceLesson || targetLesson) && (e.source === active || e.target === active);
   }
   return e.source === active || e.target === active || e.source === focus || e.target === focus;
 }
 
 function labelAllowSet(vis) {
-  // First-frame contract: ≤10 labels — route stops + anchors + active
+  // First-frame contract: route labels only; anchors stay quiet.
   // Cap is the same in all modes (full names live in sidebar / focus hint).
   const route = dayRouteIds();
   const allow = [];
@@ -384,6 +425,9 @@ function labelAllowSet(vis) {
   for (const id of route) {
     if (allow.length >= 8) break;
     if (!allow.includes(id)) allow.push(id);
+  }
+  if (viewMode === 'route') {
+    return new Set(allow.slice(0, 8));
   }
   const visSet = vis || visibleIdSet();
   for (const id of visSet) {
@@ -405,6 +449,27 @@ function drawFloorPlane(yy) {
   ctx.beginPath(); ctx.moveTo(b.sx, b.sy); ctx.lineTo(d.sx, d.sy); ctx.stroke();
 }
 
+function drawRoutePlatform() {
+  const route = dayRouteIds();
+  const x0 = -((Math.max(route.length, 1) - 1) / 2) * ROUTE_X_STEP - 90;
+  const x1 = ((Math.max(route.length, 1) - 1) / 2) * ROUTE_X_STEP + 90;
+  const z0 = -112, z1 = 112, y = 54;
+  const a = project(x0, y, z0), b = project(x1, y, z0);
+  const c2 = project(x1, y, z1), d = project(x0, y, z1);
+  ctx.strokeStyle = 'rgba(120,120,180,0.18)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.lineTo(c2.sx, c2.sy); ctx.lineTo(d.sx, d.sy); ctx.closePath();
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(196,181,253,0.16)';
+  ctx.beginPath();
+  ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke();
+  ctx.fillStyle = 'rgba(196,181,253,0.65)';
+  const arrow = project(x1 + 28, y, z0);
+  ctx.font = '11px system-ui';
+  ctx.fillText('курс →', arrow.sx, arrow.sy);
+}
+
 function draw() {
   ctx.fillStyle = '#050508';
   ctx.fillRect(0, 0, W, H);
@@ -418,16 +483,20 @@ function draw() {
   const next = nextRouteId();
   const map3 = id2node3();
 
-  // Floor planes for visible lesson floors only (or all floors if few)
-  ctx.strokeStyle = 'rgba(120,120,180,0.14)';
-  ctx.lineWidth = 1;
-  const floorIdxs = new Set();
-  for (const [lid, fi] of lessonFloorById) {
-    if (viewMode === 'all' || vis.has(lid)) floorIdxs.add(fi);
-  }
-  if (!floorIdxs.size) floorIdxs.add(0);
-  for (const f of floorIdxs) {
-    drawFloorPlane(FLOOR_BASE + f * FLOOR_STEP);
+  if (viewMode === 'route') {
+    drawRoutePlatform();
+  } else {
+    // Floor planes for visible lesson floors only (or all floors if few)
+    ctx.strokeStyle = 'rgba(120,120,180,0.14)';
+    ctx.lineWidth = 1;
+    const floorIdxs = new Set();
+    for (const [lid, fi] of lessonFloorById) {
+      if (viewMode === 'all' || vis.has(lid)) floorIdxs.add(fi);
+    }
+    if (!floorIdxs.size) floorIdxs.add(0);
+    for (const f of floorIdxs) {
+      drawFloorPlane(FLOOR_BASE + f * FLOOR_STEP);
+    }
   }
 
   // Route trail 1→N
@@ -440,7 +509,8 @@ function draw() {
     for (const id of route) {
       const o = map3.get(id);
       if (!o || !vis.has(id)) continue;
-      const pr = project(o.p.x, o.p.y, o.p.z);
+      const p = scenePos(o);
+      const pr = project(p.x, p.y, p.z);
       if (!started) { ctx.moveTo(pr.sx, pr.sy); started = true; }
       else ctx.lineTo(pr.sx, pr.sy);
     }
@@ -455,8 +525,9 @@ function draw() {
     if (!edgeVisibleInMode(e, vis)) continue;
     const a = map3.get(e.source), b = map3.get(e.target);
     if (!a || !b) continue;
-    const pa = project(a.p.x, a.p.y, a.p.z);
-    const pb = project(b.p.x, b.p.y, b.p.z);
+    const ap = scenePos(a), bp = scenePos(b);
+    const pa = project(ap.x, ap.y, ap.z);
+    const pb = project(bp.x, bp.y, bp.z);
     ctx.beginPath(); ctx.moveTo(pa.sx, pa.sy); ctx.lineTo(pb.sx, pb.sy); ctx.stroke();
   }
 
@@ -464,7 +535,8 @@ function draw() {
   const proj = nodes3d
     .filter(o => vis.has(o.n.id))
     .map(o => {
-      const pr = project(o.p.x, o.p.y, o.p.z);
+      const p = scenePos(o);
+      const pr = project(p.x, p.y, p.z);
       return { o, pr, z: pr.z };
     })
     .sort((u, v) => u.z - v.z);
@@ -475,15 +547,17 @@ function draw() {
     const isActive = nn.id === active;
     const isNext = nn.id === next;
     const onRoute = routeSet.has(nn.id);
-    const baseR = Math.max(2.8, 3.2 + Math.sqrt(nn.reach || 1) * 1.2);
-    const r = baseR * (0.65 + pr.scale * 0.7) * (isActive ? 1.45 : isNext ? 1.2 : 1);
+    const quietRouteAnchor = viewMode === 'route' && nn.is_lesson && !onRoute;
+    const baseR = quietRouteAnchor ? 4.2 : Math.max(2.8, 3.2 + Math.sqrt(nn.reach || 1) * 1.2);
+    const r = baseR * (0.65 + pr.scale * 0.7) * (isActive ? 1.28 : isNext ? 1.12 : 1);
     let col = nn.is_lesson ? '#64748b' : (nn.novel ? '#67e8f9' : ((nn.due || 0) > 0 ? '#60a5fa' : '#a5b4fc'));
+    if (quietRouteAnchor) col = '#475569';
     if (isActive) col = '#c4b5fd';
     else if (isNext) col = '#67e8f9';
     else if (onRoute) col = '#a78bfa';
 
     // Depth fade from projection scale (farther → lower alpha)
-    ctx.globalAlpha = Math.min(0.95, Math.max(0.35, 0.38 + pr.scale * 0.5));
+    ctx.globalAlpha = quietRouteAnchor ? 0.52 : Math.min(0.95, Math.max(0.35, 0.38 + pr.scale * 0.5));
     ctx.fillStyle = col;
     ctx.beginPath();
     ctx.arc(pr.sx, pr.sy, r, 0, Math.PI * 2);
@@ -492,7 +566,7 @@ function draw() {
     if (isActive || isNext || ((nn.worth || 0) > 4 && onRoute)) {
       ctx.strokeStyle = isActive ? 'rgba(233,213,255,0.85)' : 'rgba(196,181,253,0.45)';
       ctx.lineWidth = isActive ? 2.5 : 1.6;
-      ctx.beginPath(); ctx.arc(pr.sx, pr.sy, r * 1.55, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(pr.sx, pr.sy, r * 1.42, 0, Math.PI * 2); ctx.stroke();
     }
 
     // Rank badge for route stops (worth as rank, not height)
@@ -531,10 +605,11 @@ function easeInOut(t) {
 }
 
 function cameraForNode(o) {
+  const p = scenePos(o);
   return {
-    cx: -o.p.x * 0.55,
-    cy: -o.p.y * 0.28,
-    cz: -o.p.z * 0.35,
+    cx: -p.x * 0.55,
+    cy: -p.y * 0.28,
+    cz: -p.z * 0.35,
     yaw: 0.55,
     pitch: 0.38,
     zoom: 1.15
@@ -551,9 +626,10 @@ function fitRouteCamera() {
   }
   let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9, minZ = 1e9, maxZ = -1e9;
   for (const o of pts) {
-    minX = Math.min(minX, o.p.x); maxX = Math.max(maxX, o.p.x);
-    minY = Math.min(minY, o.p.y); maxY = Math.max(maxY, o.p.y);
-    minZ = Math.min(minZ, o.p.z); maxZ = Math.max(maxZ, o.p.z);
+    const p = scenePos(o);
+    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+    minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+    minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
   }
   const midX = (minX + maxX) / 2;
   const midY = (minY + maxY) / 2;
@@ -564,7 +640,7 @@ function fitRouteCamera() {
   cz = -midZ * 0.3;
   yaw = 0.55;
   pitch = 0.38;
-  zoom = Math.max(0.7, Math.min(1.6, 140 / span));
+  zoom = Math.max(0.55, Math.min(1.25, 260 / span));
 }
 
 function animateCamera(target, ms, onDone) {
@@ -864,7 +940,8 @@ canvas.addEventListener('click', e => {
   const vis = visibleIdSet();
   for (const o of nodes3d) {
     if (!vis.has(o.n.id)) continue;
-    const pr = project(o.p.x, o.p.y, o.p.z);
+    const p = scenePos(o);
+    const pr = project(p.x, p.y, p.z);
     const d = Math.hypot(pr.sx - mx, pr.sy - my);
     if (d < bd) { bd = d; best = o; }
   }

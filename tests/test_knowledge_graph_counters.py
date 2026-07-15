@@ -537,10 +537,18 @@ class Test3DCoverageAndContracts:
         assert "tourState" in html3
         assert "setInterval" not in html3
         # Route-first means full graph/noisy context is not the default:
-        # route mode keeps all stops as anchors, but expands only the active stop.
+        # route mode keeps stops + lesson anchors; local mode expands context.
         assert "function addImmediateContext" in html3
+        assert "function routeStopPos" in html3
+        assert "function scenePos" in html3
         assert "if (viewMode === 'route')" in html3
         assert "if (active) addImmediateContext(ids, active);" in html3
+        route_branch = html3.split("if (viewMode === 'route')", 1)[1].split("if (viewMode === 'local')", 1)[0]
+        assert "addImmediateContext" not in route_branch
+        label_branch = html3.split("function labelAllowSet", 1)[1].split("function drawFloorPlane", 1)[0]
+        assert "anchors stay quiet" in label_branch
+        assert "return new Set(allow.slice(0, 8));" in label_branch
+        assert "quietRouteAnchor" in html3
         assert "route first frame is sparse" in html3
         # Initial camera must fit the whole route, not immediately recenter on stop #1.
         assert "fitRouteCamera();" in html3

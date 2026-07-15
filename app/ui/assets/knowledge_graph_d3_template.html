@@ -242,6 +242,8 @@ const COMPILER_HEALTH=__COMPILER_HEALTH__;
 const CLUSTER_LABELS=__CLUSTER_LABELS__;
 const DECAY_VECTOR=__DECAY_VECTOR__;        // KG-06: {concept_id: retention 0..1}
 const MASTERY_HISTORY=__MASTERY_HISTORY__;  // KG-07: [{date, mastery:{id:pct}}]
+// Server-side A2 route (same select_day_route as 3D hall). Prefer over local recompute.
+const DAY_ROUTE=__DAY_ROUTE__||[];
 const RELATION_STYLES={
   prerequisite:{color:'#60a5fa',dash:null,width:2,opacity:0.75,marker:'arr-prereq',label:'prerequisite'},
   precedes:{color:'#fbbf24',dash:'6,4',width:2,opacity:0.8,marker:'arr-precedes',label:'precedes'},
@@ -762,10 +764,8 @@ document.getElementById('rp-find').addEventListener('click',()=>{
   const startNode=simNodes.find(n=>n.id===s);if(startNode)focusNode(startNode);
 });
 
-// A2: "Маршрут дня" — топ-K actionable по worth, соединённых по возможности в prereq-порядке.
-// Actionable = due (повтор, даже learned) ИЛИ frontier.
-// Пытаемся строить coherent последовательность: от высокого worth стартуем и жадно
-// добавляем лучший unlock среди оставшихся actionable (как в оригинальном замысле плана).
+// A2: "Маршрут дня" — prefer server day_route (select_day_route, k=6, top=max(k,10)).
+// Local computeDayRoute is fallback only for older exports without DAY_ROUTE.
 function computeDayRoute(k=6){
   let cands = NODES.filter(n => {
     if (n.is_lesson) return false;
@@ -776,13 +776,13 @@ function computeDayRoute(k=6){
   if (!cands.length) return [];
   cands.sort((a, b) => (b.w || 0) - (a.w || 0));
 
-  const top = cands.slice(0, Math.max(k, 8)); // берём чуть больше для chaining
+  // Align with Python select_day_route: top window max(k, 10)
+  const top = cands.slice(0, Math.max(k, 10));
   const idSet = new Set(top.map(x => x.id));
 
   const selected = [];
   const used = new Set();
 
-  // стартуем с самого высокого worth
   if (top.length) {
     selected.push(top[0].id);
     used.add(top[0].id);
@@ -795,7 +795,6 @@ function computeDayRoute(k=6){
     let best = null;
     let bestW = -1;
 
-    // пытаемся продолжить по unlocks (prereq-порядок вперёд)
     for (const u of (lastNode.unlocks || [])) {
       if (idSet.has(u) && !used.has(u)) {
         const cand = top.find(x => x.id === u);
@@ -812,7 +811,6 @@ function computeDayRoute(k=6){
       continue;
     }
 
-    // fallback: следующий по worth среди ещё не использованных actionable
     for (const cand of top) {
       if (!used.has(cand.id)) {
         selected.push(cand.id);
@@ -825,16 +823,25 @@ function computeDayRoute(k=6){
   return selected.slice(0, k);
 }
 
+function resolveDayRoute(k=6){
+  const server = (DAY_ROUTE||[]).map(x => typeof x === 'string' ? x : (x && x.id)).filter(Boolean);
+  if (server.length) return server.slice(0, k);
+  return computeDayRoute(k);
+}
+
 document.getElementById('rp-day').addEventListener('click',()=>{
   const stepsEl=document.getElementById('rp-steps');
-  const route = computeDayRoute(6);
+  const route = resolveDayRoute(6);
   if(!route.length){stepsEl.innerHTML='<div class="rp-msg rp-err">Нет кандидатов (все изучены?)</div>';return;}
   const html = route.map((id,i)=>{
     const n = nodeMap.get(id);
     const reason = (n && n.worth_reason) ? n.worth_reason : '';
+    const label = n ? n.label : id;
+    // textContent path via temporary element for labels from graph/LLM
+    const esc = (s)=>{const t=document.createElement('span');t.textContent=String(s||'');return t.innerHTML;};
     return (i>0?'<div class="rp-arrow">↓</div>':'') +
-      `<div class="rp-step"><div class="rs-dot" style="background:${ROUTE_COLORS[i%ROUTE_COLORS.length]}"></div><span>${n?n.label:id}</span>` +
-      (reason?`<span style="margin-left:6px;font-size:9px;opacity:.75">${reason}</span>`:'') + `</div>`;
+      `<div class="rp-step"><div class="rs-dot" style="background:${ROUTE_COLORS[i%ROUTE_COLORS.length]}"></div><span>${esc(label)}</span>` +
+      (reason?`<span style="margin-left:6px;font-size:9px;opacity:.75">${esc(reason)}</span>`:'') + `</div>`;
   }).join('');
   stepsEl.innerHTML = `<div class="rp-msg rp-ok">Маршрут дня (${route.length} остановок по ценности)</div>` + html;
   animatePath(route);

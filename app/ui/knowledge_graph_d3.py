@@ -661,6 +661,37 @@ def build_kg_payload(
     }
 
 
+def _json_for_script(value: Any) -> str:
+    """Serialize JSON safe to embed inside a ``<script>`` block.
+
+    Escapes ``<`` / ``>`` / ``&`` so a label containing ``</script>`` or HTML
+    cannot break out of the script context when the offline HTML is opened.
+    """
+    return (
+        json.dumps(value, ensure_ascii=False)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+        .replace("\u2028", "\\u2028")
+        .replace("\u2029", "\\u2029")
+    )
+
+
+def _day_route_ids(payload: Mapping[str, Any]) -> list[str]:
+    day_route = payload.get("day_route") or []
+    if not isinstance(day_route, list):
+        return []
+    route_ids: list[str] = []
+    for item in day_route:
+        if isinstance(item, str) and item.strip():
+            route_ids.append(item.strip())
+        elif isinstance(item, Mapping):
+            rid = str(item.get("id") or "").strip()
+            if rid:
+                route_ids.append(rid)
+    return route_ids
+
+
 def build_kg_html(payload: Mapping[str, Any]) -> str:
     d3_src = _load_d3_source()
     if d3_src:
@@ -672,30 +703,33 @@ def build_kg_html(payload: Mapping[str, Any]) -> str:
     return (
         _load_html_template()
         .replace("__D3_TAG__", d3_tag)
-        .replace("__NODES__",         json.dumps(payload["nodes"],         ensure_ascii=False))
-        .replace("__EDGES__",         json.dumps(payload["edges"],         ensure_ascii=False))
-        .replace("__LEVELS__",        json.dumps(payload["levels"],        ensure_ascii=False))
-        .replace("__STATS__",         json.dumps(payload["stats"],         ensure_ascii=False))
-        .replace("__HEALTH__",        json.dumps(payload["health"],        ensure_ascii=False))
-        .replace("__CLUSTER_LABELS__",json.dumps(payload["cluster_labels"],ensure_ascii=False))
-        .replace("__DECAY_VECTOR__",    json.dumps(payload.get("decay_vector", {}),    ensure_ascii=False))
-        .replace("__MASTERY_HISTORY__", json.dumps(payload.get("mastery_history", []), ensure_ascii=False))
-        .replace("__COMPILER_HEALTH__", json.dumps(payload.get("compiler_health"), ensure_ascii=False))
+        .replace("__NODES__",         _json_for_script(payload["nodes"]))
+        .replace("__EDGES__",         _json_for_script(payload["edges"]))
+        .replace("__LEVELS__",        _json_for_script(payload["levels"]))
+        .replace("__STATS__",         _json_for_script(payload["stats"]))
+        .replace("__HEALTH__",        _json_for_script(payload["health"]))
+        .replace("__CLUSTER_LABELS__",_json_for_script(payload["cluster_labels"]))
+        .replace("__DECAY_VECTOR__",    _json_for_script(payload.get("decay_vector", {})))
+        .replace("__MASTERY_HISTORY__", _json_for_script(payload.get("mastery_history", [])))
+        .replace("__COMPILER_HEALTH__", _json_for_script(payload.get("compiler_health")))
+        .replace("__DAY_ROUTE__",       _json_for_script(_day_route_ids(payload)))
     )
 
 
 def build_kg_3d_html(payload: Mapping[str, Any]) -> str:
-    """B1: self-contained 3D Knowledge Graph hall.
-    Uses same payload (nodes + edges + worth signals from A1/A2).
-    Edges are passed so the 3D view renders actual graph connections, not just a node cloud.
+    """B1: self-contained offline 3D Knowledge Graph hall (no CDN).
+
+    Same payload object as the 2D map: nodes (worth/due/novel), edges, stats,
+    and precomputed ``day_route`` (A2 stops) for flight + stop list.
     """
     t = _load_3d_template()
+    route_ids = _day_route_ids(payload)
     return (
-        t.replace("__NODES__", json.dumps(payload.get("nodes", []), ensure_ascii=False))
-         .replace("__EDGES__", json.dumps(payload.get("edges", []), ensure_ascii=False))
-         .replace("__STATS__", json.dumps(payload.get("stats", {}), ensure_ascii=False))
-         .replace("__HEALTH__", json.dumps(payload.get("health"), ensure_ascii=False))
-         .replace("__DAY_ROUTE__", json.dumps(payload.get("day_route", []), ensure_ascii=False))
+        t.replace("__NODES__", _json_for_script(payload.get("nodes", [])))
+         .replace("__EDGES__", _json_for_script(payload.get("edges", [])))
+         .replace("__STATS__", _json_for_script(payload.get("stats", {})))
+         .replace("__HEALTH__", _json_for_script(payload.get("health")))
+         .replace("__DAY_ROUTE__", _json_for_script(route_ids))
     )
 
 

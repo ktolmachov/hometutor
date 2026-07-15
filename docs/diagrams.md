@@ -603,6 +603,10 @@ flowchart TB
     T4 --> T5
 ```
 
+Тиры 1-5 в `feature_registry.py` не изменились, но control-panel пресеты (`app/ui_preferences.py`)
+с 2026-07 схлопнуты в три: **Учёба** = тиры 1-2, **Полный** = тир 3, **Диагностика** = тиры 4-5
+(старые значения `"1".."5"`/`"all"` мигрируют на чтении). См. `docs/user_guide.md#панель-управления-и-уровни-интерфейса`.
+
 ## 5. AI-агент: целевой flow и gates
 
 Overlay по `docs/agent_roadmap.md`. `app/agent/*` и compact `agent_runs` /

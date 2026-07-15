@@ -21,17 +21,17 @@ def kv_store(monkeypatch):
     return store
 
 
-def test_existing_user_migrates_to_all(kv_store, monkeypatch) -> None:
+def test_existing_user_migrates_to_diagnostic(kv_store, monkeypatch) -> None:
     monkeypatch.setattr(prefs, "_has_existing_activity", lambda: True)
 
-    assert prefs.get_ui_level() == prefs.LEVEL_ALL
-    assert kv_store[prefs.UI_LEVEL_KEY] == prefs.LEVEL_ALL
+    assert prefs.get_ui_level() == prefs.LEVEL_DIAGNOSTIC
+    assert kv_store[prefs.UI_LEVEL_KEY] == prefs.LEVEL_DIAGNOSTIC
 
 
-def test_new_user_defaults_to_level_1_without_persisting(kv_store, monkeypatch) -> None:
+def test_new_user_defaults_to_study_without_persisting(kv_store, monkeypatch) -> None:
     monkeypatch.setattr(prefs, "_has_existing_activity", lambda: False)
 
-    assert prefs.get_ui_level() == "1"
+    assert prefs.get_ui_level() == prefs.LEVEL_STUDY
     assert prefs.UI_LEVEL_KEY not in kv_store
 
 
@@ -39,10 +39,42 @@ def test_set_ui_level_validates_and_clears_overrides(kv_store) -> None:
     prefs.set_override("view:metrics", True)
     assert prefs.get_overrides() == {"view:metrics": True}
 
-    prefs.set_ui_level("2")
+    prefs.set_ui_level(prefs.LEVEL_FULL)
 
-    assert kv_store[prefs.UI_LEVEL_KEY] == "2"
+    assert kv_store[prefs.UI_LEVEL_KEY] == prefs.LEVEL_FULL
     assert prefs.get_overrides() == {}
+
+
+def test_legacy_level_values_migrate_on_read(kv_store) -> None:
+    kv_store[prefs.UI_LEVEL_KEY] = "3"
+
+    assert prefs.get_ui_level() == prefs.LEVEL_FULL
+    assert kv_store[prefs.UI_LEVEL_KEY] == prefs.LEVEL_FULL
+
+
+def test_legacy_all_migrates_to_diagnostic(kv_store) -> None:
+    kv_store[prefs.UI_LEVEL_KEY] = "all"
+
+    assert prefs.get_ui_level() == prefs.LEVEL_DIAGNOSTIC
+
+
+def test_ensure_min_ui_level_promotes_but_never_downgrades(kv_store) -> None:
+    prefs.set_ui_level(prefs.LEVEL_STUDY)
+
+    prefs.ensure_min_ui_level(prefs.LEVEL_FULL)
+    assert kv_store[prefs.UI_LEVEL_KEY] == prefs.LEVEL_FULL
+
+    prefs.ensure_min_ui_level(prefs.LEVEL_STUDY)
+    assert kv_store[prefs.UI_LEVEL_KEY] == prefs.LEVEL_FULL
+
+
+def test_ensure_min_ui_level_does_not_clear_overrides(kv_store) -> None:
+    prefs.set_ui_level(prefs.LEVEL_STUDY)
+    prefs.set_override("view:metrics", True)
+
+    prefs.ensure_min_ui_level(prefs.LEVEL_FULL)
+
+    assert prefs.get_overrides() == {"view:metrics": True}
 
 
 def test_set_ui_level_rejects_unknown_level() -> None:
@@ -68,9 +100,11 @@ def test_ui_prefs_migrate_from_global_db_for_auth_user(tmp_path, monkeypatch) ->
         config.reset_settings_cache()
         reset_schema_cache_for_tests()
 
-        assert prefs.get_ui_level() == "3"
+        # Global DB still holds the legacy "3"; per-user copy + legacy-level
+        # migration both fire on this first read, landing on the new preset.
+        assert prefs.get_ui_level() == prefs.LEVEL_FULL
         assert prefs.get_overrides() == {"view:metrics": True}
-        assert get_kv("ui_level") == "3"
+        assert get_kv("ui_level") == prefs.LEVEL_FULL
         assert get_kv("ui_feature_overrides") == '{"view:metrics": true}'
     finally:
         set_current_user_id(None)
@@ -100,10 +134,19 @@ def test_get_ui_theme_falls_back_on_invalid_stored(kv_store) -> None:
 
 
 def test_feature_visible_honors_level_and_override() -> None:
-    spec = feature_by_id("view:metrics")
+    spec = feature_by_id("view:metrics")  # tier 4 -> Диагностика
+    assert spec is not None
+
+    assert prefs.feature_visible(spec, level=prefs.LEVEL_STUDY, overrides={}) is False
+    assert prefs.feature_visible(spec, level=prefs.LEVEL_DIAGNOSTIC, overrides={}) is True
+    assert prefs.feature_visible(spec, level=prefs.LEVEL_STUDY, overrides={spec.id: True}) is True
+    assert prefs.feature_visible(spec, level=prefs.LEVEL_DIAGNOSTIC, overrides={spec.id: False}) is False
+
+
+def test_feature_visible_honors_legacy_level_values() -> None:
+    """level_allows still resolves old stored "1".."5"/"all" if ever passed directly."""
+    spec = feature_by_id("view:metrics")  # tier 4
     assert spec is not None
 
     assert prefs.feature_visible(spec, level="1", overrides={}) is False
-    assert prefs.feature_visible(spec, level=prefs.LEVEL_ALL, overrides={}) is True
-    assert prefs.feature_visible(spec, level="1", overrides={spec.id: True}) is True
-    assert prefs.feature_visible(spec, level=prefs.LEVEL_ALL, overrides={spec.id: False}) is False
+    assert prefs.feature_visible(spec, level="all", overrides={}) is True

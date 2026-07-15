@@ -67,7 +67,7 @@ def _render_onboarding() -> None:
     """Первый запуск: короткий выбор уровня интерфейса; ценность сначала."""
     from app.ui_events import track_event
     from app.ui.breadcrumb import HOME_VIEW
-    from app.ui_preferences import LEVEL_ALL, set_ui_level
+    from app.ui_preferences import LEVEL_DIAGNOSTIC, LEVEL_FULL, LEVEL_STUDY, set_ui_level
     from app.user_state import set_kv
 
     st.markdown(
@@ -86,18 +86,19 @@ def _render_onboarding() -> None:
     st.caption("Цель обучения можно будет настроить после первого ответа, когда уже будет понятно, что подстраивать.")
     ui_mode_label = st.radio(
         "Какой интерфейс показать?",
-        ["Начинаю с нуля", "Учусь регулярно", "Показать всё"],
-        index=1,
+        ["Учёба", "Полный (курсы и план)", "Диагностика (метрики и trace)"],
+        index=0,
     )
     launch_tour = st.checkbox("Запустить интерактивный тур", value=True)
     st.caption(
-        "Маршрут по умолчанию: объяснение → две мини-проверки → повторение (ориентир 15–30 мин)."
+        "Маршрут по умолчанию: объяснение → две мини-проверки → повторение (ориентир 15–30 мин). "
+        "Активация курса сама открывает режим «Полный», если сейчас выбрана «Учёба»."
     )
     if st.button("Начать", type="primary", width='stretch', key="onboarding_start"):
         ui_level_map = {
-            "Начинаю с нуля": "1",
-            "Учусь регулярно": "2",
-            "Показать всё": LEVEL_ALL,
+            "Учёба": LEVEL_STUDY,
+            "Полный (курсы и план)": LEVEL_FULL,
+            "Диагностика (метрики и trace)": LEVEL_DIAGNOSTIC,
         }
         set_ui_level(ui_level_map[ui_mode_label])
         set_kv("onboarding_v1_done", "1")

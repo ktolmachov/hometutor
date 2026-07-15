@@ -470,6 +470,65 @@ class Test3DCoverageAndContracts:
         assert '"target":"y"' in h or '"target": "y"' in h
         assert 'window.__EDGES__ = []' not in h
 
+    def test_3d_html_embeds_day_route_and_is_offline(self):
+        """B1 DoD polish: A2 day_route in export; no CDN/three.js."""
+        concepts = {
+            "a": {"label": "A"},
+            "b": {"label": "B", "prerequisites": ["a"]},
+            "lesson:1": {"label": "Lec", "level": "lesson"},
+        }
+        payload = build_kg_payload(
+            concepts,
+            due_reviews=[{"concept": "b"}, {"concept": "a"}],
+            mastery_vector={},
+        )
+        # Force a known route if frontier math is empty for this mini graph
+        if not payload.get("day_route"):
+            payload = {**payload, "day_route": ["b", "a"]}
+        html3 = build_kg_3d_html(payload)
+        assert "const DAY_ROUTE" in html3 or "DAY_ROUTE" in html3
+        for rid in payload["day_route"]:
+            assert rid in html3
+        # Offline hall: canvas only — no external script vendors (CDN ban from plan #6/#15)
+        assert "cdn.jsdelivr" not in html3.lower()
+        assert "unpkg.com" not in html3.lower()
+        assert "cdnjs.cloudflare" not in html3.lower()
+        assert "<script src=" not in html3.lower()  # no external scripts
+        assert "<canvas" in html3.lower()
+        assert "Полёт" in html3
+
+    def test_script_json_escapes_html_and_script_breakout(self):
+        """P1: labels with </script> or < must not break offline export script context."""
+        from app.ui.knowledge_graph_d3 import _json_for_script
+
+        raw = _json_for_script({"label": "</script><img onerror=1>"})
+        assert "</script>" not in raw
+        assert "<img" not in raw
+        assert "\\u003c" in raw
+
+        evil = {
+            "nodes": [{"id": "x", "label": "</script><script>alert(1)</script>", "worth": 1}],
+            "edges": [],
+            "stats": {},
+            "day_route": ["x"],
+        }
+        html3 = build_kg_3d_html(evil)
+        assert "</script><script>" not in html3
+        assert "\\u003c/script\\u003e" in html3 or "\\u003c" in html3
+
+        html2 = build_kg_html({
+            "nodes": evil["nodes"],
+            "edges": [],
+            "levels": {},
+            "stats": {},
+            "health": {},
+            "cluster_labels": {},
+            "day_route": ["x"],
+        })
+        assert "DAY_ROUTE" in html2
+        assert '"x"' in html2 or "'x'" in html2
+        assert "</script><script>" not in html2
+
 
 class TestA1NodePriceSignals:
     """A1 (wave-kg-node-worth): due_reviews and novel must be wired into node payload.

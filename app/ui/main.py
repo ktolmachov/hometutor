@@ -110,6 +110,14 @@ try:
 except Exception as exc:  # noqa: BLE001 - restore активного курса опционален, не блокируем старт UI
     logger.debug("Study scope restore skipped: %s", exc)
 
+try:
+    from app.ui.study_scope import maybe_auto_activate_demo_course
+
+    if maybe_auto_activate_demo_course():
+        st.toast("Демо-курс «hometutor 101» активирован автоматически.", icon="🎓")
+except Exception as exc:  # noqa: BLE001 - авто-активация демо-курса опциональна, не блокируем старт UI
+    logger.debug("Demo course auto-activation skipped: %s", exc)
+
 
 @st.dialog("Начало работы")
 def _render_onboarding_dialog() -> None:
@@ -271,7 +279,8 @@ if _pending_nav_view in ALL_VIEWS:
 
 _ui_level = get_ui_level()
 _ui_overrides = get_overrides()
-_nav_labels = BEGINNER_VIEW_LABELS_RU if _ui_level == "1" else _view_nav_labels
+# Study preset keeps short beginner labels (legacy level "1" migrated to "study").
+_nav_labels = BEGINNER_VIEW_LABELS_RU if _ui_level in ("study", "1") else _view_nav_labels
 _hidden_nav_views = hidden_nav_views_for_level(_ui_level, _ui_overrides)
 visible_nav_views = visible_nav_views_for_level(
     _ui_level,

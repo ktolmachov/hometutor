@@ -14,7 +14,9 @@ from app.ui.theme_presets import (
     get_theme_title,
 )
 from app.ui_preferences import (
-    LEVEL_ALL,
+    LEVEL_DIAGNOSTIC,
+    LEVEL_FULL,
+    LEVEL_STUDY,
     clear_overrides,
     feature_visible,
     get_overrides,
@@ -23,16 +25,14 @@ from app.ui_preferences import (
     set_override,
     set_ui_level,
     set_ui_theme,
+    tier_level,
 )
 
 
 _LEVEL_CARDS: tuple[tuple[str, str, str], ...] = (
-    ("1", "Начальный", "Только базовые входы"),
-    ("2", "Основной", "Учёба и прогресс"),
-    ("3", "Продвинутый", "Планы и граф знаний"),
-    ("4", "Профи", "Метрики и перенос"),
-    ("5", "Эксперт", "Trace и диагностика"),
-    (LEVEL_ALL, "Всё включено", "Полный прежний интерфейс"),
+    (LEVEL_STUDY, "Учёба", "Вопросы, тьютор, quiz, flashcards, прогресс"),
+    (LEVEL_FULL, "Полный", "+ курсы, адаптивный план, граф знаний"),
+    (LEVEL_DIAGNOSTIC, "Диагностика", "+ метрики, trace, backup, перенос данных"),
 )
 
 
@@ -106,7 +106,7 @@ def _render_overrides(level: str, overrides: dict[str, bool]) -> None:
                         key=f"ui_feature_toggle_{spec.id}",
                     )
                 with cols[1]:
-                    st.caption(f"ур. {spec.tier}")
+                    st.caption(_level_title(tier_level(spec.tier)))
                 if enabled != current:
                     set_override(spec.id, enabled)
                     st.rerun()

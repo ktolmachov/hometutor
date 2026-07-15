@@ -13,8 +13,35 @@ logger = logging.getLogger(__name__)
 UI_LEVEL_KEY = "ui_level"
 UI_OVERRIDES_KEY = "ui_feature_overrides"
 UI_THEME_KEY = "ui_theme"
-LEVEL_ALL = "all"
-VALID_UI_LEVELS = frozenset({"1", "2", "3", "4", "5", LEVEL_ALL})
+
+# Three presets: Учёба (day-to-day learning loop), Полный (courses/plans/graph),
+# Диагностика (metrics/trace/index — operator surface). Collapsed down from a
+# legacy 6-level scheme (tiers "1".."5" + "all") that split one audience across
+# too many cards; feature tiers 1-5 in feature_registry.py still exist and are
+# bucketed into these three via _TIER_LEVEL below.
+LEVEL_STUDY = "study"
+LEVEL_FULL = "full"
+LEVEL_DIAGNOSTIC = "diagnostic"
+VALID_UI_LEVELS = frozenset({LEVEL_STUDY, LEVEL_FULL, LEVEL_DIAGNOSTIC})
+
+# Legacy stored values (pre-collapse) map onto the new presets so existing
+# per-user KV rows keep working without a migration script.
+_LEGACY_LEVEL_MAP: dict[str, str] = {
+    "1": LEVEL_STUDY,
+    "2": LEVEL_STUDY,
+    "3": LEVEL_FULL,
+    "4": LEVEL_DIAGNOSTIC,
+    "5": LEVEL_DIAGNOSTIC,
+    "all": LEVEL_DIAGNOSTIC,
+}
+_LEVEL_ORDER: dict[str, int] = {LEVEL_STUDY: 0, LEVEL_FULL: 1, LEVEL_DIAGNOSTIC: 2}
+_TIER_LEVEL: dict[int, str] = {
+    1: LEVEL_STUDY,
+    2: LEVEL_STUDY,
+    3: LEVEL_FULL,
+    4: LEVEL_DIAGNOSTIC,
+    5: LEVEL_DIAGNOSTIC,
+}
 
 
 def _ensure_auth_context() -> None:
@@ -114,10 +141,14 @@ def get_ui_level() -> str:
     raw = str(_safe_get_kv(UI_LEVEL_KEY, "") or "").strip().lower()
     if raw in VALID_UI_LEVELS:
         return raw
+    if raw in _LEGACY_LEVEL_MAP:
+        migrated = _LEGACY_LEVEL_MAP[raw]
+        _safe_set_kv(UI_LEVEL_KEY, migrated)
+        return migrated
     if _has_existing_activity():
-        _safe_set_kv(UI_LEVEL_KEY, LEVEL_ALL)
-        return LEVEL_ALL
-    return "1"
+        _safe_set_kv(UI_LEVEL_KEY, LEVEL_DIAGNOSTIC)
+        return LEVEL_DIAGNOSTIC
+    return LEVEL_STUDY
 
 
 def set_ui_level(level: str) -> None:
@@ -126,6 +157,23 @@ def set_ui_level(level: str) -> None:
         raise ValueError(f"unsupported UI level: {level!r}")
     _safe_set_kv(UI_LEVEL_KEY, value)
     clear_overrides()
+
+
+def ensure_min_ui_level(level: str) -> None:
+    """Raise the stored UI level to at least ``level`` without clearing overrides.
+
+    For automatic promotions (e.g. activating a course should reveal the
+    course/plan/graph views even if the learner never opened the control
+    panel). Never downgrades, and unlike :func:`set_ui_level` this is a silent
+    background nudge, not a deliberate preset switch, so overrides survive it.
+    """
+    value = str(level or "").strip().lower()
+    if value not in VALID_UI_LEVELS:
+        raise ValueError(f"unsupported UI level: {level!r}")
+    current = get_ui_level()
+    if _LEVEL_ORDER.get(current, 0) >= _LEVEL_ORDER.get(value, 0):
+        return
+    _safe_set_kv(UI_LEVEL_KEY, value)
 
 
 def get_ui_theme() -> str:
@@ -171,9 +219,14 @@ def clear_overrides() -> None:
 
 
 def level_allows(spec_tier: int, level: str) -> bool:
-    if level == LEVEL_ALL:
-        return True
-    return int(spec_tier) <= int(level)
+    resolved = _LEGACY_LEVEL_MAP.get(str(level or "").strip().lower(), level)
+    tier_level = _TIER_LEVEL.get(int(spec_tier), LEVEL_DIAGNOSTIC)
+    return _LEVEL_ORDER.get(tier_level, 2) <= _LEVEL_ORDER.get(resolved, 2)
+
+
+def tier_level(spec_tier: int) -> str:
+    """Return which of the three presets a feature-registry tier (1-5) belongs to."""
+    return _TIER_LEVEL.get(int(spec_tier), LEVEL_DIAGNOSTIC)
 
 
 def feature_visible(

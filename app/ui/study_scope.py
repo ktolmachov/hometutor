@@ -169,7 +169,23 @@ def activate_scope(
     _clear_scope_derived_state(target)
     if state is None:
         _persist_active_scope(scope)
+        _promote_ui_level_for_course()
     return scope
+
+
+def _promote_ui_level_for_course() -> None:
+    """Raise the UI level to "Полный" so Course/Plan/Graph become visible.
+
+    Activating a course is a clear signal of intent — don't make the learner
+    also find the control panel to unlock the views that make a course useful.
+    Best-effort: a promotion failure must not break activation.
+    """
+    try:
+        from app.ui_preferences import LEVEL_FULL, ensure_min_ui_level
+
+        ensure_min_ui_level(LEVEL_FULL)
+    except Exception:  # noqa: BLE001 - promotion is best-effort; must not break activate_scope
+        pass
 
 
 def _save_last_deactivated_scope(
@@ -262,6 +278,50 @@ def restore_scope_from_app_kv(
     except Exception:  # noqa: BLE001 - hydration must never crash UI startup
         return notice
     return notice
+
+
+_DEMO_COURSE_AUTOACTIVATE_KV_KEY = "study_scope.demo_course_autoactivated"
+
+
+def maybe_auto_activate_demo_course(
+    state: MutableMapping[str, Any] | None = None,
+) -> bool:
+    """Auto-activate the built-in ``hometutor_101`` course on a demo deployment.
+
+    HF Space / local demo runs (``HOME_RAG_DATA_MODE=demo``) ship this course
+    pre-seeded (see ``deploy/hf-spaces/bootstrap_demo_paths.sh``), but nothing
+    used to activate it — a first-time visitor landed on an empty-feeling
+    Mission Control with no course scope and no path to one below the
+    "Полный" UI level. Fires at most once (KV marker) and never overrides an
+    explicit choice: skipped once the learner has activated or deactivated
+    any scope themselves. Returns True if it just activated the course.
+    """
+    if state is not None:
+        return False
+    try:
+        from app.course_graduation import delight_data_mode_is_demo
+
+        if not delight_data_mode_is_demo():
+            return False
+        if get_active_scope() is not None or get_last_deactivated_scope() is not None:
+            return False
+
+        from app.user_state_core import get_kv, set_kv
+
+        if get_kv(_DEMO_COURSE_AUTOACTIVATE_KV_KEY) == "1":
+            return False
+
+        from app.demo_sandbox import BUILTIN_DEMO_COURSE_REL, builtin_demo_course_target_dir
+
+        course_dir = builtin_demo_course_target_dir()
+        if not (course_dir / "README.md").is_file():
+            return False
+
+        set_kv(_DEMO_COURSE_AUTOACTIVATE_KV_KEY, "1")
+        activate_scope(folder_rel=BUILTIN_DEMO_COURSE_REL.as_posix(), title="hometutor 101")
+        return True
+    except Exception:  # noqa: BLE001 - auto-activation is best-effort; must not break UI startup
+        return False
 
 
 def get_active_scope(

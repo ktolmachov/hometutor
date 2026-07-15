@@ -493,15 +493,20 @@ def tile_feature_visible(tile_id: str, *, level: str | None = None, overrides: d
     spec = feature_by_id(feature_id)
     if spec is None:
         return True
-    # The Course tile is also the activation entry point. The destination view
-    # may still require an active scope, but hiding the tile before activation
-    # removes the only Mission Control path to choose that scope.
-    context_ok = True if tile_id == "course" else context_ok_for_feature(spec)
+    overrides_val = overrides if overrides is not None else get_overrides()
+    if tile_id == "course":
+        # The Course tile is also the activation entry point: no active scope
+        # means no course-scoped nav item to reach it through, so the tile
+        # itself must stay reachable at every UI level. Manual fine-tuning
+        # overrides still apply — only the level/tier gate is bypassed.
+        if spec.id in overrides_val:
+            return bool(overrides_val[spec.id])
+        return True
     return feature_visible(
         spec,
         level=level or get_ui_level(),
-        overrides=overrides if overrides is not None else get_overrides(),
-        context_ok=context_ok,
+        overrides=overrides_val,
+        context_ok=context_ok_for_feature(spec),
     )
 
 

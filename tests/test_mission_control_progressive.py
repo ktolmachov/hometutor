@@ -100,17 +100,33 @@ def test_agent_tile_visible_only_when_agent_enabled(monkeypatch) -> None:
 
     # disabled
     monkeypatch.setattr("app.config.get_settings", lambda: types.SimpleNamespace(agent_enabled=False))
-    assert not tile_feature_visible("agent_session", level="all", overrides={})
+    assert not tile_feature_visible("agent_session", level="diagnostic", overrides={})
 
     # enabled
     monkeypatch.setattr("app.config.get_settings", lambda: types.SimpleNamespace(agent_enabled=True))
-    assert tile_feature_visible("agent_session", level="all", overrides={})
+    assert tile_feature_visible("agent_session", level="diagnostic", overrides={})
 
 
 def test_course_tile_visible_without_active_scope_for_activation(monkeypatch) -> None:
     monkeypatch.setattr("app.ui.study_scope.get_active_scope", lambda: None)
 
-    assert tile_feature_visible("course", level="all", overrides={})
+    assert tile_feature_visible("course", level="diagnostic", overrides={})
+
+
+def test_course_tile_visible_at_default_study_level(monkeypatch) -> None:
+    """Regression: the course tile is the only Mission Control activation path,
+    so it must stay reachable even at the default "Учёба" level, not just at
+    "Диагностика" — otherwise a new user can never activate a course."""
+    monkeypatch.setattr("app.ui.study_scope.get_active_scope", lambda: None)
+
+    assert tile_feature_visible("course", level="study", overrides={})
+
+
+def test_course_tile_hidden_by_explicit_override(monkeypatch) -> None:
+    """Fine-tuning overrides still win over the course tile's level bypass."""
+    monkeypatch.setattr("app.ui.study_scope.get_active_scope", lambda: None)
+
+    assert not tile_feature_visible("course", level="study", overrides={"view:course": False})
 
 
 def test_a1_agent_prefill_logic() -> None:

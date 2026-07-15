@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "konspekt_sha256": "67a2808ed1f6dd83aca9804ad9929d2f0707934a5ed12d777de7ce18a616fac1",
+  "konspekt_sha256": "215c52e07f3b94be7b3e975612ff10447a9b60b43cfdc5364f30c1246dfccb1f",
   "media_sha256": "d214df9f34823c6d5cf2978584a75b6dc211c7b41c014a42a499962752055c40",
   "generated_by": {
     "tool": "scripts/attach_whole_lesson_video.py",
-    "created_at": "2026-07-14T19:56:31Z"
+    "created_at": "2026-07-15T05:44:50Z"
   },
   "media": {
     "video": {

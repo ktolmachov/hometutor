@@ -1,24 +1,24 @@
 {
   "schema_version": 1,
-  "index_version": 1,
+  "index_version": 6,
   "active_generation": {
-    "generation_id": "reset_home_rag_v2_2026_07_15T06_01_38_609583_00_00",
+    "generation_id": "reset_home_rag_v2_2026_07_15T20_41_08_756406_00_00",
     "chunks_collection": "home-rag_v2",
     "summaries_collection": "home_rag_summaries",
-    "activated_at": "2026-07-15T06:01:38.609583+00:00",
+    "activated_at": "2026-07-15T20:41:08.756406+00:00",
     "embed_model": "perplexity/pplx-embed-v1-0.6b",
     "documents_count": 20,
     "nodes_count": 40,
     "summary_documents_count": null
   },
   "previous_generation": {
-    "generation_id": "legacy",
+    "generation_id": "reset_home_rag_v2_2026_07_14T21_43_41_238449_00_00",
     "chunks_collection": "home-rag_v2",
     "summaries_collection": "home_rag_summaries",
-    "activated_at": null,
-    "embed_model": null,
-    "documents_count": null,
-    "nodes_count": null,
+    "activated_at": "2026-07-14T21:43:41.238449+00:00",
+    "embed_model": "text-embedding-qwen3-embedding-0.6b",
+    "documents_count": 20,
+    "nodes_count": 41,
     "summary_documents_count": null
   },
   "staging_generation": null,

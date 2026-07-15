@@ -2,23 +2,25 @@
 
 Курс «от папки с лекциями до карты знаний»: 6 уроков, каждый — одна большая
 идея и одно новое «могу сам». Произведён эволюционным разбором №16
-([`../../presentations/evolutionary_analyses/16_beginner_course.html`](../../presentations/evolutionary_analyses/16_beginner_course.html))
+(репозиторий `hometutor-studio`, файл
+`doc/presentations/evolutionary_analyses/16_beginner_course.html`)
 по варианту шаблона «разбор-обучение»
-([`evolutionary_analysis_guide.md` §2.1](../../presentations/evolutionary_analysis_guide.md)).
+(`hometutor-studio/doc/presentations/evolutionary_analysis_guide.md` §2.1).
 
 **Планка курса:** каждый экран, кнопка и число в материалах существуют в
-продукте. На момент P1-финала `2026-07-14` курс был сверен с витриной
-сценариев runtime-репозитория `hometutor/docs/quickstart_demo.md` (38
-сценариев; `scenario_36–38` закрывают недостающие кадры курса) и рабочим
-состоянием hometutor на HEAD `6a3dddbae`. Production-кадры и исходники
-раскадровок хранятся в studio-репозитории:
-`hometutor-studio/doc/screenshots/final/`.
+продукте. Витрина фактов — runtime `hometutor/docs/quickstart_demo.md`
+(сценарии `scenario_36–38` закрывают кадры курса). Production-кадры и
+раскадровки — только в `hometutor-studio` (`doc/screenshots/final/`,
+`doc/courses/hometutor_101/video_scripts/`).
 
 **Этот экземпляр** — встроенный runtime demo pack: он уже лежит внутри
-`DATA_DIR/uploads/hometutor_101/` после установки демо или старта HF Space.
+`DATA_DIR/uploads/hometutor_101/` (здесь: `demo_data/uploads/hometutor_101/`
+или копия в `data/uploads/…`) после установки демо / HF Space.
 В pack входят учебные markdown-файлы, `*.media.json` и MP4 для панели
 «🎞 Все видео урока» в Living Konspekt. Production-исходники (`video_scripts/`,
 `slides/`) остаются в `hometutor-studio`, а не в runtime demo pack.
+Относительные ссылки на `presentations/` из этого README **не используются** —
+они ломаются при индексации pack как корпуса.
 
 ## Программа
 

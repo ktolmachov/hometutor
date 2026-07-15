@@ -10,7 +10,7 @@
     "epsilon_guardrails.md": "48b8d9f30992c58d4c08c0aa8d3092684f60ab8106d325419db0625672f1d80b",
     "gamma_hybrid.md": "63fbd987cfec7fb1ad93a99967214157e0bdc482e0e5400054e203721948257a",
     "python_basics.md": "9e9cef01028375fb2886ec6048a8a16de1804735bb06f6e4b981c3c8547d56d3",
-    "uploads/hometutor_101/README.md": "476cf60c53dedec4ea32bbc2fc4031c99dae148d1f502cae1a0935161a1d603d",
+    "uploads/hometutor_101/README.md": "1827f9f14be786c8df7e7e0fdc59cee7dde72ef51801937d24fe45b304669f51",
     "uploads/hometutor_101/konspekts/urok_1_pervyi_otvet.konspekt.md": "01ed73fd2a70cb986655b8863e8a3b20ecbb17bc158f54509046d15e6a51910a",
     "uploads/hometutor_101/konspekts/urok_2_petlya_pamyati.konspekt.md": "7ee78833cbd463650340baacc04ee416ec954f8e8afe88e41535f47f9b88b9cd",
     "uploads/hometutor_101/konspekts/urok_3_odin_sleduyushchiy_shag.konspekt.md": "bfd0746033aa6c808d847faec958ecbd72f15ac60f6d88870066edfd595e8371",
@@ -123,8 +123,8 @@
         "ext": ".md"
       },
       "uploads/hometutor_101/README.md": {
-        "size": 7721,
-        "mtime_ns": 1784061190547328400,
+        "size": 7749,
+        "mtime_ns": 1784147768906452700,
         "ext": ".md"
       }
     }

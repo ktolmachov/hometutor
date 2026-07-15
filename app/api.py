@@ -187,6 +187,13 @@ async def _app_lifespan(_: FastAPI):
 
     init_otel_if_enabled()
     log = logging.getLogger(PROJECT_ROOT_PATH)
+    try:
+        from app.demo_sandbox import sync_demo_graph_generation
+
+        if sync_demo_graph_generation():
+            log.info("Demo Knowledge Graph generation synced to the shipped snapshot at startup.")
+    except Exception as e:  # noqa: BLE001 - demo graph sync is best-effort, must not block startup
+        log.warning("Demo graph sync skipped: %s", e)
     # Index-independent warmups start immediately (no Chroma needed).
     threading.Thread(
         target=_readiness_warmup_background,

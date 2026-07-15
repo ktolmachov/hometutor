@@ -495,7 +495,100 @@ class Test3DCoverageAndContracts:
         assert "cdnjs.cloudflare" not in html3.lower()
         assert "<script src=" not in html3.lower()  # no external scripts
         assert "<canvas" in html3.lower()
-        assert "Полёт" in html3
+        # Route-scene controls (reorientation plan R1/L2) replace timer «Полёт»
+        assert "Тур" in html3 or "playbtn" in html3
+
+    def test_3d_html_route_scene_contract(self):
+        """R1/V1: first frame is route mode; modes + stop UI present; no worth-height."""
+        concepts = {
+            "a": {"label": "Agent"},
+            "b": {"label": "RAG", "prerequisites": ["a"]},
+            "c": {"label": "Memory", "prerequisites": ["b"]},
+            "lesson:01": {"label": "L1", "level": "lesson"},
+            "lesson:02": {"label": "L2", "level": "lesson"},
+        }
+        relations = [
+            {"source_concept_id": "a", "target_concept_id": "b", "relation_type": "prereq"},
+            {"source_concept_id": "b", "target_concept_id": "c", "relation_type": "prereq"},
+            {
+                "source_concept_id": "lesson:01",
+                "target_concept_id": "lesson:02",
+                "relation_type": "precedes",
+            },
+        ]
+        payload = build_kg_payload(
+            concepts,
+            typed_relations=relations,
+            due_reviews=[{"concept": "b"}, {"concept": "c"}, {"concept": "a"}],
+        )
+        if not payload.get("day_route"):
+            payload = {**payload, "day_route": ["b", "c", "a"]}
+        html3 = build_kg_3d_html(payload)
+
+        # Default route scene + mode switcher
+        assert "viewMode = 'route'" in html3 or 'viewMode = "route"' in html3
+        assert "modeRoute" in html3
+        assert "modeLocal" in html3
+        assert "modeAll" in html3
+        assert "Вся карта" in html3
+        assert "Стоп" in html3
+        assert "Home" in html3 or "homebtn" in html3
+        # Tour state machine (L2), not raw setInterval flight
+        assert "tourState" in html3
+        assert "setInterval" not in html3
+        # Worth is not geometric height (R2)
+        assert "worth || 0) * 18" not in html3
+        assert "worth||0)*18" not in html3
+        # Offline + no external scripts
+        assert "<script src=" not in html3.lower()
+        assert "three.js" not in html3.lower()
+        # Embedded route ids survive
+        for rid in payload["day_route"]:
+            assert rid in html3
+
+    def test_lesson_floor_order_uses_precedes_not_lexical(self):
+        """R2: lesson floors follow precedes chain; file variants collapse."""
+        from app.ui.knowledge_graph_d3_analysis import lesson_anchor_key, lesson_floor_order
+
+        nodes = [
+            {"id": "lesson:z-later.md", "is_lesson": True, "label": "Z"},
+            {"id": "lesson:a-first.md", "is_lesson": True, "label": "A"},
+            {"id": "lesson:a-first.txt", "is_lesson": True, "label": "A txt"},
+            {"id": "concept", "is_lesson": False, "label": "C"},
+        ]
+        edges = [
+            {
+                "source": "lesson:a-first.md",
+                "target": "lesson:z-later.md",
+                "relation_type": "precedes",
+            },
+        ]
+        order = lesson_floor_order(nodes, edges)
+        # a-first before z-later despite lexical z < a would be wrong if reversed
+        assert order[0].startswith("lesson:a-first")
+        assert order[-1].startswith("lesson:z-later")
+        # variants collapsed to one floor anchor
+        assert len(order) == 2
+
+        # Anchor key must match JS lessonAnchorKey: collapse /+ and \+ runs to one ':'
+        assert lesson_anchor_key(r"a//b\\c.md") == "a:b:c"
+        assert lesson_anchor_key("lesson:foo.md") == lesson_anchor_key("lesson:foo.txt")
+        # Double-slash path variants group to one floor
+        nodes_slash = [
+            {"id": r"docs//lec01.md", "is_lesson": True},
+            {"id": r"docs/lec01.txt", "is_lesson": True},
+            {"id": r"docs//lec02.md", "is_lesson": True},
+        ]
+        edges_slash = [
+            {
+                "source": r"docs//lec01.md",
+                "target": r"docs//lec02.md",
+                "relation_type": "precedes",
+            },
+        ]
+        order_slash = lesson_floor_order(nodes_slash, edges_slash)
+        assert len(order_slash) == 2
+        assert lesson_anchor_key(order_slash[0]) == lesson_anchor_key(r"docs//lec01.md")
 
     def test_script_json_escapes_html_and_script_breakout(self):
         """P1: labels with </script> or < must not break offline export script context."""

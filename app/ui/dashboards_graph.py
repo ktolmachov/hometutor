@@ -1108,14 +1108,18 @@ def _render_knowledge_graph_tab() -> None:
         help="Самодостаточная интерактивная карта курса для локального открытия без приложения.",
     )
 
-    # B1: 3D hall export (same payload, worth from A2 used for height/glow + route flight)
+    # 3D hall export: same payload; first frame = day route; worth = rank/reason (not height).
     st.download_button(
         "⬇ Скачать 3D-зал (HTML)",
         data=build_kg_3d_html(payload),
         file_name="knowledge_graph_3d.html",
         mime="text/html",
         key="kg_download_3d_html",
-        help="Офлайн 3D-визуализация: этажи по урокам, высота по worth. Полёт по маршруту дня.",
+        help=(
+            "Офлайн 3D-зал: первый кадр — маршрут дня (не весь граф); "
+            "этажи по урокам (precedes); worth — ранг и причина, не высота; "
+            "управляемый тур по остановкам."
+        ),
     )
 
     with st.expander("🔬 Качество графа", expanded=False):

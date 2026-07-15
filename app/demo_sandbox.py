@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import json
+import logging
 import re
 import shutil
 from pathlib import Path, PurePosixPath
 
 from app.config import BASE_DIR, DATA_DIR
+
+logger = logging.getLogger(__name__)
 
 DEMO_SUBDIR = "demo"
 UPLOADS_SUBDIR = "uploads"
@@ -143,3 +147,67 @@ def save_uploaded_files(files: list[tuple[str, bytes]]) -> list[str]:
         destination.write_bytes(content)
         saved.append(_relative_to_data(destination))
     return saved
+
+
+def sync_demo_graph_generation() -> bool:
+    """Repair a stale/missing Knowledge Graph generation on a demo deployment.
+
+    HF Space / local demo runs persist ``data/`` on a mounted volume across
+    restarts and redeploys (see ``deploy/hf-spaces/bootstrap_demo_paths.sh``);
+    that script only seeds a target when it's still empty, so a volume seeded
+    before a newer ``demo_chroma_db``/``graph_generations`` commit keeps
+    pointing at a broken or missing generation indefinitely — no amount of
+    restarting or redeploying code fixes it.
+
+    Promotes the shipped generation over the live one only when the live one
+    is actually unreadable (neither the active nor the previous-generation
+    bundle has ``kg.sqlite`` on disk, mirroring the same fallback
+    ``app.knowledge_graph._active_graph_bundle_target`` uses at read time) —
+    it never overwrites a working graph, even an older one. Safe to call on
+    every boot: once the live bundle is readable, it's a cheap no-op, and it
+    self-heals again for free if a future demo content update ships a newer
+    generation onto an already-stale volume.
+    """
+    from app.course_graduation import delight_data_mode_is_demo
+
+    if not delight_data_mode_is_demo():
+        return False
+
+    shipped_registry_path = BASE_DIR / "demo_index_registry.json"
+    try:
+        shipped = json.loads(shipped_registry_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(shipped, dict):
+        return False
+    shipped_gid = str((shipped.get("active_generation") or {}).get("generation_id") or "").strip()
+    if not shipped_gid:
+        return False
+
+    shipped_bundle = BASE_DIR / "demo_data" / "graph_generations" / "by_generation" / shipped_gid
+    if not (shipped_bundle / "kg.sqlite").is_file():
+        return False  # image doesn't actually ship this generation's graph bundle
+
+    from app.knowledge_graph import _active_graph_bundle_target
+
+    try:
+        _resolved_gid, resolved_dir = _active_graph_bundle_target()
+        if (resolved_dir / "kg.sqlite").is_file():
+            return False  # live graph already readable (active or previous) — leave it alone
+    except Exception:  # noqa: BLE001 - resolution failure also means "broken"; fall through to sync
+        pass
+
+    from app.graph_generation_paths import generation_bundle_dir
+    from app.index_registry import save_registry_atomic
+
+    live_bundle = generation_bundle_dir(shipped_gid)
+    live_bundle.parent.mkdir(parents=True, exist_ok=True)
+    if live_bundle.exists():
+        shutil.rmtree(live_bundle)
+    shutil.copytree(shipped_bundle, live_bundle)
+    save_registry_atomic(shipped)
+    logger.info(
+        "demo_graph_sync: promoted shipped generation %s over stale/missing live generation",
+        shipped_gid,
+    )
+    return True

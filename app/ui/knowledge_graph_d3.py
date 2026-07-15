@@ -717,10 +717,11 @@ def build_kg_html(payload: Mapping[str, Any]) -> str:
 
 
 def build_kg_3d_html(payload: Mapping[str, Any]) -> str:
-    """B1: self-contained offline 3D Knowledge Graph hall (no CDN).
+    """Self-contained offline 3D Knowledge Graph hall (no CDN).
 
-    Same payload object as the 2D map: nodes (worth/due/novel), edges, stats,
-    and precomputed ``day_route`` (A2 stops) for flight + stop list.
+    Same payload as the 2D map: nodes (worth/due/novel), edges, stats, and
+    precomputed ``day_route`` (A2 stops). Export defaults to **route scene**
+    (first frame = day path, not full graph); worth is rank/reason, not height.
     """
     t = _load_3d_template()
     route_ids = _day_route_ids(payload)

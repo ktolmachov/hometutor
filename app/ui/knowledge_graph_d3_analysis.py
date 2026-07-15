@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import math
+import re
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Mapping, Sequence
 
 
 def build_graph_health(
@@ -293,6 +294,95 @@ def top_worth_factor(n: Dict[str, Any]) -> str:
     return parts[0][1]
 
 
+def lesson_anchor_key(lid: str) -> str:
+    """Normalize lesson id for floor grouping (must match ``kg_3d_template.html``).
+
+    Strip common file extensions, collapse one-or-more ``/`` or ``\\`` runs to a
+    single ``:``, lowercase. Example: ``a//b\\\\c.md`` → ``a:b:c``.
+    """
+    s = str(lid or "")
+    for ext in (".md", ".txt", ".markdown"):
+        if s.lower().endswith(ext):
+            s = s[: -len(ext)]
+            break
+    # Same as JS: s.replace(/[/\\]+/g, ':')
+    return re.sub(r"[/\\]+", ":", s).lower()
+
+
+def lesson_floor_order(
+    nodes: Sequence[Mapping[str, Any]] | None,
+    edges: Sequence[Mapping[str, Any]] | None = None,
+) -> list[str]:
+    """Stable lesson progression for 3D floors (R2).
+
+    Prefer ``precedes`` edges (topological, Kahn); collapse file variants of the
+    same lesson (``.md`` / ``.txt``) onto one anchor; fall back to lexical id.
+
+    Test oracle that mirrors client ``computeLessonOrder`` / ``lessonAnchorKey``
+    in ``kg_3d_template.html`` (keep algorithms in lockstep when changing either).
+    """
+    lessons = [
+        n
+        for n in (nodes or [])
+        if isinstance(n, Mapping) and n.get("is_lesson") and n.get("id") is not None
+    ]
+    if not lessons:
+        return []
+
+    def _anchor_key(lid: str) -> str:
+        return lesson_anchor_key(lid)
+
+    groups: dict[str, list[str]] = {}
+    for n in lessons:
+        lid = str(n["id"])
+        groups.setdefault(_anchor_key(lid), []).append(lid)
+    group_canon: dict[str, str] = {}
+    for key, ids in groups.items():
+        ids_sorted = sorted(ids)
+        groups[key] = ids_sorted
+        group_canon[key] = ids_sorted[0]
+
+    group_ids = list(group_canon.values())
+    indeg: dict[str, int] = {gid: 0 for gid in group_ids}
+    adj: dict[str, list[str]] = {gid: [] for gid in group_ids}
+
+    def _canon_of(lid: object) -> str | None:
+        if lid is None:
+            return None
+        return group_canon.get(_anchor_key(str(lid)))
+
+    for e in edges or []:
+        if not isinstance(e, Mapping):
+            continue
+        if str(e.get("relation_type") or "") != "precedes":
+            continue
+        a = _canon_of(e.get("source"))
+        b = _canon_of(e.get("target"))
+        if not a or not b or a == b:
+            continue
+        adj[a].append(b)
+        indeg[b] = indeg.get(b, 0) + 1
+
+    queue = sorted(gid for gid in group_ids if indeg.get(gid, 0) == 0)
+    order: list[str] = []
+    seen: set[str] = set()
+    while queue:
+        u = queue.pop(0)
+        if u in seen:
+            continue
+        seen.add(u)
+        order.append(u)
+        for v in adj.get(u, []):
+            indeg[v] = indeg.get(v, 0) - 1
+            if indeg[v] == 0:
+                queue.append(v)
+                queue.sort()
+    for gid in sorted(group_ids):
+        if gid not in seen:
+            order.append(gid)
+    return order
+
+
 def select_day_route(
     nodes: list[Dict[str, Any]],
     k: int = 6,
@@ -300,7 +390,7 @@ def select_day_route(
     """Select top actionable nodes by worth and try to chain them in prereq order.
 
     Actionable = has due > 0 or is frontier (and not lesson).
-    Used by both 2D auto-route and 3D flight for consistency.
+    Used by both 2D auto-route and 3D day-route tour for consistency.
     """
     actionable = [
         n for n in nodes

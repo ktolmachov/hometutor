@@ -4,251 +4,772 @@
 <meta charset="UTF-8">
 <title>3D Knowledge Graph — HomeTutor</title>
 <style>
-  :root { --bg:#0a0a0f; --glass:rgba(255,255,255,0.06); --acc:#8b5cf6; }
+  :root { --bg:#0a0a0f; --glass:rgba(255,255,255,0.06); --acc:#8b5cf6; --on:#c4b5fd; }
   html,body{margin:0;height:100%;background:var(--bg);color:#e8e8f0;font-family:system-ui,-apple-system,sans-serif;overflow:hidden}
   #wrap{display:flex;height:100%}
-  #cv{flex:1 1 auto;display:block;background:#050508}
-  #side{width:280px;border-left:1px solid #222;padding:12px 14px;box-sizing:border-box;overflow:auto;font-size:12px;background:#0c0c12}
+  #cv{flex:1 1 auto;display:block;background:#050508;min-width:0}
+  #side{width:300px;flex:0 0 300px;border-left:1px solid #222;padding:12px 14px;box-sizing:border-box;overflow:auto;font-size:12px;background:#0c0c12}
   .hd{font-weight:700;margin:0 0 8px;font-size:13px;letter-spacing:.3px}
-  .btn{background:var(--glass);border:1px solid #333;color:#ddd;padding:6px 10px;border-radius:6px;cursor:pointer;margin:4px 2px;font-size:11px}
+  .btn{background:var(--glass);border:1px solid #333;color:#ddd;padding:6px 10px;border-radius:6px;cursor:pointer;margin:3px 2px;font-size:11px}
   .btn:hover{border-color:var(--acc)}
+  .btn.on{border-color:var(--acc);color:var(--on);background:rgba(139,92,246,0.15)}
+  .btn:disabled{opacity:.4;cursor:default}
+  .row{display:flex;flex-wrap:wrap;gap:2px;margin:4px 0}
   .st{display:flex;gap:6px;margin:4px 0;font-size:11px}
-  .list{max-height:240px;overflow:auto;border:1px solid #222;border-radius:6px;padding:4px}
-  .stop{padding:3px 5px;margin:2px 0;border-radius:4px;background:#111}
+  .list{max-height:220px;overflow:auto;border:1px solid #222;border-radius:6px;padding:4px}
+  .stop{padding:5px 6px;margin:3px 0;border-radius:4px;background:#111;cursor:pointer;border:1px solid transparent}
+  .stop:hover{border-color:#333}
+  .stop.active{border-color:var(--acc);background:rgba(139,92,246,0.12)}
+  .stop.next{border-color:rgba(103,232,249,0.45)}
   .stop b{color:#c4b5fd}
-  .legend{font-size:10px;opacity:.7;margin-top:10px}
-  .mini{font-size:10px;opacity:.6;margin-top:8px}
+  .reason{font-size:10px;color:#94a3b8;display:block;margin-top:2px}
+  .badge{display:inline-block;font-size:9px;padding:1px 5px;border-radius:4px;background:#1e1b2e;border:1px solid #333;margin-left:4px;color:#c4b5fd}
+  .legend{font-size:10px;opacity:.7;margin-top:10px;line-height:1.35}
+  .mini{font-size:10px;opacity:.65;margin-top:8px;line-height:1.35}
+  .stopinfo{margin:8px 0;padding:8px;border-radius:6px;background:#12121a;border:1px solid #2a2a3a;font-size:11px;line-height:1.4}
+  .stopinfo strong{color:#e9d5ff}
   canvas{cursor:grab}
-  .topbar{position:absolute;top:8px;left:12px;z-index:10;background:rgba(10,10,15,.8);padding:4px 8px;border-radius:6px;border:1px solid #222;font-size:11px}
+  .topbar{position:absolute;top:8px;left:12px;z-index:10;background:rgba(10,10,15,.85);padding:6px 10px;border-radius:6px;border:1px solid #222;font-size:11px;max-width:min(520px,55vw);line-height:1.35}
 </style>
 </head>
 <body>
 <div id="wrap">
-  <canvas id="cv" width="900" height="700"></canvas>
+  <canvas id="cv" width="900" height="700" aria-label="3D knowledge graph"></canvas>
   <div id="side">
     <div class="hd">🏛 3D Knowledge Graph</div>
     <div id="statsline" class="st"></div>
-    <button class="btn" id="flybtn">▶ Полёт по маршруту дня</button>
-    <button class="btn" id="resetbtn">Сброс вида</button>
-    <div class="hd" style="margin-top:10px">Высокая ценность (worth)</div>
+
+    <div class="hd" style="margin-top:8px">Режим</div>
+    <div class="row">
+      <button class="btn on" id="modeRoute" type="button" title="Только маршрут дня">Маршрут</button>
+      <button class="btn" id="modeLocal" type="button" title="Остановка + ближайший контекст">Локально</button>
+      <button class="btn" id="modeAll" type="button" title="Полный граф">Вся карта</button>
+    </div>
+
+    <div class="hd" style="margin-top:8px">Маршрут дня</div>
+    <div id="stopinfo" class="stopinfo">Стоп — · выберите остановку</div>
+    <div class="row">
+      <button class="btn" id="prevbtn" type="button" title="Предыдущая остановка">◀ Назад</button>
+      <button class="btn" id="playbtn" type="button" title="Тур по остановкам">▶ Тур</button>
+      <button class="btn" id="nextbtn" type="button" title="Следующая остановка">Вперёд ▶</button>
+    </div>
+    <div class="row">
+      <button class="btn" id="homebtn" type="button" title="Вернуть читаемый вид маршрута">⌂ Home</button>
+      <button class="btn" id="topbtn" type="button" title="Вид сверху">⊤ Сверху</button>
+      <button class="btn" id="resetbtn" type="button">Сброс</button>
+    </div>
+
+    <div class="hd" style="margin-top:10px">Остановки <span class="badge" id="routebadge">0</span></div>
     <div id="toplist" class="list"></div>
+
     <div class="legend">
-      Высота / яркость ≈ worth (due + novel + decay + frontier + reach)<br>
-      Этажи: уроки внизу, концепты выше.<br>
-      Перетаскивай мышью • колесо — зум • клик — фокус
+      Первый кадр — маршрут дня, не весь граф.<br>
+      <b>Y</b> = этаж урока (precedes) · <b>X</b> = коридор маршрута · <b>Z</b> = полоса.<br>
+      Уроки — якоря этажей; концепты идут по X. Worth — ранг/причина, не высота.<br>
+      Мышь — поворот · колесо — зум · клик — фокус.
     </div>
     <div class="mini" id="hint"></div>
   </div>
 </div>
-<div class="topbar" id="topbar">3D зал (экспорт) — офлайн</div>
+<div class="topbar" id="topbar">3D зал — маршрут дня (офлайн)</div>
 <script>
-// Inlined by build_kg_3d_html
+// Inlined by build_kg_3d_html — offline, no CDN
 const NODES = __NODES__;
 const EDGES = __EDGES__ || [];
 const STATS = __STATS__ || {};
-const HEALTH = __HEALTH__ || null;
+const HEALTH = __HEALTH__ || null; // optional graph health from payload (score in statsline)
 const DAY_ROUTE = __DAY_ROUTE__ || [];
 
 const canvas = document.getElementById('cv');
 const ctx = canvas.getContext('2d');
 let W = canvas.width, H = canvas.height;
-let yaw = 0.6, pitch = 0.35, zoom = 1.0;
-let cx=0, cy=0, cz=0; // camera target (center)
-let dragging = false, lx=0, ly=0;
 
-function resize(){ W=canvas.width = canvas.clientWidth||900; H=canvas.height=canvas.clientHeight||700; }
-window.addEventListener('resize', ()=>{resize(); render();}); resize();
+// Fixed isometric-style view (honest 2.5D; cz is pan depth offset only)
+let yaw = 0.55, pitch = 0.38, zoom = 1.0;
+let cx = 0, cy = 0, cz = 0;
+let pointerDown = false, dragMoved = false, lx = 0, ly = 0, downX = 0, downY = 0;
+const DRAG_CLICK_PX = 5;
 
-function project(x,y,z){
-  // simple perspective + rotation
-  const cosY=Math.cos(yaw), sinY=Math.sin(yaw);
-  const cosP=Math.cos(pitch), sinP=Math.sin(pitch);
-  let rx = x*cosY - z*sinY;
-  let rz = x*sinY + z*cosY;
-  let ry = y;
-  // pitch around X
-  let ry2 = ry*cosP - rz*sinP;
-  let rz2 = ry*sinP + rz*cosP;
-  const dist = 380 / (Math.max(40, 260 + rz2*zoom));
-  const sx = W/2 + rx * dist * zoom + cx;
-  const sy = H/2 + ry2 * dist * zoom + cy;
-  return {sx, sy, z: rz2, scale: dist};
-}
+/** @type {'route'|'local'|'all'} */
+let viewMode = 'route';
+/** @type {'idle'|'playing'|'paused'|'step'} */
+let tourState = 'idle';
+let activeStopIndex = 0;
+let focusId = null;
+let animToken = 0;
+let tourTimer = null;
 
-// B1 polish: stable lesson floors by *sorted* lesson id (order-independent).
-// Concepts rise by worth and snap toward a linked lesson floor when possible.
-const FLOOR_BASE = -160;
-const FLOOR_STEP = 55;
-const lessonFloorById = (()=>{
-  const ids = [];
-  for (const n of (NODES || [])) {
-    if (n && n.is_lesson && n.id != null && !ids.includes(n.id)) ids.push(String(n.id));
-  }
-  ids.sort(); // lexical sort → same id always same floor regardless of payload order
-  const map = new Map();
-  ids.forEach((id, i) => map.set(id, i));
-  return map;
+const prefersReducedMotion = (() => {
+  try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+  catch (_) { return false; }
 })();
 
-function nodePos(n){
+const byId = new Map((NODES || []).map(n => [n.id, n]));
+
+function resize() {
+  W = canvas.width = canvas.clientWidth || 900;
+  H = canvas.height = canvas.clientHeight || 700;
+}
+window.addEventListener('resize', () => { resize(); render(); });
+resize();
+
+function project(x, y, z) {
+  // Fixed 2.5D projection. cz shifts apparent depth (pan), not a free-fly camera.
+  const cosY = Math.cos(yaw), sinY = Math.sin(yaw);
+  const cosP = Math.cos(pitch), sinP = Math.sin(pitch);
+  let rx = x * cosY - (z + cz * 0.15) * sinY;
+  let rz = x * sinY + (z + cz * 0.15) * cosY;
+  let ry = y;
+  let ry2 = ry * cosP - rz * sinP;
+  let rz2 = ry * sinP + rz * cosP;
+  const dist = 380 / Math.max(40, 260 + rz2 * zoom);
+  const sx = W / 2 + rx * dist * zoom + cx;
+  const sy = H / 2 + ry2 * dist * zoom + cy;
+  return { sx, sy, z: rz2, scale: dist };
+}
+
+// ── Lesson progression (precedes → topo; fallback lexical) ──
+function lessonAnchorKey(id) {
+  let s = String(id || '');
+  s = s.replace(/\.(md|txt|markdown)$/i, '');
+  s = s.replace(/[/\\]+/g, ':');
+  return s.toLowerCase();
+}
+
+function computeLessonOrder() {
+  const lessons = (NODES || []).filter(n => n && n.is_lesson && n.id != null);
+  if (!lessons.length) return [];
+
+  // Collapse file variants of the same lesson into one anchor group
+  const groups = new Map(); // anchorKey -> [ids]
+  for (const n of lessons) {
+    const k = lessonAnchorKey(n.id);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(String(n.id));
+  }
+  // canonical id per group = first lexical
+  const groupCanon = new Map();
+  for (const [k, ids] of groups) {
+    ids.sort();
+    groupCanon.set(k, ids[0]);
+  }
+
+  const groupIds = [...groupCanon.values()];
+  const indeg = new Map(groupIds.map(id => [id, 0]));
+  const adj = new Map(groupIds.map(id => [id, []]));
+  const canonOf = (lid) => {
+    const k = lessonAnchorKey(lid);
+    return groupCanon.get(k) || null;
+  };
+
+  for (const e of (EDGES || [])) {
+    if (!e || (e.relation_type || '') !== 'precedes') continue;
+    const a = canonOf(e.source), b = canonOf(e.target);
+    if (!a || !b || a === b) continue;
+    adj.get(a).push(b);
+    indeg.set(b, (indeg.get(b) || 0) + 1);
+  }
+
+  // Kahn topo; stable among zero-indegree by lexical id
+  const q = groupIds.filter(id => (indeg.get(id) || 0) === 0).sort();
+  const order = [];
+  const seen = new Set();
+  while (q.length) {
+    const u = q.shift();
+    if (seen.has(u)) continue;
+    seen.add(u);
+    order.push(u);
+    for (const v of (adj.get(u) || [])) {
+      indeg.set(v, indeg.get(v) - 1);
+      if (indeg.get(v) === 0) {
+        q.push(v);
+        q.sort();
+      }
+    }
+  }
+  for (const id of groupIds.sort()) {
+    if (!seen.has(id)) order.push(id);
+  }
+
+  // Expand to all lesson node ids (variants share floor index via anchor)
+  const floorIndex = new Map();
+  order.forEach((canon, i) => {
+    const k = lessonAnchorKey(canon);
+    for (const lid of (groups.get(k) || [canon])) floorIndex.set(lid, i);
+  });
+  return { order, floorIndex, groups };
+}
+
+const lessonMeta = computeLessonOrder();
+const lessonFloorById = lessonMeta.floorIndex || new Map();
+const nFloors = Math.max(1, new Set([...lessonFloorById.values()]).size);
+
+const FLOOR_BASE = -80;
+const FLOOR_STEP = 48;
+const X_STEP = 70;
+
+function conceptProgressX(n) {
+  // X = progression along the course corridor (independent of floor Y).
+  // Prefer day-route index; else earliest linked lesson order; else stable hash band.
+  const route = dayRouteIds();
+  const ri = route.indexOf(n.id);
+  if (ri >= 0) return ri * X_STEP;
+  const links = [...(n.prereqs || []), ...(n.unlocks || [])];
+  let best = null;
+  for (const lid of links) {
+    if (lessonFloorById.has(lid)) {
+      const fi = lessonFloorById.get(lid);
+      if (best == null || fi < best) best = fi;
+    }
+  }
+  if (best != null) return best * X_STEP * 0.9;
+  let hsh = 0;
+  for (let j = 0; j < (n.id || '').length; j++) hsh = (hsh * 31 + n.id.charCodeAt(j)) | 0;
+  return ((hsh % 17) - 8) * (X_STEP * 0.35);
+}
+
+function nodePos(n) {
+  // Axes (independent meanings):
+  //   Y = floor/layer (lesson order from precedes; concepts hug linked lesson floor)
+  //   X = progression along corridor (route / lesson order for concepts; lessons centered)
+  //   Z = local lane/depth (cluster + hash)
+  // Worth never moves geometry.
   const isL = !!n.is_lesson;
+  let hsh = 0;
+  for (let j = 0; j < (n.id || '').length; j++) hsh = (hsh * 31 + n.id.charCodeAt(j)) | 0;
+  const c = (n.cluster || 0);
+
   let y;
   if (isL) {
     const fi = lessonFloorById.has(n.id) ? lessonFloorById.get(n.id) : 0;
     y = FLOOR_BASE + fi * FLOOR_STEP;
   } else {
-    let floorY = 20;
+    let floorY = FLOOR_BASE + 28;
     const links = [...(n.prereqs || []), ...(n.unlocks || [])];
     for (const lid of links) {
       if (lessonFloorById.has(lid)) {
-        floorY = FLOOR_BASE + lessonFloorById.get(lid) * FLOOR_STEP + 40;
+        floorY = FLOOR_BASE + lessonFloorById.get(lid) * FLOOR_STEP + 22;
         break;
       }
     }
-    y = floorY + (n.worth || 0) * 18;
+    y = floorY;
   }
 
-  // Spread in xz using cluster + hash of id (stable across reloads)
-  const c = (n.cluster||0);
-  let hsh = 0; for(let j=0;j<(n.id||'').length;j++) hsh = (hsh*31 + n.id.charCodeAt(j))|0;
-  const spread = 140;
-  const x = ((c*37 + (hsh%19)) % 23 - 11) * (spread/11) + (isL?0: (hsh%5-2)*6);
-  const z = ((c*19 + (hsh%29)) % 29 - 14) * (spread/14) + (hsh%7-3)*4;
-  return {x, y, z};
+  let x;
+  if (isL) {
+    // Lessons are floor anchors: sit near corridor origin, not on the same
+    // diagonal as Y (order lives on Y for floors; X is only a small lane offset).
+    x = ((hsh % 5) - 2) * 12 + ((c % 3) - 1) * 8;
+  } else {
+    x = conceptProgressX(n) + ((hsh % 5) - 2) * 10;
+  }
+  const z = ((c * 19 + (hsh % 29)) % 15 - 7) * 14 + ((hsh % 7) - 3) * 3;
+  return { x, y, z };
 }
 
-let nodes3d = (NODES||[]).map((n)=>({n, p: nodePos(n)}));
+let nodes3d = (NODES || []).map(n => ({ n, p: nodePos(n) }));
+const id2node3 = () => new Map(nodes3d.map(o => [o.n.id, o]));
 
-function drawFloorPlane(yy){
-  const a = project(-220,yy,-180), b=project(220,yy,-180);
-  const c2=project(-220,yy,180), d=project(220,yy,180);
-  ctx.beginPath(); ctx.moveTo(a.sx,a.sy); ctx.lineTo(b.sx,b.sy); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(c2.sx,c2.sy); ctx.lineTo(d.sx,d.sy); ctx.stroke();
-}
-
-function draw(){
-  ctx.fillStyle = '#050508';
-  ctx.fillRect(0,0,W,H);
-
-  // Floor planes: one per lesson floor (+ base band if no lessons)
-  ctx.strokeStyle = 'rgba(120,120,180,0.12)';
-  ctx.lineWidth=1;
-  const nFloors = Math.max(1, lessonFloorById.size);
-  for (let f = 0; f < nFloors; f++) {
-    drawFloorPlane(FLOOR_BASE + f * FLOOR_STEP);
-  }
-  // content band reference when concepts sit above floors
-  if (nFloors > 0) {
-    drawFloorPlane(FLOOR_BASE + (nFloors - 1) * FLOOR_STEP + 40);
-  }
-
-  // edges (faded) — real graph connections from payload (P2 fix)
-  ctx.strokeStyle = 'rgba(160,140,255,0.18)';
-  ctx.lineWidth = 0.7;
-  const id2node = new Map(nodes3d.map(o=>[o.n.id,o]));
-  for(const e of (EDGES||[])){
-    const a = id2node.get(e.source), b=id2node.get(e.target);
-    if(!a||!b) continue;
-    const pa = project(a.p.x,a.p.y,a.p.z);
-    const pb = project(b.p.x,b.p.y,b.p.z);
-    ctx.beginPath(); ctx.moveTo(pa.sx,pa.sy); ctx.lineTo(pb.sx,pb.sy); ctx.stroke();
-  }
-
-  // nodes sorted back to front
-  const proj = nodes3d.map(o=>{
-    const pr = project(o.p.x, o.p.y, o.p.z);
-    return {o, pr, z:pr.z};
-  }).sort((u,v)=> u.z - v.z);
-
-  for(const item of proj){
-    const {o, pr} = item;
-    const nn = o.n;
-    const r = Math.max(2.5, 3.5 + Math.sqrt(nn.reach||1)*1.6 + (nn.worth||0)*0.6 ) * (0.6 + pr.scale*0.7);
-    const alpha = Math.max(0.35, 0.55 + (nn.worth||0)*0.04);
-    const col = nn.level==='lesson' ? '#64748b' : (nn.novel?'#67e8f9': (nn.due>0?'#60a5fa':'#a5b4fc'));
-    ctx.fillStyle = col;
-    ctx.globalAlpha = alpha;
-    ctx.beginPath();
-    ctx.arc(pr.sx, pr.sy, r, 0, Math.PI*2);
-    ctx.fill();
-    ctx.globalAlpha=1;
-
-    // glow for high worth
-    if((nn.worth||0)>4){
-      ctx.strokeStyle = 'rgba(196,181,253,0.45)';
-      ctx.lineWidth=2.5;
-      ctx.beginPath(); ctx.arc(pr.sx,pr.sy, r*1.55,0,Math.PI*2); ctx.stroke();
-    }
-    // label for top
-    if((nn.worth||0)>3.5 || nn.is_lesson){
-      ctx.fillStyle='#ddd';
-      ctx.font='9px system-ui';
-      ctx.fillText((nn.label||nn.id).slice(0,18), pr.sx+ r+3, pr.sy+3);
-    }
-  }
-  ctx.globalAlpha=1;
-}
-
-function render(){ draw(); }
-
-canvas.addEventListener('mousedown', e=>{dragging=true; lx=e.clientX; ly=e.clientY; canvas.style.cursor='grabbing';});
-window.addEventListener('mouseup', ()=>{dragging=false; canvas.style.cursor='grab';});
-window.addEventListener('mousemove', e=>{
-  if(!dragging) return;
-  const dx=e.clientX-lx, dy=e.clientY-ly;
-  yaw += dx*0.0045;
-  pitch = Math.max(-1.2, Math.min(1.2, pitch - dy*0.004));
-  lx=e.clientX; ly=e.clientY;
-  render();
-});
-canvas.addEventListener('wheel', e=>{ zoom = Math.max(0.4, Math.min(2.8, zoom - e.deltaY*0.0015)); render(); e.preventDefault(); }, {passive:false});
-
-canvas.addEventListener('click', e=>{
-  // hit test nearest
-  let best=null, bd=1e9;
-  const rect=canvas.getBoundingClientRect();
-  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
-  for(const o of nodes3d){
-    const pr=project(o.p.x,o.p.y,o.p.z);
-    const d=Math.hypot(pr.sx-mx, pr.sy-my);
-    if(d<bd){bd=d; best=o;}
-  }
-  if(best && bd<38){
-    focus(best.n);
-  }
-});
-
-function focus(n){
-  const o = nodes3d.find(x=>x.n.id===n.id); if(!o) return;
-  // center camera target on it
-  cx = -o.p.x * 0.6;
-  cy = -o.p.y * 0.3;
-  cz = -o.p.z * 0.6;
-  render();
-  // flash info
-  const s=document.getElementById('hint');
-  s.textContent = `${n.label} · W=${(n.worth||0).toFixed(1)} ${n.worth_reason||''}`;
-  setTimeout(()=>{ if(s.textContent.includes(n.label)) s.textContent=''; }, 1600);
-}
-
-function dayRouteIds(){
+let _routeIdsCache = null;
+function dayRouteIds() {
+  if (_routeIdsCache) return _routeIdsCache;
   let route = DAY_ROUTE;
   if (!route || route.length === 0) {
-    route = [...(NODES||[])].filter(n => !n.is_lesson && ((n.due||0) > 0 || n.frontier))
-      .sort((a,b)=>(b.worth||0)-(a.worth||0)).slice(0,6).map(n => n.id);
+    route = [...(NODES || [])]
+      .filter(n => !n.is_lesson && ((n.due || 0) > 0 || n.frontier))
+      .sort((a, b) => (b.worth || 0) - (a.worth || 0))
+      .slice(0, 6)
+      .map(n => n.id);
   }
-  return (route||[]).map(x => typeof x === 'string' ? x : (x && x.id)).filter(Boolean);
+  _routeIdsCache = (route || []).map(x => typeof x === 'string' ? x : (x && x.id)).filter(Boolean);
+  return _routeIdsCache;
 }
 
-function buildTopList(){
+function activeRouteId() {
+  const r = dayRouteIds();
+  if (!r.length) return null;
+  const i = Math.max(0, Math.min(activeStopIndex, r.length - 1));
+  return r[i];
+}
+
+function nextRouteId() {
+  const r = dayRouteIds();
+  if (!r.length) return null;
+  const i = activeStopIndex + 1;
+  return i < r.length ? r[i] : null;
+}
+
+/** Visible set by mode — route first frame is sparse. */
+function visibleIdSet() {
+  if (viewMode === 'all') {
+    return new Set((NODES || []).map(n => n.id));
+  }
+  const ids = new Set();
+  const route = dayRouteIds();
+  const seed = [];
+
+  if (viewMode === 'route') {
+    seed.push(...route);
+    const active = activeRouteId();
+    if (active) seed.push(active);
+  } else {
+    // local: active stop + focus
+    const active = activeRouteId();
+    if (active) seed.push(active);
+    if (focusId) seed.push(focusId);
+    // keep whole route as anchors so orientation is not lost
+    seed.push(...route);
+  }
+
+  for (const id of seed) {
+    if (!id) continue;
+    ids.add(id);
+    const n = byId.get(id);
+    if (!n) continue;
+    for (const p of (n.prereqs || [])) ids.add(p);
+    for (const u of (n.unlocks || [])) ids.add(u);
+  }
+
+  // Always include lesson anchors linked to visible concepts
+  for (const id of [...ids]) {
+    const n = byId.get(id);
+    if (!n) continue;
+    for (const p of [...(n.prereqs || []), ...(n.unlocks || [])]) {
+      const m = byId.get(p);
+      if (m && m.is_lesson) ids.add(p);
+    }
+    if (n.is_lesson) ids.add(id);
+  }
+
+  // Local: only immediate neighborhood of active/focus (drop far route neighbors' edges density)
+  if (viewMode === 'local') {
+    const core = new Set();
+    const a = activeRouteId();
+    if (a) core.add(a);
+    if (focusId) core.add(focusId);
+    for (const id of [...core]) {
+      const n = byId.get(id);
+      if (!n) continue;
+      for (const p of (n.prereqs || [])) core.add(p);
+      for (const u of (n.unlocks || [])) core.add(u);
+    }
+    // keep route stops as faint anchors
+    for (const rid of route) core.add(rid);
+    for (const id of [...core]) {
+      const n = byId.get(id);
+      if (!n) continue;
+      for (const p of [...(n.prereqs || []), ...(n.unlocks || [])]) {
+        const m = byId.get(p);
+        if (m && m.is_lesson) core.add(p);
+      }
+    }
+    return core;
+  }
+
+  return ids;
+}
+
+function labelAllowSet(vis) {
+  // First-frame contract: ≤10 labels — route stops + anchors + active
+  // Cap is the same in all modes (full names live in sidebar / focus hint).
+  const route = dayRouteIds();
+  const allow = [];
+  const active = activeRouteId();
+  const next = nextRouteId();
+  if (active) allow.push(active);
+  if (next && next !== active) allow.push(next);
+  for (const id of route) {
+    if (allow.length >= 8) break;
+    if (!allow.includes(id)) allow.push(id);
+  }
+  const visSet = vis || visibleIdSet();
+  for (const id of visSet) {
+    if (allow.length >= 10) break;
+    const n = byId.get(id);
+    if (n && n.is_lesson && !allow.includes(id)) allow.push(id);
+  }
+  return new Set(allow.slice(0, 10));
+}
+
+function drawFloorPlane(yy) {
+  // Floors span corridor X (progression) and depth Z — not lesson-count diagonal.
+  const x0 = -80, x1 = Math.max(dayRouteIds().length, 1) * X_STEP + 80;
+  const a = project(x0, yy, -120), b = project(x1, yy, -120);
+  const c2 = project(x0, yy, 120), d = project(x1, yy, 120);
+  ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(c2.sx, c2.sy); ctx.lineTo(d.sx, d.sy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(c2.sx, c2.sy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(b.sx, b.sy); ctx.lineTo(d.sx, d.sy); ctx.stroke();
+}
+
+function draw() {
+  ctx.fillStyle = '#050508';
+  ctx.fillRect(0, 0, W, H);
+
+  const vis = visibleIdSet();
+  const labels = labelAllowSet(vis);
+  const route = dayRouteIds();
+  const routeSet = new Set(route);
+  const routeRank = new Map(route.map((id, i) => [id, i + 1]));
+  const active = activeRouteId();
+  const next = nextRouteId();
+  const map3 = id2node3();
+
+  // Floor planes for visible lesson floors only (or all floors if few)
+  ctx.strokeStyle = 'rgba(120,120,180,0.14)';
+  ctx.lineWidth = 1;
+  const floorIdxs = new Set();
+  for (const [lid, fi] of lessonFloorById) {
+    if (viewMode === 'all' || vis.has(lid)) floorIdxs.add(fi);
+  }
+  if (!floorIdxs.size) floorIdxs.add(0);
+  for (const f of floorIdxs) {
+    drawFloorPlane(FLOOR_BASE + f * FLOOR_STEP);
+  }
+
+  // Route trail 1→N
+  if (route.length >= 2) {
+    ctx.strokeStyle = 'rgba(196,181,253,0.55)';
+    ctx.lineWidth = 2.2;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    let started = false;
+    for (const id of route) {
+      const o = map3.get(id);
+      if (!o || !vis.has(id)) continue;
+      const pr = project(o.p.x, o.p.y, o.p.z);
+      if (!started) { ctx.moveTo(pr.sx, pr.sy); started = true; }
+      else ctx.lineTo(pr.sx, pr.sy);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Edges (only between visible nodes)
+  ctx.strokeStyle = viewMode === 'all' ? 'rgba(160,140,255,0.16)' : 'rgba(160,140,255,0.28)';
+  ctx.lineWidth = 0.8;
+  for (const e of (EDGES || [])) {
+    if (!vis.has(e.source) || !vis.has(e.target)) continue;
+    const a = map3.get(e.source), b = map3.get(e.target);
+    if (!a || !b) continue;
+    const pa = project(a.p.x, a.p.y, a.p.z);
+    const pb = project(b.p.x, b.p.y, b.p.z);
+    ctx.beginPath(); ctx.moveTo(pa.sx, pa.sy); ctx.lineTo(pb.sx, pb.sy); ctx.stroke();
+  }
+
+  // Nodes back-to-front
+  const proj = nodes3d
+    .filter(o => vis.has(o.n.id))
+    .map(o => {
+      const pr = project(o.p.x, o.p.y, o.p.z);
+      return { o, pr, z: pr.z };
+    })
+    .sort((u, v) => u.z - v.z);
+
+  for (const item of proj) {
+    const { o, pr } = item;
+    const nn = o.n;
+    const isActive = nn.id === active;
+    const isNext = nn.id === next;
+    const onRoute = routeSet.has(nn.id);
+    const baseR = Math.max(2.8, 3.2 + Math.sqrt(nn.reach || 1) * 1.2);
+    const r = baseR * (0.65 + pr.scale * 0.7) * (isActive ? 1.45 : isNext ? 1.2 : 1);
+    let col = nn.is_lesson ? '#64748b' : (nn.novel ? '#67e8f9' : ((nn.due || 0) > 0 ? '#60a5fa' : '#a5b4fc'));
+    if (isActive) col = '#c4b5fd';
+    else if (isNext) col = '#67e8f9';
+    else if (onRoute) col = '#a78bfa';
+
+    // Depth fade from projection scale (farther → lower alpha)
+    ctx.globalAlpha = Math.min(0.95, Math.max(0.35, 0.38 + pr.scale * 0.5));
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(pr.sx, pr.sy, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (isActive || isNext || ((nn.worth || 0) > 4 && onRoute)) {
+      ctx.strokeStyle = isActive ? 'rgba(233,213,255,0.85)' : 'rgba(196,181,253,0.45)';
+      ctx.lineWidth = isActive ? 2.5 : 1.6;
+      ctx.beginPath(); ctx.arc(pr.sx, pr.sy, r * 1.55, 0, Math.PI * 2); ctx.stroke();
+    }
+
+    // Rank badge for route stops (worth as rank, not height)
+    if (onRoute) {
+      const rank = routeRank.get(nn.id) || 0;
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#0a0a0f';
+      ctx.beginPath();
+      ctx.arc(pr.sx - r * 0.9, pr.sy - r * 0.9, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#e9d5ff';
+      ctx.font = 'bold 9px system-ui';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(rank), pr.sx - r * 0.9, pr.sy - r * 0.9);
+      ctx.textAlign = 'start';
+      ctx.textBaseline = 'alphabetic';
+    }
+
+    if (labels.has(nn.id)) {
+      ctx.globalAlpha = Math.min(1, Math.max(0.55, 0.5 + pr.scale * 0.45));
+      ctx.fillStyle = isActive ? '#f5f3ff' : '#ddd';
+      ctx.font = (isActive ? 'bold ' : '') + '10px system-ui';
+      const text = String(nn.label || nn.id).slice(0, 22);
+      ctx.fillText(text, pr.sx + r + 4, pr.sy + 3);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+function render() { draw(); }
+
+// ── Camera helpers ──
+function easeInOut(t) {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+function cameraForNode(o) {
+  return {
+    cx: -o.p.x * 0.55,
+    cy: -o.p.y * 0.28,
+    cz: -o.p.z * 0.35,
+    yaw: 0.55,
+    pitch: 0.38,
+    zoom: 1.15
+  };
+}
+
+function fitRouteCamera() {
+  const route = dayRouteIds();
+  const map3 = id2node3();
+  const pts = route.map(id => map3.get(id)).filter(Boolean);
+  if (!pts.length) {
+    yaw = 0.55; pitch = 0.38; zoom = 1.0; cx = cy = cz = 0;
+    return;
+  }
+  let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9, minZ = 1e9, maxZ = -1e9;
+  for (const o of pts) {
+    minX = Math.min(minX, o.p.x); maxX = Math.max(maxX, o.p.x);
+    minY = Math.min(minY, o.p.y); maxY = Math.max(maxY, o.p.y);
+    minZ = Math.min(minZ, o.p.z); maxZ = Math.max(maxZ, o.p.z);
+  }
+  const midX = (minX + maxX) / 2;
+  const midY = (minY + maxY) / 2;
+  const midZ = (minZ + maxZ) / 2;
+  const span = Math.max(maxX - minX, maxY - minY, maxZ - minZ, 40);
+  cx = -midX * 0.5;
+  cy = -midY * 0.25;
+  cz = -midZ * 0.3;
+  yaw = 0.55;
+  pitch = 0.38;
+  zoom = Math.max(0.7, Math.min(1.6, 140 / span));
+}
+
+function animateCamera(target, ms, onDone) {
+  const token = ++animToken;
+  if (prefersReducedMotion || ms <= 0) {
+    cx = target.cx; cy = target.cy; cz = target.cz;
+    if (target.yaw != null) yaw = target.yaw;
+    if (target.pitch != null) pitch = target.pitch;
+    if (target.zoom != null) zoom = target.zoom;
+    render();
+    if (onDone) onDone();
+    return;
+  }
+  const s = { cx, cy, cz, yaw, pitch, zoom };
+  const t0 = performance.now();
+  function frame(now) {
+    if (token !== animToken) return;
+    const u = Math.min(1, (now - t0) / ms);
+    const e = easeInOut(u);
+    cx = s.cx + (target.cx - s.cx) * e;
+    cy = s.cy + (target.cy - s.cy) * e;
+    cz = s.cz + (target.cz - s.cz) * e;
+    if (target.yaw != null) yaw = s.yaw + (target.yaw - s.yaw) * e;
+    if (target.pitch != null) pitch = s.pitch + (target.pitch - s.pitch) * e;
+    if (target.zoom != null) zoom = s.zoom + (target.zoom - s.zoom) * e;
+    render();
+    if (u < 1) requestAnimationFrame(frame);
+    else if (onDone) onDone();
+  }
+  requestAnimationFrame(frame);
+}
+
+function goToStop(index, { animate = true, fromTour = false } = {}) {
+  const route = dayRouteIds();
+  if (!route.length) return;
+  activeStopIndex = Math.max(0, Math.min(index, route.length - 1));
+  const id = route[activeStopIndex];
+  focusId = id;
+  const o = nodes3d.find(x => x.n.id === id);
+  updateStopInfo();
+  buildTopList();
+  syncModeButtons();
+  if (o) {
+    const target = cameraForNode(o);
+    const ms = animate ? (fromTour ? 1500 : 900) : 0;
+    if (fromTour) tourState = 'playing';
+    else if (tourState !== 'playing') tourState = 'step';
+    animateCamera(target, ms, () => {
+      if (fromTour && tourState === 'playing') scheduleNextTour();
+      updateStopInfo();
+      render();
+    });
+  } else {
+    render();
+  }
+  updatePlayButton();
+}
+
+function scheduleNextTour() {
+  if (tourTimer) { clearTimeout(tourTimer); tourTimer = null; }
+  if (tourState !== 'playing') return;
+  const route = dayRouteIds();
+  if (activeStopIndex >= route.length - 1) {
+    tourState = 'idle';
+    updatePlayButton();
+    const h = document.getElementById('hint');
+    if (h) h.textContent = 'Маршрут дня завершён';
+    return;
+  }
+  const delay = prefersReducedMotion ? 200 : 400;
+  tourTimer = setTimeout(() => {
+    if (tourState !== 'playing') return;
+    goToStop(activeStopIndex + 1, { animate: true, fromTour: true });
+  }, delay);
+}
+
+function stopTour() {
+  if (tourTimer) { clearTimeout(tourTimer); tourTimer = null; }
+  animToken++; // cancel in-flight camera
+  if (tourState === 'playing') tourState = 'paused';
+  updatePlayButton();
+}
+
+function toggleTour() {
+  const route = dayRouteIds();
+  if (!route.length) {
+    const h = document.getElementById('hint');
+    if (h) h.textContent = 'Нет остановок для маршрута дня';
+    return;
+  }
+  if (tourState === 'playing') {
+    stopTour();
+    tourState = 'paused';
+    updatePlayButton();
+    return;
+  }
+  // start or resume
+  if (activeStopIndex >= route.length - 1 && tourState !== 'paused') {
+    activeStopIndex = 0;
+  }
+  tourState = 'playing';
+  updatePlayButton();
+  goToStop(activeStopIndex, { animate: true, fromTour: true });
+}
+
+function updatePlayButton() {
+  const b = document.getElementById('playbtn');
+  if (!b) return;
+  if (tourState === 'playing') b.textContent = '⏸ Пауза';
+  else if (tourState === 'paused') b.textContent = '▶ Продолжить';
+  else b.textContent = '▶ Тур';
+}
+
+function updateStopInfo() {
+  const el = document.getElementById('stopinfo');
+  const route = dayRouteIds();
+  const top = document.getElementById('topbar');
+  if (!route.length) {
+    if (el) el.innerHTML = 'Нет остановок маршрута дня.';
+    if (top) top.textContent = '3D зал — нет маршрута (офлайн)';
+    return;
+  }
+  const i = activeStopIndex;
+  const id = route[i];
+  const n = byId.get(id) || {};
+  const reason = String(n.worth_reason || 'в маршруте дня');
+  const label = String(n.label || id);
+  const next = nextRouteId();
+  const nextLabel = next ? String((byId.get(next) || {}).label || next) : '—';
+  if (el) {
+    el.innerHTML = '';
+    const line = document.createElement('div');
+    const s = document.createElement('strong');
+    s.textContent = `Стоп ${i + 1}/${route.length}`;
+    line.appendChild(s);
+    line.appendChild(document.createTextNode(` · ${label}`));
+    el.appendChild(line);
+    const r = document.createElement('div');
+    r.className = 'reason';
+    r.textContent = `потому что: ${reason}`;
+    el.appendChild(r);
+    const nx = document.createElement('div');
+    nx.className = 'mini';
+    nx.style.marginTop = '4px';
+    nx.textContent = next ? `дальше: ${nextLabel}` : 'это последняя остановка';
+    el.appendChild(nx);
+  }
+  if (top) {
+    top.textContent = `Я здесь: ${label} · дальше: ${nextLabel} · ${reason}`;
+  }
+  const badge = document.getElementById('routebadge');
+  if (badge) badge.textContent = String(route.length);
+}
+
+function setViewMode(mode) {
+  viewMode = mode;
+  syncModeButtons();
+  const h = document.getElementById('hint');
+  if (h) {
+    if (mode === 'route') h.textContent = 'Режим маршрута: только путь дня и ближайший контекст';
+    else if (mode === 'local') h.textContent = 'Локально: остановка + immediate prereqs/unlocks';
+    else h.textContent = 'Вся карта: полный граф (подписи по-прежнему ограничены)';
+  }
+  render();
+}
+
+function syncModeButtons() {
+  const map = { route: 'modeRoute', local: 'modeLocal', all: 'modeAll' };
+  for (const [m, id] of Object.entries(map)) {
+    const b = document.getElementById(id);
+    if (!b) continue;
+    if (m === viewMode) b.classList.add('on');
+    else b.classList.remove('on');
+  }
+}
+
+function focus(n) {
+  if (!n) return;
+  focusId = n.id;
+  const route = dayRouteIds();
+  const ri = route.indexOf(n.id);
+  if (ri >= 0) activeStopIndex = ri;
+  const o = nodes3d.find(x => x.n.id === n.id);
+  if (o) animateCamera(cameraForNode(o), prefersReducedMotion ? 0 : 700);
+  updateStopInfo();
+  buildTopList();
+  const s = document.getElementById('hint');
+  if (s) {
+    const reason = n.worth_reason ? ` · ${n.worth_reason}` : '';
+    const extras = [];
+    if (n.audio) extras.push('audio');
+    if (n.rubric || n.rubric_score != null) extras.push('rubric');
+    const badge = extras.length ? ` [${extras.join(', ')}]` : '';
+    s.textContent = `${n.label || n.id} · rank W=${(n.worth || 0).toFixed(1)}${reason}${badge}`;
+  }
+  render();
+}
+
+function buildTopList() {
   const cont = document.getElementById('toplist');
   while (cont.firstChild) cont.removeChild(cont.firstChild);
-  // Prefer server A2 day_route (same as flight); fall back to worth-sorted actionable.
-  const byId = new Map((NODES||[]).map(n => [n.id, n]));
-  let stops = dayRouteIds().map(id => byId.get(id)).filter(Boolean);
+  const route = dayRouteIds();
+  let stops = route.map(id => byId.get(id)).filter(Boolean);
   if (!stops.length) {
-    stops = [...(NODES||[])].filter(n => !n.is_lesson && ((n.due||0) > 0 || n.frontier))
-      .sort((a,b)=>(b.worth||0)-(a.worth||0)).slice(0,7);
+    stops = [...(NODES || [])]
+      .filter(n => !n.is_lesson && ((n.due || 0) > 0 || n.frontier))
+      .sort((a, b) => (b.worth || 0) - (a.worth || 0))
+      .slice(0, 6);
   }
   if (!stops.length) {
     const empty = document.createElement('div');
@@ -257,95 +778,162 @@ function buildTopList(){
     cont.appendChild(empty);
     return;
   }
-  stops.forEach((n, idx)=>{
+  stops.forEach((n, idx) => {
     const d = document.createElement('div');
     d.className = 'stop';
+    if (idx === activeStopIndex) d.classList.add('active');
+    if (idx === activeStopIndex + 1) d.classList.add('next');
     const title = document.createElement('b');
-    title.textContent = `${idx+1}. ${String(n.label||n.id).slice(0,20)}`;
+    title.textContent = `${idx + 1}. ${String(n.label || n.id).slice(0, 24)}`;
     d.appendChild(title);
     const w = document.createElement('span');
-    w.style.opacity = '0.6';
-    w.textContent = ` W=${(n.worth||0).toFixed(1)}`;
+    w.className = 'badge';
+    w.textContent = `W=${(n.worth || 0).toFixed(1)}`;
     d.appendChild(w);
-    d.appendChild(document.createElement('br'));
     const reason = document.createElement('span');
-    reason.style.fontSize = '10px';
-    reason.style.color = '#94a3b8';
-    reason.textContent = String(n.worth_reason || '');
+    reason.className = 'reason';
+    reason.textContent = String(n.worth_reason || 'в маршруте дня');
     d.appendChild(reason);
-    d.onclick = () => focus(n);
+    d.onclick = () => {
+      stopTour();
+      tourState = 'step';
+      goToStop(idx, { animate: true });
+    };
     cont.appendChild(d);
   });
 }
 
-function updateStats(){
-  const el=document.getElementById('statsline');
-  const tc=STATS.total_concepts||STATS.total||0;
-  const tl=STATS.total_lessons||0;
+function updateStats() {
+  const el = document.getElementById('statsline');
+  const tc = STATS.total_concepts || STATS.total || (NODES || []).filter(n => !n.is_lesson).length;
+  const tl = STATS.total_lessons || (NODES || []).filter(n => n.is_lesson).length;
   while (el.firstChild) el.removeChild(el.firstChild);
   const row = document.createElement('div');
   row.className = 'st';
-  row.textContent = `${tc} концептов · ${tl} уроков`;
+  let text = `${tc} концептов · ${tl} уроков · этажей: ${nFloors}`;
+  if (HEALTH && typeof HEALTH.score === 'number') {
+    text += ` · quality ${Math.round(HEALTH.score)}`;
+  }
+  row.textContent = text;
   el.appendChild(row);
 }
 
-let flyTimer=null;
-function flyRoute(){
-  if(flyTimer){ clearInterval(flyTimer); flyTimer=null; }
-  const route = dayRouteIds();
-  if(!route.length){
-    const h=document.getElementById('hint');
-    if(h) h.textContent='Нет достойных остановок для маршрута дня';
+// ── Input ──
+canvas.addEventListener('mousedown', e => {
+  pointerDown = true;
+  dragMoved = false;
+  downX = lx = e.clientX;
+  downY = ly = e.clientY;
+  canvas.style.cursor = 'grabbing';
+});
+window.addEventListener('mouseup', () => {
+  pointerDown = false;
+  canvas.style.cursor = 'grab';
+});
+window.addEventListener('mousemove', e => {
+  if (!pointerDown) return;
+  const dx = e.clientX - lx, dy = e.clientY - ly;
+  if (!dragMoved) {
+    const total = Math.hypot(e.clientX - downX, e.clientY - downY);
+    if (total >= DRAG_CLICK_PX) dragMoved = true;
+  }
+  if (!dragMoved) return;
+  yaw += dx * 0.0045;
+  pitch = Math.max(-1.0, Math.min(1.1, pitch - dy * 0.004));
+  lx = e.clientX; ly = e.clientY;
+  render();
+});
+canvas.addEventListener('wheel', e => {
+  zoom = Math.max(0.45, Math.min(2.6, zoom - e.deltaY * 0.0015));
+  render();
+  e.preventDefault();
+}, { passive: false });
+
+canvas.addEventListener('click', e => {
+  // Suppress focus after orbit drag (mouseup clears pointerDown before click)
+  if (dragMoved) {
+    dragMoved = false;
     return;
   }
-  let i=0;
-  const hint=document.getElementById('hint');
-  if(hint) hint.textContent=`Полёт: ${route.length} остановок`;
-  flyTimer = setInterval(()=>{
-    if(i>=route.length){
-      clearInterval(flyTimer); flyTimer=null;
-      if(hint) hint.textContent='Маршрут дня завершён';
-      return;
-    }
-    const id = route[i];
-    const o = nodes3d.find(x=>x.n.id===id);
-    if(o){
-      cx = cx*0.4 + (-o.p.x*0.65)*0.6;
-      cy = cy*0.4 + (-o.p.y*0.25)*0.6;
-      yaw = yaw*0.6 + (0.4 + i*0.12)*0.4;
-      pitch = pitch*0.6 + 0.25*0.4;
-      zoom = zoom*0.7 + 1.1*0.3;
-      render();
-      const nodeObj = (NODES||[]).find(nn => nn.id === id);
-      if (nodeObj) {
-        focus(nodeObj);
-        if(hint){
-          const reason = nodeObj.worth_reason ? ` · ${nodeObj.worth_reason}` : '';
-          hint.textContent = `Стоп ${i+1}/${route.length}: ${nodeObj.label||id}${reason}`;
-        }
-      }
-    }
-    i++;
-  }, 620);
-}
+  let best = null, bd = 1e9;
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const vis = visibleIdSet();
+  for (const o of nodes3d) {
+    if (!vis.has(o.n.id)) continue;
+    const pr = project(o.p.x, o.p.y, o.p.z);
+    const d = Math.hypot(pr.sx - mx, pr.sy - my);
+    if (d < bd) { bd = d; best = o; }
+  }
+  if (best && bd < 40) focus(best.n);
+});
 
-document.getElementById('flybtn').onclick = flyRoute;
-document.getElementById('resetbtn').onclick = ()=>{
-  yaw=0.6; pitch=0.35; zoom=1.0; cx=cy=cz=0;
+// ── Controls ──
+document.getElementById('modeRoute').onclick = () => setViewMode('route');
+document.getElementById('modeLocal').onclick = () => setViewMode('local');
+document.getElementById('modeAll').onclick = () => setViewMode('all');
+document.getElementById('prevbtn').onclick = () => {
+  stopTour();
+  tourState = 'step';
+  goToStop(activeStopIndex - 1, { animate: true });
+};
+document.getElementById('nextbtn').onclick = () => {
+  stopTour();
+  tourState = 'step';
+  goToStop(activeStopIndex + 1, { animate: true });
+};
+document.getElementById('playbtn').onclick = () => toggleTour();
+document.getElementById('homebtn').onclick = () => {
+  stopTour();
+  tourState = 'idle';
+  fitRouteCamera();
+  updateStopInfo();
+  updatePlayButton();
+  render();
+};
+document.getElementById('topbtn').onclick = () => {
+  stopTour();
+  animateCamera({ cx, cy, cz, yaw: 0.2, pitch: 1.05, zoom: Math.max(zoom, 1.0) }, prefersReducedMotion ? 0 : 800);
+};
+document.getElementById('resetbtn').onclick = () => {
+  stopTour();
+  tourState = 'idle';
+  viewMode = 'route';
+  activeStopIndex = 0;
+  focusId = dayRouteIds()[0] || null;
+  fitRouteCamera();
+  syncModeButtons();
+  updateStopInfo();
+  buildTopList();
+  updatePlayButton();
   render();
 };
 
-function init(){
-  // Offline-only canvas hall (no CDN / three.js) — B1 DoD.
+function init() {
   updateStats();
+  const route = dayRouteIds();
+  activeStopIndex = 0;
+  focusId = route[0] || null;
+  viewMode = 'route';
+  fitRouteCamera();
+  // Nudge camera onto first stop without noisy auto-spin
+  if (focusId) {
+    const o = nodes3d.find(x => x.n.id === focusId);
+    if (o) {
+      const t = cameraForNode(o);
+      cx = t.cx; cy = t.cy; cz = t.cz;
+      zoom = t.zoom;
+    }
+  }
   buildTopList();
+  updateStopInfo();
+  syncModeButtons();
+  updatePlayButton();
   render();
-  setTimeout(()=>{ if(!dragging) { yaw += 0.3; render(); } }, 900);
-  const nCount = (NODES||[]).length;
-  const floors = lessonFloorById.size;
-  const stops = dayRouteIds().length;
-  document.getElementById('hint').textContent =
-    `${nCount} узлов · ${floors} этаж(ей) · маршрут: ${stops} останов. · worth A2`;
+  const h = document.getElementById('hint');
+  if (h) {
+    h.textContent = `${(NODES || []).length} узлов · маршрут ${route.length}/6 · режим route · worth = rank/reason`;
+  }
 }
 init();
 </script>

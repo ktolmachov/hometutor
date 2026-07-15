@@ -11,12 +11,12 @@
     "gamma_hybrid.md": "63fbd987cfec7fb1ad93a99967214157e0bdc482e0e5400054e203721948257a",
     "python_basics.md": "9e9cef01028375fb2886ec6048a8a16de1804735bb06f6e4b981c3c8547d56d3",
     "uploads/hometutor_101/README.md": "476cf60c53dedec4ea32bbc2fc4031c99dae148d1f502cae1a0935161a1d603d",
-    "uploads/hometutor_101/konspekts/urok_1_pervyi_otvet.konspekt.md": "4a24178a1c176a6d454ec0c0114cfff91da14923c0de3c03579230b15ad8a498",
-    "uploads/hometutor_101/konspekts/urok_2_petlya_pamyati.konspekt.md": "7c362d37b3979b979c0f1730bb056f4bb51ab017e3d1c2c09ab2f8d26e71ebe0",
-    "uploads/hometutor_101/konspekts/urok_3_odin_sleduyushchiy_shag.konspekt.md": "c9ec3572c2f89396015d22d33e2840c9a59a2c7c734f02c9ee630823bb1637db",
-    "uploads/hometutor_101/konspekts/urok_4_karta_znaniy.konspekt.md": "51e1cd81996316dbb2bd1a72bb8a08d54210de43d011ac271a8d17e6e1cf57d3",
-    "uploads/hometutor_101/konspekts/urok_5_konspekt_s_pasportom.konspekt.md": "1b284c91ba91ac9aeda1192e5aecd544c8f15008b0b28b0ac4d719bfc9520ebe",
-    "uploads/hometutor_101/konspekts/urok_6_khozyain_sistemy.konspekt.md": "816079f77485dc4434012cf44a7005ece8241221168f4bc281fbe5a7e407a3d0",
+    "uploads/hometutor_101/konspekts/urok_1_pervyi_otvet.konspekt.md": "01ed73fd2a70cb986655b8863e8a3b20ecbb17bc158f54509046d15e6a51910a",
+    "uploads/hometutor_101/konspekts/urok_2_petlya_pamyati.konspekt.md": "7ee78833cbd463650340baacc04ee416ec954f8e8afe88e41535f47f9b88b9cd",
+    "uploads/hometutor_101/konspekts/urok_3_odin_sleduyushchiy_shag.konspekt.md": "bfd0746033aa6c808d847faec958ecbd72f15ac60f6d88870066edfd595e8371",
+    "uploads/hometutor_101/konspekts/urok_4_karta_znaniy.konspekt.md": "fec064aa81967c65ca8fd26c418440415723180901c61716299b7371c11df6b2",
+    "uploads/hometutor_101/konspekts/urok_5_konspekt_s_pasportom.konspekt.md": "b984aac56e7d1d2559955e918dcfbc0fd95900232067777756ccf3997b769fec",
+    "uploads/hometutor_101/konspekts/urok_6_khozyain_sistemy.konspekt.md": "d064ef2598d6a5a5b8f253ed3e99e5fe4230feb76216658bfbcc85a2e049e7ed",
     "uploads/hometutor_101/lectures/urok_1_pervyi_otvet.md": "59b96bcb828f060a526f28a69b39c1b851ced3730196415e9db18a8f68c3dce1",
     "uploads/hometutor_101/lectures/urok_2_petlya_pamyati.md": "bd29016708cab9d0787286d521fcd585f335faf8d4fd0579524ebc4691ca140b",
     "uploads/hometutor_101/lectures/urok_3_odin_sleduyushchiy_shag.md": "66f81b33235c584121f8613fbe44d24f70335952e86dc1f21d7accfdf4db1fda",
@@ -63,33 +63,33 @@
         "ext": ".md"
       },
       "uploads/hometutor_101/konspekts/urok_1_pervyi_otvet.konspekt.md": {
-        "size": 11373,
-        "mtime_ns": 1784058893989431100,
+        "size": 11920,
+        "mtime_ns": 1784094286911253300,
         "ext": ".md"
       },
       "uploads/hometutor_101/konspekts/urok_2_petlya_pamyati.konspekt.md": {
-        "size": 12183,
-        "mtime_ns": 1784058894893900200,
+        "size": 12749,
+        "mtime_ns": 1784094287791667300,
         "ext": ".md"
       },
       "uploads/hometutor_101/konspekts/urok_3_odin_sleduyushchiy_shag.konspekt.md": {
-        "size": 11646,
-        "mtime_ns": 1784058895785842000,
+        "size": 12180,
+        "mtime_ns": 1784094288714961600,
         "ext": ".md"
       },
       "uploads/hometutor_101/konspekts/urok_4_karta_znaniy.konspekt.md": {
-        "size": 12663,
-        "mtime_ns": 1784058896690600100,
+        "size": 13200,
+        "mtime_ns": 1784094289646248000,
         "ext": ".md"
       },
       "uploads/hometutor_101/konspekts/urok_5_konspekt_s_pasportom.konspekt.md": {
-        "size": 13009,
-        "mtime_ns": 1784058897584182800,
+        "size": 13591,
+        "mtime_ns": 1784094290559587500,
         "ext": ".md"
       },
       "uploads/hometutor_101/konspekts/urok_6_khozyain_sistemy.konspekt.md": {
-        "size": 13215,
-        "mtime_ns": 1784058898475221400,
+        "size": 13736,
+        "mtime_ns": 1784094291459999000,
         "ext": ".md"
       },
       "uploads/hometutor_101/lectures/urok_1_pervyi_otvet.md": {
@@ -130,5 +130,5 @@
     }
   },
   "source_fragments": 20,
-  "nodes_count": 39
+  "nodes_count": 40
 }

@@ -3,8 +3,8 @@
   "gate_passed": true,
   "published": true,
   "metrics": {
-    "concept_count": 104,
-    "semantic_relation_count": 182,
+    "concept_count": 102,
+    "semantic_relation_count": 190,
     "cross_doc_relations": 19,
     "docs_participating_pct": 100.0,
     "concepts_with_evidence_pct": 100.0,
@@ -17,17 +17,17 @@
   },
   "fail_reasons": [],
   "counters": {
-    "concepts": 104,
-    "relations": 196,
+    "concepts": 102,
+    "relations": 201,
     "test_artifacts": 0,
     "relations_without_evidence": 0,
-    "duplicate_candidates": 10
+    "duplicate_candidates": 11
   },
   "findings": [
     {
       "severity": "P2",
       "kind": "duplicate_candidates",
-      "title": "Duplicate/alias candidates: 10",
+      "title": "Duplicate/alias candidates: 11",
       "items": [
         {
           "source": "retrieval-augmented-generation",
@@ -78,16 +78,16 @@
           "match": "sm-2 ↔ интервальное-повторение-sm-2"
         },
         {
+          "source": "review",
+          "target": "sm-2-spaced-repetition",
+          "reason": "nested_label",
+          "match": "повторение ↔ интервальное-повторение-sm-2"
+        },
+        {
           "source": "live-summary",
           "target": "summary",
           "reason": "nested_label",
           "match": "живой-конспект ↔ конспект"
-        },
-        {
-          "source": "voice-and-timecodes",
-          "target": "timestamps",
-          "reason": "nested_label",
-          "match": "голос-и-таймкоды ↔ таймкоды"
         }
       ]
     }

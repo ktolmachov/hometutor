@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -41,6 +42,31 @@ from app.config import CHROMA_DIR, DATA_DIR  # noqa: E402  (env must be set firs
 from app.ingestion import build_index  # noqa: E402
 
 
+def _remove_demo_build_artifacts() -> None:
+    """Remove generated demo artifacts that must not be re-ingested as source docs."""
+    targets = [
+        CHROMA_DIR,
+        DATA_DIR / "graph_generations",
+        REPO_ROOT / "demo_index_registry.json",
+        REPO_ROOT / "demo_index_registry.json.lock",
+    ]
+    allowed_roots = [
+        (REPO_ROOT / "demo_chroma_db").resolve(),
+        (REPO_ROOT / "demo_data").resolve(),
+        REPO_ROOT.resolve(),
+    ]
+    for target in targets:
+        resolved = target.resolve()
+        if not target.exists():
+            continue
+        if not any(resolved == root or root in resolved.parents for root in allowed_roots):
+            raise RuntimeError(f"Refusing to delete non-demo artifact: {resolved}")
+        if target.is_dir():
+            shutil.rmtree(target)
+        else:
+            target.unlink()
+
+
 def main() -> None:
     argparse.ArgumentParser(
         description="Build demo_chroma_db/ from demo_data/ using cloud embeddings.",
@@ -54,6 +80,7 @@ def main() -> None:
     print(f"registry={os.environ['INDEX_REGISTRY_PATH']}")
     print(f"embed_api_base={os.environ['EMBED_API_BASE']}")
     print(f"embed_model={os.environ['EMBED_MODEL']}")
+    _remove_demo_build_artifacts()
     build_index(reset=True)
     print("done.")
 

@@ -157,6 +157,34 @@ def _metric_line(metrics: dict[str, Any], key: str, *, label: str, as_pct: bool 
         return None
 
 
+def _failed_attempt_view(failed: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(failed, dict):
+        return {"title": None, "reasons": [], "metrics": [], "debug_line": None}
+    report = failed.get("report") if isinstance(failed.get("report"), dict) else {}
+    metrics = report.get("metrics") if isinstance(report.get("metrics"), dict) else {}
+    metric_lines = [
+        line
+        for line in (
+            _metric_line(metrics, "concept_count", label="концепты"),
+            _metric_line(metrics, "semantic_relation_count", label="связи"),
+            _metric_line(metrics, "docs_participating_pct", label="документы", as_pct=True),
+            _metric_line(metrics, "relations_with_evidence_pct", label="evidence", as_pct=True),
+        )
+        if line
+    ]
+    from app.course_quality_passport import rewrite_fail_reasons_for_learners
+
+    raw_reasons = [str(r).strip() for r in (report.get("fail_reasons") or []) if str(r).strip()]
+    reasons = rewrite_fail_reasons_for_learners(report) or raw_reasons
+    label = str(failed.get("label") or "").strip()
+    return {
+        "title": "Почему последняя попытка обновить карту не прошла проверку",
+        "reasons": reasons,
+        "metrics": metric_lines,
+        "debug_line": f"last_attempt={label}" if label else None,
+    }
+
+
 def build_learner_publish_status_view(status: dict[str, Any] | None) -> dict[str, Any]:
     """Learner-facing copy for graph publish UI (material plan C2).
 
@@ -219,39 +247,18 @@ def build_learner_publish_status_view(status: dict[str, Any] | None) -> dict[str
         pub = "yes" if active_report.get("published") else "no"
         debug_lines.append(f"quality gate={gate} published={pub}")
 
-    failed = status.get("latest_failed_staging")
-    failed_title: str | None = None
-    failed_reasons: list[str] = []
-    failed_metrics: list[str] = []
-    if isinstance(failed, dict):
-        report = failed.get("report") if isinstance(failed.get("report"), dict) else {}
-        failed_title = "Почему последняя попытка обновить карту не прошла проверку"
-        metrics = report.get("metrics") if isinstance(report.get("metrics"), dict) else {}
-        if metrics:
-            for line in (
-                _metric_line(metrics, "concept_count", label="концепты"),
-                _metric_line(metrics, "semantic_relation_count", label="связи"),
-                _metric_line(metrics, "docs_participating_pct", label="документы", as_pct=True),
-                _metric_line(metrics, "relations_with_evidence_pct", label="evidence", as_pct=True),
-            ):
-                if line:
-                    failed_metrics.append(line)
-        from app.course_quality_passport import rewrite_fail_reasons_for_learners
-
-        raw_reasons = [str(r).strip() for r in (report.get("fail_reasons") or []) if str(r).strip()]
-        failed_reasons = rewrite_fail_reasons_for_learners(report) or raw_reasons
-        label = str(failed.get("label") or "").strip()
-        if label:
-            debug_lines.append(f"last_attempt={label}")
+    failed = _failed_attempt_view(status.get("latest_failed_staging"))
+    if failed["debug_line"]:
+        debug_lines.append(failed["debug_line"])
 
     return {
         "tone": tone,
         "primary": primary,
         "captions": captions,
         "debug_lines": debug_lines,
-        "failed_title": failed_title,
-        "failed_reasons": failed_reasons,
-        "failed_metrics": failed_metrics,
+        "failed_title": failed["title"],
+        "failed_reasons": failed["reasons"],
+        "failed_metrics": failed["metrics"],
         "badge_label": badge_label,
         "badge_title": primary if badge_label else None,
     }

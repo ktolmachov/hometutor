@@ -235,7 +235,8 @@ flowchart LR
 - `app/index_registry.py`
 - `app/knowledge_graph_bundle.py`
 - `app/graph_publish_status.py` — read-path active/previous/staging + set-based
-  `graph_freshness_gap` для Mission Control.
+  `graph_freshness_gap` для Mission Control; `build_learner_publish_status_view`
+  — учебный язык статуса карты (C2).
 - `app/course_quality_passport.py` — pure aggregator «паспорт материала»
   (карта/конспекты/медиа/readiness/audit + лестница `min_documents`); UI в
   `app/ui/course_prepare_view.py`.

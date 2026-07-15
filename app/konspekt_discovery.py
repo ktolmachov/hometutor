@@ -20,6 +20,7 @@ class KonspektMeta:
     presentation: str | None
     generated: str | None
     tags: tuple[str, ...]
+    source_sha256: str | None = None
 
 
 @dataclass(frozen=True)
@@ -32,11 +33,21 @@ class CoverageSummary:
         return self.covered / self.total if self.total else 0.0
 
 
+_SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+
+
 def _parse_frontmatter(text: str) -> dict[str, str]:
     m = _FRONTMATTER_RE.match(text)
     if not m:
         return {}
     return dict(_FIELD_RE.findall(m.group(1)))
+
+
+def _parse_source_sha256(fm: dict[str, str]) -> str | None:
+    raw = str(fm.get("source_sha256") or "").strip().strip('"').strip("'")
+    if not _SHA256_RE.fullmatch(raw):
+        return None
+    return raw.lower()
 
 
 def _normalize(s: str) -> str:
@@ -93,6 +104,7 @@ def scan_konspekts(course_dir: Path) -> list[KonspektMeta]:
             presentation=fm.get("presentation", "").strip().strip('"').strip("'") or None,
             generated=fm.get("generated", "").strip().strip('"').strip("'") or None,
             tags=tags,
+            source_sha256=_parse_source_sha256(fm),
         ))
 
     _KONSPEKT_SCAN_CACHE[course_dir] = (sig, results)
@@ -127,6 +139,144 @@ def coverage_summary(doc_paths: list[str]) -> CoverageSummary:
     """Подсчитать, сколько из doc_paths имеют готовый конспект."""
     covered = sum(1 for p in doc_paths if find_konspekt_for_source_in_data(p) is not None)
     return CoverageSummary(covered=covered, total=len(doc_paths))
+
+
+# ── C1: staleness of konspekt vs source (cheap, no LLM) ────────────────────
+# Frontmatter ``source_sha256`` is written by Obsidian export / smart_konspekt.
+# Hash styles differ (utf-8 text vs smart name+bytes). We accept any primary-
+# source variant as fresh; if none match and the source file is newer than the
+# konspekt → stale; otherwise unknown (e.g. multi-input smart hash).
+
+
+def resolve_konspekt_source_path(
+    km: KonspektMeta,
+    *,
+    source_rel: str | None = None,
+    data_dir: Path | str | None = None,
+) -> Path | None:
+    """Resolve the lecture/source file that this konspekt claims to cover."""
+    root = Path(data_dir) if data_dir is not None else DATA_DIR
+    candidates: list[Path] = []
+    if source_rel:
+        rel = str(source_rel).replace("\\", "/").strip()
+        if rel:
+            candidates.append(root / rel)
+    src = str(km.source or "").replace("\\", "/").strip()
+    if src:
+        candidates.append(root / src)
+        candidates.append(km.path.parent / src)
+        candidates.append(km.path.parent / Path(src).name)
+        # Parent course folder + basename (common for course/a.md ↔ course/konspekt)
+        parts = Path(src).parts
+        if len(parts) >= 1:
+            candidates.append(km.path.parent / parts[-1])
+    seen: set[str] = set()
+    for cand in candidates:
+        try:
+            key = str(cand.resolve())
+        except OSError:
+            key = str(cand)
+        if key in seen:
+            continue
+        seen.add(key)
+        if cand.is_file():
+            return cand
+    return None
+
+
+def _source_hash_variants(source_path: Path) -> set[str]:
+    """Hashes that Obsidian export / single-file smart_konspekt may have stored."""
+    out: set[str] = set()
+    try:
+        raw_bytes = source_path.read_bytes()
+    except OSError:
+        return out
+    out.add(hashlib.sha256(raw_bytes).hexdigest())
+    try:
+        text = raw_bytes.decode("utf-8", errors="replace")
+        out.add(hashlib.sha256(text.encode("utf-8")).hexdigest())
+    except Exception:  # noqa: BLE001 - decode edge cases skip text variant
+        pass
+    # smart_konspekt single-file style: name + NUL + bytes + NUL
+    h = hashlib.sha256()
+    h.update(source_path.name.encode("utf-8"))
+    h.update(b"\0")
+    h.update(raw_bytes)
+    h.update(b"\0")
+    out.add(h.hexdigest())
+    return out
+
+
+@lru_cache(maxsize=128)
+def _cached_staleness_state(
+    konspekt_key: str,
+    k_mtime_ns: int,
+    k_size: int,
+    source_key: str,
+    s_mtime_ns: int,
+    s_size: int,
+    stored_hash: str,
+) -> str:
+    """Return 'fresh' | 'stale' | 'unknown' (cached on path mtimes/sizes)."""
+    source_path = Path(source_key)
+    variants = _source_hash_variants(source_path)
+    if stored_hash in variants:
+        return "fresh"
+    # Multi-input smart hash (or other style) cannot be recomputed from primary alone:
+    # only flag stale when the source file is strictly newer than the konspekt.
+    if s_mtime_ns > k_mtime_ns:
+        return "stale"
+    return "unknown"
+
+
+def konspekt_source_staleness(
+    km: KonspektMeta,
+    *,
+    source_rel: str | None = None,
+    data_dir: Path | str | None = None,
+) -> str | None:
+    """Whether the konspekt is out of date relative to its source lecture.
+
+    Returns:
+      - ``"stale"`` — source changed after konspekt (or hash mismatch + newer source)
+      - ``"fresh"`` — stored hash matches a known single-source style
+      - ``None`` — no ``source_sha256``, missing source, or ambiguous hash style
+    """
+    stored = (km.source_sha256 or "").strip().lower()
+    if not stored or not _SHA256_RE.fullmatch(stored):
+        return None
+    src = resolve_konspekt_source_path(km, source_rel=source_rel, data_dir=data_dir)
+    if src is None:
+        return None
+    try:
+        k_stat = km.path.stat()
+        s_stat = src.stat()
+    except OSError:
+        return None
+    state = _cached_staleness_state(
+        str(km.path.resolve()),
+        int(k_stat.st_mtime_ns),
+        int(k_stat.st_size),
+        str(src.resolve()),
+        int(s_stat.st_mtime_ns),
+        int(s_stat.st_size),
+        stored,
+    )
+    if state == "unknown":
+        return None
+    return state
+
+
+def konspekt_stale_badge_label(
+    km: KonspektMeta,
+    *,
+    source_rel: str | None = None,
+    data_dir: Path | str | None = None,
+) -> str | None:
+    """Learner-facing fragment when stale, else None."""
+    if konspekt_source_staleness(km, source_rel=source_rel, data_dir=data_dir) == "stale":
+        return "🕰 устарел"
+    return None
 
 
 # ── A1: парсер рубрики качества конспекта (детерминированный, без LLM) ─────

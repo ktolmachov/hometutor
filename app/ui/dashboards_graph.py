@@ -398,7 +398,7 @@ def _concept_evidence_ledger(
             {
                 "kind": "document",
                 "title": title,
-                "detail": summary[:220] if summary else "Документ связан с концептом в graph bundle.",
+                "detail": summary[:220] if summary else "Документ связан с этим концептом на карте знаний.",
                 "sections": sections,
             }
         )
@@ -696,55 +696,43 @@ def _render_graph_quality_audit(audit: dict[str, object]) -> None:
 
 def _render_graph_publish_status() -> dict | None:
     try:
-        from app.graph_publish_status import get_graph_publish_status
+        from app.graph_publish_status import (
+            build_learner_publish_status_view,
+            get_graph_publish_status,
+        )
 
         status = get_graph_publish_status()
     except Exception:  # noqa: BLE001 - diagnostics only; graph tab must still render.
-        st.caption("Статус публикации graph bundle временно недоступен.")
+        st.caption("Статус карты временно недоступен.")
         return None
 
-    active = status.get("active") if isinstance(status.get("active"), dict) else {}
-    reader_source = str(status.get("reader_source") or "legacy")
-    reader_generation = str(status.get("reader_generation_id") or "")
-    if reader_source == "active":
-        st.success(f"Published graph: active generation `{reader_generation}`.")
-    elif reader_source == "previous":
-        st.warning(
-            "Показан previous published graph "
-            f"`{reader_generation}`; для active generation "
-            f"`{active.get('generation_id') or 'unknown'}` promoted bundle не найден.",
-            icon="⚠️",
-        )
+    view = build_learner_publish_status_view(status)
+    primary = str(view.get("primary") or "")
+    tone = str(view.get("tone") or "info")
+    if tone == "success":
+        st.success(primary)
+    elif tone == "warning":
+        st.warning(primary, icon="⚠️")
     else:
-        st.warning(
-            "Published graph bundle не найден. Вкладка может показывать legacy/empty graph.",
-            icon="⚠️",
-        )
+        st.info(primary)
+    for caption in view.get("captions") or []:
+        st.caption(str(caption))
 
-    failed = status.get("latest_failed_staging")
-    if not isinstance(failed, dict):
-        return status
-    report = failed.get("report") if isinstance(failed.get("report"), dict) else {}
-    fail_reasons = [str(item) for item in (report.get("fail_reasons") or []) if str(item).strip()]
-    metrics = report.get("metrics") if isinstance(report.get("metrics"), dict) else {}
-    with st.expander("Последний staging graph не опубликован", expanded=False):
-        st.caption(f"Bundle: `{failed.get('label')}`")
-        if metrics:
-            st.caption(
-                " · ".join(
-                    [
-                        f"concepts {metrics.get('concept_count', 0)}",
-                        f"relations {metrics.get('semantic_relation_count', 0)}",
-                        f"docs {round(float(metrics.get('docs_participating_pct') or 0), 1)}%",
-                        f"relation evidence {round(float(metrics.get('relations_with_evidence_pct') or 0), 1)}%",
-                    ]
-                )
-            )
-        from app.course_quality_passport import rewrite_fail_reasons_for_learners
-
-        learner_reasons = rewrite_fail_reasons_for_learners(report) or fail_reasons
-        for reason in learner_reasons[:6]:
-            st.caption(f"- {reason}")
+    failed_title = view.get("failed_title")
+    if failed_title:
+        with st.expander(str(failed_title), expanded=False):
+            metrics = [str(m) for m in (view.get("failed_metrics") or []) if str(m).strip()]
+            if metrics:
+                st.caption(" · ".join(metrics))
+            for reason in list(view.get("failed_reasons") or [])[:6]:
+                st.caption(f"- {reason}")
+            debug_lines = [str(x) for x in (view.get("debug_lines") or []) if str(x).strip()]
+            if debug_lines:
+                st.caption("Отладка: " + " · ".join(debug_lines[:4]))
+    elif view.get("debug_lines"):
+        with st.expander("Технические детали карты", expanded=False):
+            for line in view["debug_lines"]:
+                st.caption(str(line))
     return status
 
 
@@ -1044,11 +1032,9 @@ def _render_knowledge_graph_tab() -> None:
         knowledge_graph = preview_graph
         concepts = knowledge_graph.get_concepts()
         typed_relations = knowledge_graph.get_typed_relations()
-        label = str((preview_info or {}).get("label") or "latest staging")
-        st.warning(
-            f"Показан preview staging graph `{label}`. Он не опубликован и не используется в RAG/плане, пока gate не пройден.",
-            icon="⚠️",
-        )
+        from app.graph_publish_status import LEARNER_MAP_PREVIEW_WARNING
+
+        st.warning(LEARNER_MAP_PREVIEW_WARNING, icon="⚠️")
     learned_set = collect_kg_learned_set(concepts)
 
     if not concepts:

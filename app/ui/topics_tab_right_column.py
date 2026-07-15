@@ -357,6 +357,7 @@ def _render_konspekt_badge(rel_path: str, *, key_prefix: str) -> None:
         return
     date_str = f" · {km.generated}" if km.generated else ""
     badge = f"✅ конспект готов{date_str}"
+    badge_color = "#4ade80"
     try:
         # A1: rubric badge next to konspekt (konspekt_quality_plan)
         from app.konspekt_discovery import get_konspekt_quality_rubric
@@ -366,7 +367,7 @@ def _render_konspekt_badge(rel_path: str, *, key_prefix: str) -> None:
     except Exception:  # noqa: BLE001
         pass
     try:
-        # C1: grade badge (derived from roles, same places as A1)
+        # grade badge (derived from roles)
         from app.section_index import _cached_parse_sections, get_konspekt_grade
         secs = _cached_parse_sections(km.path)
         grade = get_konspekt_grade(secs)
@@ -374,8 +375,18 @@ def _render_konspekt_badge(rel_path: str, *, key_prefix: str) -> None:
             badge += f" · {grade}"
     except Exception:  # noqa: BLE001
         pass
+    try:
+        # material plan C1: source_sha256 vs lecture content
+        from app.konspekt_discovery import konspekt_stale_badge_label
+
+        stale_label = konspekt_stale_badge_label(km, source_rel=rel_path)
+        if stale_label:
+            badge += f" · {stale_label}"
+            badge_color = "#f59e0b"
+    except Exception:  # noqa: BLE001 - staleness is advisory only
+        pass
     st.markdown(
-        f'<div style="font-size:12px;color:#4ade80;margin:2px 0 4px">{badge}</div>',
+        f'<div style="font-size:12px;color:{badge_color};margin:2px 0 4px">{badge}</div>',
         unsafe_allow_html=True,
     )
     try:
@@ -431,13 +442,21 @@ def _vault_status_badge(rel_path: str) -> str:
         if src is not None and vault_target(src).exists():
             uri = obsidian_uri(vault_target(src))
             badge = f'<a href="{uri}" title="Открыть конспект в Obsidian" style="color:#4ade80;font-size:13px;text-decoration:none">✅</a>'
-            # A1: rubric рядом с ✅ (plan)
+            # A1: rubric рядом с ✅ (plan); C1: stale vs source
             try:
+                from app.konspekt_discovery import konspekt_stale_badge_label
+
                 km = find_konspekt_for_source_in_data(rel_path)
                 if km:
                     r = get_konspekt_quality_rubric(km.path)
                     if r and r.get("average") is not None:
                         badge += f' <span style="font-size:11px;color:#64748b">рубрика {r["average"]}/5</span>'
+                    stale_label = konspekt_stale_badge_label(km, source_rel=rel_path)
+                    if stale_label:
+                        badge += (
+                            f' <span title="Исходник лекции новее конспекта" '
+                            f'style="font-size:11px;color:#f59e0b">{stale_label}</span>'
+                        )
             except Exception:
                 pass
             return badge

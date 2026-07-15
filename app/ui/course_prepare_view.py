@@ -353,80 +353,51 @@ def _resolve_graph_status_for_scope(
 
 
 def _render_graph_publish_status(*, key_prefix: str) -> None:
-    """Show which graph bundle is actually published/read and why staging may be blocked."""
+    """Show map publish status in learner language (material plan C2)."""
     try:
-        from app.graph_publish_status import get_graph_publish_status
+        from app.graph_publish_status import (
+            build_learner_publish_status_view,
+            get_graph_publish_status,
+        )
 
         status = get_graph_publish_status()
     except Exception:  # noqa: BLE001 - UI diagnostics must degrade, not block course prep.
-        st.caption("Статус публикации graph bundle временно недоступен.")
+        st.caption("Статус карты временно недоступен.")
         return
 
-    active = status.get("active") if isinstance(status.get("active"), dict) else {}
-    previous = status.get("previous") if isinstance(status.get("previous"), dict) else {}
-    reader_source = str(status.get("reader_source") or "legacy")
-    reader_generation = str(status.get("reader_generation_id") or "")
-
-    if reader_source == "active":
-        st.success(f"Graph read-path: опубликованный bundle active generation `{reader_generation}`.")
-    elif reader_source == "previous":
-        st.warning(
-            "Graph read-path использует previous published bundle: "
-            f"`{reader_generation}`. Для active generation "
-            f"`{active.get('generation_id') or 'unknown'}` promoted bundle не найден.",
-            icon="⚠️",
-        )
+    view = build_learner_publish_status_view(status)
+    primary = str(view.get("primary") or "")
+    tone = str(view.get("tone") or "info")
+    if tone == "success":
+        st.success(primary)
+    elif tone == "warning":
+        st.warning(primary, icon="⚠️")
     else:
-        st.warning(
-            "Graph read-path сейчас в legacy/empty режиме: promoted bundle для active generation не найден.",
-            icon="⚠️",
-        )
+        st.info(primary)
+    for caption in view.get("captions") or []:
+        st.caption(str(caption))
 
-    active_report = active.get("report") if isinstance(active.get("report"), dict) else None
-    if active.get("generation_id"):
-        state = "есть" if active.get("exists") else "нет"
-        st.caption(f"Active generation: `{active.get('generation_id')}` · promoted bundle: {state}")
-    if previous.get("generation_id") and reader_source != "active":
-        state = "есть" if previous.get("exists") else "нет"
-        st.caption(f"Previous generation: `{previous.get('generation_id')}` · promoted bundle: {state}")
-    if active_report:
-        st.caption(
-            "Active quality: "
-            f"gate={'pass' if active_report.get('gate_passed') else 'fail'} · "
-            f"published={bool(active_report.get('published'))}"
-        )
-
-    failed = status.get("latest_failed_staging")
-    if not isinstance(failed, dict):
-        return
-    report = failed.get("report") if isinstance(failed.get("report"), dict) else {}
-    fail_reasons = [str(item) for item in (report.get("fail_reasons") or []) if str(item).strip()]
-    with st.expander("Почему последний staging graph не опубликован", expanded=False):
-        st.caption(f"Staging bundle: `{failed.get('label')}`")
-        metrics = report.get("metrics") if isinstance(report.get("metrics"), dict) else {}
-        if metrics:
-            cols = st.columns(4)
-            with cols[0]:
-                st.metric("Concepts", int(metrics.get("concept_count") or 0))
-            with cols[1]:
-                st.metric("Relations", int(metrics.get("semantic_relation_count") or 0))
-            with cols[2]:
-                st.metric("Docs %", round(float(metrics.get("docs_participating_pct") or 0), 1))
-            with cols[3]:
-                st.metric("Evidence %", round(float(metrics.get("relations_with_evidence_pct") or 0), 1))
-        if fail_reasons:
-            from app.course_quality_passport import rewrite_fail_reasons_for_learners
-
-            learner_reasons = rewrite_fail_reasons_for_learners(report) or fail_reasons
-            st.markdown("**Блокеры publish**")
-            for reason in learner_reasons[:6]:
-                st.caption(f"- {reason}")
-            overflow = max(0, len(learner_reasons) - 6)
-            if overflow:
-                st.caption(f"И ещё {overflow}")
-        if st.button("Обновить статус публикации графа", key=f"{key_prefix}_refresh_publish_status"):
-            _clear_graph_caches()
-            st.rerun()
+    failed_title = view.get("failed_title")
+    if failed_title:
+        with st.expander(str(failed_title), expanded=False):
+            metrics = [str(m) for m in (view.get("failed_metrics") or []) if str(m).strip()]
+            if metrics:
+                st.caption(" · ".join(metrics))
+            reasons = list(view.get("failed_reasons") or [])
+            if reasons:
+                st.markdown("**Что мешает**")
+                for reason in reasons[:6]:
+                    st.caption(f"- {reason}")
+                overflow = max(0, len(reasons) - 6)
+                if overflow:
+                    st.caption(f"И ещё {overflow}")
+            if st.button("Обновить статус карты", key=f"{key_prefix}_refresh_publish_status"):
+                _clear_graph_caches()
+                st.rerun()
+    if view.get("debug_lines"):
+        with st.expander("Технические детали карты", expanded=False):
+            for line in view["debug_lines"]:
+                st.caption(str(line))
 
 
 def _render_course_quality_passport(*, documents: list[str], index_stats: dict | None) -> None:

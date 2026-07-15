@@ -1,7 +1,12 @@
 import json
 from pathlib import Path
 
-from app.graph_publish_status import _compact_report, get_graph_publish_status, graph_freshness_gap
+from app.graph_publish_status import (
+    _compact_report,
+    build_learner_publish_status_view,
+    get_graph_publish_status,
+    graph_freshness_gap,
+)
 
 
 def _write_registry(path: Path, *, active_gid: str, previous_gid: str | None = None) -> None:
@@ -184,3 +189,106 @@ def test_graph_freshness_gap_filters_non_user_paths() -> None:
     # a new user file appears
     index_stats2 = {"files": ["demo/real.md", "docs/lec.md", "uploads/new.pdf", "cache/foo"]}
     assert graph_freshness_gap(index_stats2, publish_status) == 1  # uploads/new.pdf
+
+
+def _assert_no_engineer_jargon(text: str) -> None:
+    lowered = text.lower()
+    for banned in ("bundle", "staging", "promote", "generation", "published graph", "read-path"):
+        assert banned not in lowered, f"learner surface still has jargon: {banned!r} in {text!r}"
+
+
+def test_learner_publish_status_active_is_plain_language() -> None:
+    view = build_learner_publish_status_view(
+        {
+            "reader_source": "active",
+            "reader_generation_id": "gen-active-1",
+            "active": {
+                "generation_id": "gen-active-1",
+                "exists": True,
+                "report": {"gate_passed": True, "published": True},
+            },
+            "previous": {},
+            "latest_failed_staging": None,
+        }
+    )
+    assert view["tone"] == "success"
+    assert view["primary"] == "Карта актуальна"
+    assert view["badge_label"] is None
+    _assert_no_engineer_jargon(view["primary"])
+    # Technical ids only in debug tier
+    assert any("gen-active-1" in line for line in view["debug_lines"])
+
+
+def test_learner_publish_status_previous_and_failed_attempt() -> None:
+    from app.graph_publish_status import LEARNER_MAP_PREVIEW_WARNING
+
+    view = build_learner_publish_status_view(
+        {
+            "reader_source": "previous",
+            "reader_generation_id": "gen-prev",
+            "active": {"generation_id": "gen-new", "exists": False, "report": None},
+            "previous": {"generation_id": "gen-prev", "exists": True, "report": {"published": True}},
+            "latest_failed_staging": {
+                "label": "staging-xyz",
+                "report": {
+                    "fail_reasons": ["Недостаточно документов для семантического графа"],
+                    "metrics": {"doc_count": 1, "concept_count": 2, "semantic_relation_count": 0},
+                },
+            },
+        }
+    )
+    assert view["tone"] == "warning"
+    assert "предыдущая версия" in view["primary"].lower()
+    assert view["badge_label"] == "⚠ предыдущая карта"
+    assert view["badge_title"] == view["primary"]
+    _assert_no_engineer_jargon(view["primary"])
+    _assert_no_engineer_jargon(view["badge_label"])
+    assert view["failed_title"]
+    _assert_no_engineer_jargon(view["failed_title"])
+    assert any("Добавьте ещё" in r for r in view["failed_reasons"])
+    # P4: only keys present in metrics (no synthetic evidence/docs zeros)
+    assert view["failed_metrics"] == ["концепты 2", "связи 0"]
+    surface = " ".join(
+        [
+            view["primary"],
+            *view["captions"],
+            str(view["failed_title"]),
+            *view["failed_reasons"],
+            *view["failed_metrics"],
+            str(view["badge_label"] or ""),
+            LEARNER_MAP_PREVIEW_WARNING,
+        ]
+    )
+    _assert_no_engineer_jargon(surface)
+
+
+def test_learner_publish_status_legacy_and_unavailable() -> None:
+    legacy = build_learner_publish_status_view({"reader_source": "legacy", "active": {}, "previous": {}})
+    assert "не собрана" in legacy["primary"].lower()
+    assert legacy["badge_label"] == "⚠ карта не собрана"
+    _assert_no_engineer_jargon(legacy["primary"])
+    _assert_no_engineer_jargon(legacy["badge_label"])
+
+    missing = build_learner_publish_status_view(None)
+    assert "временно недоступен" in missing["primary"].lower()
+    _assert_no_engineer_jargon(missing["primary"])
+
+
+def test_kg_mission_badge_uses_learner_view(monkeypatch) -> None:
+    """P1: Mission Control badge must share learner copy, not engineer jargon."""
+    import app.ui.mission_control as mc
+
+    monkeypatch.setattr(
+        "app.graph_publish_status.get_graph_publish_status",
+        lambda: {
+            "reader_source": "previous",
+            "reader_generation_id": "g-prev",
+            "active": {"exists": False, "generation_id": "g-new"},
+            "previous": {"exists": True, "generation_id": "g-prev"},
+        },
+    )
+    html_out = mc._kg_bundle_state_badge()
+    assert "предыдущая карта" in html_out
+    assert "previous bundle" not in html_out.lower()
+    assert "bundle" not in html_out.lower()
+    assert "generation" not in html_out.lower()

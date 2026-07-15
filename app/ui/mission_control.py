@@ -756,31 +756,29 @@ def _build_kg_mini_svg(concepts: dict, mastery_vector: dict) -> str:
 
 
 def _kg_bundle_state_badge() -> str:
-    """Compact bundle-state badge for the KG Mission Control card (B1).
+    """Compact map-state badge for the KG Mission Control card (C2 learner language).
 
-    Mirrors the publish-status banner shown on the Knowledge Graph screen so that, when
-    the active graph bundle is not the canonical ``active`` generation (previous/legacy),
-    both screens surface the same state instead of silently showing numbers from a
-    different bundle. Returns ``""`` when the bundle is the normal active generation or
-    when the status lookup is unavailable.
+    Mirrors the publish-status banner on the Knowledge Graph screen via
+    ``build_learner_publish_status_view`` so MC and KG never disagree on copy.
+    Returns ``""`` when the map is the normal active published version or when
+    the status lookup is unavailable.
     """
     try:
-        from app.graph_publish_status import get_graph_publish_status
+        from app.graph_publish_status import (
+            build_learner_publish_status_view,
+            get_graph_publish_status,
+        )
 
-        reader_source = str((get_graph_publish_status() or {}).get("reader_source") or "active")
+        view = build_learner_publish_status_view(get_graph_publish_status())
     except Exception:  # noqa: BLE001 - badge is optional diagnostics, never breaks the card
         return ""
-    if reader_source == "previous":
-        return (
-            '<span class="kg-mc-badge" title="Показан предыдущий опубликованный graph bundle '
-            '(active generation не найдена)">⚠ previous bundle</span>'
-        )
-    if reader_source == "legacy":
-        return (
-            '<span class="kg-mc-badge" title="Published graph bundle не найден — '
-            'показан legacy graph">⚠ legacy bundle</span>'
-        )
-    return ""
+    label = str(view.get("badge_label") or "").strip()
+    if not label:
+        return ""
+    title = str(view.get("badge_title") or view.get("primary") or label).strip()
+    safe_title = html.escape(title, quote=True)
+    safe_label = html.escape(label)
+    return f'<span class="kg-mc-badge" title="{safe_title}">{safe_label}</span>'
 
 
 def render_kg_mission_card() -> None:

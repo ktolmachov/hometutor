@@ -135,6 +135,128 @@ def get_graph_publish_status(*, staging_limit: int = 3) -> dict[str, Any]:
     }
 
 
+# P3: status-independent copy for draft-map preview (not computed by the view).
+LEARNER_MAP_PREVIEW_WARNING = (
+    "Показан черновик карты, который ещё не прошёл проверку качества. "
+    "Он виден для диагностики и не используется в ответах и плане."
+)
+
+
+def _metric_line(metrics: dict[str, Any], key: str, *, label: str, as_pct: bool = False) -> str | None:
+    """P4: include a metric only when the key is present (skip synthetic zeros)."""
+    if key not in metrics:
+        return None
+    raw = metrics.get(key)
+    if raw is None:
+        return None
+    try:
+        if as_pct:
+            return f"{label} {round(float(raw), 1)}%"
+        return f"{label} {int(raw)}"
+    except (TypeError, ValueError):
+        return None
+
+
+def build_learner_publish_status_view(status: dict[str, Any] | None) -> dict[str, Any]:
+    """Learner-facing copy for graph publish UI (material plan C2).
+
+    Primary surface avoids engineer jargon (bundle / staging / promote / generation).
+    Technical ids live only under ``debug_lines`` for an optional collapsed expander.
+    Compact MC badge fields: ``badge_label`` / ``badge_title`` (empty when active).
+    """
+    if not isinstance(status, dict):
+        return {
+            "tone": "info",
+            "primary": "Статус карты временно недоступен.",
+            "captions": [],
+            "debug_lines": [],
+            "failed_title": None,
+            "failed_reasons": [],
+            "failed_metrics": [],
+            "badge_label": None,
+            "badge_title": None,
+        }
+
+    reader_source = str(status.get("reader_source") or "legacy")
+    active = status.get("active") if isinstance(status.get("active"), dict) else {}
+    previous = status.get("previous") if isinstance(status.get("previous"), dict) else {}
+    reader_gid = str(status.get("reader_generation_id") or "").strip()
+    active_gid = str(active.get("generation_id") or "").strip()
+    previous_gid = str(previous.get("generation_id") or "").strip()
+
+    if reader_source == "active":
+        tone = "success"
+        primary = "Карта актуальна"
+        captions: list[str] = []
+        badge_label: str | None = None
+    elif reader_source == "previous":
+        tone = "warning"
+        primary = "Показана предыдущая версия карты — новая ещё не готова"
+        captions = [
+            "Ответы и план могут опираться на прошлую карту, пока новая не пройдёт проверку качества."
+        ]
+        badge_label = "⚠ предыдущая карта"
+    else:
+        tone = "warning"
+        primary = "Карта знаний пока не собрана для текущих материалов"
+        captions = [
+            "После индексации с картой знаний здесь появится опубликованная версия."
+        ]
+        badge_label = "⚠ карта не собрана"
+
+    debug_lines: list[str] = []
+    if reader_gid:
+        debug_lines.append(f"read={reader_source} id={reader_gid}")
+    if active_gid:
+        state = "ok" if active.get("exists") else "missing"
+        debug_lines.append(f"active id={active_gid} ({state})")
+    if previous_gid and reader_source != "active":
+        state = "ok" if previous.get("exists") else "missing"
+        debug_lines.append(f"previous id={previous_gid} ({state})")
+    active_report = active.get("report") if isinstance(active.get("report"), dict) else None
+    if active_report is not None:
+        gate = "pass" if active_report.get("gate_passed") else "fail"
+        pub = "yes" if active_report.get("published") else "no"
+        debug_lines.append(f"quality gate={gate} published={pub}")
+
+    failed = status.get("latest_failed_staging")
+    failed_title: str | None = None
+    failed_reasons: list[str] = []
+    failed_metrics: list[str] = []
+    if isinstance(failed, dict):
+        report = failed.get("report") if isinstance(failed.get("report"), dict) else {}
+        failed_title = "Почему последняя попытка обновить карту не прошла проверку"
+        metrics = report.get("metrics") if isinstance(report.get("metrics"), dict) else {}
+        if metrics:
+            for line in (
+                _metric_line(metrics, "concept_count", label="концепты"),
+                _metric_line(metrics, "semantic_relation_count", label="связи"),
+                _metric_line(metrics, "docs_participating_pct", label="документы", as_pct=True),
+                _metric_line(metrics, "relations_with_evidence_pct", label="evidence", as_pct=True),
+            ):
+                if line:
+                    failed_metrics.append(line)
+        from app.course_quality_passport import rewrite_fail_reasons_for_learners
+
+        raw_reasons = [str(r).strip() for r in (report.get("fail_reasons") or []) if str(r).strip()]
+        failed_reasons = rewrite_fail_reasons_for_learners(report) or raw_reasons
+        label = str(failed.get("label") or "").strip()
+        if label:
+            debug_lines.append(f"last_attempt={label}")
+
+    return {
+        "tone": tone,
+        "primary": primary,
+        "captions": captions,
+        "debug_lines": debug_lines,
+        "failed_title": failed_title,
+        "failed_reasons": failed_reasons,
+        "failed_metrics": failed_metrics,
+        "badge_label": badge_label,
+        "badge_title": primary if badge_label else None,
+    }
+
+
 def graph_freshness_gap(
     index_stats: dict[str, Any] | None, publish_status: dict[str, Any] | None
 ) -> int:

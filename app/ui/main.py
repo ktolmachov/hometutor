@@ -113,10 +113,24 @@ except Exception as exc:  # noqa: BLE001 - restore активного курса
 try:
     from app.ui.study_scope import maybe_auto_activate_demo_course
 
-    if maybe_auto_activate_demo_course():
+    _demo_course_activated = maybe_auto_activate_demo_course()
+    if _demo_course_activated:
         st.toast("Демо-курс «hometutor 101» активирован автоматически.", icon="🎓")
 except Exception as exc:  # noqa: BLE001 - авто-активация демо-курса опциональна, не блокируем старт UI
     logger.debug("Demo course auto-activation skipped: %s", exc)
+    _demo_course_activated = False
+
+try:
+    # Self-heals ui_level whenever a course is active — covers both a scope that
+    # was just (auto-)activated and one restored from a previous run where the
+    # promotion never landed (e.g. the onboarding default below once overwrote
+    # it). Cheap and idempotent: ensure_min_ui_level never downgrades.
+    if _get_active_scope() is not None:
+        from app.ui_preferences import LEVEL_FULL, ensure_min_ui_level
+
+        ensure_min_ui_level(LEVEL_FULL)
+except Exception as exc:  # noqa: BLE001 - level promotion опциональна, не блокируем старт UI
+    logger.debug("UI level promotion for active course skipped: %s", exc)
 
 
 @st.dialog("Начало работы")
@@ -125,7 +139,13 @@ def _render_onboarding_dialog() -> None:
 
 
 try:
-    if user_state.get_kv("onboarding_v1_done") != "1":
+    if _demo_course_activated:
+        # A guided demo course just auto-activated — that already answers "what
+        # interface am I in" better than the generic level picker, and showing
+        # the picker here would let its default ("Учёба") silently overwrite the
+        # promotion above. Mark onboarding done instead of prompting.
+        user_state.set_kv("onboarding_v1_done", "1")
+    elif user_state.get_kv("onboarding_v1_done") != "1":
         _render_onboarding_dialog()
 except Exception as e:  # noqa: BLE001 - onboarding check failure is non-fatal during startup
     logger.debug("Onboarding check failed, skipping: %s", e)

@@ -13,7 +13,8 @@
 
 В этом режиме приложение работает в связке: **Streamlit UI + FastAPI** + облачная LLM
 (OpenRouter/OpenAI-совместимый провайдер) + заранее подготовленный демо-корпус (`demo_data/`)
-и скомпилированный векторный индекс (`demo_chroma_db/`). При старте контейнера
+и скомпилированный векторный индекс (`demo_chroma_db/`). Active generation pointer
+для этого снимка хранится в `demo_index_registry.json`. При старте контейнера
 [`bootstrap_demo_paths.sh`](bootstrap_demo_paths.sh) копирует их в рабочие `data/`/`chroma_db/`,
 если они ещё пусты (эфемерный FS контейнера — см. ограничения ниже). Встроенный курс
 `demo_data/uploads/hometutor_101/` гарантированно докладывается в `data/uploads/hometutor_101/`,
@@ -95,9 +96,14 @@ Variables/Secrets имеют приоритет.
 `uploads/hometutor_101/`. Иначе файлы курса будут скопированы в Space, но готовый
 прединдекс может ещё не отвечать по ним до ручного reindex из UI.
 
+Команда также пишет `demo_index_registry.json` и, если graph publish gate пройден,
+`demo_data/graph_generations/by_generation/<generation_id>/`. Эти файлы должны
+коммититься вместе с `demo_chroma_db/`, иначе Space получит индекс без согласованного
+Knowledge Graph read-path.
+
 ### Шаг 2: Коммит индекса
 ```bash
-git add demo_chroma_db/
+git add demo_chroma_db/ demo_data/graph_generations/ demo_index_registry.json
 git commit -m "chore: pre-build demo database index"
 ```
 

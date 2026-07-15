@@ -20,6 +20,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULTS = {
     "HOME_RAG_DATA_DIR": str(REPO_ROOT / "demo_data"),
     "HOME_RAG_INDEX_DIR": str(REPO_ROOT / "demo_chroma_db"),
+    "INDEX_REGISTRY_PATH": str(REPO_ROOT / "demo_index_registry.json"),
+    "INDEX_REGISTRY_LOCK_PATH": str(REPO_ROOT / "demo_index_registry.json.lock"),
     "EMBED_API_BASE": "https://openrouter.ai/api/v1",
     "EMBED_MODEL": "perplexity/pplx-embed-v1-0.6b",
     "EMBED_DIMENSIONS": "1024",
@@ -45,6 +47,7 @@ def main() -> None:
 
     print(f"data_dir={DATA_DIR}")
     print(f"index_dir={CHROMA_DIR}")
+    print(f"registry={os.environ['INDEX_REGISTRY_PATH']}")
     print(f"embed_api_base={os.environ['EMBED_API_BASE']}")
     print(f"embed_model={os.environ['EMBED_MODEL']}")
     build_index(reset=True)

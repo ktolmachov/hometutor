@@ -59,3 +59,44 @@ def test_relation_with_invalid_chunk_gets_same_doc_chunk_fallback():
     )
     assert relation["evidence_doc_id"] == "course/deep-agents.md"
     assert relation["evidence_chunk_id"] == "chunk-1"
+
+
+def test_relation_evidence_gate_accepts_metadata_chunk_fallback():
+    def extract(_doc_id, _rows):
+        return (
+            {
+                "concepts": [
+                    {
+                        "label": f"Concept {idx}",
+                        "normalized_label": f"Concept {idx}",
+                    }
+                    for idx in range(12)
+                ],
+                "relations": [
+                    {
+                        "source": f"Concept {idx}",
+                        "target": f"Concept {idx + 1}",
+                        "type": "uses",
+                        "confidence": 0.9,
+                    }
+                    for idx in range(11)
+                ],
+            },
+            None,
+        )
+
+    docs = [
+        _doc(f"course/lesson-{idx}.md", f"lesson-{idx}")
+        for idx in range(3)
+    ]
+
+    result = compile_course_graph(
+        docs,
+        generation_id="gen-test",
+        scope_hash="scope-test",
+        llm_extract_fn=extract,
+    )
+
+    metrics = result.quality_report.metrics
+    assert metrics["relations_with_evidence_pct"] == 100.0
+    assert "Не все связи с evidence" not in result.quality_report.fail_reasons

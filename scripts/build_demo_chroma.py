@@ -18,6 +18,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 _DEFAULTS = {
+    "HOME_RAG_DATA_MODE": "demo",
+    "HOME_RAG_LOCAL_PROFILE": "cloud_fast",
+    "OFFLINE_PROBE_LLM_ENDPOINT": "false",
+    "LLM_LOCAL_WARMUP": "false",
     "HOME_RAG_DATA_DIR": str(REPO_ROOT / "demo_data"),
     "HOME_RAG_INDEX_DIR": str(REPO_ROOT / "demo_chroma_db"),
     "INDEX_REGISTRY_PATH": str(REPO_ROOT / "demo_index_registry.json"),

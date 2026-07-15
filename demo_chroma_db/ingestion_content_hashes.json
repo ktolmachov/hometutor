@@ -3,54 +3,132 @@
   "embed_model": "perplexity/pplx-embed-v1-0.6b",
   "retrieval_fingerprint": "155ddfa3ca7dee7191e11e90",
   "hashes": {
-    "README.md": "d9d12fdf737520ba1ee3ee013f6c24069a32047414aa383f01ccb5b521e354ff",
+    "README.md": "e2312afcc0f1c440b9e43418f755238df1324fe850ded3c7afed98ce3f485779",
     "alpha_rag_intro.md": "4f02709d35464813f52a08dbcbddf45e1f81f3dc3c6a281b5893fdf3fa49676a",
     "beta_vector_db.md": "be146276e95afb5449c08793bd90051bdc032bc84246accc7d7ccb5e5820ef23",
     "delta_srs.md": "a0021e41e1f34de42a358cd37deed18249080a8d95f6f13bf25c4e508765f314",
     "epsilon_guardrails.md": "48b8d9f30992c58d4c08c0aa8d3092684f60ab8106d325419db0625672f1d80b",
     "gamma_hybrid.md": "63fbd987cfec7fb1ad93a99967214157e0bdc482e0e5400054e203721948257a",
-    "python_basics.md": "9e9cef01028375fb2886ec6048a8a16de1804735bb06f6e4b981c3c8547d56d3"
+    "python_basics.md": "9e9cef01028375fb2886ec6048a8a16de1804735bb06f6e4b981c3c8547d56d3",
+    "uploads/hometutor_101/README.md": "476cf60c53dedec4ea32bbc2fc4031c99dae148d1f502cae1a0935161a1d603d",
+    "uploads/hometutor_101/konspekts/urok_1_pervyi_otvet.konspekt.md": "4a24178a1c176a6d454ec0c0114cfff91da14923c0de3c03579230b15ad8a498",
+    "uploads/hometutor_101/konspekts/urok_2_petlya_pamyati.konspekt.md": "7c362d37b3979b979c0f1730bb056f4bb51ab017e3d1c2c09ab2f8d26e71ebe0",
+    "uploads/hometutor_101/konspekts/urok_3_odin_sleduyushchiy_shag.konspekt.md": "c9ec3572c2f89396015d22d33e2840c9a59a2c7c734f02c9ee630823bb1637db",
+    "uploads/hometutor_101/konspekts/urok_4_karta_znaniy.konspekt.md": "51e1cd81996316dbb2bd1a72bb8a08d54210de43d011ac271a8d17e6e1cf57d3",
+    "uploads/hometutor_101/konspekts/urok_5_konspekt_s_pasportom.konspekt.md": "1b284c91ba91ac9aeda1192e5aecd544c8f15008b0b28b0ac4d719bfc9520ebe",
+    "uploads/hometutor_101/konspekts/urok_6_khozyain_sistemy.konspekt.md": "816079f77485dc4434012cf44a7005ece8241221168f4bc281fbe5a7e407a3d0",
+    "uploads/hometutor_101/lectures/urok_1_pervyi_otvet.md": "59b96bcb828f060a526f28a69b39c1b851ced3730196415e9db18a8f68c3dce1",
+    "uploads/hometutor_101/lectures/urok_2_petlya_pamyati.md": "bd29016708cab9d0787286d521fcd585f335faf8d4fd0579524ebc4691ca140b",
+    "uploads/hometutor_101/lectures/urok_3_odin_sleduyushchiy_shag.md": "66f81b33235c584121f8613fbe44d24f70335952e86dc1f21d7accfdf4db1fda",
+    "uploads/hometutor_101/lectures/urok_4_karta_znaniy.md": "7b7a1f302c487f9e89f88e416137b95a5eec423d816b62accc8b83ce0d5eae64",
+    "uploads/hometutor_101/lectures/urok_5_konspekt_s_pasportom.md": "3c717bb670813a20cc888235a11ffada19a0031ac5537ad30acf87229d025c8c",
+    "uploads/hometutor_101/lectures/urok_6_khozyain_sistemy.md": "cd0eb8683a1f7fb3e1548ff7a01f0a55641c78f31ec6f988ed1f3a545e60afc4"
   },
   "file_manifest": {
     "schema_version": 1,
     "files": {
       "alpha_rag_intro.md": {
         "size": 1176,
-        "mtime_ns": 1780387960000000000,
+        "mtime_ns": 1783790065987635700,
         "ext": ".md"
       },
       "beta_vector_db.md": {
         "size": 921,
-        "mtime_ns": 1780387960000000000,
+        "mtime_ns": 1783790065987635700,
         "ext": ".md"
       },
       "delta_srs.md": {
         "size": 677,
-        "mtime_ns": 1780387960000000000,
+        "mtime_ns": 1783790065987635700,
         "ext": ".md"
       },
       "epsilon_guardrails.md": {
         "size": 652,
-        "mtime_ns": 1780387960000000000,
+        "mtime_ns": 1783790065987635700,
         "ext": ".md"
       },
       "gamma_hybrid.md": {
         "size": 670,
-        "mtime_ns": 1780387960000000000,
+        "mtime_ns": 1783790065988634200,
         "ext": ".md"
       },
       "python_basics.md": {
         "size": 831,
-        "mtime_ns": 1780387960000000000,
+        "mtime_ns": 1783790065988634200,
         "ext": ".md"
       },
       "README.md": {
-        "size": 497,
-        "mtime_ns": 1780387960000000000,
+        "size": 850,
+        "mtime_ns": 1784061108460717000,
+        "ext": ".md"
+      },
+      "uploads/hometutor_101/konspekts/urok_1_pervyi_otvet.konspekt.md": {
+        "size": 11373,
+        "mtime_ns": 1784058893989431100,
+        "ext": ".md"
+      },
+      "uploads/hometutor_101/konspekts/urok_2_petlya_pamyati.konspekt.md": {
+        "size": 12183,
+        "mtime_ns": 1784058894893900200,
+        "ext": ".md"
+      },
+      "uploads/hometutor_101/konspekts/urok_3_odin_sleduyushchiy_shag.konspekt.md": {
+        "size": 11646,
+        "mtime_ns": 1784058895785842000,
+        "ext": ".md"
+      },
+      "uploads/hometutor_101/konspekts/urok_4_karta_znaniy.konspekt.md": {
+        "size": 12663,
+        "mtime_ns": 1784058896690600100,
+        "ext": ".md"
+      },
+      "uploads/hometutor_101/konspekts/urok_5_konspekt_s_pasportom.konspekt.md": {
+        "size": 13009,
+        "mtime_ns": 1784058897584182800,
+        "ext": ".md"
+      },
+      "uploads/hometutor_101/konspekts/urok_6_khozyain_sistemy.konspekt.md": {
+        "size": 13215,
+        "mtime_ns": 1784058898475221400,
+        "ext": ".md"
+      },
+      "uploads/hometutor_101/lectures/urok_1_pervyi_otvet.md": {
+        "size": 8420,
+        "mtime_ns": 1784048088299771300,
+        "ext": ".md"
+      },
+      "uploads/hometutor_101/lectures/urok_2_petlya_pamyati.md": {
+        "size": 7998,
+        "mtime_ns": 1784048130075399300,
+        "ext": ".md"
+      },
+      "uploads/hometutor_101/lectures/urok_3_odin_sleduyushchiy_shag.md": {
+        "size": 7361,
+        "mtime_ns": 1784048169886534500,
+        "ext": ".md"
+      },
+      "uploads/hometutor_101/lectures/urok_4_karta_znaniy.md": {
+        "size": 8456,
+        "mtime_ns": 1784048215368706600,
+        "ext": ".md"
+      },
+      "uploads/hometutor_101/lectures/urok_5_konspekt_s_pasportom.md": {
+        "size": 8841,
+        "mtime_ns": 1784048265671303400,
+        "ext": ".md"
+      },
+      "uploads/hometutor_101/lectures/urok_6_khozyain_sistemy.md": {
+        "size": 8967,
+        "mtime_ns": 1784048315824423100,
+        "ext": ".md"
+      },
+      "uploads/hometutor_101/README.md": {
+        "size": 7721,
+        "mtime_ns": 1784061190547328400,
         "ext": ".md"
       }
     }
   },
-  "source_fragments": 7,
-  "nodes_count": 7
+  "source_fragments": 20,
+  "nodes_count": 39
 }

@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "index_version": 2,
+  "active_generation": {
+    "generation_id": "reset_home_rag_v2_2026_07_15T04_59_46_789432_00_00",
+    "chunks_collection": "home-rag_v2",
+    "summaries_collection": "home_rag_summaries",
+    "activated_at": "2026-07-15T04:59:46.789432+00:00",
+    "embed_model": "perplexity/pplx-embed-v1-0.6b",
+    "documents_count": 20,
+    "nodes_count": 39,
+    "summary_documents_count": null
+  },
+  "previous_generation": {
+    "generation_id": "reset_home_rag_v2_2026_07_15T04_45_39_196973_00_00",
+    "chunks_collection": "home-rag_v2",
+    "summaries_collection": "home_rag_summaries",
+    "activated_at": "2026-07-15T04:45:39.196973+00:00",
+    "embed_model": "perplexity/pplx-embed-v1-0.6b",
+    "documents_count": 20,
+    "nodes_count": 39,
+    "summary_documents_count": null
+  },
+  "staging_generation": null,
+  "last_failed_generation": null
+}

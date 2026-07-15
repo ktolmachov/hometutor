@@ -13,3 +13,9 @@ eval_results/
 .python/
 hometutor.egg-info/
 mcps/tasks/tools/
+
+# Demo build runtime byproducts; demo corpus itself is tracked.
+demo_data/user_state.db
+demo_data/sessions.db
+demo_data/llm_request_cache.db
+demo_data/cache/

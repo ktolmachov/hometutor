@@ -630,9 +630,9 @@ def _compute_metrics(
     )
     valid_chunk_ids = {
         doc_id: {
-            str(row.get("chunk_id") or "").strip()
+            _chunk_id_from_metadata(row, doc_id)
             for row in rows
-            if str(row.get("chunk_id") or "").strip()
+            if _chunk_id_from_metadata(row, doc_id)
         }
         for doc_id, rows in documents_grouped.items()
     }

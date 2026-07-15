@@ -234,6 +234,11 @@ flowchart LR
 - `app/ingestion_index_nodes.py`
 - `app/index_registry.py`
 - `app/knowledge_graph_bundle.py`
+- `app/graph_publish_status.py` — read-path active/previous/staging + set-based
+  `graph_freshness_gap` для Mission Control.
+- `app/course_quality_passport.py` — pure aggregator «паспорт материала»
+  (карта/конспекты/медиа/readiness/audit + лестница `min_documents`); UI в
+  `app/ui/course_prepare_view.py`.
 - `app/ui/dashboards_graph.py` — companion-панель Knowledge Graph: действия с
   концептом, evidence ledger, graph quality audit и deterministic alias/duplicate
   diagnostics поверх активного graph bundle; тот же D3 HTML-payload можно скачать

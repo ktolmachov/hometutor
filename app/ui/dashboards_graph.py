@@ -740,7 +740,10 @@ def _render_graph_publish_status() -> dict | None:
                     ]
                 )
             )
-        for reason in fail_reasons[:6]:
+        from app.course_quality_passport import rewrite_fail_reasons_for_learners
+
+        learner_reasons = rewrite_fail_reasons_for_learners(report) or fail_reasons
+        for reason in learner_reasons[:6]:
             st.caption(f"- {reason}")
     return status
 

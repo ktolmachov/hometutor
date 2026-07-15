@@ -27,7 +27,8 @@ from app.flashcards_tag_display import escape_multiline, source_display, split_c
 _INK = "#132019"
 _MUTED = "#59685f"
 _ACCENT = "#b95631"
-_MONO = "ui-monospace,'IBM Plex Mono',monospace"
+# System mono stack (matches --font-mono in ui_theme.css; iframe has no host CSS vars).
+_MONO = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
 
 _DECK_SOURCE_ICONS: dict[str, str] = {
     "course": "🎓",
@@ -269,7 +270,7 @@ def build_interactive_card_html(
     ink: str = "#132019",
     muted: str = "#59685f",
     accent: str = "#b95631",
-    mono: str = "ui-monospace,'IBM Plex Mono',monospace",
+    mono: str = _MONO,
     front_bg: str = "linear-gradient(160deg, rgba(36,59,44,0.04) 0%, rgba(185,86,49,0.04) 100%)",
     back_bg: str = "linear-gradient(160deg, rgba(185,86,49,0.07) 0%, rgba(36,59,44,0.05) 100%)",
 ) -> str:

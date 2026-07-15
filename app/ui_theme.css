@@ -1,5 +1,5 @@
 /* Only external font: Material Symbols for icons (small, icon-only).
-   Body text uses system font stacks for true local-first (no network for Manrope/Plex).
+   Body text uses system stacks only (--font-sans / --font-mono); no webfonts for text.
    See conventions_architecture.md and plan item #9. */
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0');
 

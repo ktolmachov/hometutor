@@ -201,20 +201,25 @@ def write_bundle_via_compiler(
     llm_extract_fn=None,
 ) -> Dict[str, Any]:
     """Compile course graph, persist bundle + quality sidecar; publish only when gate_passed."""
+    from app.course_cache import normalize_source_paths
     from app.course_graph_compiler import compile_course_graph
+
+    # Normalize once so compiler sidecar matches heuristic path contract.
+    paths = normalize_source_paths(source_paths or [])
+    hashes = sorted({str(h).strip() for h in (source_content_hashes or []) if str(h).strip()})
 
     result = compile_course_graph(
         documents,
         generation_id=generation_id,
         scope_hash=scope_hash,
-        source_content_hashes=source_content_hashes or [],
+        source_content_hashes=hashes,
         existing_concepts=existing_concepts or {},
         llm_extract_fn=llm_extract_fn,
     )
     report_dict = result.quality_report.model_dump()
     report_dict["published"] = False
-    report_dict["source_paths"] = list(source_paths or [])
-    report_dict["source_content_hashes"] = sorted(set(source_content_hashes or []))
+    report_dict["source_paths"] = list(paths)
+    report_dict["source_content_hashes"] = list(hashes)
     rel_count = result.relation_count
 
     if result.payload:
@@ -236,8 +241,8 @@ def write_bundle_via_compiler(
                 heuristic_data,
                 generation_id=generation_id,
                 scope_hash=scope_hash,
-                source_paths=source_paths,
-                source_content_hashes=source_content_hashes,
+                source_paths=paths,
+                source_content_hashes=hashes,
                 report_overrides={
                     "compiler_fail_reasons": compiler_fail_reasons,
                     "heuristic_fallback": True,
@@ -255,15 +260,15 @@ def write_bundle_via_compiler(
     else:
         write_graph_quality_report_sidecar(bundle_dir, report_dict)
 
-    if bind_on_publish and result.gate_passed and source_paths:
+    if bind_on_publish and result.gate_passed and paths:
         from app.course_cache import update_course_graph_binding
 
         update_course_graph_binding(
-            source_paths,
+            paths,
             generation_id=generation_id,
             scope_hash=scope_hash,
             graph_quality_summary=_quality_summary_from_report(report_dict),
-            source_content_hashes=source_content_hashes or [],
+            source_content_hashes=hashes,
         )
 
     quality_report = _quality_summary_from_report(report_dict)
@@ -311,19 +316,20 @@ def _heuristic_bundle_stats(
         "gates": [],
         "fail_reasons": ["Heuristic fallback path — semantic gate не пройден"],
     }
-    # Normalize to keep contract consistent with compiler path (P4)
+    # Normalize so sidecar matches compiler path contract.
     from app.course_cache import normalize_source_paths
+
     paths = normalize_source_paths(source_paths) if source_paths is not None else []
+    hashes: list[str] = []
     if source_paths is not None:
         report["source_paths"] = paths
     if source_content_hashes is not None:
-        ch = sorted({str(h).strip() for h in source_content_hashes if str(h).strip()})
-        report["source_content_hashes"] = ch
+        hashes = sorted({str(h).strip() for h in source_content_hashes if str(h).strip()})
+        report["source_content_hashes"] = hashes
     if report_overrides:
         report.update(report_overrides)
     write_graph_quality_report_sidecar(bundle_dir, report)
 
-    ch_for_return = sorted({str(h).strip() for h in (source_content_hashes or []) if str(h).strip()}) if source_content_hashes is not None else []
     return {
         "ok": True,
         "published": False,
@@ -340,7 +346,7 @@ def _heuristic_bundle_stats(
         "path": str(bundle_dir),
         "storage": "sqlite_bundle",
         "source_paths": paths,
-        "source_content_hashes": ch_for_return,
+        "source_content_hashes": hashes,
     }
 
 
@@ -459,9 +465,9 @@ def write_bundle_for_generation(
     """Пишет bundle сразу в каталог generation (reset=true)."""
     bundle_dir = generation_bundle_dir(generation_id)
     if use_compiler:
-        from app.course_cache import course_scope_hash
+        from app.course_cache import course_scope_hash, normalize_source_paths
 
-        paths = source_paths or []
+        paths = normalize_source_paths(source_paths or [])
         sh = scope_hash or (course_scope_hash(paths) if paths else "global")
         return write_bundle_via_compiler(
             documents,

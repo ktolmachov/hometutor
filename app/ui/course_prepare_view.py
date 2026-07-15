@@ -415,15 +415,40 @@ def _render_graph_publish_status(*, key_prefix: str) -> None:
             with cols[3]:
                 st.metric("Evidence %", round(float(metrics.get("relations_with_evidence_pct") or 0), 1))
         if fail_reasons:
+            from app.course_quality_passport import rewrite_fail_reasons_for_learners
+
+            learner_reasons = rewrite_fail_reasons_for_learners(report) or fail_reasons
             st.markdown("**Блокеры publish**")
-            for reason in fail_reasons[:6]:
+            for reason in learner_reasons[:6]:
                 st.caption(f"- {reason}")
-            overflow = max(0, len(fail_reasons) - 6)
+            overflow = max(0, len(learner_reasons) - 6)
             if overflow:
                 st.caption(f"И ещё {overflow}")
         if st.button("Обновить статус публикации графа", key=f"{key_prefix}_refresh_publish_status"):
             _clear_graph_caches()
             st.rerun()
+
+
+def _render_course_quality_passport(*, documents: list[str], index_stats: dict | None) -> None:
+    """B1: one card aggregating graph / konspekt / media / readiness / audit."""
+    try:
+        from app.course_quality_passport import build_course_quality_passport
+
+        passport = build_course_quality_passport(
+            documents,
+            index_stats=index_stats,
+            fetch_live=True,
+        )
+    except Exception:  # noqa: BLE001 - passport is advisory; prepare must continue
+        st.caption("Паспорт материала временно недоступен.")
+        return
+
+    lines = [str(x) for x in (passport.get("lines") or []) if str(x).strip()]
+    if not lines:
+        return
+    st.markdown("##### Паспорт материала")
+    for line in lines:
+        st.caption(line)
 
 
 def _render_graph_quality_report(
@@ -638,12 +663,14 @@ def render_course_prepare_view(
     )
 
     cached = load_course_artifact(documents)
+    index_stats = _get_index_stats()
     graph_view = _render_course_activation_status(
         scope=scope,
         documents=documents,
-        index_stats=_get_index_stats(),
+        index_stats=index_stats,
         artifact=cached,
     )
+    _render_course_quality_passport(documents=documents, index_stats=index_stats)
 
     _render_graph_quality_report(
         scope=scope,

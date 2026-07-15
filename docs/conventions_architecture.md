@@ -78,11 +78,12 @@
 - Четыре guard'а кодируют жёсткие границы: `scripts/check_config_access.py`, `check_dead_modules.py`, `check_requirements_imports.py`, `check_size_budget.py`.
 - Стражи запускаются на каждом CI (push/PR) через явный шаг «Architecture regression guards» в `.github/workflows/ci.yml` (в дополнение к общему `pytest tests/`). Также доступны в любом локальном запуске `pytest` (через `tests/test_architecture_guards.py`, параметризованный; `main()` должен вернуть 0). Нет запланированного ежедневного (cron/schedule) задания.
 - Агрегатор: `scripts/arch_regression_guards.py` (можно запускать standalone).
-- Бюджеты size (файлы/функции/линии) — no-growth; синхронизированы с HEAD (33/155/1929/361). Waiver'ы только явные (см. `app/prompts/_impl.py`).
+- Бюджеты size (файлы/функции/линии) — no-growth; синхронизированы с HEAD (33/155/1942/361). Waiver'ы только явные (см. `app/prompts/_impl.py`).
 - Если guard красный — фиксим структуру, не поднимаем потолок.
 
 ## Темы и шрифты (local-first)
 
-- Основные шрифты (Manrope + IBM Plex Mono) используют системные стеки (`--font-sans`, `--font-mono` в `ui_theme.css`). Нет внешних запросов для текста.
+- Тело UI — системные стеки (`--font-sans` = `system-ui`…, `--font-mono` = `ui-monospace`… в `ui_theme.css`). Отдельные webfonts (Manrope / IBM Plex Mono) не подключаются; внешних запросов для текста нет.
 - Material Symbols (иконки) — единственный оставшийся внешний шрифт (минимальный, только иконки). Задокументировано как tradeoff (см. план #9).
 - В строгом оффлайне всё рендерится через системные шрифты.
+- Iframe-виджеты (например interactive flashcard) не наследуют host CSS vars и дублируют mono-стек явно, без ссылок на webfonts.

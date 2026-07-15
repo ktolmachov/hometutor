@@ -536,6 +536,16 @@ class Test3DCoverageAndContracts:
         # Tour state machine (L2), not raw setInterval flight
         assert "tourState" in html3
         assert "setInterval" not in html3
+        # Route-first means full graph/noisy context is not the default:
+        # route mode keeps all stops as anchors, but expands only the active stop.
+        assert "function addImmediateContext" in html3
+        assert "if (viewMode === 'route')" in html3
+        assert "if (active) addImmediateContext(ids, active);" in html3
+        assert "route first frame is sparse" in html3
+        # Initial camera must fit the whole route, not immediately recenter on stop #1.
+        assert "fitRouteCamera();" in html3
+        assert "Nudge camera onto first stop" not in html3
+        assert "const t = cameraForNode(o);" not in html3
         # Worth is not geometric height (R2)
         assert "worth || 0) * 18" not in html3
         assert "worth||0)*18" not in html3

@@ -206,7 +206,8 @@ const nFloors = Math.max(1, new Set([...lessonFloorById.values()]).size);
 
 const FLOOR_BASE = -80;
 const FLOOR_STEP = 48;
-const X_STEP = 70;
+const X_STEP = 88;
+let _routeIdsCache = null;
 
 function conceptProgressX(n) {
   // X = progression along the course corridor (independent of floor Y).
@@ -263,14 +264,18 @@ function nodePos(n) {
   } else {
     x = conceptProgressX(n) + ((hsh % 5) - 2) * 10;
   }
-  const z = ((c * 19 + (hsh % 29)) % 15 - 7) * 14 + ((hsh % 7) - 3) * 3;
+  const route = dayRouteIds();
+  const ri = route.indexOf(n.id);
+  const routeLane = ri >= 0 ? ((ri % 3) - 1) * 42 : null;
+  const z = routeLane != null
+    ? routeLane
+    : ((c * 19 + (hsh % 29)) % 15 - 7) * 14 + ((hsh % 7) - 3) * 3;
   return { x, y, z };
 }
 
 let nodes3d = (NODES || []).map(n => ({ n, p: nodePos(n) }));
 const id2node3 = () => new Map(nodes3d.map(o => [o.n.id, o]));
 
-let _routeIdsCache = null;
 function dayRouteIds() {
   if (_routeIdsCache) return _routeIdsCache;
   let route = DAY_ROUTE;
@@ -299,6 +304,26 @@ function nextRouteId() {
   return i < r.length ? r[i] : null;
 }
 
+function addLessonAnchors(ids, id) {
+  const n = byId.get(id);
+  if (!n) return;
+  for (const linkedId of [...(n.prereqs || []), ...(n.unlocks || [])]) {
+    const linked = byId.get(linkedId);
+    if (linked && linked.is_lesson) ids.add(linkedId);
+  }
+}
+
+function addImmediateContext(ids, id) {
+  const n = byId.get(id);
+  if (!n) return;
+  for (const p of (n.prereqs || [])) ids.add(p);
+  for (const u of (n.unlocks || [])) ids.add(u);
+  addLessonAnchors(ids, id);
+  for (const linkedId of [...(n.prereqs || []), ...(n.unlocks || [])]) {
+    addLessonAnchors(ids, linkedId);
+  }
+}
+
 /** Visible set by mode — route first frame is sparse. */
 function visibleIdSet() {
   if (viewMode === 'all') {
@@ -306,67 +331,45 @@ function visibleIdSet() {
   }
   const ids = new Set();
   const route = dayRouteIds();
-  const seed = [];
+  const active = activeRouteId();
 
   if (viewMode === 'route') {
-    seed.push(...route);
-    const active = activeRouteId();
-    if (active) seed.push(active);
-  } else {
-    // local: active stop + focus
-    const active = activeRouteId();
-    if (active) seed.push(active);
-    if (focusId) seed.push(focusId);
-    // keep whole route as anchors so orientation is not lost
-    seed.push(...route);
-  }
-
-  for (const id of seed) {
-    if (!id) continue;
-    ids.add(id);
-    const n = byId.get(id);
-    if (!n) continue;
-    for (const p of (n.prereqs || [])) ids.add(p);
-    for (const u of (n.unlocks || [])) ids.add(u);
-  }
-
-  // Always include lesson anchors linked to visible concepts
-  for (const id of [...ids]) {
-    const n = byId.get(id);
-    if (!n) continue;
-    for (const p of [...(n.prereqs || []), ...(n.unlocks || [])]) {
-      const m = byId.get(p);
-      if (m && m.is_lesson) ids.add(p);
+    for (const id of route) {
+      ids.add(id);
+      addLessonAnchors(ids, id);
     }
-    if (n.is_lesson) ids.add(id);
+    if (active) addImmediateContext(ids, active);
+    return ids;
   }
 
-  // Local: only immediate neighborhood of active/focus (drop far route neighbors' edges density)
+  // Local: active/focus neighborhood, with route stops kept as orientation anchors.
   if (viewMode === 'local') {
-    const core = new Set();
-    const a = activeRouteId();
-    if (a) core.add(a);
-    if (focusId) core.add(focusId);
-    for (const id of [...core]) {
-      const n = byId.get(id);
-      if (!n) continue;
-      for (const p of (n.prereqs || [])) core.add(p);
-      for (const u of (n.unlocks || [])) core.add(u);
+    for (const rid of route) {
+      ids.add(rid);
+      addLessonAnchors(ids, rid);
     }
-    // keep route stops as faint anchors
-    for (const rid of route) core.add(rid);
-    for (const id of [...core]) {
-      const n = byId.get(id);
-      if (!n) continue;
-      for (const p of [...(n.prereqs || []), ...(n.unlocks || [])]) {
-        const m = byId.get(p);
-        if (m && m.is_lesson) core.add(p);
-      }
-    }
-    return core;
+    if (active) addImmediateContext(ids, active);
+    if (focusId) addImmediateContext(ids, focusId);
+    return ids;
   }
 
   return ids;
+}
+
+function edgeVisibleInMode(e, vis) {
+  if (!vis.has(e.source) || !vis.has(e.target)) return false;
+  if (viewMode === 'all') return true;
+  const active = activeRouteId();
+  const focus = focusId;
+  const route = dayRouteIds();
+  const si = route.indexOf(e.source);
+  const ti = route.indexOf(e.target);
+  const routeAdjacent = si >= 0 && ti >= 0 && Math.abs(si - ti) === 1;
+  if (routeAdjacent) return true;
+  if (viewMode === 'route') {
+    return e.source === active || e.target === active;
+  }
+  return e.source === active || e.target === active || e.source === focus || e.target === focus;
 }
 
 function labelAllowSet(vis) {
@@ -449,7 +452,7 @@ function draw() {
   ctx.strokeStyle = viewMode === 'all' ? 'rgba(160,140,255,0.16)' : 'rgba(160,140,255,0.28)';
   ctx.lineWidth = 0.8;
   for (const e of (EDGES || [])) {
-    if (!vis.has(e.source) || !vis.has(e.target)) continue;
+    if (!edgeVisibleInMode(e, vis)) continue;
     const a = map3.get(e.source), b = map3.get(e.target);
     if (!a || !b) continue;
     const pa = project(a.p.x, a.p.y, a.p.z);
@@ -916,15 +919,6 @@ function init() {
   focusId = route[0] || null;
   viewMode = 'route';
   fitRouteCamera();
-  // Nudge camera onto first stop without noisy auto-spin
-  if (focusId) {
-    const o = nodes3d.find(x => x.n.id === focusId);
-    if (o) {
-      const t = cameraForNode(o);
-      cx = t.cx; cy = t.cy; cz = t.cz;
-      zoom = t.zoom;
-    }
-  }
   buildTopList();
   updateStopInfo();
   syncModeButtons();

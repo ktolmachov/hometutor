@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<!--
+  hometutor 101 — слайды учебного курса для новичков (6 уроков).
+  Собрано по deck_template.html / html_deck_guide.md (16:9, самодостаточный HTML).
+  Каждый факт сверен с витриной сценариев docs/quickstart_demo.md и кодом продукта.
+  Навигация: ← → пробел · клик по краям · F = печать в PDF.
+-->
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>hometutor 101 · слайды курса · v1.0</title>
+<style>
+  :root{
+    --bg:#0b1020; --bg2:#0e1430;
+    --panel:#141b38; --panel2:#1a2348;
+    --ink:#eef2ff; --muted:#9aa6d4;
+    --line:#283163;
+    --accent:#6d8bff; --accent2:#33e0c8;
+    --gold:#ffcb6b; --good:#5ee0a0; --bad:#ff7a90;
+    --grad:linear-gradient(120deg,#6d8bff 0%,#33e0c8 100%);
+    --shadow:0 20px 60px rgba(0,0,0,.45);
+    --radius:18px;
+    --font:'Segoe UI',system-ui,-apple-system,Roboto,Helvetica,Arial,sans-serif;
+    --mono:'JetBrains Mono','Cascadia Code',Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:var(--font);
+    background:
+      radial-gradient(1200px 700px at 80% -10%,rgba(109,139,255,.18),transparent 60%),
+      radial-gradient(1000px 600px at -10% 110%,rgba(51,224,200,.14),transparent 55%),
+      var(--bg);
+    color:var(--ink);overflow:hidden;
+  }
+  .stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  .deck{position:relative;width:min(96vw,1280px);aspect-ratio:16/9;max-height:94vh}
+  .slide{position:absolute;inset:0;background:linear-gradient(180deg,var(--bg2),var(--bg));
+    border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);
+    padding:46px 56px 60px;display:none;flex-direction:column;overflow:hidden}
+  .slide.active{display:flex;animation:fade .45s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .slide::before{content:"";position:absolute;left:0;top:0;height:5px;width:100%;background:var(--grad)}
+  .kicker{font-size:13px;letter-spacing:.22em;text-transform:uppercase;color:var(--accent2);
+    font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:10px}
+  .kicker .num{background:rgba(109,139,255,.16);border:1px solid var(--line);color:var(--accent);
+    border-radius:8px;padding:2px 9px;font-size:12px;letter-spacing:.05em}
+  h1{font-size:40px;line-height:1.08;font-weight:800;letter-spacing:-.5px;margin-bottom:8px}
+  h2{font-size:30px;line-height:1.12;font-weight:800;letter-spacing:-.3px;margin-bottom:14px}
+  h2 .accent,h1 .accent{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--muted);font-size:18px;font-weight:500;margin-bottom:18px;max-width:62ch}
+  .body{flex:1;min-height:0;display:flex;flex-direction:column;gap:14px;overflow:auto}
+  .body::-webkit-scrollbar{width:8px}
+  .body::-webkit-scrollbar-thumb{background:var(--line);border-radius:8px}
+  p{font-size:17px;line-height:1.5;color:#dbe2ff}
+  .muted{color:var(--muted)}strong{color:#fff}
+  .accent-t{color:var(--accent2);font-weight:700}
+  .gold-t{color:var(--gold);font-weight:700}
+  ul{list-style:none;display:flex;flex-direction:column;gap:9px}
+  li{position:relative;padding-left:26px;font-size:16.5px;line-height:1.45;color:#dce3ff}
+  li::before{content:"";position:absolute;left:2px;top:9px;width:9px;height:9px;border-radius:3px;background:var(--grad)}
+  .thesis{border-left:3px solid transparent;border-image:var(--grad) 1;
+    background:linear-gradient(90deg,rgba(109,139,255,.12),rgba(51,224,200,.03));
+    padding:18px 22px;border-radius:0 12px 12px 0;font-size:19px;line-height:1.5;color:#eaf0ff}
+  .thesis.small{font-size:16.5px;padding:14px 18px}
+  .grid{display:grid;gap:14px}.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}
+  .card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .card h3{font-size:15px;color:var(--accent2);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+  .card p,.card li{font-size:15px}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .stat{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:14px;padding:14px 16px;text-align:center}
+  .stat .v{font-size:30px;font-weight:800;line-height:1;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .stat .l{font-size:12.5px;color:var(--muted);margin-top:7px;line-height:1.3}
+  table{width:100%;border-collapse:collapse;font-size:14.5px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line)}
+  th{color:var(--accent2);font-weight:700;text-transform:uppercase;font-size:11.5px;letter-spacing:.08em}
+  tbody tr:hover{background:rgba(109,139,255,.06)}
+  td:first-child{font-weight:600;color:#fff}
+  .yes{color:var(--good);font-weight:700}.no{color:var(--bad);font-weight:700}.part{color:var(--gold)}
+  .flow{font-family:var(--mono);font-size:13.5px;line-height:1.55;color:#bcd0ff;
+    background:rgba(8,12,28,.7);border:1px solid var(--line);border-radius:12px;padding:16px 18px;white-space:pre;overflow:auto}
+  .pillrow{display:flex;flex-wrap:wrap;gap:8px}
+  .pill{font-size:13px;font-weight:600;color:#cdd7ff;background:rgba(109,139,255,.12);border:1px solid var(--line);border-radius:999px;padding:6px 12px}
+  .foot{position:absolute;left:56px;right:56px;bottom:16px;display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:12.5px}
+  .foot .brand{display:flex;align-items:center;gap:9px;font-weight:700;color:#cdd7ff;letter-spacing:.02em}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--grad);box-shadow:0 0 12px rgba(51,224,200,.6)}
+  .cover{justify-content:center;align-items:flex-start;text-align:left}
+  .cover .logo{font-size:15px;letter-spacing:.3em;text-transform:uppercase;color:var(--accent2);font-weight:800;margin-bottom:22px}
+  .cover h1{font-size:60px;max-width:18ch}
+  .cover .tag{font-size:22px;color:var(--muted);margin-top:14px;max-width:50ch;line-height:1.45}
+  .cover .meta{display:flex;gap:10px;margin-top:30px;flex-wrap:wrap}
+  .badge{border:1px solid var(--line);background:rgba(109,139,255,.1);border-radius:999px;padding:8px 16px;font-size:14px;font-weight:600;color:#dbe2ff}
+  .badge b{color:var(--accent2)}
+  .divider{justify-content:center;align-items:center;text-align:center;background:radial-gradient(800px 500px at 50% 40%,rgba(109,139,255,.18),transparent 60%),linear-gradient(180deg,var(--bg2),var(--bg))}
+  .divider .big{font-size:64px;font-weight:800;letter-spacing:-1px}
+  .divider .lbl{font-size:16px;letter-spacing:.3em;text-transform:uppercase;color:var(--accent2);font-weight:700;margin-bottom:14px}
+  .nav{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:14px;z-index:50;
+    background:rgba(14,20,48,.8);border:1px solid var(--line);border-radius:999px;padding:8px 14px;backdrop-filter:blur(8px)}
+  .nav button{background:none;border:none;color:var(--ink);cursor:pointer;font-size:18px;width:34px;height:34px;border-radius:50%;display:grid;place-items:center}
+  .nav button:hover{background:rgba(109,139,255,.2)}
+  .nav .count{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:54px;text-align:center}
+  .progress{position:fixed;top:0;left:0;height:3px;background:var(--grad);z-index:60;transition:width .35s ease}
+  .hint{position:fixed;top:14px;right:16px;font-size:12px;color:var(--muted);z-index:50}
+  svg{display:block}
+  .diagram{display:flex;justify-content:center;align-items:center;flex:1;min-height:0}
+  @media print{
+    @page{size:1280px 720px;margin:0}
+    html,body{height:auto;overflow:visible;background:#0b1020}
+    .stage{position:static;display:block}
+    .deck{width:1280px;height:720px;max-height:none;aspect-ratio:auto}
+    .slide{display:flex!important;position:relative;page-break-after:always;break-after:page;
+      width:1280px;height:720px;border-radius:0;box-shadow:none;animation:none;border:none}
+    .nav,.progress,.hint{display:none!important}
+  }
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+<div class="hint">← → пробел · клик по краям · F = печать в PDF</div>
+
+<div class="stage">
+  <div class="deck" id="deck">
+
+    <!-- 01 · COVER -->
+    <section class="slide cover active">
+      <div class="logo">◆ hometutor 101</div>
+      <h1>От папки с лекциями — <span class="accent">до карты знаний</span></h1>
+      <div class="tag">Учебный курс для новичков: 6 уроков, каждый — одна большая идея
+        и одно новое «могу сам». Каждый экран и кнопка в курсе существуют в продукте.</div>
+      <div class="meta">
+        <span class="badge">Уроков · <b>6</b></span>
+        <span class="badge">Формат · <b>лекция + конспект + видео</b></span>
+        <span class="badge">Проверено · <b>витриной сценариев</b></span>
+      </div>
+      <div class="foot"><span class="brand"><span class="dot"></span>hometutor 101</span><span>твой репетитор — из твоей папки</span></div>
+    </section>
+
+    <!-- 02 · COURSE MAP -->
+    <section class="slide">
+      <div class="kicker"><span class="num">Карта</span> Программа курса</div>
+      <h2>Шесть уроков — лестница <span class="accent">«могу сам»</span></h2>
+      <div class="body">
+        <div class="grid g3">
+          <div class="card"><h3>1 · Первый ответ</h3><p>Папка становится репетитором: ответ с источниками по твоим файлам.</p></div>
+          <div class="card"><h3>2 · Петля памяти</h3><p>Ответ → тьютор → квиз → карточки → повторение. Система помнит за тебя.</p></div>
+          <div class="card"><h3>3 · Один следующий шаг</h3><p>«Сейчас важнее…»: план и Маршрутизатор с причинами и квитанциями.</p></div>
+          <div class="card"><h3>4 · Карта знаний</h3><p>Граф с твоим уровнем на узлах, маршрут дня, карта — в подарок (HTML).</p></div>
+          <div class="card"><h3>5 · Конспект с паспортом</h3><p>Рубрика качества, статусы понимания, голос лектора и таймкоды.</p></div>
+          <div class="card"><h3>6 · Хозяин системы</h3><p>Честный сбой, офлайн-ядро, свои данные, своя комната.</p></div>
+        </div>
+        <div class="thesis small">Правило курса: <span class="gold-t">один урок — одна большая идея</span>,
+          пример раньше абстракции, практика сразу, честные грани продукта — тоже материал.</div>
+      </div>
+      <div class="foot"><span class="brand"><span class="dot"></span>hometutor 101</span><span>программа</span></div>
+    </section>
+
+    <!-- 03 · L1 IDEA -->
+    <section class="slide">
+      <div class="kicker"><span class="num">Урок 1</span> Первый ответ · идея</div>
+      <h2>Папка с лекциями становится <span class="accent">репетитором</span></h2>
+      <div class="body">
+        <div class="thesis">Ответ собирается <span class="accent-t">из твоих файлов</span> и показывает
+          источники: клик — и ты видишь точный фрагмент лекции. Ответу можно верить,
+          <span class="gold-t">потому что его можно проверить</span>.</div>
+        <div class="grid g3">
+          <div class="card"><h3>Как это работает</h3><p>«Библиотекарь» прочитал папку и разложил мысли по полочкам. Вопрос → найдены фрагменты → собран ответ (это называется RAG).</p></div>
+          <div class="card"><h3>Сигналы доверия</h3><p>Confidence-оценка + источники под каждым ответом. Низкая уверенность — повод открыть источник самому.</p></div>
+          <div class="card"><h3>Local-first</h3><p>Индекс, базы и модель (LM Studio) — на твоём компьютере. Конспекты не уходят в облако.</p></div>
+        </div>
+      </div>
+      <div class="foot"><span class="brand"><span class="dot"></span>hometutor 101</span><span>урок 1 · идея</span></div>
+    </section>
+
+    <!-- 04 · L1 PATH -->
+    <section class="slide">
+      <div class="kicker"><span class="num">Урок 1</span> Первый ответ · путь и практика</div>
+      <h2>Пять шагов до первого <span class="accent">«ага!»</span></h2>
+      <div class="body">
+        <div class="flow">папка с файлами → индексация (минуты) → «Быстрый ответ» → ответ + confidence + источники → клик во фрагмент лекции</div>
+        <div class="grid g2">
+          <div class="card"><h3>Попробуй сам · 5 минут</h3><ul>
+            <li>Задай 3 вопроса: простой, сложный и каверзный (про то, чего в папке нет)</li>
+            <li>На каверзном посмотри на confidence — честная слабая опора вместо выдумки</li>
+            <li>Или пройди главу 1 интерактивного тура (~3 мин)</li></ul></div>
+          <div class="card"><h3>Чекпоинт «могу сам»</h3><p>Я получаю ответ по своей папке и <strong>проверяю его источник одним кликом</strong>.</p>
+            <div class="pillrow" style="margin-top:8px"><span class="pill">Быстрый ответ</span><span class="pill">источники</span><span class="pill">confidence</span></div></div>
+        </div>
+        <div class="thesis small">Дверь дальше: кнопка <span class="accent-t">«Учить эту тему 5 минут»</span> под ответом — вход в урок 2.</div>
+      </div>
+      <div class="foot"><span class="brand"><span class="dot"></span>hometutor 101</span><span>урок 1 · практика</span></div>
+    </section>
+
+    <!-- 05 · L2 IDEA + SVG LOOP -->
+    <section class="slide">
+      <div class="kicker"><span class="num">Урок 2</span> Петля памяти · идея</div>
+      <h2>Знание закрепляет не «понял», а <span class="accent">«вспомнил вовремя»</span></h2>
+      <div class="body">
+        <div class="diagram">
+          <svg viewBox="0 0 900 240" width="100%" style="max-width:880px">
+            <defs><linearGradient id="g1" x1="0" x2="1"><stop offset="0" stop-color="#6d8bff"/><stop offset="1" stop-color="#33e0c8"/></linearGradient></defs>
+            <g font-family="sans-serif" font-size="15" text-anchor="middle">
+              <rect x="20"  y="90" width="140" height="48" rx="12" fill="#141b38" stroke="url(#g1)"/><text x="90"  y="119" fill="#eef2ff">Ответ</text>
+              <rect x="200" y="90" width="140" height="48" rx="12" fill="#141b38" stroke="#283163"/><text x="270" y="119" fill="#dbe2ff">Тьютор</text>
+              <rect x="380" y="90" width="140" height="48" rx="12" fill="#141b38" stroke="#283163"/><text x="450" y="119" fill="#dbe2ff">Квиз</text>
+              <rect x="560" y="90" width="140" height="48" rx="12" fill="#141b38" stroke="#283163"/><text x="630" y="119" fill="#dbe2ff">Карточки</text>
+              <rect x="740" y="90" width="140" height="48" rx="12" fill="#141b38" stroke="url(#g1)"/><text x="810" y="119" fill="#33e0c8" font-weight="700">Повторение</text>
+            </g>
+            <g stroke="url(#g1)" stroke-width="2.5" fill="none">
+              <path d="M160 114 L200 114"/><path d="M340 114 L380 114"/><path d="M520 114 L560 114"/><path d="M700 114 L740 114"/>
+              <path d="M810 90 C 810 20, 90 20, 90 90"/>
+            </g>
+            <g font-family="sans-serif" font-size="12.5" fill="#9aa6d4" text-anchor="middle">
+              <text x="450" y="34">SM-2 возвращает тебя перед тем, как знание выпадет из памяти</text>
+              <text x="270" y="165">«Учить эту тему 5 минут»</text>
+              <text x="450" y="165">ошибка → подсказка</text>
+              <text x="630" y="165">предпросмотр: правь до сохранения</text>
+              <text x="810" y="165">бейдж «К повторению: N»</text>
+            </g>
+          </svg>
+        </div>
+        <div class="thesis small">Ни один стык петли не требует твоей дисциплины — <span class="gold-t">стыки соединены кнопками</span>.
+          Ошибка в квизе — не провал, а <span class="accent-t">кандидат в карточку</span>.</div>
+      </div>
+      <div class="foot"><span class="brand"><span class="dot"></span>hometutor 101</span><span>урок 2 · идея</span></div>
+    </section>
+
+    <!-- 06 · L2 PATH -->
+    <section class="slide">
+      <div class="kicker"><span class="num">Урок 2</span> Петля памяти · путь и практика</div>
+      <h2>Один проход петли — <span class="accent">10 минут</span></h2>
+      <div class="body">
+        <div class="grid g3">
+          <div class="card"><h3>Шаги</h3><ul>
+            <li>Ответ → «Учить эту тему 5 минут»</li>
+            <li>Диалог с тьютором: «объясни проще», «дай пример»</li>
+            <li>Мини-квиз → карточки из ошибок</li></ul></div>
+          <div class="card"><h3>Твоя колода</h3><ul>
+            <li>Предпросмотр: правь и удаляй до сохранения</li>
+            <li>Экспорт в Anki — одним пакетом</li>
+            <li>Честные оценки: «легко / трудно / забыл»</li></ul></div>
+          <div class="card"><h3>Чекпоинт «могу сам»</h3><p>Я прошёл петлю целиком, и завтра бейдж <strong>«К повторению»</strong> вернёт меня сам.</p></div>
+        </div>
+        <div class="thesis small">Грабли: отвечать «легко», когда было трудно — интервалы растут быстрее памяти.
+          <span class="gold-t">Честность — топливо SM-2.</span></div>
+      </div>
+      <div class="foot"><span class="brand"><span class="dot"></span>hometutor 101</span><span>урок 2 · практика</span></div>
+    </section>
+
+    <!-- 07 · L3 IDEA -->
+    <section class="slide">
+      <div class="kicker"><span class="num">Урок 3</span> Один следующий шаг · идея</div>
+      <h2>Навигатор, <span class="accent">а не карта</span></h2>
+      <div class="body">
+        <div class="thesis">Хороший репетитор не вываливает меню — он говорит
+          <span class="accent-t">«сейчас важнее вот это»</span> и объясняет почему.
+          Рекомендация → причина → шаг → <span class="gold-t">квитанция «было → стало»</span>.</div>
+        <div class="grid g3">
+          <div class="card"><h3>«Сейчас важнее…»</h3><p>Один лучший шаг с оценкой времени вместо десяти равных кнопок. Все режимы остаются доступны.</p></div>
+          <div class="card"><h3>Объяснимость</h3><p>У рекомендации есть «почему»: сигналы — очередь повторений, слабые темы, пауза, темп. Никакой облачной магии.</p></div>
+          <div class="card"><h3>Честный чек</h3><p>После шага — квитанция: «К повторению: было 12 → стало 8». Эффект измерен на твоей машине.</p></div>
+        </div>
+      </div>
+      <div class="foot"><span class="brand"><span class="dot"></span>hometutor 101</span><span>урок 3 · идея</span></div>
+    </section>
+
+    <!-- 08 · L3 PATH -->
+    <section class="slide">
+      <div class="kicker"><span class="num">Урок 3</span> Один следующий шаг · путь и практика</div>
+      <h2>Утренний ритуал и <span class="accent">живой план</span></h2>
+      <div class="body">
+        <div class="flow">главный экран → «Сейчас важнее…» → шаг (клик) → квитанция «было → стало» → раз в неделю: план и его дельта</div>
+        <div class="grid g2">
+          <div class="card"><h3>План недели</h3><ul>
+            <li>«Сегодня: разобрать X (8 мин)» — из твоих слабых мест и темпа</li>
+            <li>«Что изменилось в плане»: списки «появились» / «исчезли»</li>
+            <li>Исчезло — обычно значит: ты это освоил</li></ul></div>
+          <div class="card"><h3>Чекпоинт «могу сам»</h3><p>Я начинаю день с одного шага, читаю «почему» и нахожу квитанцию после шага.</p>
+            <div class="pillrow" style="margin-top:8px"><span class="pill">после паузы — мягкий возврат</span><span class="pill">дельта = changelog</span></div></div>
+        </div>
+      </div>
+      <div class="foot"><span class="brand"><span class="dot"></span>hometutor 101</span><span>урок 3 · практика</span></div>
+    </section>
+
+    <!-- 09 · L4 IDEA -->
+    <section class="slide">
+      <div class="kicker"><span class="num">Урок 4</span> Карта знаний · идея</div>
+      <h2>Прогресс — это <span class="accent">местность</span>, а не число</h2>
+      <div class="body">
+        <div class="thesis">Карта показывает концепты, связи и твой уровень освоения на каждом узле.
+          А кнопка <span class="accent-t">«Авто: маршрут дня»</span> прокладывает путь по самым ценным
+          остановкам — <span class="gold-t">с причиной у каждой</span>.</div>
+        <div class="grid g3">
+          <div class="card"><h3>Твои слои</h3><p>Освоение из квизов и повторений, выцветание со временем, граница изученного — след урока 2 становится видимым.</p></div>
+          <div class="card"><h3>Цена узла</h3><p>Пора повторить + ново для тебя + выцвело + важность для карты. Арифметика твоих данных, не магия.</p></div>
+          <div class="card"><h3>Карта — навигация</h3><p>Клик по слабому узлу ведёт разбирать его с тьютором. Graduated-концепты уходят из плана пробелов.</p></div>
+        </div>
+      </div>
+      <div class="foot"><span class="brand"><span class="dot"></span>hometutor 101</span><span>урок 4 · идея</span></div>
+    </section>
+
+    <!-- 10 · L4 PATH -->
+    <section class="slide">
+      <div class="kicker"><span class="num">Урок 4</span> Карта знаний · путь и практика</div>
+      <h2>Маршрут дня и карта <span class="accent">в подарок</span></h2>
+      <div class="body">
+        <div class="flow">открыть граф → найти слабый узел → «Авто: маршрут дня» → пройти остановку → «⬇ Скачать живую карту (HTML)»</div>
+        <div class="grid g2">
+          <div class="card"><h3>Экспорт</h3><ul>
+            <li>«Скачать живую карту (HTML)» — интерактивный файл, работает офлайн в браузере</li>
+            <li>«Скачать 3D-зал (HTML)» — этажи-уроки, высота узла = его цена, полёт по маршруту</li>
+            <li>Снимок раз в месяц → видно, где выросли «тропинки»</li></ul></div>
+          <div class="card"><h3>Чекпоинт «могу сам»</h3><p>Я нахожу свой слабый узел, прохожу маршрут дня и объясняю причину каждой остановки.</p>
+            <div class="pillrow" style="margin-top:8px"><span class="pill">новые лекции ≠ потеря прогресса</span><span class="pill">свежесть карты видна</span></div></div>
+        </div>
+      </div>
+      <div class="foot"><span class="brand"><span class="dot"></span>hometutor 101</span><span>урок 4 · практика</span></div>
+    </section>
+
+    <!-- 11 · L5 IDEA -->
+    <section class="slide">
+      <div class="kicker"><span class="num">Урок 5</span> Конспект с паспортом · идея</div>
+      <h2>Конспект — <span class="accent">собеседник</span>, а не файл с галочкой</h2>
+      <div class="body">
+        <div class="thesis">Качество конспекта = <span class="accent-t">качество текста</span> (паспорт: рубрика из 10 критериев
+          с честными оценками) × <span class="gold-t">качество твоих отношений с ним</span> (статусы, вопросы, мысли).</div>
+        <div class="grid g3">
+          <div class="card"><h3>Паспорт</h3><p>Рубрика 10×(1–5) с комментариями — вплоть до честного «Проверка точности: 4/5». Читай как этикетку.</p></div>
+          <div class="card"><h3>Статусы и вопросы</h3><p>«Понял / сомневаюсь / не понял» на каждом разделе; «сомневаюсь» превращается в записанный вопрос — долг понимания с адресом.</p></div>
+          <div class="card"><h3>Голос и таймкоды</h3><p>Разделы лекций с записью можно слушать (честный фрагмент записи) и продолжать видео с точной минуты.</p></div>
+        </div>
+      </div>
+      <div class="foot"><span class="brand"><span class="dot"></span>hometutor 101</span><span>урок 5 · идея</span></div>
+    </section>
+
+    <!-- 12 · L5 PATH -->
+    <section class="slide">
+      <div class="kicker"><span class="num">Урок 5</span> Конспект с паспортом · путь и практика</div>
+      <h2>Чтение как <span class="accent">измеримый прогресс</span></h2>
+      <div class="body">
+        <div class="flow">открыть конспект → прочитать паспорт (30 сек) → читать с карандашом статусов → «сомневаюсь» → записать вопрос → закрыть вопрос у тьютора</div>
+        <div class="grid g2">
+          <div class="card"><h3>Живой конспект</h3><ul>
+            <li>Корзина: собери свой конспект из разделов разных лекций</li>
+            <li>«Моя мысль» на раздел — твои слова рядом с текстом</li>
+            <li>Пересборка не теряет мысли, статусы и вопросы</li></ul></div>
+          <div class="card"><h3>Чекпоинт «могу сам»</h3><p>После чтения на главном экране видны мои счётчики: <strong>понято / сомневаюсь / вопросов открыто</strong>.</p>
+            <div class="pillrow" style="margin-top:8px"><span class="pill">правило одного вопроса</span><span class="pill">плейлист «Мои N минут»</span></div></div>
+        </div>
+      </div>
+      <div class="foot"><span class="brand"><span class="dot"></span>hometutor 101</span><span>урок 5 · практика</span></div>
+    </section>
+
+    <!-- 13 · L6 IDEA -->
+    <section class="slide">
+      <div class="kicker"><span class="num">Урок 6</span> Хозяин системы · идея</div>
+      <h2>Доверие проверяется <span class="accent">в плохой день</span></h2>
+      <div class="body">
+        <div class="thesis">Зрелая система не «никогда не ломается» — она <span class="accent-t">честно называет причину за секунды</span>
+          и подсказывает выход. Сбой языковой модели ≠ сбой обучения.</div>
+        <div class="grid g3">
+          <div class="card"><h3>Честный отказ</h3><p>Модель недоступна → конкретный баннер за пару секунд, не минутный спиннер. Внутри — «предохранитель» (circuit breaker).</p></div>
+          <div class="card"><h3>Офлайн-ядро</h3><p>Без модели работают: поиск, карточки и повторение, конспекты, карта. Вечер в поезде спасён.</p></div>
+          <div class="card"><h3>Свои данные, своя комната</h3><p>Полный экспорт/восстановление, выгрузка в Anki. Пять миров оформления: Лес · Океан · Закат · Космос · Ягода.</p></div>
+        </div>
+      </div>
+      <div class="foot"><span class="brand"><span class="dot"></span>hometutor 101</span><span>урок 6 · идея</span></div>
+    </section>
+
+    <!-- 14 · L6 PATH -->
+    <section class="slide">
+      <div class="kicker"><span class="num">Урок 6</span> Хозяин системы · путь и практика</div>
+      <h2>Ритуалы <span class="accent">хозяина</span></h2>
+      <div class="body">
+        <div class="flow">выключи модель сам → прочитай баннер → закончи повторение офлайн → сделай полный экспорт → выбери свой мир</div>
+        <div class="grid g2">
+          <div class="card"><h3>Проверь приватность за минуту</h3><ul>
+            <li>Выключи Wi-Fi — поиск, ответы с источниками и карточки работают</li>
+            <li>Честная цена: LM Studio ставится и запускается локально</li>
+            <li>«Продукт поглупел»? Сначала проверь, жива ли модель</li></ul></div>
+          <div class="card"><h3>Чекпоинт «могу сам»</h3><p>Я знаю своё офлайн-ядро, у меня есть свежий экспорт-пакет и выбран свой мир.</p>
+            <div class="pillrow" style="margin-top:8px"><span class="pill">бонус: агент «Собрать учебную сессию»</span><span class="pill">демо для друзей — HF Spaces</span></div></div>
+        </div>
+      </div>
+      <div class="foot"><span class="brand"><span class="dot"></span>hometutor 101</span><span>урок 6 · практика</span></div>
+    </section>
+
+    <!-- 15 · DOGFOOD -->
+    <section class="slide">
+      <div class="kicker"><span class="num">Бонус</span> Курс живёт внутри продукта</div>
+      <h2>Этот курс — <span class="accent">корм для самого hometutor</span></h2>
+      <div class="body">
+        <div class="thesis">Продукт умеет учить чему угодно из папки markdown-файлов.
+          Курс о продукте — это папка markdown-файлов. <span class="gold-t">Положи курс в продукт —
+          и hometutor станет репетитором по самому себе.</span></div>
+        <div class="grid g2">
+          <div class="card"><h3>Как</h3><ul>
+            <li>Скопируй папки lectures/ и konspekts/ курса в свои материалы (например, data/uploads/hometutor_101/)</li>
+            <li>Запусти переиндексацию</li>
+            <li>Спроси: «что делает кнопка „Авто: маршрут дня“?» — и проверь источники</li></ul></div>
+          <div class="card"><h3>Что получится</h3><ul>
+            <li>Квизы и карточки по самому продукту</li>
+            <li>Карта знаний курса о карте знаний</li>
+            <li>Конспекты уроков с паспортами — продукт прочитает их рубрики</li></ul></div>
+        </div>
+      </div>
+      <div class="foot"><span class="brand"><span class="dot"></span>hometutor 101</span><span>dogfood</span></div>
+    </section>
+
+    <!-- 16 · FINALE -->
+    <section class="slide divider">
+      <div class="lbl">Финал курса</div>
+      <div class="big">Папка → первый ответ →<br><span style="background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent">петля → карта → мастерство.</span></div>
+      <div style="display:flex;gap:14px;margin-top:30px;flex-wrap:wrap;justify-content:center;max-width:900px">
+        <span class="badge"><b>Проверяемо</b> — источники, квитанции, паспорта</span>
+        <span class="badge"><b>Честно</b> — включая плохие дни</span>
+        <span class="badge"><b>Твоё</b> — локально, переносимо, в твоей комнате</span>
+      </div>
+      <div class="foot" style="justify-content:center"><span class="brand"><span class="dot"></span>hometutor 101 · курс для новичков · 2026 · v1.0</span></div>
+    </section>
+
+  </div>
+</div>
+
+<div class="nav">
+  <button id="prev" aria-label="назад">‹</button>
+  <span class="count" id="count">1 / 1</span>
+  <button id="next" aria-label="вперёд">›</button>
+</div>
+
+<script>
+  const slides=[...document.querySelectorAll('.slide')];
+  let i=0;
+  const count=document.getElementById('count');
+  const progress=document.getElementById('progress');
+  function show(n){
+    i=Math.max(0,Math.min(slides.length-1,n));
+    slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+    count.textContent=(i+1)+' / '+slides.length;
+    progress.style.width=((i+1)/slides.length*100)+'%';
+    const b=slides[i].querySelector('.body'); if(b) b.scrollTop=0;
+  }
+  document.getElementById('next').onclick=()=>show(i+1);
+  document.getElementById('prev').onclick=()=>show(i-1);
+  document.addEventListener('keydown',e=>{
+    if(['ArrowRight','PageDown',' '].includes(e.key)){e.preventDefault();show(i+1);}
+    else if(['ArrowLeft','PageUp'].includes(e.key)){e.preventDefault();show(i-1);}
+    else if(e.key==='Home'){show(0);}
+    else if(e.key==='End'){show(slides.length-1);}
+    else if(e.key.toLowerCase()==='f'){window.print();}
+  });
+  document.getElementById('deck').addEventListener('click',e=>{
+    if(e.target.closest('a,button')) return;
+    const r=e.currentTarget.getBoundingClientRect();
+    show(i + ((e.clientX-r.left) > r.width/2 ? 1 : -1));
+  });
+  show(0);
+</script>
+</body>
+</html>

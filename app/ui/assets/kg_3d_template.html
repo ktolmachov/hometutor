@@ -62,10 +62,10 @@
     <div id="toplist" class="list"></div>
 
     <div class="legend">
-      Первый кадр — маршрут дня, не весь граф.<br>
-      <b>Y</b> = этаж урока (precedes) · <b>X</b> = коридор маршрута · <b>Z</b> = полоса.<br>
-      Уроки — якоря этажей; концепты идут по X. Worth — ранг/причина, не высота.<br>
-      Мышь — поворот · колесо — зум · клик — фокус.
+      Первый кадр — чистая дорожка маршрута дня, не весь граф.<br>
+      <b>Маршрут</b>: 1→N, тихие lesson-якоря, worth = ранг/причина.<br>
+      <b>Локально/Вся карта</b>: Y = этаж урока (precedes), X = прогрессия, Z = полоса.<br>
+      Мышь — поворот · колесо — зум · hover — причина · клик — локальный контекст.
     </div>
     <div class="mini" id="hint"></div>
   </div>
@@ -108,7 +108,11 @@ function resize() {
   W = canvas.width = canvas.clientWidth || 900;
   H = canvas.height = canvas.clientHeight || 700;
 }
-window.addEventListener('resize', () => { resize(); render(); });
+window.addEventListener('resize', () => {
+  resize();
+  if (viewMode === 'route') fitRouteCamera();
+  render();
+});
 resize();
 
 function project(x, y, z) {
@@ -482,6 +486,19 @@ function labelIntersects(a, b) {
   return !(a.x + a.w < b.x || b.x + b.w < a.x || a.y + a.h < b.y || b.y + b.h < a.y);
 }
 
+function roundedRectPath(x, y, w, h, r) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.moveTo(x + rr, y);
+  ctx.lineTo(x + w - rr, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+  ctx.lineTo(x + w, y + h - rr);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+  ctx.lineTo(x + rr, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+  ctx.lineTo(x, y + rr);
+  ctx.quadraticCurveTo(x, y, x + rr, y);
+}
+
 function drawSmartLabel(nn, pr, r, isActive, labelBoxes) {
   const raw = String(nn.label || nn.id);
   const text = raw.length > 22 ? raw.slice(0, 21) + '…' : raw;
@@ -504,6 +521,41 @@ function drawSmartLabel(nn, pr, r, isActive, labelBoxes) {
     return true;
   }
   return false;
+}
+
+function drawActiveReasonCallout(nn, pr, r, labelBoxes) {
+  if (viewMode !== 'route' || !nn) return;
+  const route = dayRouteIds();
+  const idx = route.indexOf(nn.id);
+  if (idx < 0) return;
+  const reason = String(nn.worth_reason || 'в маршруте дня');
+  const text = `Стоп ${idx + 1}/${route.length} · ${reason}`;
+  ctx.font = '10px system-ui';
+  const w = Math.min(ctx.measureText(text).width + 16, 280);
+  const h = 22;
+  const candidates = [
+    { x: pr.sx + r + 10, y: pr.sy - h - 8 },
+    { x: pr.sx - w / 2, y: pr.sy + r + 14 },
+    { x: pr.sx - w - r - 10, y: pr.sy - h - 8 },
+  ];
+  for (const c of candidates) {
+    const box = { x: c.x, y: c.y, w, h };
+    if (box.x < 6 || box.y < 6 || box.x + box.w > W - 6 || box.y + box.h > H - 6) continue;
+    if (labelBoxes.some(b => labelIntersects(box, b))) continue;
+    labelBoxes.push(box);
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = 'rgba(15, 15, 24, 0.92)';
+    ctx.strokeStyle = 'rgba(196,181,253,0.45)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    roundedRectPath(c.x, c.y, w, h, 5);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#e9d5ff';
+    ctx.fillText(text.length > 42 ? text.slice(0, 41) + '…' : text, c.x + 8, c.y + 14);
+    ctx.globalAlpha = 1;
+    return;
+  }
 }
 
 function draw() {
@@ -577,6 +629,8 @@ function draw() {
     })
     .sort((u, v) => u.z - v.z);
   const labelBoxes = [];
+  const labelQueue = [];
+  let activeVisual = null;
 
   for (const item of proj) {
     const { o, pr } = item;
@@ -625,10 +679,20 @@ function draw() {
     }
 
     if (labels.has(nn.id)) {
-      ctx.globalAlpha = Math.min(1, Math.max(0.55, 0.5 + pr.scale * 0.45));
-      drawSmartLabel(nn, pr, r, isActive, labelBoxes);
+      const routeRankValue = routeRank.get(nn.id) || 99;
+      labelQueue.push({
+        nn, pr, r, isActive,
+        priority: isActive ? 0 : isNext ? 1 : routeRankValue + 2,
+      });
     }
+    if (isActive) activeVisual = { nn, pr, r };
   }
+  labelQueue.sort((a, b) => a.priority - b.priority);
+  for (const item of labelQueue) {
+    ctx.globalAlpha = Math.min(1, Math.max(0.55, 0.5 + item.pr.scale * 0.45));
+    drawSmartLabel(item.nn, item.pr, item.r, item.isActive, labelBoxes);
+  }
+  if (activeVisual) drawActiveReasonCallout(activeVisual.nn, activeVisual.pr, activeVisual.r, labelBoxes);
   ctx.globalAlpha = 1;
 }
 
@@ -677,7 +741,7 @@ function fitRouteCamera() {
   pitch = 0.38;
   zoom = Math.max(0.55, Math.min(1.25, 260 / span));
   const routePoints = [
-    ...pts.map(o => scenePos(o)),
+    ...[...visibleIdSet()].map(id => map3.get(id)).filter(Boolean).map(o => scenePos(o)),
     ...routePlatformWorldPoints(),
   ];
   for (let i = 0; i < 2; i++) {
@@ -878,7 +942,13 @@ function focus(n) {
   focusId = n.id;
   const route = dayRouteIds();
   const ri = route.indexOf(n.id);
-  if (ri >= 0) activeStopIndex = ri;
+  if (ri >= 0) {
+    activeStopIndex = ri;
+    if (viewMode === 'route') {
+      viewMode = 'local';
+      syncModeButtons();
+    }
+  }
   const o = nodes3d.find(x => x.n.id === n.id);
   if (o) animateCamera(cameraForNode(o), prefersReducedMotion ? 0 : 700);
   updateStopInfo();
@@ -886,13 +956,26 @@ function focus(n) {
   const s = document.getElementById('hint');
   if (s) {
     const reason = n.worth_reason ? ` · ${n.worth_reason}` : '';
-    const extras = [];
-    if (n.audio) extras.push('audio');
-    if (n.rubric || n.rubric_score != null) extras.push('rubric');
-    const badge = extras.length ? ` [${extras.join(', ')}]` : '';
-    s.textContent = `${n.label || n.id} · rank W=${(n.worth || 0).toFixed(1)}${reason}${badge}`;
+    s.textContent = `${n.label || n.id} · rank W=${(n.worth || 0).toFixed(1)}${reason}`;
   }
   render();
+}
+
+function hoverAt(mx, my) {
+  const vis = visibleIdSet();
+  let best = null, bd = 1e9;
+  for (const o of nodes3d) {
+    if (!vis.has(o.n.id)) continue;
+    const p = scenePos(o);
+    const pr = project(p.x, p.y, p.z);
+    const d = Math.hypot(pr.sx - mx, pr.sy - my);
+    if (d < bd) { bd = d; best = o; }
+  }
+  const h = document.getElementById('hint');
+  if (!h || !best || bd >= 34) return;
+  const n = best.n;
+  const reason = n.worth_reason ? ` · ${n.worth_reason}` : '';
+  h.textContent = `${n.label || n.id} · rank W=${(n.worth || 0).toFixed(1)}${reason}`;
 }
 
 function buildTopList() {
@@ -966,7 +1049,11 @@ window.addEventListener('mouseup', () => {
   canvas.style.cursor = 'grab';
 });
 window.addEventListener('mousemove', e => {
-  if (!pointerDown) return;
+  if (!pointerDown) {
+    const rect = canvas.getBoundingClientRect();
+    hoverAt(e.clientX - rect.left, e.clientY - rect.top);
+    return;
+  }
   const dx = e.clientX - lx, dy = e.clientY - ly;
   if (!dragMoved) {
     const total = Math.hypot(e.clientX - downX, e.clientY - downY);
@@ -1062,7 +1149,7 @@ function init() {
   render();
   const h = document.getElementById('hint');
   if (h) {
-    h.textContent = `${(NODES || []).length} узлов · маршрут ${route.length}/6 · режим route · worth = rank/reason`;
+    h.textContent = `${(NODES || []).length} узлов · маршрут ${route.length}/${route.length} · режим route · worth = rank/reason`;
   }
 }
 init();

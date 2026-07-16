@@ -11,6 +11,9 @@ bundle flag, avg_mastery denominator) and guarantee parity with
 from __future__ import annotations
 
 import inspect
+import os
+
+import pytest
 
 from app.ui.knowledge_graph_d3 import (
     build_kg_3d_html,
@@ -543,7 +546,7 @@ class Test3DCoverageAndContracts:
         assert "function scenePos" in html3
         assert "if (viewMode === 'route')" in html3
         assert "if (active) addImmediateContext(ids, active);" in html3
-        route_branch = html3.split("if (viewMode === 'route')", 1)[1].split("if (viewMode === 'local')", 1)[0]
+        route_branch = html3.split("function visibleIdSet", 1)[1].split("if (viewMode === 'local')", 1)[0]
         assert "addImmediateContext" not in route_branch
         assert "return false;" in html3.split("function edgeVisibleInMode", 1)[1].split("function labelAllowSet", 1)[0]
         label_branch = html3.split("function labelAllowSet", 1)[1].split("function drawFloorPlane", 1)[0]
@@ -552,13 +555,22 @@ class Test3DCoverageAndContracts:
         assert "quietRouteAnchor" in html3
         assert "function drawSmartLabel" in html3
         assert "labelIntersects" in html3
+        assert "function drawActiveReasonCallout" in html3
+        assert "Стоп ${idx + 1}/${route.length}" in html3
+        assert "function hoverAt" in html3
+        assert "hover — причина" in html3
+        assert "клик — локальный контекст" in html3
         assert "topbar" not in html3
         assert "viewMode = 'route';" in html3.split("document.getElementById('homebtn').onclick", 1)[1]
         assert "function routePlatformWorldPoints" in html3
         assert "targetW" in html3 and "targetH" in html3
+        assert "if (viewMode === 'route') fitRouteCamera();" in html3
         tour_end_branch = html3.split("if (activeStopIndex >= route.length - 1)", 1)[1].split("const delay", 1)[0]
         assert "viewMode = 'route';" in tour_end_branch
         assert "fitRouteCamera();" in tour_end_branch
+        focus_branch = html3.split("function focus", 1)[1].split("function hoverAt", 1)[0]
+        assert "viewMode = 'local';" in focus_branch
+        assert "syncModeButtons();" in focus_branch
         assert "route first frame is sparse" in html3
         # Initial camera must fit the whole route, not immediately recenter on stop #1.
         assert "fitRouteCamera();" in html3
@@ -567,12 +579,95 @@ class Test3DCoverageAndContracts:
         # Worth is not geometric height (R2)
         assert "worth || 0) * 18" not in html3
         assert "worth||0)*18" not in html3
+        # B2 was deferred; do not keep dead UI for fields absent from the payload.
+        assert "n.audio" not in html3
+        assert "rubric_score" not in html3
+        # The shipped JS artifact must use the same precedes/floor-collapse contract,
+        # not only the Python mirror helper.
+        assert "function computeLessonOrder" in html3
+        assert "(e.relation_type || '') !== 'precedes'" in html3
+        assert "Kahn topo" in html3
+        assert "floorIndex.set" in html3
         # Offline + no external scripts
         assert "<script src=" not in html3.lower()
         assert "three.js" not in html3.lower()
         # Embedded route ids survive
         for rid in payload["day_route"]:
             assert rid in html3
+
+    def test_3d_visual_smoke_opt_in(self, tmp_path):
+        """V1: optional browser smoke for the offline 3D export.
+
+        Run locally with HT_RUN_KG_3D_VISUAL=1 when Playwright browsers are installed.
+        The normal unit suite keeps this skipped to avoid making browser binaries a CI
+        dependency.
+        """
+        if os.environ.get("HT_RUN_KG_3D_VISUAL") != "1":
+            pytest.skip("set HT_RUN_KG_3D_VISUAL=1 to run the browser smoke")
+
+        sync_api = pytest.importorskip("playwright.sync_api")
+        concepts = {
+            "study-session-agent": {"label": "Study session agent"},
+            "rag": {"label": "RAG", "prerequisites": ["study-session-agent"]},
+            "hometutor": {"label": "Hometutor", "prerequisites": ["rag"]},
+            "ai-agent": {"label": "AI-agent", "prerequisites": ["hometutor"]},
+            "memory-loop": {"label": "Петля памяти", "prerequisites": ["ai-agent"]},
+            "tutor": {"label": "Тьютор", "prerequisites": ["memory-loop"]},
+            "lesson:01": {"label": "Урок 1", "level": "lesson"},
+        }
+        payload = build_kg_payload(concepts)
+        payload = {
+            **payload,
+            "day_route": [
+                "study-session-agent",
+                "rag",
+                "hometutor",
+                "ai-agent",
+                "memory-loop",
+                "tutor",
+            ],
+        }
+        html_path = tmp_path / "kg_3d_visual_smoke.html"
+        html_path.write_text(build_kg_3d_html(payload), encoding="utf-8")
+
+        with sync_api.sync_playwright() as p:
+            browser = p.chromium.launch()
+            try:
+                for viewport in ({"width": 1366, "height": 768}, {"width": 1920, "height": 1080}):
+                    page = browser.new_page(viewport=viewport)
+                    page.goto(html_path.as_uri())
+                    page.wait_for_load_state("load")
+                    page.wait_for_timeout(250)
+                    result = page.evaluate(
+                        """
+                        () => {
+                          const canvas = document.querySelector('canvas');
+                          const ctx = canvas.getContext('2d');
+                          const img = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+                          let nonBg = 0;
+                          for (let i = 0; i < img.length; i += 32) {
+                            const r = img[i], g = img[i + 1], b = img[i + 2];
+                            if (!(r <= 8 && g <= 8 && b <= 12)) nonBg++;
+                          }
+                          return {
+                            nonBg,
+                            routeOn: document.querySelector('#modeRoute')?.classList.contains('on'),
+                            topbarGone: !document.querySelector('#topbar'),
+                            stopCount: document.querySelectorAll('.stop').length,
+                            stopInfo: document.querySelector('#stopinfo')?.textContent || '',
+                          };
+                        }
+                        """
+                    )
+                    page.close()
+
+                    assert result["nonBg"] > 100
+                    assert result["routeOn"] is True
+                    assert result["topbarGone"] is True
+                    assert result["stopCount"] == 6
+                    assert "Стоп 1/6" in result["stopInfo"]
+            finally:
+                browser.close()
 
     def test_lesson_floor_order_uses_precedes_not_lexical(self):
         """R2: lesson floors follow precedes chain; file variants collapse."""

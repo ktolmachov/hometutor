@@ -545,10 +545,20 @@ class Test3DCoverageAndContracts:
         assert "if (active) addImmediateContext(ids, active);" in html3
         route_branch = html3.split("if (viewMode === 'route')", 1)[1].split("if (viewMode === 'local')", 1)[0]
         assert "addImmediateContext" not in route_branch
+        assert "return false;" in html3.split("function edgeVisibleInMode", 1)[1].split("function labelAllowSet", 1)[0]
         label_branch = html3.split("function labelAllowSet", 1)[1].split("function drawFloorPlane", 1)[0]
         assert "anchors stay quiet" in label_branch
         assert "return new Set(allow.slice(0, 8));" in label_branch
         assert "quietRouteAnchor" in html3
+        assert "function drawSmartLabel" in html3
+        assert "labelIntersects" in html3
+        assert "topbar" not in html3
+        assert "viewMode = 'route';" in html3.split("document.getElementById('homebtn').onclick", 1)[1]
+        assert "function routePlatformWorldPoints" in html3
+        assert "targetW" in html3 and "targetH" in html3
+        tour_end_branch = html3.split("if (activeStopIndex >= route.length - 1)", 1)[1].split("const delay", 1)[0]
+        assert "viewMode = 'route';" in tour_end_branch
+        assert "fitRouteCamera();" in tour_end_branch
         assert "route first frame is sparse" in html3
         # Initial camera must fit the whole route, not immediately recenter on stop #1.
         assert "fitRouteCamera();" in html3

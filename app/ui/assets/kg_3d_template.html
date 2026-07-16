@@ -16,7 +16,7 @@
   .btn:disabled{opacity:.4;cursor:default}
   .row{display:flex;flex-wrap:wrap;gap:2px;margin:4px 0}
   .st{display:flex;gap:6px;margin:4px 0;font-size:11px}
-  .list{max-height:220px;overflow:auto;border:1px solid #222;border-radius:6px;padding:4px}
+  .list{overflow:visible;border:1px solid #222;border-radius:6px;padding:4px}
   .stop{padding:5px 6px;margin:3px 0;border-radius:4px;background:#111;cursor:pointer;border:1px solid transparent}
   .stop:hover{border-color:#333}
   .stop.active{border-color:var(--acc);background:rgba(139,92,246,0.12)}
@@ -386,7 +386,6 @@ function visibleIdSet() {
   if (viewMode === 'local') {
     for (const rid of route) {
       ids.add(rid);
-      addLessonAnchors(ids, rid);
     }
     if (active) addImmediateContext(ids, active);
     if (focusId) addImmediateContext(ids, focusId);
@@ -417,15 +416,35 @@ function labelAllowSet(vis) {
   // Cap is the same in all modes (full names live in sidebar / focus hint).
   const route = dayRouteIds();
   const allow = [];
+  const pushLabel = (id) => {
+    if (id && !allow.includes(id)) allow.push(id);
+  };
   const active = activeRouteId();
   const next = nextRouteId();
-  if (active) allow.push(active);
-  if (next && next !== active) allow.push(next);
+  pushLabel(active);
+  pushLabel(next);
+  if (viewMode === 'local') {
+    const addLocalContextLabels = (id) => {
+      const n = byId.get(id);
+      if (!n) return;
+      if (!n.is_lesson) pushLabel(id);
+      for (const linkedId of [...(n.prereqs || []), ...(n.unlocks || [])]) {
+        const linked = byId.get(linkedId);
+        if (linked && !linked.is_lesson) pushLabel(linkedId);
+        if (allow.length >= 8) return;
+      }
+    };
+    addLocalContextLabels(active);
+    addLocalContextLabels(focusId);
+  }
   for (const id of route) {
     if (allow.length >= 8) break;
-    if (!allow.includes(id)) allow.push(id);
+    pushLabel(id);
   }
   if (viewMode === 'route') {
+    return new Set(allow.slice(0, 8));
+  }
+  if (viewMode === 'local') {
     return new Set(allow.slice(0, 8));
   }
   const visSet = vis || visibleIdSet();
@@ -528,10 +547,11 @@ function drawActiveReasonCallout(nn, pr, r, labelBoxes) {
   const route = dayRouteIds();
   const idx = route.indexOf(nn.id);
   if (idx < 0) return;
+  const name = String(nn.label || nn.id);
   const reason = String(nn.worth_reason || 'в маршруте дня');
-  const text = `Стоп ${idx + 1}/${route.length} · ${reason}`;
+  const text = `Стоп ${idx + 1}/${route.length} · ${name} · ${reason}`;
   ctx.font = '10px system-ui';
-  const w = Math.min(ctx.measureText(text).width + 16, 280);
+  const w = Math.min(ctx.measureText(text).width + 16, 340);
   const h = 22;
   const candidates = [
     { x: pr.sx + r + 10, y: pr.sy - h - 8 },
@@ -552,7 +572,7 @@ function drawActiveReasonCallout(nn, pr, r, labelBoxes) {
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = '#e9d5ff';
-    ctx.fillText(text.length > 42 ? text.slice(0, 41) + '…' : text, c.x + 8, c.y + 14);
+    ctx.fillText(text.length > 54 ? text.slice(0, 53) + '…' : text, c.x + 8, c.y + 14);
     ctx.globalAlpha = 1;
     return;
   }
@@ -575,7 +595,7 @@ function draw() {
     drawRoutePlatform();
   } else {
     // Floor planes for visible lesson floors only (or all floors if few)
-    ctx.strokeStyle = 'rgba(120,120,180,0.14)';
+    ctx.strokeStyle = viewMode === 'local' ? 'rgba(120,120,180,0.07)' : 'rgba(120,120,180,0.14)';
     ctx.lineWidth = 1;
     const floorIdxs = new Set();
     for (const [lid, fi] of lessonFloorById) {
@@ -639,8 +659,10 @@ function draw() {
     const isNext = nn.id === next;
     const onRoute = routeSet.has(nn.id);
     const quietRouteAnchor = viewMode === 'route' && nn.is_lesson && !onRoute;
+    const localContextNode = viewMode === 'local' && !onRoute;
     const rawBaseR = quietRouteAnchor ? 4.2 : Math.max(2.8, 3.2 + Math.sqrt(nn.reach || 1) * 1.2);
-    const baseR = onRoute ? Math.min(rawBaseR, 15.5) : rawBaseR;
+    const localCap = nn.is_lesson ? 5.8 : 9.2;
+    const baseR = onRoute ? Math.min(rawBaseR, 15.5) : (localContextNode ? Math.min(rawBaseR, localCap) : rawBaseR);
     const r = baseR * (0.65 + pr.scale * 0.7) * (isActive ? 1.16 : isNext ? 1.08 : 1);
     let col = nn.is_lesson ? '#64748b' : (nn.novel ? '#67e8f9' : ((nn.due || 0) > 0 ? '#60a5fa' : '#a5b4fc'));
     if (quietRouteAnchor) col = '#475569';
@@ -678,7 +700,7 @@ function draw() {
       ctx.textBaseline = 'alphabetic';
     }
 
-    if (labels.has(nn.id)) {
+    if (labels.has(nn.id) && !(viewMode === 'route' && isActive)) {
       const routeRankValue = routeRank.get(nn.id) || 99;
       labelQueue.push({
         nn, pr, r, isActive,

@@ -548,15 +548,23 @@ class Test3DCoverageAndContracts:
         assert "if (active) addImmediateContext(ids, active);" in html3
         route_branch = html3.split("function visibleIdSet", 1)[1].split("if (viewMode === 'local')", 1)[0]
         assert "addImmediateContext" not in route_branch
+        local_branch = html3.split("if (viewMode === 'local')", 1)[1].split("return ids;", 1)[0]
+        assert "addLessonAnchors(ids, rid)" not in local_branch
         assert "return false;" in html3.split("function edgeVisibleInMode", 1)[1].split("function labelAllowSet", 1)[0]
         label_branch = html3.split("function labelAllowSet", 1)[1].split("function drawFloorPlane", 1)[0]
         assert "anchors stay quiet" in label_branch
         assert "return new Set(allow.slice(0, 8));" in label_branch
+        assert "viewMode === 'local'" in label_branch
+        assert "linked && !linked.is_lesson" in label_branch
         assert "quietRouteAnchor" in html3
+        assert "localContextNode" in html3
+        assert "localCap" in html3
         assert "function drawSmartLabel" in html3
         assert "labelIntersects" in html3
         assert "function drawActiveReasonCallout" in html3
-        assert "Стоп ${idx + 1}/${route.length}" in html3
+        assert "Стоп ${idx + 1}/${route.length} · ${name} · ${reason}" in html3
+        assert "!(viewMode === 'route' && isActive)" in html3
+        assert ".list{overflow:visible" in html3
         assert "function hoverAt" in html3
         assert "hover — причина" in html3
         assert "клик — локальный контекст" in html3

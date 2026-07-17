@@ -89,6 +89,9 @@ window.addEventListener('message', (event) => {
     frame.style.height = height + 'px';
     frame.srcdoc = String(args.html || '');
     setFrameHeight(height);
+    // Strip _kg3d only after host has had a chance to consume it on this run.
+    // Do not strip on bare component load (races Python before remove).
+    cleanupKg3dParam();
     return;
   }
   if (event.source !== frame.contentWindow) return;
@@ -111,9 +114,6 @@ window.addEventListener('message', (event) => {
 });
 
 setComponentReady();
-// After a successful Python consume, host also pops _kg3d; cleanup here strips
-// stale params if Python rejected before a full navigation cycle completed.
-cleanupKg3dParam();
 </script>
 </body>
 </html>

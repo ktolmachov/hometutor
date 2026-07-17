@@ -204,6 +204,96 @@ def _set_kg_3d_action_result(
     }
 
 
+def _prime_kg_3d_action_focus(
+    target,
+    *,
+    action: str,
+    concept_id: str,
+    event_id: str,
+    label: str,
+) -> None:
+    target[KG_3D_ACTION_KEY] = {
+        "action": action,
+        "concept_id": concept_id,
+        "event_id": event_id,
+    }
+    target["kg_selected_concept"] = concept_id
+    target["kg_action_concept"] = concept_id
+    target["interactive_quiz_focus_concept"] = concept_id
+    target["current_topic"] = label
+
+
+def _run_kg_3d_start_action(
+    *,
+    target,
+    envelope: dict,
+    concept_id: str,
+    event_id: str,
+    label: str,
+    state,
+) -> None:
+    from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
+
+    for key in (
+        "interactive_quiz_data",
+        "interactive_quiz_gen_id",
+        "interactive_quiz_saved_for_gen_id",
+        "interactive_quiz_error",
+    ):
+        target.pop(key, None)
+    target[PENDING_CURRENT_VIEW_KEY] = "Интерактивный Quiz"
+    mark_kg_3d_event(target, event_id, "succeeded")
+    # Toast is the user-facing ack for start. Do not leave a sticky hall
+    # action_result — user navigates away; a stale «Quiz открыт» would surface
+    # on the next visit to Knowledge Graph after st.rerun().
+    target.pop(KG_3D_ACTION_RESULT_KEY, None)
+    if state is None:
+        st.toast(f"▶ Старт из 3D-зала: **{concept_id}** → Quiz", icon="🎮")
+        # PENDING is applied at the start of a run; force another pass so the
+        # view switch is not lost mid-tab render after the _kg3d reload.
+        st.rerun()
+
+
+def _run_kg_3d_collect_action(
+    *,
+    target,
+    envelope: dict,
+    knowledge_graph,
+    doc_index: dict,
+    concept_id: str,
+    event_id: str,
+    label: str,
+    state,
+) -> None:
+    related_docs = list(knowledge_graph.get_related_documents(concept_id) or [])
+    query_text = " ".join(part for part in [concept_id, label] if part)
+    added, duplicates = _collect_concept_sections_to_workbench(
+        concept=concept_id,
+        related_docs=related_docs,
+        doc_index=doc_index if isinstance(doc_index, dict) else {},
+        base_query=query_text,
+        state=state,
+    )
+    mark_kg_3d_event(target, event_id, "succeeded")
+    _set_kg_3d_action_result(
+        state,
+        envelope=envelope,
+        status="succeeded",
+        label=label,
+        added=added,
+        duplicates=duplicates,
+    )
+    if state is None:
+        if added or duplicates:
+            suffix = f" (уже было: {duplicates})" if duplicates else ""
+            st.toast(f"В рабочий конспект: +{added}{suffix}", icon="📚")
+        else:
+            st.toast(
+                "Подходящих разделов не нашлось — возможно, конспекты ещё не созданы.",
+                icon="ℹ️",
+            )
+
+
 def _execute_kg_3d_action(
     envelope: dict,
     *,
@@ -212,8 +302,6 @@ def _execute_kg_3d_action(
     state=None,
 ) -> None:
     """G1: apply start (nav only) or collect (workbench write) for a validated envelope."""
-    from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
-
     target = st.session_state if state is None else state
     action = str(envelope.get("action") or "")
     concept_id = str(envelope.get("concept_id") or "").strip()
@@ -230,76 +318,39 @@ def _execute_kg_3d_action(
         )
         return
 
-    target[KG_3D_ACTION_KEY] = {
-        "action": action,
-        "concept_id": concept_id,
-        "event_id": event_id,
-    }
-    target["kg_selected_concept"] = concept_id
-    target["kg_action_concept"] = concept_id
-    target["interactive_quiz_focus_concept"] = concept_id
-    target["current_topic"] = label
+    _prime_kg_3d_action_focus(
+        target,
+        action=action,
+        concept_id=concept_id,
+        event_id=event_id,
+        label=label,
+    )
 
     try:
         if action == "start":
-            # Navigation only — no workbench / mastery write (G1 boundary).
-            for key in (
-                "interactive_quiz_data",
-                "interactive_quiz_gen_id",
-                "interactive_quiz_saved_for_gen_id",
-                "interactive_quiz_error",
-            ):
-                target.pop(key, None)
-            target[PENDING_CURRENT_VIEW_KEY] = "Интерактивный Quiz"
-            mark_kg_3d_event(target, event_id, "succeeded")
-            _set_kg_3d_action_result(
-                state,
+            _run_kg_3d_start_action(
+                target=target,
                 envelope=envelope,
-                status="succeeded",
+                concept_id=concept_id,
+                event_id=event_id,
                 label=label,
+                state=state,
             )
-            if state is None:
-                st.toast(f"▶ Старт из 3D-зала: **{concept_id}** → Quiz", icon="🎮")
-                # PENDING is applied at the start of a run; force another pass so
-                # the view switch is not lost mid-tab render after the _kg3d reload.
-                st.rerun()
-            return
-
-        # collect: same domain path as 2D «Собрать всё по концепту»
-        related_docs = list(knowledge_graph.get_related_documents(concept_id) or [])
-        query_text = " ".join(part for part in [concept_id, label] if part)
-        added, duplicates = _collect_concept_sections_to_workbench(
-            concept=concept_id,
-            related_docs=related_docs,
-            doc_index=doc_index if isinstance(doc_index, dict) else {},
-            base_query=query_text,
-            state=state,
-        )
-        mark_kg_3d_event(target, event_id, "succeeded")
-        _set_kg_3d_action_result(
-            state,
-            envelope=envelope,
-            status="succeeded",
-            label=label,
-            added=added,
-            duplicates=duplicates,
-        )
-        if state is None:
-            if added or duplicates:
-                st.toast(
-                    f"В рабочий конспект: +{added}"
-                    + (f" (уже было: {duplicates})" if duplicates else ""),
-                    icon="📚",
-                )
-            else:
-                st.toast(
-                    "Подходящих разделов не нашлось — возможно, конспекты ещё не созданы.",
-                    icon="ℹ️",
-                )
+        else:
+            _run_kg_3d_collect_action(
+                target=target,
+                envelope=envelope,
+                knowledge_graph=knowledge_graph,
+                doc_index=doc_index,
+                concept_id=concept_id,
+                event_id=event_id,
+                label=label,
+                state=state,
+            )
     except Exception as exc:  # noqa: BLE001 - action must fail closed without breaking the tab
         mark_kg_3d_event(target, event_id, "failed")
         _set_kg_3d_action_result(
-            state,
+            state=state,
             envelope=envelope,
             status="failed",
             label=label,
@@ -314,8 +365,22 @@ def _consume_and_apply_kg_3d_query(
     node_ids: list[str],
     knowledge_graph,
     doc_index: dict,
-) -> None:
-    """Order: validate → remove ``_kg3d`` → reserve → execute → ack (G0)."""
+) -> dict | None:
+    """Host-side G0 pipeline for ``_kg3d``.
+
+    Order (fixed, intentional — differs from the pure ``consume_kg_3d_query_param``
+    docstring which covers only validate→reserve):
+
+    1. **remove** ``_kg3d`` from the URL first — prevents infinite full-rerun loops
+       on malformed/stale envelopes;
+    2. **validate** envelope (via ``consume_kg_3d_query_param``);
+    3. **reserve** ``event_id`` in the bounded dedup window;
+    4. **execute** start/collect;
+    5. **pop and return** one-shot ``action_result`` for the embedded hall on
+       *this same render* (caller must pass it into ``render_kg_3d_hall``).
+
+    Returns the action_result dict, or None if no/invalid/duplicate envelope.
+    """
     raw = _query_param_first_str(KG_3D_QUERY_PARAM)
     # Always strip the param so a bad/stale URL cannot loop full reruns.
     if KG_3D_QUERY_PARAM in st.query_params or raw:
@@ -324,7 +389,7 @@ def _consume_and_apply_kg_3d_query(
         except Exception:  # noqa: BLE001 - query_params API may vary by Streamlit version
             pass
     if not raw:
-        return
+        return None
     nonce = ensure_kg_3d_session_nonce(st.session_state)
     env = consume_kg_3d_query_param(
         raw=raw,
@@ -333,12 +398,16 @@ def _consume_and_apply_kg_3d_query(
         state=st.session_state,
     )
     if env is None:
-        return
+        return None
     _execute_kg_3d_action(
         env,
         knowledge_graph=knowledge_graph,
         doc_index=doc_index,
     )
+    # Pop after execute so the hall on this render gets a fresh ack, and a later
+    # unrelated rerun does not re-surface a stale result.
+    result = st.session_state.pop(KG_3D_ACTION_RESULT_KEY, None)
+    return result if isinstance(result, dict) else None
 
 
 def _add_section_to_workbench_state(section, state=None) -> bool:
@@ -1329,8 +1398,9 @@ def _render_knowledge_graph_tab() -> None:
     node_ids = [n["id"] for n in payload.get("nodes", [])]
 
     # ── 3D hall action bridge (G0/G1): _kg3d query-param only ──────────
-    # Must run before embedding so collect updates inventory view-model args.
-    _consume_and_apply_kg_3d_query(
+    # Must run before embedding so collect updates inventory view-model args
+    # and the one-shot action_result is available on this same render.
+    action_result = _consume_and_apply_kg_3d_query(
         node_ids=node_ids,
         knowledge_graph=knowledge_graph,
         doc_index=doc_index,
@@ -1352,11 +1422,10 @@ def _render_knowledge_graph_tab() -> None:
     except Exception:  # noqa: BLE001
         wb_count = 0
     nonce = ensure_kg_3d_session_nonce(st.session_state)
-    action_result = st.session_state.pop(KG_3D_ACTION_RESULT_KEY, None)
     st.markdown("##### 🏛 3D-зал (embedded)")
     st.caption(
         "Маршрут дня · ▶ Начать (навигация в Quiz) · ➕ В конспект · "
-        "✓ = quiz-прогресс · ◆ = уже в Живом конспекте."
+        "✓ = был в квизе (mastery_history, любой score) · ◆ = в Живом конспекте."
     )
     hall_selected = render_kg_3d_hall(
         payload,

@@ -111,7 +111,7 @@
       Первый кадр — чистая дорожка маршрута дня, не весь граф.<br>
       <b>Маршрут</b>: 1→N, тихие lesson-якоря, worth = ранг/причина.<br>
       <b>Локально/Вся карта</b>: Y = этаж урока (precedes), X = прогрессия, Z = полоса.<br>
-      <b>✓</b> = quiz-прогресс · <b>◆</b> = в конспекте (только embedded).<br>
+      <b>✓</b> = был в квизе (mastery_history, любой score; ≥80% — ярче) · <b>◆</b> = в конспекте (embedded).<br>
       Мышь — поворот · колесо — зум · hover — причина · клик — фокус (локальный контекст) · кнопки — действия.
     </div>
     <div class="mini" id="hint"></div>
@@ -131,12 +131,16 @@ const HOST_MODE = __HOST_MODE__ || 'export'; // export | embedded — channel/ga
 const SESSION_NONCE = __SESSION_NONCE__ || '';
 const COLLECTED_IDS = __COLLECTED_IDS__ || [];
 const ACTION_RESULT = __ACTION_RESULT__ || null;
-const WORKBENCH_COUNT = __WORKBENCH_COUNT__;
+const WORKBENCH_COUNT_INIT = __WORKBENCH_COUNT__;
 
 const canvas = document.getElementById('cv');
 const ctx = canvas.getContext('2d');
 let W = canvas.width, H = canvas.height;
 let cssW = W, cssH = H;
+/** Mutable inventory counter (G3); updated on collect ack without full reload. */
+let workbenchCount = (WORKBENCH_COUNT_INIT == null || WORKBENCH_COUNT_INIT === '')
+  ? null
+  : Number(WORKBENCH_COUNT_INIT);
 
 // Fixed isometric-style view (honest 2.5D; cz is pan depth offset only)
 let yaw = 0.55, pitch = 0.38, zoom = 1.0;
@@ -157,16 +161,35 @@ let memoryOverlay = false;
 /** @type {null|{event_id:string,action:string,concept_id:string,phase:string,label:string}} */
 let pendingAction = null;
 let actionTimeoutTimer = null;
+// ✓ = «был в квизе» (ключ есть в последнем mastery_history snapshot),
+// NOT 2D learned (≥80%). Plan G2: quiz-event signal only; any score counts.
+const QUIZ_SEEN_MIN = 0; // inclusive: any numeric mastery entry marks quiz-seen
+function masteryKeysAbove(masteryObj, minPct) {
+  const out = new Set();
+  if (!masteryObj || typeof masteryObj !== 'object') return out;
+  for (const [cid, raw] of Object.entries(masteryObj)) {
+    const v = Number(raw);
+    if (!Number.isFinite(v)) continue;
+    if (v >= minPct) out.add(String(cid));
+  }
+  return out;
+}
 const doneConceptIds = (() => {
   const last = (MASTERY_HISTORY || []).length ? MASTERY_HISTORY[MASTERY_HISTORY.length - 1] : null;
   const mastery = last && last.mastery && typeof last.mastery === 'object' ? last.mastery : {};
-  return new Set(Object.keys(mastery).map(String));
+  return masteryKeysAbove(mastery, QUIZ_SEEN_MIN);
 })();
 const prevSnapshotConceptIds = (() => {
   if (!MASTERY_HISTORY || MASTERY_HISTORY.length < 2) return new Set();
   const prev = MASTERY_HISTORY[MASTERY_HISTORY.length - 2];
   const mastery = prev && prev.mastery && typeof prev.mastery === 'object' ? prev.mastery : {};
-  return new Set(Object.keys(mastery).map(String));
+  return masteryKeysAbove(mastery, QUIZ_SEEN_MIN);
+})();
+// Stronger fill (≥80%) — visual only; does not change ✓ membership.
+const learnedConceptIds = (() => {
+  const last = (MASTERY_HISTORY || []).length ? MASTERY_HISTORY[MASTERY_HISTORY.length - 1] : null;
+  const mastery = last && last.mastery && typeof last.mastery === 'object' ? last.mastery : {};
+  return masteryKeysAbove(mastery, 80);
 })();
 const collectedConceptIds = new Set((COLLECTED_IDS || []).map(String));
 const isEmbedded = HOST_MODE === 'embedded';
@@ -859,11 +882,12 @@ function draw() {
     const localCap = nn.is_lesson ? 5.8 : 9.2;
     const baseR = onRoute ? Math.min(rawBaseR, 15.5) : (localContextNode ? Math.min(rawBaseR, localCap) : rawBaseR);
     const r = baseR * (0.65 + pr.scale * 0.7) * (isActive ? 1.16 : isNext ? 1.08 : 1);
-    const isDone = doneConceptIds.has(nn.id);
+    const isDone = doneConceptIds.has(nn.id); // quiz-seen (any score in last snapshot)
+    const isLearned = learnedConceptIds.has(nn.id); // mastery ≥80% (2D parity visual)
     const isCollected = isEmbedded && collectedConceptIds.has(nn.id);
     let col = nn.is_lesson ? '#64748b' : (nn.novel ? '#67e8f9' : ((nn.due || 0) > 0 ? '#60a5fa' : '#a5b4fc'));
     if (quietRouteAnchor) col = '#475569';
-    if (isDone && onRoute) col = '#72f1a5';
+    if (isDone && onRoute) col = isLearned ? '#72f1a5' : '#86efac';
     if (isActive) col = '#9a6cff';
     else if (isNext) col = '#42e8e0';
     else if (onRoute && !isDone) col = '#a78bfa';
@@ -1218,12 +1242,14 @@ function postAction(action, conceptId) {
   // Soft timeout: release CTA lock if host never acks (no domain change).
   actionTimeoutTimer = setTimeout(() => {
     if (pendingAction && pendingAction.event_id === event_id) {
-      pendingAction = { ...pendingAction, phase: 'timeout' };
+      const label = pendingAction.label;
       const st = document.getElementById('actionstatus');
       if (st) {
-        st.textContent = `Таймаут: «${pendingAction.label}» — повторите действие`;
+        st.dataset.sticky = '1';
+        st.textContent = `Таймаут: «${label}» — повторите действие`;
       }
-      // Release lock so user can retry with a new event_id
+      // Release lock so user can retry with a new event_id. Sticky status
+      // remains visible until the next action/ack overwrites it.
       pendingAction = null;
       updateActionUI();
     }
@@ -1241,10 +1267,9 @@ function beginAction(action) {
     }
     return;
   }
+  // collect is add-only: already-collected stays disabled.
+  // start always allowed (re-study), even if quiz-seen.
   if (action === 'collect' && collectedConceptIds.has(id)) return;
-  if (action === 'start' && doneConceptIds.has(id)) {
-    // Still allow start for review; mockup disables when done — product allows re-study.
-  }
   postAction(action, id);
 }
 
@@ -1253,7 +1278,9 @@ function updateProgressLine() {
   if (!el) return;
   const route = dayRouteIds();
   const doneN = route.filter(id => doneConceptIds.has(id)).length;
-  el.textContent = `${doneN} из ${route.length} пройдено по квизам`;
+  const learnedN = route.filter(id => learnedConceptIds.has(id)).length;
+  el.textContent = `${doneN} из ${route.length} с quiz-следом` +
+    (learnedN ? ` · ≥80%: ${learnedN}` : '');
 }
 
 function updateInventoryLine() {
@@ -1264,7 +1291,9 @@ function updateInventoryLine() {
     return;
   }
   el.hidden = false;
-  const n = WORKBENCH_COUNT != null ? WORKBENCH_COUNT : collectedConceptIds.size;
+  const n = workbenchCount != null && Number.isFinite(workbenchCount)
+    ? workbenchCount
+    : collectedConceptIds.size;
   el.textContent = `Живой конспект · ${n} раздел(ов) · отмечено на сцене: ${collectedConceptIds.size}`;
 }
 
@@ -1348,11 +1377,20 @@ function applyActionResult() {
   if (status === 'succeeded') {
     if (action === 'collect') {
       if (conceptId) collectedConceptIds.add(conceptId);
+      // Grow local counter so inventory is not stale until full host reload.
+      if (added > 0) {
+        if (workbenchCount == null || !Number.isFinite(workbenchCount)) {
+          workbenchCount = collectedConceptIds.size;
+        } else {
+          workbenchCount += added;
+        }
+      }
       st.textContent = added || duplicates
         ? `Ack: «${label}» добавлено в конспект · +${added}` + (duplicates ? ` · уже было ${duplicates}` : '')
         : `Ack: «${label}» · подходящих разделов не нашлось`;
       updateInventoryLine();
       buildTopList();
+      render();
     } else if (action === 'start') {
       st.textContent = `Ack: «${label}» · Quiz открыт`;
     } else {
@@ -1390,7 +1428,10 @@ function updateStopInfo() {
     if (doneConceptIds.has(id)) {
       const ok = document.createElement('span');
       ok.className = 'badge';
-      ok.textContent = '✓ quiz';
+      ok.textContent = learnedConceptIds.has(id) ? '✓ ≥80%' : '✓ quiz';
+      ok.title = learnedConceptIds.has(id)
+        ? 'mastery ≥80% в последнем снимке'
+        : 'был в квизе (любой score в mastery_history)';
       line.appendChild(ok);
     }
     if (isEmbedded && collectedConceptIds.has(id)) {

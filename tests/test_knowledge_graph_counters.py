@@ -1066,7 +1066,7 @@ class TestKg3dActionBridge:
         assert 'HOST_MODE = "embedded"' in html
         assert "abcd" * 8 in html
         assert '"rag"' in html
-        assert "WORKBENCH_COUNT = 4" in html
+        assert "WORKBENCH_COUNT_INIT = 4" in html or "WORKBENCH_COUNT = 4" in html
         assert "ACTION_RESULT" in html
         assert "добавлено: 2" in html
 
@@ -1113,8 +1113,8 @@ class TestKg3dProductActions:
         assert state[KG_3D_ACTION_KEY]["action"] == "start"
         assert state["interactive_quiz_focus_concept"] == "rag"
         assert state["kg_action_concept"] == "rag"
-        assert state[KG_3D_ACTION_RESULT_KEY]["status"] == "succeeded"
-        assert state[KG_3D_ACTION_RESULT_KEY]["action"] == "start"
+        # start: toast + view switch; no sticky hall action_result (would stale on return)
+        assert KG_3D_ACTION_RESULT_KEY not in state
         assert calls["collect"] == 0
 
     def test_collect_calls_workbench_once(self, monkeypatch):
@@ -1173,6 +1173,73 @@ class TestKg3dProductActions:
         assert "streamlit:setComponentValue" in html
         assert "syncKg3dAction" in html
         assert "KG3D_MAX_RAW" in html
+        # cleanup only after streamlit:render — not on bare load (race with Python)
+        assert "cleanupKg3dParam();" in html
+        load_tail = html.split("setComponentReady();", 1)[1]
+        assert "cleanupKg3dParam()" not in load_tail
+
+    def test_consume_returns_action_result_after_execute(self, monkeypatch):
+        """Host returns one-shot ack for the same render (no NameError / stale pop)."""
+        from app.ui import dashboards_graph as dg
+
+        state: dict = {
+            "kg_3d_session_nonce": "a" * 32,
+        }
+        calls = {"n": 0}
+
+        class _KG:
+            def get_related_documents(self, concept):
+                return ["doc1.md"]
+
+            def get_concepts(self):
+                return {"rag": {"label": "RAG"}}
+
+        def fake_collect(**kwargs):
+            calls["n"] += 1
+            return (1, 0)
+
+        monkeypatch.setattr(dg, "_collect_concept_sections_to_workbench", fake_collect)
+
+        class _QP(dict):
+            def pop(self, *a, **k):
+                return dict.pop(self, *a, **k)
+
+        class _FakeSt:
+            session_state = state
+            query_params = _QP()
+
+            @staticmethod
+            def toast(*a, **k):
+                pass
+
+            @staticmethod
+            def error(*a, **k):
+                pass
+
+        env = {
+            "version": 1,
+            "source": "kg3d",
+            "event_id": "12345678-1234-1234-1234-1234567890ef",
+            "session_nonce": "a" * 32,
+            "concept_id": "rag",
+            "action": "collect",
+            "ts": int(time.time()),
+        }
+        raw = encode_kg_3d_query_raw(env)
+        _FakeSt.query_params[dg.KG_3D_QUERY_PARAM] = raw
+        monkeypatch.setattr(dg, "st", _FakeSt)
+
+        result = dg._consume_and_apply_kg_3d_query(
+            node_ids=["rag"],
+            knowledge_graph=_KG(),
+            doc_index={},
+        )
+        assert calls["n"] == 1
+        assert isinstance(result, dict)
+        assert result["status"] == "succeeded"
+        assert result["added"] == 1
+        # one-shot: popped from session after return
+        assert KG_3D_ACTION_RESULT_KEY not in state
 
 
 class TestKg3dMemoryAndInventoryContract:
@@ -1196,13 +1263,29 @@ class TestKg3dMemoryAndInventoryContract:
         assert "2026-07-16" in html
         assert "drawMemoryTrace" in html
         assert "doneConceptIds" in html
+        assert "learnedConceptIds" in html
+        assert "quiz-следом" in html or "quiz-следом" in html
         assert "DECAY_VECTOR" in html
         assert "String(rank)" in html
         assert "isCollected" in html
+        # ✓ membership is quiz-seen (any score), not 2D learned≥80 only
+        assert "QUIZ_SEEN_MIN" in html
+        assert "masteryKeysAbove" in html
+        # mutable inventory counter after collect ack
+        assert "let workbenchCount" in html
+        assert "workbenchCount +=" in html or "workbenchCount +=" in html.replace(" ", "")
 
     def test_label_cap_unchanged(self):
         html = build_kg_3d_html(
             {"nodes": [], "edges": [], "stats": {}, "day_route": []}
         )
         assert "return new Set(allow.slice(0, 8));" in html
+
+    def test_default_hall_component_key_is_not_2d_name(self):
+        import inspect
+
+        from app.ui.knowledge_graph_d3 import render_kg_3d_hall
+
+        sig = inspect.signature(render_kg_3d_hall)
+        assert sig.parameters["key"].default == "kg_3d_hall_component"
 

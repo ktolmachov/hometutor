@@ -880,9 +880,11 @@ def consume_kg_3d_query_param(
     state: MutableMapping[str, Any],
     now_ts: int | None = None,
 ) -> dict[str, Any] | None:
-    """Validate → reserve event_id. Caller removes query param always.
+    """Validate envelope and reserve ``event_id`` (no side effects beyond dedup).
 
-    Order (plan G0): validate → remove query param (caller) → reserve → execute → ack.
+    Host order (see ``_consume_and_apply_kg_3d_query``) is intentionally:
+    **remove query param → validate → reserve → execute → ack**.
+    The param is stripped *before* this call so a bad URL cannot loop full reruns.
     Returns a validated envelope ready for execute, or None if rejected/duplicate.
     """
     env = validate_kg_3d_envelope(
@@ -988,7 +990,7 @@ def render_kg_3d_hall(
     workbench_count: int | None = None,
     action_result: Mapping[str, Any] | None = None,
     height: int = 720,
-    key: str = "kg_3d_component",
+    key: str = "kg_3d_hall_component",
 ) -> str | None:
     """Render embedded 3D hall via dedicated Streamlit component.
 

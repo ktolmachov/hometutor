@@ -669,6 +669,10 @@ class Test3DCoverageAndContracts:
         assert "laneColors" in html
         assert "rgba(154,108,255,0.14)" in html  # route underglow
         assert "no particles" in html.lower() or "no particles / stars / bokeh" in html
+        # W0 quality (Q1–Q4/Q7): axis above nav, compass axes unique, mobile fit, learner status
+        assert "axisY" in html or "H - 78" in html
+        assert "narrow ? 0.90" in html or "W < 560" in html
+        assert "Маршрут дня · стоп" in html
         assert "prefers-reduced-motion" in html
         assert "three.js" not in html.lower()
         assert "<script src=" not in html.lower()

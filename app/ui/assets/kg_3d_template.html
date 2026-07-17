@@ -1829,8 +1829,15 @@ function updateStopInfo() {
   const role = roleFromReason(reason, n);
   const next = nextRouteId();
   const nextLabel = next ? String((byId.get(next) || {}).label || next) : '—';
-  const masteryRaw = (typeof n.mastery === 'number') ? n.mastery
-    : (MASTERY_HISTORY.length ? (MASTERY_HISTORY[MASTERY_HISTORY.length - 1].mastery || {})[id] : null);
+  // Prefer last mastery_history quiz score when present (honest quiz trail);
+  // fall back to node.mastery from payload. Treat missing as null, not 0.
+  const histMastery = MASTERY_HISTORY.length
+    ? (MASTERY_HISTORY[MASTERY_HISTORY.length - 1].mastery || {})[id]
+    : null;
+  const nodeMastery = (typeof n.mastery === 'number' && Number.isFinite(n.mastery)) ? n.mastery : null;
+  const masteryRaw = (histMastery != null && Number.isFinite(Number(histMastery)))
+    ? Number(histMastery)
+    : nodeMastery;
   const masteryPct = masteryRaw != null && Number.isFinite(Number(masteryRaw))
     ? Math.max(0, Math.min(100, Math.round(Number(masteryRaw))))
     : null;

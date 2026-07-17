@@ -711,6 +711,11 @@ class Test3DCoverageAndContracts:
         assert "threatsbox" in html
         assert "updateThreatsPanel" in html
         assert "KEEPER_THREATS" in html
+        # W4c district doors
+        assert 'id="districts"' in html
+        assert "door_quiz" in html and "door_flashcards" in html
+        assert "updateDistrictDoors" in html
+        assert "door_plan" in html and "door_konspekt" in html
         # G4.1 floor tint + G4.2 history scrubber (G4.3 photo export deferred / privacy)
         assert "function floorProgressScore" in html
         assert "function refreshMemorySetsFromHistory" in html
@@ -1443,6 +1448,21 @@ class TestKg3dActionBridge:
         assert ok is not None
         assert ok["action"] == "review"
 
+    def test_accepts_district_door_actions(self):
+        """W4c: door_* nav actions (district MVP)."""
+        for action in (
+            "door_quiz",
+            "door_flashcards",
+            "door_plan",
+            "door_konspekt",
+        ):
+            env = self._env(action=action, concept_id="rag")
+            ok = validate_kg_3d_envelope(
+                env, session_nonce="a" * 32, node_ids=["rag"]
+            )
+            assert ok is not None, action
+            assert ok["action"] == action
+
     def test_rejects_bad_event_id(self):
         assert (
             validate_kg_3d_envelope(
@@ -1624,6 +1644,47 @@ class TestKg3dProductActions:
         assert state["flashcards_focus_concept"] == "rag"
         assert state["kg_action_concept"] == "rag"
         assert state[KG_3D_ACTION_KEY]["action"] == "review"
+        assert KG_3D_ACTION_RESULT_KEY not in state
+        assert calls["collect"] == 0
+
+    def test_door_quiz_navigates_without_workbench(self, monkeypatch):
+        """W4c: district door → product view; nav only."""
+        from app.ui import dashboards_graph as dg
+        from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
+
+        state: dict = {}
+        calls = {"collect": 0}
+
+        def boom(**kwargs):
+            calls["collect"] += 1
+            return (0, 0)
+
+        monkeypatch.setattr(dg, "_collect_concept_sections_to_workbench", boom)
+
+        class _FakeSt:
+            @staticmethod
+            def toast(*a, **k):
+                pass
+
+            @staticmethod
+            def rerun():
+                pass
+
+            @staticmethod
+            def error(*a, **k):
+                pass
+
+        monkeypatch.setattr(dg, "st", _FakeSt)
+        env = {
+            "action": "door_quiz",
+            "concept_id": "rag",
+            "event_id": "12345678-1234-1234-1234-1234567890aa",
+        }
+        dg._execute_kg_3d_action(
+            env, knowledge_graph=None, doc_index={}, state=state
+        )
+        assert state[PENDING_CURRENT_VIEW_KEY] == "Интерактивный Quiz"
+        assert state["interactive_quiz_focus_concept"] == "rag"
         assert KG_3D_ACTION_RESULT_KEY not in state
         assert calls["collect"] == 0
 

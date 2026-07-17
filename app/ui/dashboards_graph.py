@@ -248,6 +248,64 @@ def _run_kg_3d_start_action(
         st.rerun()
 
 
+def _run_kg_3d_door_action(
+    *,
+    target,
+    envelope: dict,
+    concept_id: str,
+    event_id: str,
+    label: str,
+    state,
+) -> None:
+    """W4c: district door — navigation only to a product view (no domain write)."""
+    from app.ui.flashcards_sections import FC_MAIN_SECTION_REVIEW, pending_section_key
+    from app.ui.knowledge_graph_d3 import KG_3D_DOOR_VIEWS
+    from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
+
+    action = str(envelope.get("action") or "").strip()
+    view = KG_3D_DOOR_VIEWS.get(action)
+    if not view:
+        mark_kg_3d_event(target, event_id, "failed")
+        _set_kg_3d_action_result(
+            state,
+            envelope=envelope,
+            status="failed",
+            label=label or concept_id,
+            message="Неизвестная дверь района",
+        )
+        return
+
+    # Best-available concept focus when door carries a real concept id.
+    if concept_id and concept_id != "_district":
+        target["kg_selected_concept"] = concept_id
+        target["kg_action_concept"] = concept_id
+        target["current_topic"] = label or concept_id
+        if action == "door_quiz":
+            target["interactive_quiz_focus_concept"] = concept_id
+        if action == "door_flashcards":
+            target["flashcards_focus_concept"] = concept_id
+
+    if action == "door_flashcards":
+        target["flashcards_subview"] = "review"
+        target[pending_section_key()] = FC_MAIN_SECTION_REVIEW
+        target["flashcards_review_queue"] = []
+        target["flashcards_review_index"] = 0
+
+    target[PENDING_CURRENT_VIEW_KEY] = view
+    mark_kg_3d_event(target, event_id, "succeeded")
+    target.pop(KG_3D_ACTION_RESULT_KEY, None)
+    door_names = {
+        "door_quiz": "Арена (Quiz)",
+        "door_flashcards": "Оранжерея (Flashcards)",
+        "door_plan": "Магистраль (План)",
+        "door_konspekt": "Кузница (Конспект)",
+    }
+    pretty = door_names.get(action, view)
+    if state is None:
+        st.toast(f"🚪 {pretty}", icon="🌆")
+        st.rerun()
+
+
 def _run_kg_3d_review_action(
     *,
     target,
@@ -336,13 +394,25 @@ def _execute_kg_3d_action(
     doc_index: dict,
     state=None,
 ) -> None:
-    """G1/W2b: start|review (nav only) or collect (workbench write) for a validated envelope."""
+    """G1/W2b/W4c: start|review|door_* (nav) or collect (workbench write)."""
+    from app.ui.knowledge_graph_d3 import _KG3D_ACTIONS, _KG3D_DOOR_ACTIONS
+
     target = st.session_state if state is None else state
     action = str(envelope.get("action") or "")
     concept_id = str(envelope.get("concept_id") or "").strip()
     event_id = str(envelope.get("event_id") or "").strip()
     label = _kg_3d_concept_label(knowledge_graph, concept_id)
-    if not concept_id or action not in {"start", "collect", "review"}:
+    if action not in _KG3D_ACTIONS:
+        mark_kg_3d_event(target, event_id, "failed")
+        _set_kg_3d_action_result(
+            state,
+            envelope=envelope,
+            status="failed",
+            label=label or concept_id,
+            message="Некорректное действие",
+        )
+        return
+    if action not in _KG3D_DOOR_ACTIONS and not concept_id:
         mark_kg_3d_event(target, event_id, "failed")
         _set_kg_3d_action_result(
             state,
@@ -353,13 +423,20 @@ def _execute_kg_3d_action(
         )
         return
 
-    _prime_kg_3d_action_focus(
-        target,
-        action=action,
-        concept_id=concept_id,
-        event_id=event_id,
-        label=label,
-    )
+    if action not in _KG3D_DOOR_ACTIONS:
+        _prime_kg_3d_action_focus(
+            target,
+            action=action,
+            concept_id=concept_id,
+            event_id=event_id,
+            label=label,
+        )
+    else:
+        target[KG_3D_ACTION_KEY] = {
+            "action": action,
+            "concept_id": concept_id,
+            "event_id": event_id,
+        }
 
     try:
         if action == "start":
@@ -373,6 +450,15 @@ def _execute_kg_3d_action(
             )
         elif action == "review":
             _run_kg_3d_review_action(
+                target=target,
+                envelope=envelope,
+                concept_id=concept_id,
+                event_id=event_id,
+                label=label,
+                state=state,
+            )
+        elif action in _KG3D_DOOR_ACTIONS:
+            _run_kg_3d_door_action(
                 target=target,
                 envelope=envelope,
                 concept_id=concept_id,

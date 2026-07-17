@@ -149,6 +149,22 @@
   }
   .kgx-threats-meta{margin-top:0.3rem;font-size:0.6rem;color:var(--kgx-muted)}
   .kgx-threats-empty{margin:0;font-size:0.72rem;color:var(--kgx-muted)}
+  /* W4c: district doors (local/all only — not first route frame) */
+  .kgx-districts{
+    display:none;flex-wrap:wrap;gap:0.35rem;padding:0.45rem 0.55rem 0.15rem;
+    border-bottom:1px solid var(--kgx-line);flex:0 0 auto;
+  }
+  .kgx-districts.is-on{display:flex}
+  .kgx-door{
+    flex:1 1 42%;min-height:34px;padding:0.35rem 0.45rem;border-radius:5px;
+    border:1px solid var(--kgx-line);background:rgba(12,16,20,0.75);
+    color:var(--kgx-muted);cursor:pointer;font-size:0.68rem;font-weight:700;
+    text-align:left;
+  }
+  .kgx-door:hover{border-color:var(--kgx-accent);color:var(--kgx-text)}
+  .kgx-door:disabled{opacity:.45;cursor:default}
+  .kgx-door .sub{display:block;font-size:0.58rem;font-weight:500;color:var(--kgx-muted);margin-top:0.1rem}
+  .kgx-door strong{color:inherit;font-weight:700}
   #body{display:grid;grid-template-columns:minmax(0,1fr) 314px;flex:1 1 auto;min-height:0}
   #stage{position:relative;min-width:0;min-height:0;overflow:hidden;background:var(--kgx-night)}
   #cv{display:block;width:100%;height:100%;background:#050508;cursor:grab}
@@ -543,6 +559,20 @@
       </div>
     </div>
     <aside id="side" class="kgx-panel" aria-label="Текущая остановка">
+      <div class="kgx-districts" id="districts" aria-label="Районы Мнемополиса (Созвездие / Вся карта)">
+        <button type="button" class="kgx-door" data-door="door_quiz" id="door_quiz" title="Интерактивный Quiz">
+          <strong>⚔ Арена</strong><span class="sub" id="door_quiz_sub">Quiz</span>
+        </button>
+        <button type="button" class="kgx-door" data-door="door_flashcards" id="door_flashcards" title="Flashcards / SR">
+          <strong>🌿 Оранжерея</strong><span class="sub" id="door_fc_sub">Повторения</span>
+        </button>
+        <button type="button" class="kgx-door" data-door="door_plan" id="door_plan" title="Адаптивный план">
+          <strong>🛤 Магистраль</strong><span class="sub">План дня</span>
+        </button>
+        <button type="button" class="kgx-door" data-door="door_konspekt" id="door_konspekt" title="Живой конспект">
+          <strong>🔨 Кузница</strong><span class="sub" id="door_kb_sub">Конспект</span>
+        </button>
+      </div>
       <div class="kgx-panel-head">
         <div class="kgx-eyebrow" id="stopeyebrow">Остановка —</div>
         <h3 id="stopname">Выберите остановку</h3>
@@ -604,6 +634,7 @@
         <li><strong>Рассвет и фонари</strong> — небо и огни на тропе отражают quiz-след маршрута дня.</li>
         <li><strong>Туман</strong> — низкий retention (`decay_vector`); кнопка ◌ «Спокойный мир» скрывает его. Туман никогда не блокирует «Начать».</li>
         <li><strong>Хранитель</strong> — рассказ об остановке и список угроз забывания (офлайн; LLM — по кнопке в продукте). 🔁 развеет туман.</li>
+        <li><strong>Районы</strong> — в Созвездии / Всей карте: Арена, Оранжерея, Магистраль, Кузница (двери в разделы). Не в первом кадре Маршрута.</li>
       </ol>
       <p class="kgx-onboard-diag" id="onboard-diag" hidden></p>
       <button class="kgx-onboard-ok" id="onboard-ok" type="button">Понятно</button>
@@ -2223,9 +2254,14 @@ window.addEventListener('message', (event) => {
   }
 });
 
+const DOOR_ACTIONS = {
+  door_quiz: 1, door_flashcards: 1, door_plan: 1, door_konspekt: 1,
+};
+
 function beginAction(action) {
-  const id = activeRouteId();
-  if (!id) return;
+  const isDoor = !!DOOR_ACTIONS[action];
+  const id = activeRouteId() || focusId || ((NODES || [])[0] && (NODES || [])[0].id) || '_district';
+  if (!isDoor && !id) return;
   if (pendingAction) return;
   if (!isEmbedded) {
     const st = document.getElementById('actionstatus');
@@ -2238,8 +2274,35 @@ function beginAction(action) {
   // collect is add-only: already-collected stays disabled.
   // start / review always allowed (re-study / retrieval practice).
   if (action === 'collect' && collectedConceptIds.has(id)) return;
-  if (action !== 'start' && action !== 'collect' && action !== 'review') return;
-  postAction(action, id);
+  if (!isDoor && action !== 'start' && action !== 'collect' && action !== 'review') return;
+  if (isDoor && !DOOR_ACTIONS[action]) return;
+  postAction(action, id || '_district');
+}
+
+/** W4c: district doors only outside first route frame (orientation kill switch). */
+function updateDistrictDoors() {
+  const box = document.getElementById('districts');
+  if (!box) return;
+  const show = viewMode === 'local' || viewMode === 'all';
+  box.classList.toggle('is-on', show);
+  box.setAttribute('aria-hidden', show ? 'false' : 'true');
+  // Soft state signals (honest, optional): due count / basket.
+  const dueN = (NODES || []).filter(n => n && !n.is_lesson && (n.due || 0) > 0).length;
+  const fcSub = document.getElementById('door_fc_sub');
+  if (fcSub) fcSub.textContent = dueN > 0 ? `due ${dueN}` : 'Повторения';
+  const kbSub = document.getElementById('door_kb_sub');
+  if (kbSub) {
+    const n = (typeof workbenchCount === 'number' && Number.isFinite(workbenchCount))
+      ? workbenchCount
+      : collectedConceptIds.size;
+    kbSub.textContent = n > 0 ? `◆ ${n}` : 'Конспект';
+  }
+  document.querySelectorAll('.kgx-door').forEach((btn) => {
+    btn.disabled = !!pendingAction || !isEmbedded;
+    if (!isEmbedded) {
+      btn.title = (btn.title || '') + ' · в продукте';
+    }
+  });
 }
 
 /** W2b: show review CTA when retrieval practice is honest (fog or due). */
@@ -2481,9 +2544,14 @@ function updateActionUI() {
   const st = document.getElementById('actionstatus');
   if (st) {
     if (pendingAction) {
-      const an = pendingAction.action === 'start'
+      const act = pendingAction.action;
+      const an = act === 'start'
         ? 'открытие Quiz'
-        : (pendingAction.action === 'review' ? 'открытие Flashcards' : 'сбор в конспект');
+        : (act === 'review'
+          ? 'открытие Flashcards'
+          : (String(act || '').startsWith('door_')
+            ? 'переход в район'
+            : 'сбор в конспект'));
       st.textContent = `Ожидание: ${an} · «${pendingAction.label}»`;
     } else if (!isEmbedded) {
       // W0′ R7: clearer export hierarchy copy
@@ -2511,6 +2579,7 @@ function updateActionUI() {
     wrap.setAttribute('data-memory', memoryOverlay ? 'on' : 'off');
     wrap.setAttribute('data-calm', calmWorld ? 'on' : 'off');
   }
+  updateDistrictDoors();
   // W2a invariant: fog never disables primary actions (re-assert after any UI update).
   // applyCtaState already ignores fog; this documents the contract for tests/readers.
 }
@@ -2872,12 +2941,14 @@ function setViewMode(mode) {
   const h = document.getElementById('hint');
   if (h) {
     if (mode === 'route') h.textContent = 'Режим маршрута: чистая дорожка дня; контекст — в «Созвездии»';
-    else if (mode === 'local') h.textContent = 'Созвездие: активная остановка + immediate prereqs/unlocks · реплей снимков справа';
-    else h.textContent = 'Вся карта: этажи подсвечены mastery · реплей снимков справа';
+    else if (mode === 'local') h.textContent = 'Созвездие: активная остановка + immediate prereqs/unlocks · районы-двери';
+    else h.textContent = 'Вся карта: этажи + районы-двери · реплей снимков справа';
   }
   buildTopList();
   updateStats();
   updateReplayBar();
+  updateDistrictDoors();
+  updateActionUI();
   render();
 }
 
@@ -3452,8 +3523,15 @@ function init() {
   updateInventoryLine();
   updateSnapshotLine();
   updateActionUI();
+  updateDistrictDoors();
   applyActionResult();
   updateProgressLine();
+  document.querySelectorAll('.kgx-door').forEach((btn) => {
+    btn.onclick = () => {
+      const door = btn.getAttribute('data-door');
+      if (door) beginAction(door);
+    };
+  });
   const brand = document.getElementById('brandsub');
   if (brand) {
     brand.textContent = HOST_MODE === 'export' && SNAPSHOT_DATE

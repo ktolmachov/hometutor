@@ -121,13 +121,19 @@ function isValidActionEnvelope(data) {
   if (!data || typeof data !== 'object') return false;
   if (Number(data.version) !== 1) return false;
   if (data.source !== 'kg3d') return false;
-  // W2b: review = Flashcards nav (same envelope channel as start/collect).
-  if (data.action !== 'start' && data.action !== 'collect' && data.action !== 'review') return false;
+  // W2b review + W4c district doors (nav-only product views).
+  const allowed = {
+    start: 1, collect: 1, review: 1,
+    door_quiz: 1, door_flashcards: 1, door_plan: 1, door_konspekt: 1,
+  };
+  if (!allowed[data.action]) return false;
   const concept = String(data.concept_id || '').trim();
   const eventId = String(data.event_id || '').trim();
   const nonce = String(data.session_nonce || '').trim();
   const ts = Number(data.ts);
-  return !!(concept && eventId && nonce && Number.isFinite(ts) && ts > 0);
+  const isDoor = String(data.action || '').startsWith('door_');
+  // Doors may use placeholder concept_id when graph empty; still require non-empty id.
+  return !!(eventId && nonce && Number.isFinite(ts) && ts > 0 && (isDoor ? true : concept));
 }
 
 window.__kg3dSetConcept = syncConceptSelection;

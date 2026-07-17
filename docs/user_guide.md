@@ -270,6 +270,9 @@ Flashcards — это human-in-the-loop генерация:
   (город памяти). **Не** заменяет Mission Control: home остаётся главным экраном.
 - **🌆 Вернуться в Мнемополис** — после завершения interactive/scoped quiz: мир
   покажет **quiz-след** (✓ / рассвет), не SR/туман и не ◆ (свои каналы).
+- **Районы (двери)** в режимах Созвездие / Вся карта: ⚔ Арена → Quiz,
+  🌿 Оранжерея → Flashcards, 🛤 Магистраль → Адаптивный план, 🔨 Кузница →
+  Живой конспект. В первом кадре Маршрута дверей нет (ориентация).
 - **🏛 3D-зал (embedded)** на вкладке Knowledge Graph — живой Memory Run рядом с 2D-картой.
   **Каналы действий (надёжность iframe):** primary — `setComponentValue` с envelope
   `{kind: 'kg3d_action', envelope}` (работает внутри Streamlit component iframe);

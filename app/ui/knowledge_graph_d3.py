@@ -67,8 +67,19 @@ _KG3D_UUID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
 _KG3D_ULID_RE = re.compile(r"^[0-9A-HJKMNP-TV-Z]{26}$", re.IGNORECASE)
-# W2b: review = navigation to Flashcards (nav-only, like start); collect still writes.
-_KG3D_ACTIONS = frozenset({"start", "collect", "review"})
+# W2b: review = Flashcards nav; W4c: district doors = nav-only product views.
+_KG3D_DOOR_ACTIONS = frozenset(
+    {"door_quiz", "door_flashcards", "door_plan", "door_konspekt"}
+)
+_KG3D_ACTIONS = frozenset({"start", "collect", "review"}) | _KG3D_DOOR_ACTIONS
+
+# Door action → product view (PENDING_CURRENT_VIEW_KEY).
+KG_3D_DOOR_VIEWS: dict[str, str] = {
+    "door_quiz": "Интерактивный Quiz",
+    "door_flashcards": "Flashcards",
+    "door_plan": "Адаптивный план",
+    "door_konspekt": "Живой конспект",
+}
 _MISSING_TEMPLATE_HTML = """<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -797,7 +808,7 @@ def validate_kg_3d_envelope(
         ts = int(env.get("ts"))
     except (TypeError, ValueError):
         return None
-    if not concept_id or not event_id or not nonce:
+    if not event_id or not nonce:
         return None
     if not _valid_event_id(event_id):
         return None
@@ -813,8 +824,19 @@ def validate_kg_3d_envelope(
     if len(nonce) != len(expected) or not compare_digest(nonce, expected):
         return None
     allowed = {str(n).strip() for n in node_ids if str(n).strip()}
-    if concept_id not in allowed:
-        return None
+    # W4c doors: concept optional (focus best-effort); bind to a real node when possible.
+    if action in _KG3D_DOOR_ACTIONS:
+        if concept_id and concept_id not in allowed:
+            concept_id = ""
+        if not concept_id and allowed:
+            concept_id = next(iter(sorted(allowed)))
+        if not concept_id:
+            concept_id = "_district"
+    else:
+        if not concept_id:
+            return None
+        if concept_id not in allowed:
+            return None
     return {
         "version": 1,
         "source": "kg3d",

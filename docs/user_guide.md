@@ -255,13 +255,15 @@ Flashcards — это human-in-the-loop генерация:
   embedded. Export: **«снимок от YYYY-MM-DD»**, CTA read-only, без корзины и vault-ссылок.
   Подписи ≤8; JSON в HTML script-safe.
 - **🏛 3D-зал (embedded)** на вкладке Knowledge Graph — живой Memory Run рядом с 2D-картой.
-  **Единственный канал действий** — query-param `_kg3d` (base64url envelope +
-  `session_nonce`); `setComponentValue` — только selection (concept id).
-  **▶ Начать** → «Интерактивный Quiz» с преселектом концепта; **В конспект** — тот же
-  collect, что 2D; **Открыть раздел** / интерьер узла («Внутрь» или повторный клик) —
-  разделы с `obsidian://`, связи и quiz-след. **?** в топбаре — правила зала
-  (onboarding при первом открытии сессии). **◆** и счётчик корзины — live view-model.
-  Одно pending-действие; дедуп `event_id` (64). Export read-only.
+  **Каналы действий (надёжность iframe):** primary — `setComponentValue` с envelope
+  `{kind: 'kg3d_action', envelope}` (работает внутри Streamlit component iframe);
+  fallback/compat — query-param `_kg3d` (base64url + `session_nonce`), если
+  `top.location` доступен. Selection — строковый concept id через тот же
+  `setComponentValue`. Оба канала делят дедуп `event_id` (окно 64) — dual delivery
+  не дублирует side effect. **▶ Начать** → «Интерактивный Quiz» с преселектом
+  концепта; **В конспект** — тот же collect, что 2D; **Открыть раздел** / интерьер
+  («Внутрь» или повторный клик) — разделы с `obsidian://`. **?** — правила зала.
+  **◆** и счётчик корзины — live view-model. Export read-only.
 - **«📍 «заголовок»»** открывает Obsidian сразу на нужном заголовке конспекта (нужен созданный конспект — кнопка «Подготовить для Obsidian» во вкладке `Темы`);
 - **«🖥 VS Code: раздел»** открывает тот же файл на нужной строке;
 - при повторяющихся заголовках в документе UI подсказывает, что VS Code-ссылка точнее (Obsidian-якорь открывает первый одноимённый заголовок);

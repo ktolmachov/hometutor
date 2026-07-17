@@ -1011,6 +1011,32 @@ def _kg_3d_component():
     return components.declare_component("kg_3d", path=str(_3D_COMPONENT_PATH))
 
 
+def parse_kg_3d_component_value(
+    value: Any,
+) -> tuple[str | None, dict[str, Any] | None]:
+    """Split Streamlit component return into (selection_id, action_payload).
+
+    - selection: plain string concept id (legacy / focus sync)
+    - action: ``{kind: 'kg3d_action', envelope: {...}}`` — primary live channel
+    """
+    if value is None:
+        return None, None
+    if isinstance(value, str):
+        cid = value.strip()
+        return (cid or None), None
+    if isinstance(value, Mapping):
+        kind = str(value.get("kind") or "").strip()
+        if kind == "kg3d_action":
+            env = value.get("envelope")
+            if isinstance(env, Mapping):
+                return None, dict(env)
+            # envelope fields may be flat on the value itself
+            return None, dict(value)
+        # Unknown dict — not a selection string
+        return None, None
+    return None, None
+
+
 def render_kg_3d_hall(
     payload: Mapping[str, Any],
     *,
@@ -1022,12 +1048,16 @@ def render_kg_3d_hall(
     show_onboarding: bool = False,
     height: int = 720,
     key: str = "kg_3d_hall_component",
-) -> str | None:
+) -> Any:
     """Render embedded 3D hall via dedicated Streamlit component.
 
-    Returns selected concept id (string) from ``setComponentValue`` if any.
-    Actions are delivered exclusively via the ``_kg3d`` query-param bridge
-    (never through component value — avoids dual delivery of one event).
+    Returns the raw component value:
+    - ``str`` — selected concept id
+    - ``dict`` with ``kind == 'kg3d_action'`` — action envelope (primary channel)
+    - ``None`` — no interaction
+
+    Host must process action envelopes via
+    ``_consume_and_apply_kg_3d_component_value`` (dedup shared with ``_kg3d``).
     """
     html = build_kg_3d_html(
         payload,
@@ -1039,15 +1069,12 @@ def render_kg_3d_hall(
         concept_sections=concept_sections,
         show_onboarding=show_onboarding,
     )
-    selected = _kg_3d_component()(
+    return _kg_3d_component()(
         html=html,
         height=height,
         default=None,
         key=key,
     )
-    if isinstance(selected, str) and selected.strip():
-        return selected.strip()
-    return None
 
 
 def render_d3_knowledge_graph(

@@ -35,8 +35,11 @@ from app.ui.knowledge_graph_d3 import (
     consume_kg_3d_query_param,
     ensure_kg_3d_session_nonce,
     mark_kg_3d_event,
+    parse_kg_3d_component_value,
     render_d3_knowledge_graph,
     render_kg_3d_hall,
+    reserve_kg_3d_event_id,
+    validate_kg_3d_envelope,
 )
 from app.ui.topics_catalog import load_topics_catalog as _load_topics_catalog
 from app.ui.tutor_mastery_forecast_panel import (
@@ -366,7 +369,7 @@ def _consume_and_apply_kg_3d_query(
     knowledge_graph,
     doc_index: dict,
 ) -> dict | None:
-    """Host-side G0 pipeline for ``_kg3d``.
+    """Host-side fallback channel for ``_kg3d`` URL param.
 
     Order (fixed, intentional — differs from the pure ``consume_kg_3d_query_param``
     docstring which covers only validate→reserve):
@@ -380,6 +383,8 @@ def _consume_and_apply_kg_3d_query(
        *this same render* (caller must pass it into ``render_kg_3d_hall``).
 
     Returns the action_result dict, or None if no/invalid/duplicate envelope.
+    Primary live channel is component value — see
+    ``_consume_and_apply_kg_3d_component_value`` (URL may fail in sandboxed iframes).
     """
     raw = _query_param_first_str(KG_3D_QUERY_PARAM)
     # Always strip the param so a bad/stale URL cannot loop full reruns.
@@ -408,6 +413,51 @@ def _consume_and_apply_kg_3d_query(
     # unrelated rerun does not re-surface a stale result.
     result = st.session_state.pop(KG_3D_ACTION_RESULT_KEY, None)
     return result if isinstance(result, dict) else None
+
+
+def _consume_and_apply_kg_3d_component_value(
+    value,
+    *,
+    node_ids: list[str],
+    knowledge_graph,
+    doc_index: dict,
+    state=None,
+) -> dict | None:
+    """Primary host channel: action envelope from ``setComponentValue``.
+
+    Same validate → reserve → execute → ack contract as ``_kg3d``, without base64/URL.
+    Dedup window is shared, so dual delivery (component + URL) is at-most-once.
+    Returns action_result for collect (also left in session for next hall render),
+    or None if not an action / invalid / duplicate.
+    """
+    _selection, envelope = parse_kg_3d_component_value(value)
+    if envelope is None:
+        return None
+    target = st.session_state if state is None else state
+    nonce = ensure_kg_3d_session_nonce(target)
+    env = validate_kg_3d_envelope(
+        envelope,
+        session_nonce=nonce,
+        node_ids=node_ids,
+    )
+    if env is None:
+        return None
+    if not reserve_kg_3d_event_id(target, env["event_id"]):
+        return None
+    _execute_kg_3d_action(
+        env,
+        knowledge_graph=knowledge_graph,
+        doc_index=doc_index,
+        state=state,
+    )
+    result = target.pop(KG_3D_ACTION_RESULT_KEY, None)
+    if isinstance(result, dict):
+        # Re-store so the *next* render (after st.rerun) can bake Ack into the hall.
+        # Component channel cannot inject result into HTML on the same Python frame
+        # where the value first arrives (component already returned for this run).
+        target[KG_3D_ACTION_RESULT_KEY] = result
+        return result
+    return None
 
 
 def _add_section_to_workbench_state(section, state=None) -> bool:
@@ -1535,9 +1585,10 @@ def _render_knowledge_graph_tab() -> None:
 
     node_ids = [n["id"] for n in payload.get("nodes", [])]
 
-    # ── 3D hall action bridge (G0/G1): _kg3d query-param only ──────────
-    # Must run before embedding so collect updates inventory view-model args
-    # and the one-shot action_result is available on this same render.
+    # ── 3D hall action bridge (G0/G1) ──────────────────────────────────
+    # Fallback channel first: _kg3d query-param (same-run ack when URL works).
+    # Primary channel: component value {kind: kg3d_action} — reliable inside
+    # sandboxed Streamlit component iframes where top.location.replace fails.
     action_result = _consume_and_apply_kg_3d_query(
         node_ids=node_ids,
         knowledge_graph=knowledge_graph,
@@ -1586,9 +1637,7 @@ def _render_knowledge_graph_tab() -> None:
         "Memory Run · ▶ Начать (Quiz) · В конспект · Открыть раздел (Obsidian) · "
         "✓ = был в квизе · ◆ = в Живом конспекте · «?» — правила зала."
     )
-    # Selection only from component value (string concept id). Actions arrive solely
-    # via _kg3d query-param above — never dual-delivered through setComponentValue.
-    hall_selected = render_kg_3d_hall(
+    hall_value = render_kg_3d_hall(
         payload,
         session_nonce=nonce,
         collected_concept_ids=collected_ids,
@@ -1599,6 +1648,19 @@ def _render_knowledge_graph_tab() -> None:
         height=720,
         key="kg_3d_hall_component",
     )
+    hall_selected, component_action = parse_kg_3d_component_value(hall_value)
+    # Primary action channel (component envelope). Dedup skips if _kg3d already ran.
+    if component_action is not None:
+        component_result = _consume_and_apply_kg_3d_component_value(
+            hall_value,
+            node_ids=node_ids,
+            knowledge_graph=knowledge_graph,
+            doc_index=doc_index,
+        )
+        # collect: result is in session for next render; force rerun so hall gets Ack.
+        # start: _run_kg_3d_start_action already calls st.rerun() when live.
+        if component_result is not None and str(component_result.get("action") or "") == "collect":
+            st.rerun()
     if hall_selected and hall_selected in node_ids:
         st.session_state["kg_selected_concept"] = hall_selected
         st.session_state["kg_action_concept"] = hall_selected

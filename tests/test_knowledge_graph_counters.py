@@ -1229,8 +1229,8 @@ class TestKg3dProductActions:
         assert dg._query_param_first_str("_kgc") == ""
         assert dg._query_param_first_str("missing") == ""
 
-    def test_component_wrapper_sole_kg3d_action_channel(self):
-        """Plan G0: actions only via _kg3d; setComponentValue is selection-only."""
+    def test_component_wrapper_primary_component_action_url_fallback(self):
+        """Audit P0: primary = setComponentValue envelope; _kg3d = fallback."""
         from pathlib import Path
 
         html = Path("app/ui/assets/kg_3d_component/index.html").read_text(
@@ -1238,18 +1238,24 @@ class TestKg3dProductActions:
         )
         assert "_kg3d" in html
         assert "hometutor:kg-action" in html
-        assert "setComponentValue" in html
         assert "streamlit:setComponentValue" in html
         assert "syncKg3dAction" in html
+        assert "setActionValue" in html
+        assert "kg3d_action" in html
+        assert "notifyChild" in html
+        assert "hometutor:kg-action-delivery" in html
         assert "KG3D_MAX_RAW" in html
-        # No dual delivery via component-value action envelopes
-        assert "setActionValue" not in html
-        assert "kg3d_action" not in html
-        assert "window.setTimeout(() => syncKg3dAction" not in html
+        # Primary then fallback (not URL-only)
+        assert "setActionValue(envelope)" in html
+        assert "top.location.replace" in html
         # cleanup only after streamlit:render — not on bare load (race with Python)
         assert "cleanupKg3dParam();" in html
         load_tail = html.split("setComponentReady();", 1)[1]
         assert "cleanupKg3dParam()" not in load_tail
+        # Child shows delivery diagnostics (not only 12s timeout)
+        child = Path("app/ui/assets/kg_3d_template.html").read_text(encoding="utf-8")
+        assert "hometutor:kg-action-delivery" in child
+        assert "ждём ack через компонент" in child
         # 2D mirror: _kgc cleanup also deferred to streamlit:render
         html2d = Path("app/ui/assets/kg_d3_component/index.html").read_text(
             encoding="utf-8"
@@ -1321,11 +1327,84 @@ class TestKg3dProductActions:
         # one-shot: popped from session after return
         assert KG_3D_ACTION_RESULT_KEY not in state
 
-    def test_no_component_value_action_consumer(self):
-        """Dual-channel component-value action path must not exist (plan G0)."""
+    def test_component_value_action_consumer_collect(self, monkeypatch):
+        """Primary channel: component envelope → execute → result for next hall render."""
         from app.ui import dashboards_graph as dg
+        from app.ui.knowledge_graph_d3 import parse_kg_3d_component_value
 
-        assert not hasattr(dg, "_consume_and_apply_kg_3d_component_value")
+        state: dict = {"kg_3d_session_nonce": "a" * 32}
+        calls = {"n": 0}
+
+        class _KG:
+            def get_related_documents(self, concept):
+                return ["doc1.md"]
+
+            def get_concepts(self):
+                return {"rag": {"label": "RAG"}}
+
+        def fake_collect(**kwargs):
+            calls["n"] += 1
+            return (1, 0)
+
+        monkeypatch.setattr(dg, "_collect_concept_sections_to_workbench", fake_collect)
+        value = {
+            "kind": "kg3d_action",
+            "version": 1,
+            "envelope": {
+                "version": 1,
+                "source": "kg3d",
+                "event_id": "12345678-1234-1234-1234-1234567890aa",
+                "session_nonce": "a" * 32,
+                "concept_id": "rag",
+                "action": "collect",
+                "ts": int(time.time()),
+            },
+        }
+        sel, act = parse_kg_3d_component_value(value)
+        assert sel is None and act is not None
+        result = dg._consume_and_apply_kg_3d_component_value(
+            value,
+            node_ids=["rag"],
+            knowledge_graph=_KG(),
+            doc_index={},
+            state=state,
+        )
+        assert calls["n"] == 1
+        assert isinstance(result, dict)
+        assert result["status"] == "succeeded"
+        assert result["added"] == 1
+        # left in session for next hall render (component same-frame ack)
+        assert state[KG_3D_ACTION_RESULT_KEY]["status"] == "succeeded"
+        # dual delivery: same event_id rejected
+        again = dg._consume_and_apply_kg_3d_component_value(
+            value,
+            node_ids=["rag"],
+            knowledge_graph=_KG(),
+            doc_index={},
+            state=state,
+        )
+        assert again is None
+        assert calls["n"] == 1
+
+    def test_parse_kg_3d_component_value_selection_vs_action(self):
+        from app.ui.knowledge_graph_d3 import parse_kg_3d_component_value
+
+        assert parse_kg_3d_component_value("rag") == ("rag", None)
+        assert parse_kg_3d_component_value(None) == (None, None)
+        sel, act = parse_kg_3d_component_value(
+            {
+                "kind": "kg3d_action",
+                "envelope": {
+                    "version": 1,
+                    "source": "kg3d",
+                    "action": "start",
+                    "concept_id": "x",
+                },
+            }
+        )
+        assert sel is None
+        assert act is not None
+        assert act["action"] == "start"
 
 
 class TestKg3dMemoryAndInventoryContract:

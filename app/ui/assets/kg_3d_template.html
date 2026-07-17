@@ -1568,6 +1568,11 @@ function postAction(action, conceptId) {
     }, '*');
   } catch (_) {
     pendingAction = null;
+    const st = document.getElementById('actionstatus');
+    if (st) {
+      st.dataset.sticky = '1';
+      st.textContent = `Ошибка: не удалось отправить «${label}» (postMessage)`;
+    }
     updateActionUI();
     return;
   }
@@ -1579,7 +1584,7 @@ function postAction(action, conceptId) {
       const st = document.getElementById('actionstatus');
       if (st) {
         st.dataset.sticky = '1';
-        st.textContent = `Таймаут: «${label}» — повторите действие`;
+        st.textContent = `Таймаут: «${label}» — мост не ответил, повторите действие`;
       }
       // Release lock so user can retry with a new event_id. Sticky status
       // remains visible until the next action/ack overwrites it.
@@ -1588,6 +1593,41 @@ function postAction(action, conceptId) {
     }
   }, 12000);
 }
+
+// Wrapper delivery diagnostics (URL sandbox failures are expected; component path is primary).
+window.addEventListener('message', (event) => {
+  const data = event.data || {};
+  if (data.type !== 'hometutor:kg-action-delivery') return;
+  if (!pendingAction) return;
+  const st = document.getElementById('actionstatus');
+  if (!st) return;
+  const status = String(data.status || '');
+  const detail = String(data.detail || '');
+  if (status === 'component_sent' || status === 'url_ok') {
+    // Keep pending; host ack will clear. Mild status so user sees progress.
+    if (!st.dataset.sticky) {
+      st.textContent = status === 'url_ok'
+        ? `Доставка (URL) · «${pendingAction.label}»…`
+        : `Доставка · «${pendingAction.label}»…`;
+    }
+    return;
+  }
+  if (status === 'url_failed' || status === 'oversized' || status === 'url_skipped') {
+    // URL fallback failed — component channel should still complete; do not unlock yet.
+    st.dataset.sticky = '1';
+    st.textContent = status === 'oversized'
+      ? `URL-мост недоступен (слишком длинно); ждём ack через компонент · «${pendingAction.label}»`
+      : `URL-мост недоступен; ждём ack через компонент · «${pendingAction.label}»`;
+    return;
+  }
+  if (status === 'component_failed' || status === 'invalid' || status === 'delivery_failed') {
+    st.dataset.sticky = '1';
+    st.textContent = `Ошибка доставки: «${pendingAction.label}» · ${detail || status}`;
+    pendingAction = null;
+    if (actionTimeoutTimer) clearTimeout(actionTimeoutTimer);
+    updateActionUI();
+  }
+});
 
 function beginAction(action) {
   const id = activeRouteId();

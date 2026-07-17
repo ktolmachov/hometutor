@@ -57,6 +57,7 @@ from app.retrieval import build_query_engine
 from app.source_readiness import build_source_readiness_summary
 from app.retrieval_cache import (
     EmptyIndexError,
+    EmbedModelMismatchError,
     ReindexInProgressError,
     clear_retrieval_cache,
     get_cache_stats,

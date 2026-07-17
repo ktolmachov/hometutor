@@ -60,7 +60,7 @@ def topics():
         }
     try:
         return services.get_topics_catalog()
-    except services.EmptyIndexError as e:
+    except (services.EmptyIndexError, services.EmbedModelMismatchError) as e:
         record_api_error(endpoint="/topics", exc=e, status_code=503)
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:  # noqa: BLE001 - knowledge API boundary records service failures and returns controlled HTTP 500.
@@ -276,7 +276,7 @@ def kb_overview():
         }
     try:
         return services.get_kb_overview()
-    except services.EmptyIndexError as e:
+    except (services.EmptyIndexError, services.EmbedModelMismatchError) as e:
         record_api_error(endpoint="/kb/overview", exc=e, status_code=503)
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:  # noqa: BLE001 - knowledge API boundary records service failures and returns controlled HTTP 500.

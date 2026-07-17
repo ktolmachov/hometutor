@@ -676,6 +676,11 @@ class Test3DCoverageAndContracts:
         assert "function strokeSmoothPath" in html  # Q8
         assert "function appendObsidianLink" in html  # Q5
         assert "rgba(255,255,255,0.16)" in html  # Q9 ring track
+        # G4.1 floor tint + G4.2 history scrubber (G4.3 photo export deferred / privacy)
+        assert "function floorProgressScore" in html
+        assert "function refreshMemorySetsFromHistory" in html
+        assert 'id="replaybar"' in html
+        assert "function playHistoryReplay" in html
         assert "prefers-reduced-motion" in html
         assert "three.js" not in html.lower()
         assert "<script src=" not in html.lower()

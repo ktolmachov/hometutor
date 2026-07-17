@@ -104,6 +104,21 @@
   }
   .kgx-depth-btn:hover{border-color:var(--kgx-coral);background:rgba(255,107,138,0.15)}
   .kgx-depth-btn[hidden]{display:none}
+  /* G4.2: mastery_history scrubber (render-only; route geometry unchanged) */
+  .kgx-replay{
+    position:absolute;right:0.75rem;bottom:4.6rem;z-index:3;
+    display:none;align-items:center;gap:0.3rem;padding:0.28rem 0.4rem;
+    border:1px solid var(--kgx-line);border-radius:6px;
+    background:rgba(12,16,20,0.88);color:var(--kgx-muted);font-size:0.68rem;
+  }
+  .kgx-replay.is-on{display:flex}
+  .kgx-replay button{
+    min-width:28px;min-height:28px;border:1px solid var(--kgx-line);border-radius:4px;
+    background:transparent;color:var(--kgx-text);cursor:pointer;font-size:0.72rem;padding:0 0.35rem;
+  }
+  .kgx-replay button:hover{border-color:var(--kgx-gold);color:var(--kgx-gold)}
+  .kgx-replay button:disabled{opacity:.35;cursor:default}
+  .kgx-replay strong{color:var(--kgx-gold);font-weight:700;min-width:5.5rem;text-align:center}
   .kgx-compass{
     /* Q2: clear unique axes; bottom-left, clear of center nav strip */
     position:absolute;left:0.75rem;bottom:4.6rem;width:76px;height:76px;border-radius:50%;
@@ -396,6 +411,13 @@
         <div id="statsline" class="st" role="status" aria-live="polite"></div>
         <button class="kgx-depth-btn" id="depthbtn" type="button" hidden title="Показать полный граф">Вся карта</button>
       </div>
+      <div id="replaybar" class="kgx-replay" role="group" aria-label="Реплей снимков mastery">
+        <button type="button" id="replayprev" title="Предыдущий снимок" aria-label="Предыдущий снимок">◀</button>
+        <strong id="replaydate">live</strong>
+        <button type="button" id="replaynext" title="Следующий снимок" aria-label="Следующий снимок">▶</button>
+        <button type="button" id="replayplay" title="Проиграть историю" aria-label="Проиграть историю">▷</button>
+        <button type="button" id="replaylive" title="Вернуться к live" aria-label="Live">Live</button>
+      </div>
       <div class="kgx-compass" aria-hidden="true" title="КУРС · ДАЛЬШЕ · ВХОД · СЕГОДНЯ">
         <span class="n">КУРС</span><span class="e">ДАЛ</span><span class="s">ВХОД</span><span class="w">СЕГ</span><i></i>
       </div>
@@ -553,23 +575,40 @@ function masteryKeysAbove(masteryObj, minPct) {
   }
   return out;
 }
-const doneConceptIds = (() => {
-  const last = (MASTERY_HISTORY || []).length ? MASTERY_HISTORY[MASTERY_HISTORY.length - 1] : null;
-  const mastery = last && last.mastery && typeof last.mastery === 'object' ? last.mastery : {};
-  return masteryKeysAbove(mastery, QUIZ_SEEN_MIN);
-})();
-const prevSnapshotConceptIds = (() => {
-  if (!MASTERY_HISTORY || MASTERY_HISTORY.length < 2) return new Set();
-  const prev = MASTERY_HISTORY[MASTERY_HISTORY.length - 2];
-  const mastery = prev && prev.mastery && typeof prev.mastery === 'object' ? prev.mastery : {};
-  return masteryKeysAbove(mastery, QUIZ_SEEN_MIN);
-})();
+// G4.2: mutable sets — refreshed from historyReplayIndex (−1 = live last snapshot).
+let doneConceptIds = new Set();
+let prevSnapshotConceptIds = new Set();
 // Stronger fill (≥80%) — visual only; does not change ✓ membership.
-const learnedConceptIds = (() => {
-  const last = (MASTERY_HISTORY || []).length ? MASTERY_HISTORY[MASTERY_HISTORY.length - 1] : null;
-  const mastery = last && last.mastery && typeof last.mastery === 'object' ? last.mastery : {};
-  return masteryKeysAbove(mastery, 80);
-})();
+let learnedConceptIds = new Set();
+/** −1 = live (latest mastery_history); ≥0 = scrub to that snapshot for replay. */
+let historyReplayIndex = -1;
+let historyReplayTimer = null;
+
+function refreshMemorySetsFromHistory() {
+  const hist = MASTERY_HISTORY || [];
+  if (!hist.length) {
+    doneConceptIds = new Set();
+    prevSnapshotConceptIds = new Set();
+    learnedConceptIds = new Set();
+    return;
+  }
+  const idx = historyReplayIndex < 0
+    ? hist.length - 1
+    : Math.max(0, Math.min(historyReplayIndex, hist.length - 1));
+  const cur = hist[idx];
+  const mastery = cur && cur.mastery && typeof cur.mastery === 'object' ? cur.mastery : {};
+  doneConceptIds = masteryKeysAbove(mastery, QUIZ_SEEN_MIN);
+  learnedConceptIds = masteryKeysAbove(mastery, 80);
+  if (idx > 0) {
+    const prev = hist[idx - 1];
+    const pm = prev && prev.mastery && typeof prev.mastery === 'object' ? prev.mastery : {};
+    prevSnapshotConceptIds = masteryKeysAbove(pm, QUIZ_SEEN_MIN);
+  } else {
+    prevSnapshotConceptIds = new Set();
+  }
+}
+refreshMemorySetsFromHistory();
+
 const collectedConceptIds = new Set((COLLECTED_IDS || []).map(String));
 const isEmbedded = HOST_MODE === 'embedded';
 
@@ -938,11 +977,63 @@ function labelAllowSet(vis) {
   return new Set(allow.slice(0, 10));
 }
 
-function drawFloorPlane(yy) {
+function conceptFloorIndex(n) {
+  if (!n) return 0;
+  if (n.is_lesson && lessonFloorById.has(n.id)) return lessonFloorById.get(n.id);
+  for (const lid of [...(n.prereqs || []), ...(n.unlocks || [])]) {
+    if (lessonFloorById.has(lid)) return lessonFloorById.get(lid);
+  }
+  return 0;
+}
+
+/** G4.1: 0..1 floor progress from quiz mastery (− decay), render-only. */
+function floorProgressScore(floorIdx) {
+  const hist = MASTERY_HISTORY || [];
+  const idx = historyReplayIndex < 0
+    ? hist.length - 1
+    : Math.max(0, Math.min(historyReplayIndex, hist.length - 1));
+  const snap = hist[idx];
+  const mastery = snap && snap.mastery && typeof snap.mastery === 'object' ? snap.mastery : {};
+  let sum = 0;
+  let n = 0;
+  for (const node of (NODES || [])) {
+    if (!node || node.is_lesson) continue;
+    if (conceptFloorIndex(node) !== floorIdx) continue;
+    const raw = mastery[node.id];
+    let score = (raw != null && Number.isFinite(Number(raw))) ? Number(raw) / 100 : 0.18;
+    const decay = Number(DECAY_VECTOR[node.id]);
+    if (Number.isFinite(decay) && decay > 0) {
+      score = Math.max(0, score - Math.min(0.35, decay * 0.12));
+    }
+    sum += Math.max(0, Math.min(1, score));
+    n += 1;
+  }
+  return n ? sum / n : 0.15;
+}
+
+function drawFloorPlane(yy, floorIdx) {
   // Floors span corridor X (progression) and depth Z — not lesson-count diagonal.
+  // G4.1: local/all only — tint pad by mastery/decay of floor concepts (route untouched).
   const x0 = -80, x1 = Math.max(dayRouteIds().length, 1) * X_STEP + 80;
   const a = project(x0, yy, -120), b = project(x1, yy, -120);
   const c2 = project(x0, yy, 120), d = project(x1, yy, 120);
+  if (viewMode !== 'route' && floorIdx != null) {
+    const score = floorProgressScore(floorIdx);
+    const alpha = 0.045 + score * 0.14;
+    ctx.beginPath();
+    ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.lineTo(d.sx, d.sy); ctx.lineTo(c2.sx, c2.sy);
+    ctx.closePath();
+    if (score >= 0.55) ctx.fillStyle = `rgba(114,241,165,${alpha})`;
+    else if (score >= 0.3) ctx.fillStyle = `rgba(154,108,255,${alpha * 0.95})`;
+    else ctx.fillStyle = `rgba(255,107,138,${alpha})`;
+    ctx.fill();
+    ctx.strokeStyle = score >= 0.55
+      ? `rgba(114,241,165,${0.18 + score * 0.2})`
+      : score >= 0.3
+        ? `rgba(154,108,255,${0.14 + score * 0.15})`
+        : `rgba(255,107,138,${0.12 + (1 - score) * 0.1})`;
+  }
+  ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(c2.sx, c2.sy); ctx.lineTo(d.sx, d.sy); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(c2.sx, c2.sy); ctx.stroke();
@@ -1254,7 +1345,7 @@ function draw() {
     }
     if (!floorIdxs.size) floorIdxs.add(0);
     for (const f of floorIdxs) {
-      drawFloorPlane(FLOOR_BASE + f * FLOOR_STEP);
+      drawFloorPlane(FLOOR_BASE + f * FLOOR_STEP, f);
     }
   }
 
@@ -1870,10 +1961,103 @@ function updateProgressLine() {
   }
   const hint = document.getElementById('progresshint');
   if (hint) {
-    hint.textContent = memoryOverlay
-      ? 'след прошлого снимка поверх маршрута'
-      : 'маршрут перестраивается по памяти';
+    const hist = MASTERY_HISTORY || [];
+    if (historyReplayIndex >= 0 && hist[historyReplayIndex]) {
+      hint.textContent = `реплей снимка · ${hist[historyReplayIndex].date || historyReplayIndex}`;
+    } else {
+      hint.textContent = memoryOverlay
+        ? 'след прошлого снимка поверх маршрута'
+        : 'маршрут перестраивается по памяти';
+    }
   }
+  updateReplayBar();
+}
+
+function stopHistoryReplayPlay() {
+  if (historyReplayTimer) {
+    clearTimeout(historyReplayTimer);
+    historyReplayTimer = null;
+  }
+  const play = document.getElementById('replayplay');
+  if (play) {
+    play.textContent = '▷';
+    play.title = 'Проиграть историю';
+  }
+}
+
+function applyHistoryReplayIndex(idx) {
+  const hist = MASTERY_HISTORY || [];
+  if (!hist.length || idx < 0) {
+    historyReplayIndex = -1;
+  } else {
+    historyReplayIndex = Math.max(0, Math.min(idx, hist.length - 1));
+    // last snapshot ≡ live
+    if (historyReplayIndex === hist.length - 1) historyReplayIndex = -1;
+  }
+  refreshMemorySetsFromHistory();
+  updateProgressLine();
+  updateStopInfo();
+  buildTopList();
+  render();
+}
+
+function updateReplayBar() {
+  const bar = document.getElementById('replaybar');
+  if (!bar) return;
+  const hist = MASTERY_HISTORY || [];
+  // G4.2: scrubber when ≥2 snapshots; visible in local/all or memory overlay (route stays sparse)
+  const show = hist.length >= 2 && (viewMode !== 'route' || memoryOverlay || historyReplayIndex >= 0);
+  bar.classList.toggle('is-on', show);
+  if (!show) return;
+  const dateEl = document.getElementById('replaydate');
+  const prev = document.getElementById('replayprev');
+  const next = document.getElementById('replaynext');
+  const live = document.getElementById('replaylive');
+  const idx = historyReplayIndex < 0 ? hist.length - 1 : historyReplayIndex;
+  if (dateEl) {
+    dateEl.textContent = historyReplayIndex < 0
+      ? `live · ${hist[hist.length - 1].date || 'now'}`
+      : String(hist[idx].date || `#${idx + 1}`);
+  }
+  if (prev) prev.disabled = idx <= 0;
+  if (next) next.disabled = historyReplayIndex < 0 || idx >= hist.length - 1;
+  if (live) live.disabled = historyReplayIndex < 0;
+}
+
+function playHistoryReplay() {
+  const hist = MASTERY_HISTORY || [];
+  if (hist.length < 2) return;
+  stopHistoryReplayPlay();
+  // Start from oldest if live
+  if (historyReplayIndex < 0) applyHistoryReplayIndex(0);
+  const play = document.getElementById('replayplay');
+  if (play) {
+    play.textContent = '■';
+    play.title = 'Стоп реплея';
+  }
+  const stepMs = prefersReducedMotion ? 0 : 900;
+  const tick = () => {
+    const histNow = MASTERY_HISTORY || [];
+    const cur = historyReplayIndex < 0 ? histNow.length - 1 : historyReplayIndex;
+    if (cur >= histNow.length - 1) {
+      applyHistoryReplayIndex(-1);
+      stopHistoryReplayPlay();
+      return;
+    }
+    applyHistoryReplayIndex(cur + 1);
+    if (historyReplayIndex < 0 || historyReplayIndex >= histNow.length - 1) {
+      stopHistoryReplayPlay();
+      return;
+    }
+    if (stepMs <= 0) {
+      // reduced-motion: jump to end
+      applyHistoryReplayIndex(-1);
+      stopHistoryReplayPlay();
+      return;
+    }
+    historyReplayTimer = setTimeout(tick, stepMs);
+  };
+  historyReplayTimer = setTimeout(tick, stepMs || 0);
 }
 
 function updateInventoryLine() {
@@ -2195,11 +2379,12 @@ function setViewMode(mode) {
   const h = document.getElementById('hint');
   if (h) {
     if (mode === 'route') h.textContent = 'Режим маршрута: чистая дорожка дня; контекст — в «Созвездии»';
-    else if (mode === 'local') h.textContent = 'Созвездие: активная остановка + immediate prereqs/unlocks';
-    else h.textContent = 'Вся карта: полный граф (подписи по-прежнему ограничены)';
+    else if (mode === 'local') h.textContent = 'Созвездие: активная остановка + immediate prereqs/unlocks · реплей снимков справа';
+    else h.textContent = 'Вся карта: этажи подсвечены mastery · реплей снимков справа';
   }
   buildTopList();
   updateStats();
+  updateReplayBar();
   render();
 }
 
@@ -2600,8 +2785,46 @@ document.getElementById('memorybtn').onclick = () => {
   updateActionUI();
   updateProgressLine();
   updateStats();
+  updateReplayBar();
   render();
 };
+// G4.2 history scrubber
+const replayPrev = document.getElementById('replayprev');
+const replayNext = document.getElementById('replaynext');
+const replayLive = document.getElementById('replaylive');
+const replayPlay = document.getElementById('replayplay');
+if (replayPrev) {
+  replayPrev.onclick = () => {
+    stopHistoryReplayPlay();
+    const hist = MASTERY_HISTORY || [];
+    const cur = historyReplayIndex < 0 ? hist.length - 1 : historyReplayIndex;
+    applyHistoryReplayIndex(Math.max(0, cur - 1));
+  };
+}
+if (replayNext) {
+  replayNext.onclick = () => {
+    stopHistoryReplayPlay();
+    const hist = MASTERY_HISTORY || [];
+    if (historyReplayIndex < 0) return;
+    if (historyReplayIndex >= hist.length - 2) applyHistoryReplayIndex(-1);
+    else applyHistoryReplayIndex(historyReplayIndex + 1);
+  };
+}
+if (replayLive) {
+  replayLive.onclick = () => {
+    stopHistoryReplayPlay();
+    applyHistoryReplayIndex(-1);
+  };
+}
+if (replayPlay) {
+  replayPlay.onclick = () => {
+    if (historyReplayTimer) {
+      stopHistoryReplayPlay();
+      return;
+    }
+    playHistoryReplay();
+  };
+}
 const helpBtn = document.getElementById('helpbtn');
 if (helpBtn) helpBtn.onclick = () => openOnboarding();
 const onboardOk = document.getElementById('onboard-ok');

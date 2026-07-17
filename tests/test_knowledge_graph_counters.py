@@ -670,12 +670,26 @@ class Test3DCoverageAndContracts:
         assert "rgba(154,108,255,0.14)" in html  # route underglow
         assert "no particles" in html.lower() or "no particles / stars / bokeh" in html
         # W0 quality: axis/nav, mobile fit, learner status, Q5/Q8/Q9
-        assert "axisY" in html or "H - 78" in html
-        assert "narrow ? 0.90" in html or "W < 560" in html
+        assert "axisY" in html or "H - (narrow" in html or "H - 108" in html
+        assert "W < 560" in html
         assert "Маршрут дня · стоп" in html
         assert "function strokeSmoothPath" in html  # Q8
         assert "function appendObsidianLink" in html  # Q5
-        assert "rgba(255,255,255,0.16)" in html  # Q9 ring track
+        assert "rgba(223,229,255,0.28)" in html  # W0′ R6 ring track contrast
+        # W0′ residual polish + W1 dawn/lanterns (vision №19 first slice)
+        assert "function quizRouteProgress" in html
+        assert "function drawRouteLantern" in html
+        assert "kgx-export-inert" in html
+        assert "в продукте" in html  # W0′-R7 export CTA hierarchy copy
+        assert "пора повторить" in html  # W0′-R5 learner chips
+        assert "due true" not in html  # no raw boolean chip
+        assert "onboard-diag" in html  # W0′-R4 diag in ?-dialog
+        assert "clip:rect(0,0,0,0)" in html  # W0′-R4 #hint not learner surface
+        assert "0.70" in html  # W0′-R1 vertical fill targetH
+        assert ".kgx-compass span{display:none}" in html.replace(" ", "") or (
+            "kgx-compass span" in html and "display:none" in html
+        )  # W0′-R2 variant A
+        assert "небо теплеет" in html or "рассвет" in html  # W1 progress copy
         # G4.1 floor tint + G4.2 history scrubber (G4.3 photo export deferred / privacy)
         assert "function floorProgressScore" in html
         assert "function refreshMemorySetsFromHistory" in html

@@ -252,8 +252,10 @@ Flashcards — это human-in-the-loop генерация:
   **X** = прогрессия, **Z** = полоса; **worth не двигает высоту** — ранг, карточка
   (роль, W, mastery-кольцо, due/novel, дата квиза). **✓** = был в квизе
   (`mastery_history`, любой score; ≥80% ярче). **◆** / двери Obsidian — только
-  embedded. Export: **«снимок от YYYY-MM-DD»**, CTA read-only, без корзины и vault-ссылок.
-  Подписи ≤8; JSON в HTML script-safe.
+  embedded. **Рассвет и фонари:** небо и огни на остановках кодируют quiz-след
+  маршрута дня (0/N — ночь, N/N — рассвет; без отдельной валюты). Export:
+  **«снимок от YYYY-MM-DD»**, CTA read-only («… · в продукте»), без корзины и
+  vault-ссылок. Подписи ≤8; JSON в HTML script-safe.
 - **🏛 3D-зал (embedded)** на вкладке Knowledge Graph — живой Memory Run рядом с 2D-картой.
   **Каналы действий (надёжность iframe):** primary — `setComponentValue` с envelope
   `{kind: 'kg3d_action', envelope}` (работает внутри Streamlit component iframe);

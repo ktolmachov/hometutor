@@ -25,7 +25,7 @@ function setFrameHeight(height) {
 function setComponentValue(value) {
   const v = String(value || '').trim();
   if (!v) return;
-  // Selection-only channel (string concept id). Actions never go through setComponentValue.
+  // Selection channel (string concept id). Actions use setActionValue(envelope).
   streamlitMessage('streamlit:setComponentValue', { value: v, dataType: 'json' });
 }
 
@@ -33,6 +33,13 @@ function syncConceptSelection(conceptId) {
   const v = String(conceptId || '').trim();
   if (!v) return;
   setComponentValue(v);
+}
+
+function setActionValue(envelope) {
+  streamlitMessage('streamlit:setComponentValue', {
+    value: { kind: 'kg3d_action', envelope },
+    dataType: 'json',
+  });
 }
 
 function b64urlEncodeUtf8(str) {
@@ -101,7 +108,7 @@ window.addEventListener('message', (event) => {
   }
   if (data.type === 'hometutor:kg-action') {
     if (!isValidActionEnvelope(data)) return;
-    syncKg3dAction({
+    const envelope = {
       version: 1,
       source: 'kg3d',
       event_id: String(data.event_id).trim(),
@@ -109,7 +116,10 @@ window.addEventListener('message', (event) => {
       concept_id: String(data.concept_id).trim(),
       action: data.action,
       ts: Number(data.ts),
-    });
+    };
+    setActionValue(envelope);
+    // Fallback for Streamlit builds that drop component values during full reruns.
+    window.setTimeout(() => syncKg3dAction(envelope), 250);
   }
 });
 

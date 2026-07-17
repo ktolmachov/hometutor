@@ -35,8 +35,10 @@ from app.ui.knowledge_graph_d3 import (
     consume_kg_3d_query_param,
     ensure_kg_3d_session_nonce,
     mark_kg_3d_event,
+    reserve_kg_3d_event_id,
     render_d3_knowledge_graph,
     render_kg_3d_hall,
+    validate_kg_3d_envelope,
 )
 from app.ui.topics_catalog import load_topics_catalog as _load_topics_catalog
 from app.ui.tutor_mastery_forecast_panel import (
@@ -406,6 +408,40 @@ def _consume_and_apply_kg_3d_query(
     )
     # Pop after execute so the hall on this render gets a fresh ack, and a later
     # unrelated rerun does not re-surface a stale result.
+    result = st.session_state.pop(KG_3D_ACTION_RESULT_KEY, None)
+    return result if isinstance(result, dict) else None
+
+
+def _consume_and_apply_kg_3d_component_value(
+    value,
+    *,
+    node_ids: list[str],
+    knowledge_graph,
+    doc_index: dict,
+) -> dict | None:
+    """Apply action delivered by Streamlit component value; ``_kg3d`` is fallback."""
+    if not isinstance(value, dict):
+        return None
+    if value.get("kind") != "kg3d_action":
+        return None
+    raw_env = value.get("envelope")
+    if not isinstance(raw_env, dict):
+        return None
+    nonce = ensure_kg_3d_session_nonce(st.session_state)
+    env = validate_kg_3d_envelope(
+        raw_env,
+        session_nonce=nonce,
+        node_ids=node_ids,
+    )
+    if env is None:
+        return None
+    if not reserve_kg_3d_event_id(st.session_state, env["event_id"]):
+        return None
+    _execute_kg_3d_action(
+        env,
+        knowledge_graph=knowledge_graph,
+        doc_index=doc_index,
+    )
     result = st.session_state.pop(KG_3D_ACTION_RESULT_KEY, None)
     return result if isinstance(result, dict) else None
 
@@ -1405,6 +1441,9 @@ def _render_knowledge_graph_tab() -> None:
         knowledge_graph=knowledge_graph,
         doc_index=doc_index,
     )
+    if action_result is None:
+        pending_result = st.session_state.pop(KG_3D_ACTION_RESULT_KEY, None)
+        action_result = pending_result if isinstance(pending_result, dict) else None
 
     # Embedded 3D hall (C1): live payload + action bridge. Export remains download above.
     try:
@@ -1427,7 +1466,7 @@ def _render_knowledge_graph_tab() -> None:
         "Маршрут дня · ▶ Начать (навигация в Quiz) · ➕ В конспект · "
         "✓ = был в квизе (mastery_history, любой score) · ◆ = в Живом конспекте."
     )
-    hall_selected = render_kg_3d_hall(
+    hall_value = render_kg_3d_hall(
         payload,
         session_nonce=nonce,
         collected_concept_ids=collected_ids,
@@ -1436,6 +1475,17 @@ def _render_knowledge_graph_tab() -> None:
         height=720,
         key="kg_3d_hall_component",
     )
+    if isinstance(hall_value, dict):
+        result = _consume_and_apply_kg_3d_component_value(
+            hall_value,
+            node_ids=node_ids,
+            knowledge_graph=knowledge_graph,
+            doc_index=doc_index,
+        )
+        if result is not None:
+            st.session_state[KG_3D_ACTION_RESULT_KEY] = result
+            st.rerun()
+    hall_selected = hall_value if isinstance(hall_value, str) else None
     if hall_selected and hall_selected in node_ids:
         st.session_state["kg_selected_concept"] = hall_selected
         st.session_state["kg_action_concept"] = hall_selected

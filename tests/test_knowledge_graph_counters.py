@@ -1163,7 +1163,7 @@ class TestKg3dProductActions:
         assert dg._query_param_first_str("_kgc") == ""
         assert dg._query_param_first_str("missing") == ""
 
-    def test_component_wrapper_uses_kg3d_param_not_envelope_component_value(self):
+    def test_component_wrapper_uses_component_value_with_kg3d_fallback(self):
         from pathlib import Path
 
         html = Path("app/ui/assets/kg_3d_component/index.html").read_text(
@@ -1173,7 +1173,10 @@ class TestKg3dProductActions:
         assert "hometutor:kg-action" in html
         assert "setComponentValue" in html
         assert "streamlit:setComponentValue" in html
+        assert "setActionValue(envelope)" in html
+        assert "kind: 'kg3d_action'" in html
         assert "syncKg3dAction" in html
+        assert "window.setTimeout(() => syncKg3dAction(envelope), 250)" in html
         assert "KG3D_MAX_RAW" in html
         # cleanup only after streamlit:render — not on bare load (race with Python)
         assert "cleanupKg3dParam();" in html
@@ -1241,6 +1244,66 @@ class TestKg3dProductActions:
         assert result["status"] == "succeeded"
         assert result["added"] == 1
         # one-shot: popped from session after return
+        assert KG_3D_ACTION_RESULT_KEY not in state
+
+    def test_component_value_action_returns_action_result(self, monkeypatch):
+        """Primary action channel: component value → execute → one-shot ack."""
+        from app.ui import dashboards_graph as dg
+
+        state: dict = {
+            "kg_3d_session_nonce": "b" * 32,
+        }
+        calls = {"n": 0}
+
+        class _KG:
+            def get_related_documents(self, concept):
+                return ["doc1.md"]
+
+            def get_concepts(self):
+                return {"rag": {"label": "RAG"}}
+
+        def fake_collect(**kwargs):
+            calls["n"] += 1
+            return (1, 0)
+
+        monkeypatch.setattr(dg, "_collect_concept_sections_to_workbench", fake_collect)
+
+        class _FakeSt:
+            session_state = state
+
+            @staticmethod
+            def toast(*a, **k):
+                pass
+
+            @staticmethod
+            def error(*a, **k):
+                pass
+
+        monkeypatch.setattr(dg, "st", _FakeSt)
+        value = {
+            "kind": "kg3d_action",
+            "envelope": {
+                "version": 1,
+                "source": "kg3d",
+                "event_id": "12345678-1234-1234-1234-1234567890aa",
+                "session_nonce": "b" * 32,
+                "concept_id": "rag",
+                "action": "collect",
+                "ts": int(time.time()),
+            },
+        }
+
+        result = dg._consume_and_apply_kg_3d_component_value(
+            value,
+            node_ids=["rag"],
+            knowledge_graph=_KG(),
+            doc_index={},
+        )
+
+        assert calls["n"] == 1
+        assert isinstance(result, dict)
+        assert result["status"] == "succeeded"
+        assert result["added"] == 1
         assert KG_3D_ACTION_RESULT_KEY not in state
 
 

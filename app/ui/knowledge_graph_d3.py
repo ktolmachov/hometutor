@@ -991,11 +991,12 @@ def render_kg_3d_hall(
     action_result: Mapping[str, Any] | None = None,
     height: int = 720,
     key: str = "kg_3d_hall_component",
-) -> str | None:
+) -> Any:
     """Render embedded 3D hall via dedicated Streamlit component.
 
     Returns selected concept id (string) from ``setComponentValue`` if any.
-    Actions are delivered exclusively via ``_kg3d`` query-param (not component value).
+    Actions return as ``{"kind": "kg3d_action", "envelope": ...}``; ``_kg3d``
+    remains a URL fallback for component-value delivery races.
     """
     html = build_kg_3d_html(
         payload,
@@ -1013,6 +1014,8 @@ def render_kg_3d_hall(
     )
     if isinstance(selected, str) and selected.strip():
         return selected.strip()
+    if isinstance(selected, Mapping):
+        return dict(selected)
     return None
 
 

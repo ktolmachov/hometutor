@@ -721,6 +721,62 @@ class Test3DCoverageAndContracts:
         assert len(order_slash) == 2
         assert lesson_anchor_key(order_slash[0]) == lesson_anchor_key(r"docs//lec01.md")
 
+    @pytest.mark.parametrize(
+        "case_nodes,case_edges,expected_first_prefix,expected_len",
+        [
+            # Orphan lessons: no precedes edges at all -> pure lexical fallback, all present.
+            (
+                [
+                    {"id": "lesson:b.md", "is_lesson": True},
+                    {"id": "lesson:a.md", "is_lesson": True},
+                ],
+                [],
+                "lesson:a",
+                2,
+            ),
+            # Mixed extensions collapse to one anchor per group across .md/.txt/.markdown.
+            (
+                [
+                    {"id": "lesson:x.md", "is_lesson": True},
+                    {"id": "lesson:x.txt", "is_lesson": True},
+                    {"id": "lesson:x.markdown", "is_lesson": True},
+                    {"id": "lesson:y.md", "is_lesson": True},
+                ],
+                [{"source": "lesson:x.md", "target": "lesson:y.md", "relation_type": "precedes"}],
+                "lesson:x",
+                2,
+            ),
+        ],
+    )
+    def test_lesson_floor_order_edge_cases(
+        self, case_nodes, case_edges, expected_first_prefix, expected_len
+    ):
+        """R2/P2-5: floor-order oracle on orphan lessons and mixed-extension variants."""
+        from app.ui.knowledge_graph_d3_analysis import lesson_floor_order
+
+        order = lesson_floor_order(case_nodes, case_edges)
+        assert len(order) == expected_len
+        assert order[0].startswith(expected_first_prefix)
+
+    def test_lesson_floor_order_breaks_cycles_without_crashing(self):
+        """R2/P2-5: a precedes cycle must not hang Kahn's algorithm; all lessons
+        still surface once the queue drains and leftovers are appended lexically."""
+        from app.ui.knowledge_graph_d3_analysis import lesson_floor_order
+
+        nodes = [
+            {"id": "lesson:a.md", "is_lesson": True},
+            {"id": "lesson:b.md", "is_lesson": True},
+            {"id": "lesson:c.md", "is_lesson": True},
+        ]
+        edges = [
+            {"source": "lesson:a.md", "target": "lesson:b.md", "relation_type": "precedes"},
+            {"source": "lesson:b.md", "target": "lesson:c.md", "relation_type": "precedes"},
+            {"source": "lesson:c.md", "target": "lesson:a.md", "relation_type": "precedes"},  # cycle
+        ]
+        order = lesson_floor_order(nodes, edges)
+        assert len(order) == 3
+        assert set(order) == {"lesson:a.md", "lesson:b.md", "lesson:c.md"}
+
     def test_script_json_escapes_html_and_script_breakout(self):
         """P1: labels with </script> or < must not break offline export script context."""
         from app.ui.knowledge_graph_d3 import _json_for_script

@@ -584,7 +584,9 @@ function _kgBridgeConceptToStreamlit(conceptId){
     if(window.parent!==window&&window.parent===window.top){
       const pu=new URL(window.top.location.href);
       pu.searchParams.set('_kgc',conceptId);
-      window.top.location.assign(pu.toString());
+      // replace(), not assign(): this is a transient bridge reload, not a
+      // navigation the user should be able to land back on via history/back.
+      window.top.location.replace(pu.toString());
       window.top.localStorage.setItem('_kgc_ts', Date.now()+'|'+conceptId);
     }
   }catch(_){}

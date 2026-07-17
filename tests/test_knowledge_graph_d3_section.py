@@ -260,7 +260,7 @@ class TestKnowledgeGraphSelectionBridge:
         assert "concept:conceptId" in html
         assert "pu.searchParams.set('_kgc',conceptId)" in html
         assert "window.parent!==window&&window.parent===window.top" in html
-        assert "window.top.location.assign(pu.toString())" in html
+        assert "window.top.location.replace(pu.toString())" in html
 
     def test_renderer_returns_selected_concept_from_component(self, monkeypatch: pytest.MonkeyPatch):
         import app.ui.knowledge_graph_d3 as kg_d3

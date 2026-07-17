@@ -38,7 +38,21 @@ function syncConceptSelection(conceptId){
     const pu=new URL(top.location.href);
     if(pu.searchParams.get('_kgc')===v){return;}
     pu.searchParams.set('_kgc',v);
-    top.location.assign(pu.toString());
+    // replace(), not assign(): the rerun is a transient bridge action, not a
+    // navigation the user should be able to land back on via history/back button.
+    top.location.replace(pu.toString());
+  }catch(_){}
+}
+
+// Once the reload from syncConceptSelection has round-tripped through Streamlit,
+// strip _kgc from the address bar so it doesn't linger as a stale, replayable URL.
+function cleanupConceptParam(){
+  try{
+    const top=window.top;
+    const pu=new URL(top.location.href);
+    if(!pu.searchParams.has('_kgc')){return;}
+    pu.searchParams.delete('_kgc');
+    top.history.replaceState(top.history.state,'',pu.toString());
   }catch(_){}
 }
 
@@ -47,6 +61,7 @@ window.__kgSetConcept=syncConceptSelection;
 window.addEventListener('message',event=>{
   const data=event.data||{};
   if(data.type==='streamlit:render'){
+    if(event.source!==window.parent){return;}
     const args=data.args||{};
     const height=Number(args.height)||740;
     frame.style.height=height+'px';
@@ -55,11 +70,13 @@ window.addEventListener('message',event=>{
     return;
   }
   if(data.type==='hometutor:kg-select'&&data.concept){
+    if(event.source!==frame.contentWindow){return;}
     syncConceptSelection(String(data.concept));
   }
 });
 
 setComponentReady();
+cleanupConceptParam();
 </script>
 </body>
 </html>

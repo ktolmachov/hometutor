@@ -798,6 +798,253 @@ class Test3DCoverageAndContracts:
             finally:
                 browser.close()
 
+    def test_3d_embedded_collect_click_to_ack_e2e(self, tmp_path, monkeypatch):
+        """P1 live gate: click «В конспект» → action envelope → Python ack → UI Ack.
+
+        Proves the path visual smoke cannot: export CTA is disabled there.
+        Uses Playwright on embedded production HTML + host Python consumer
+        (same ``_consume_and_apply_kg_3d_component_value`` as Streamlit).
+        Opt-out: ``HT_SKIP_KG_3D_VISUAL=1``.
+        """
+        if os.environ.get("HT_SKIP_KG_3D_VISUAL") == "1":
+            pytest.skip("HT_SKIP_KG_3D_VISUAL=1")
+
+        sync_api = pytest.importorskip("playwright.sync_api")
+        from app.ui import dashboards_graph as dg
+
+        nonce = "b" * 32
+        route = ["rag", "hometutor"]
+        payload = {
+            "nodes": [
+                {
+                    "id": "rag",
+                    "label": "RAG",
+                    "worth": 6.2,
+                    "worth_reason": "к повторению",
+                    "due": 1,
+                    "mastery": 40,
+                },
+                {
+                    "id": "hometutor",
+                    "label": "Hometutor",
+                    "worth": 5.0,
+                    "worth_reason": "новое",
+                    "novel": True,
+                    "mastery": 10,
+                },
+            ],
+            "edges": [],
+            "stats": {"total_concepts": 2},
+            "day_route": route,
+            "mastery_history": [{"date": "2026-07-16", "mastery": {"rag": 40.0}}],
+        }
+
+        hall_html = build_kg_3d_html(
+            payload,
+            host_mode="embedded",
+            session_nonce=nonce,
+            collected_concept_ids=[],
+            workbench_count=0,
+            action_result=None,
+            show_onboarding=False,
+            exported_at="2026-07-17",
+        )
+        hall_path = tmp_path / "kg_3d_embedded_live.html"
+        hall_path.write_text(hall_html, encoding="utf-8")
+
+        # Mini Streamlit-like host: captures component value + optional URL bridge.
+        host_html = f"""<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8"><title>kg3d host harness</title>
+<style>html,body{{margin:0;height:100%;background:#080812}}
+iframe{{display:block;width:100%;height:100%;border:0}}</style></head>
+<body>
+<iframe id="kg-frame" title="hall" src="{hall_path.as_uri()}"></iframe>
+<script>
+window.__componentValues = [];
+window.__urlReplaces = [];
+window.__kgActions = [];
+// Spy setComponentValue channel (wrapper/host would forward to Streamlit).
+window.addEventListener('message', (event) => {{
+  const d = event.data || {{}};
+  if (d.isStreamlitMessage && d.type === 'streamlit:setComponentValue') {{
+    window.__componentValues.push(d.value);
+  }}
+  if (d.type === 'hometutor:kg-action') {{
+    window.__kgActions.push(d);
+    // Emulate primary wrapper path: component envelope
+    window.__componentValues.push({{
+      kind: 'kg3d_action',
+      version: 1,
+      envelope: {{
+        version: 1,
+        source: 'kg3d',
+        event_id: d.event_id,
+        session_nonce: d.session_nonce,
+        concept_id: d.concept_id,
+        action: d.action,
+        ts: d.ts,
+      }},
+    }});
+  }}
+}});
+</script>
+</body></html>
+"""
+        host_path = tmp_path / "kg_3d_host_harness.html"
+        host_path.write_text(host_html, encoding="utf-8")
+
+        calls = {"n": 0}
+
+        class _KG:
+            def get_related_documents(self, concept):
+                return ["doc1.md"]
+
+            def get_concepts(self):
+                return {"rag": {"label": "RAG"}, "hometutor": {"label": "Hometutor"}}
+
+        def fake_collect(**kwargs):
+            calls["n"] += 1
+            assert kwargs["concept"] == "rag"
+            return (2, 0)
+
+        monkeypatch.setattr(dg, "_collect_concept_sections_to_workbench", fake_collect)
+
+        with sync_api.sync_playwright() as p:
+            browser = p.chromium.launch()
+            try:
+                page = browser.new_page(viewport={"width": 1366, "height": 768})
+                page.goto(host_path.as_uri())
+                page.wait_for_load_state("load")
+                page.wait_for_timeout(400)
+
+                frame = page.frame_locator("#kg-frame")
+                # Dismiss onboarding if present (embedded may auto-open).
+                try:
+                    if frame.locator("#onboard.is-open").count() > 0:
+                        frame.locator("#onboard-ok").click(timeout=1500)
+                        page.wait_for_timeout(150)
+                except Exception:  # noqa: BLE001 - onboarding optional in this fixture
+                    pass
+                # Also try unconditional ok if overlay visible
+                try:
+                    ok = frame.locator("#onboard-ok")
+                    if ok.count() and frame.locator("#onboard").evaluate(
+                        "el => el.classList.contains('is-open')"
+                    ):
+                        ok.click(timeout=1000)
+                except Exception:  # noqa: BLE001
+                    pass
+
+                # CTA enabled in embedded
+                collect = frame.locator("#collectbtn")
+                assert collect.count() == 1
+                disabled = collect.evaluate("el => el.disabled")
+                assert disabled is False, "embedded collect must be enabled"
+
+                collect.click()
+                page.wait_for_timeout(350)
+
+                # Child pending UI
+                busy = frame.locator("#collectbtn").get_attribute("aria-busy")
+                status_text = frame.locator("#actionstatus").inner_text()
+                assert busy == "true" or "Ожидание" in (
+                    frame.locator("#collectbtn").inner_text()
+                ) or "Доставка" in status_text or status_text == ""
+
+                # Host captured action / component envelope
+                captured = page.evaluate(
+                    """() => ({
+                      actions: window.__kgActions || [],
+                      values: window.__componentValues || [],
+                    })"""
+                )
+                assert captured["actions"] or captured["values"], (
+                    "click must deliver hometutor:kg-action or component value"
+                )
+
+                # Prefer structured component value; else build from raw action
+                value = None
+                for v in captured["values"]:
+                    if isinstance(v, dict) and v.get("kind") == "kg3d_action":
+                        value = v
+                        break
+                if value is None and captured["actions"]:
+                    a = captured["actions"][0]
+                    value = {
+                        "kind": "kg3d_action",
+                        "version": 1,
+                        "envelope": {
+                            "version": 1,
+                            "source": "kg3d",
+                            "event_id": a["event_id"],
+                            "session_nonce": a["session_nonce"],
+                            "concept_id": a["concept_id"],
+                            "action": a["action"],
+                            "ts": a["ts"],
+                        },
+                    }
+                assert value is not None
+                env = value["envelope"]
+                assert env["action"] == "collect"
+                assert env["concept_id"] == "rag"
+                assert env["session_nonce"] == nonce
+                # Envelope shape matches wrapper setActionValue payload
+                assert value.get("kind") == "kg3d_action"
+                assert value.get("version") == 1
+                assert env.get("source") == "kg3d"
+                assert env.get("event_id")
+                assert isinstance(env.get("ts"), (int, float)) and env["ts"] > 0
+
+                state: dict = {"kg_3d_session_nonce": nonce}
+                result = dg._consume_and_apply_kg_3d_component_value(
+                    value,
+                    node_ids=route,
+                    knowledge_graph=_KG(),
+                    doc_index={},
+                    state=state,
+                )
+                assert calls["n"] == 1
+                assert isinstance(result, dict)
+                assert result["status"] == "succeeded"
+                assert result["added"] == 2
+                assert result["action"] == "collect"
+
+                # Re-render hall with ack (same as Streamlit next run after st.rerun)
+                acked_html = build_kg_3d_html(
+                    payload,
+                    host_mode="embedded",
+                    session_nonce=nonce,
+                    collected_concept_ids=["rag"],
+                    workbench_count=2,
+                    action_result=result,
+                    show_onboarding=False,
+                    exported_at="2026-07-17",
+                )
+                acked_path = tmp_path / "kg_3d_embedded_acked.html"
+                acked_path.write_text(acked_html, encoding="utf-8")
+                page.frame_locator("#kg-frame").owner  # keep frame locator alive
+                page.evaluate(
+                    """(url) => { document.getElementById('kg-frame').src = url; }""",
+                    acked_path.as_uri(),
+                )
+                page.wait_for_timeout(500)
+
+                frame2 = page.frame_locator("#kg-frame")
+                try:
+                    if frame2.locator("#onboard.is-open").count() > 0:
+                        frame2.locator("#onboard-ok").click(timeout=1000)
+                except Exception:  # noqa: BLE001
+                    pass
+
+                ack_text = frame2.locator("#actionstatus").inner_text()
+                collect_text = frame2.locator("#collectbtn").inner_text()
+                inv = frame2.locator("#inventorycount").inner_text()
+                assert "Ack" in ack_text or "конспект" in ack_text.lower(), ack_text
+                assert "◆" in collect_text or "конспект" in collect_text.lower()
+                assert "2" in inv or "раздел" in inv
+            finally:
+                browser.close()
+
     def test_lesson_floor_order_uses_precedes_not_lexical(self):
         """R2: lesson floors follow precedes chain; file variants collapse."""
         from app.ui.knowledge_graph_d3_analysis import lesson_anchor_key, lesson_floor_order

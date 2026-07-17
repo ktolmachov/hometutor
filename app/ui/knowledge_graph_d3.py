@@ -906,6 +906,33 @@ def encode_kg_3d_query_raw(envelope: Mapping[str, Any]) -> str:
     return base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii").rstrip("=")
 
 
+def _normalize_concept_sections(
+    concept_sections: Mapping[str, Sequence[Mapping[str, Any]]] | None,
+) -> dict[str, list[dict[str, Any]]]:
+    """U2: coerce a raw concept→sections mapping into the embedded-only doors payload."""
+    if not isinstance(concept_sections, Mapping):
+        return {}
+    vm: dict[str, list[dict[str, Any]]] = {}
+    for cid, rows in concept_sections.items():
+        key = str(cid or "").strip()
+        if not key or not isinstance(rows, Sequence):
+            continue
+        clean: list[dict[str, Any]] = []
+        for row in rows:
+            if not isinstance(row, Mapping):
+                continue
+            clean.append(
+                {
+                    "heading": str(row.get("heading") or "").strip(),
+                    "in_basket": bool(row.get("in_basket")),
+                    "obsidian_uri": str(row.get("obsidian_uri") or "").strip(),
+                }
+            )
+        if clean:
+            vm[key] = clean
+    return vm
+
+
 def build_kg_3d_html(
     payload: Mapping[str, Any],
     *,
@@ -934,68 +961,40 @@ def build_kg_3d_html(
     - ``show_onboarding``: first-open hall rules overlay (U4)
     """
     mode = "embedded" if str(host_mode or "").strip().lower() == "embedded" else "export"
-    t = _load_3d_template()
-    route_ids = _day_route_ids(payload)
     snap = str(exported_at or "").strip() or date.today().isoformat()
-    collected = [
-        str(c).strip()
-        for c in (collected_concept_ids or [])
-        if str(c).strip()
-    ]
-    # Export never bakes live basket state (honest offline contract).
+    collected = [str(c).strip() for c in (collected_concept_ids or []) if str(c).strip()]
     if mode == "export":
-        collected = []
-        wb_count: int | None = None
-        nonce = ""
-        result: Mapping[str, Any] | None = None
+        # Export never bakes live basket state (honest offline contract).
+        collected, wb_count, nonce, result, onboard = [], None, "", None, False
         sections_vm: dict[str, list[dict[str, Any]]] = {}
-        onboard = False
     else:
         wb_count = int(workbench_count) if workbench_count is not None else None
         nonce = str(session_nonce or "").strip()
         result = action_result if isinstance(action_result, Mapping) else None
-        sections_vm = {}
-        if isinstance(concept_sections, Mapping):
-            for cid, rows in concept_sections.items():
-                key = str(cid or "").strip()
-                if not key or not isinstance(rows, Sequence):
-                    continue
-                clean: list[dict[str, Any]] = []
-                for row in rows:
-                    if not isinstance(row, Mapping):
-                        continue
-                    heading = str(row.get("heading") or "").strip()
-                    uri = str(row.get("obsidian_uri") or "").strip()
-                    clean.append(
-                        {
-                            "heading": heading,
-                            "in_basket": bool(row.get("in_basket")),
-                            "obsidian_uri": uri,
-                        }
-                    )
-                if clean:
-                    sections_vm[key] = clean
+        sections_vm = _normalize_concept_sections(concept_sections)
         onboard = bool(show_onboarding)
-    return (
-        t.replace("__NODES__", _json_for_script(payload.get("nodes", [])))
-        .replace("__EDGES__", _json_for_script(payload.get("edges", [])))
-        .replace("__STATS__", _json_for_script(payload.get("stats", {})))
-        .replace("__HEALTH__", _json_for_script(payload.get("health")))
-        .replace("__DAY_ROUTE__", _json_for_script(route_ids))
-        .replace("__MASTERY_HISTORY__", _json_for_script(payload.get("mastery_history", [])))
-        .replace("__DECAY_VECTOR__", _json_for_script(payload.get("decay_vector", {})))
-        .replace("__SNAPSHOT_DATE__", _json_for_script(snap))
-        .replace("__HOST_MODE__", _json_for_script(mode))
-        .replace("__SESSION_NONCE__", _json_for_script(nonce))
-        .replace("__COLLECTED_IDS__", _json_for_script(collected))
-        .replace("__ACTION_RESULT__", _json_for_script(result))
-        .replace(
-            "__WORKBENCH_COUNT__",
-            _json_for_script(wb_count if wb_count is not None else None),
-        )
-        .replace("__CONCEPT_SECTIONS__", _json_for_script(sections_vm))
-        .replace("__SHOW_ONBOARDING__", "true" if onboard else "false")
-    )
+
+    replacements = {
+        "__NODES__": _json_for_script(payload.get("nodes", [])),
+        "__EDGES__": _json_for_script(payload.get("edges", [])),
+        "__STATS__": _json_for_script(payload.get("stats", {})),
+        "__HEALTH__": _json_for_script(payload.get("health")),
+        "__DAY_ROUTE__": _json_for_script(_day_route_ids(payload)),
+        "__MASTERY_HISTORY__": _json_for_script(payload.get("mastery_history", [])),
+        "__DECAY_VECTOR__": _json_for_script(payload.get("decay_vector", {})),
+        "__SNAPSHOT_DATE__": _json_for_script(snap),
+        "__HOST_MODE__": _json_for_script(mode),
+        "__SESSION_NONCE__": _json_for_script(nonce),
+        "__COLLECTED_IDS__": _json_for_script(collected),
+        "__ACTION_RESULT__": _json_for_script(result),
+        "__WORKBENCH_COUNT__": _json_for_script(wb_count),
+        "__CONCEPT_SECTIONS__": _json_for_script(sections_vm),
+        "__SHOW_ONBOARDING__": "true" if onboard else "false",
+    }
+    html = _load_3d_template()
+    for placeholder, value in replacements.items():
+        html = html.replace(placeholder, value)
+    return html
 
 
 @lru_cache(maxsize=1)

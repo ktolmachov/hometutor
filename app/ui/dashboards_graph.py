@@ -485,6 +485,63 @@ def _collect_concept_sections_to_workbench(
     return added, duplicates
 
 
+def _workbench_basket_headings(basket_rows: list[dict]) -> set[tuple[str, str]]:
+    """(concept, lowercased-heading) pairs already present in the workbench basket."""
+    headings: set[tuple[str, str]] = set()
+    for row in basket_rows:
+        cid = str(row.get("concept") or "").strip()
+        heading = str(row.get("heading_text") or row.get("heading") or "").strip().lower()
+        if cid and heading:
+            headings.add((cid, heading))
+    return headings
+
+
+def _concept_section_cards(
+    *,
+    concept: str,
+    label: str,
+    related_docs: list,
+    doc_index: dict,
+    basket_headings: set[tuple[str, str]],
+) -> list[dict[str, object]]:
+    """U2: best section per related document → door cards (heading + in_basket + obs uri)."""
+    from app.obsidian_export import obsidian_uri
+    from app.section_index import best_section_for, build_section_index
+
+    cards: list[dict[str, object]] = []
+    for rel_path in related_docs:
+        meta = doc_index.get(str(rel_path), {}) if isinstance(doc_index, dict) else {}
+        path = meta.get("relative_path") or meta.get("file_name") or str(rel_path)
+        query = " ".join(
+            part
+            for part in [concept, label, " ".join(meta.get("key_concepts") or [])]
+            if part
+        )
+        try:
+            sections = build_section_index(str(path))
+            section = best_section_for(sections, query) if sections else None
+        except Exception:  # noqa: BLE001
+            continue
+        if section is None:
+            continue
+        heading = str(getattr(section, "heading_text", "") or "").strip()
+        md_abs = getattr(section, "konspekt_md_abs", None)
+        uri = ""
+        try:
+            if md_abs:
+                uri = str(obsidian_uri(md_abs, heading_text=heading) or "")
+        except Exception:  # noqa: BLE001
+            uri = ""
+        cards.append(
+            {
+                "heading": heading,
+                "in_basket": (concept, heading.lower()) in basket_headings,
+                "obsidian_uri": uri,
+            }
+        )
+    return cards
+
+
 def _concept_sections_view_model(
     *,
     concept_ids: list[str],
@@ -498,9 +555,6 @@ def _concept_sections_view_model(
     related document). Does not mutate the workbench; only reports ``in_basket``.
     Cached in ``st.session_state`` when ``state`` is None.
     """
-    from app.obsidian_export import obsidian_uri
-    from app.section_index import best_section_for, build_section_index
-
     ids = [str(c).strip() for c in concept_ids if str(c or "").strip()]
     if not ids:
         return {}
@@ -508,13 +562,7 @@ def _concept_sections_view_model(
     cache_key = "kg_3d_concept_sections_vm"
     cache_sig_key = "kg_3d_concept_sections_sig"
     basket_rows = _workbench_state_rows(state)
-    basket_headings: set[tuple[str, str]] = set()
-    for row in basket_rows:
-        cid = str(row.get("concept") or "").strip()
-        heading = str(row.get("heading_text") or row.get("heading") or "").strip().lower()
-        if cid and heading:
-            basket_headings.add((cid, heading))
-
+    basket_headings = _workbench_basket_headings(basket_rows)
     sig = (
         tuple(ids),
         tuple(sorted(f"{c}:{h}" for c, h in basket_headings)),
@@ -537,7 +585,6 @@ def _concept_sections_view_model(
         except Exception:  # noqa: BLE001 - cache is best-effort
             pass
 
-    out: dict[str, list[dict[str, object]]] = {}
     try:
         concepts = knowledge_graph.get_concepts() if knowledge_graph is not None else {}
     except Exception:  # noqa: BLE001
@@ -545,6 +592,7 @@ def _concept_sections_view_model(
     if not isinstance(concepts, dict):
         concepts = {}
 
+    out: dict[str, list[dict[str, object]]] = {}
     for concept in ids:
         raw = concepts.get(concept) if isinstance(concepts, dict) else {}
         info = raw if isinstance(raw, dict) else {}
@@ -553,39 +601,15 @@ def _concept_sections_view_model(
             related_docs = list(knowledge_graph.get_related_documents(concept) or [])
         except Exception:  # noqa: BLE001
             related_docs = []
-        rows: list[dict[str, object]] = []
-        for rel_path in related_docs:
-            meta = doc_index.get(str(rel_path), {}) if isinstance(doc_index, dict) else {}
-            path = meta.get("relative_path") or meta.get("file_name") or str(rel_path)
-            query = " ".join(
-                part
-                for part in [concept, label, " ".join(meta.get("key_concepts") or [])]
-                if part
-            )
-            try:
-                sections = build_section_index(str(path))
-                section = best_section_for(sections, query) if sections else None
-            except Exception:  # noqa: BLE001
-                continue
-            if section is None:
-                continue
-            heading = str(getattr(section, "heading_text", "") or "").strip()
-            md_abs = getattr(section, "konspekt_md_abs", None)
-            uri = ""
-            try:
-                if md_abs:
-                    uri = str(obsidian_uri(md_abs, heading_text=heading) or "")
-            except Exception:  # noqa: BLE001
-                uri = ""
-            rows.append(
-                {
-                    "heading": heading,
-                    "in_basket": (concept, heading.lower()) in basket_headings,
-                    "obsidian_uri": uri,
-                }
-            )
-        if rows:
-            out[concept] = rows
+        cards = _concept_section_cards(
+            concept=concept,
+            label=label,
+            related_docs=related_docs,
+            doc_index=doc_index,
+            basket_headings=basket_headings,
+        )
+        if cards:
+            out[concept] = cards
 
     if state is None:
         try:

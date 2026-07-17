@@ -49,21 +49,11 @@ def _view_visible(target_view: str) -> bool:
     return feature_visible(spec, level=get_ui_level(), overrides=get_overrides())
 
 
-def open_mnemo_polis(*, state: Any | None = None) -> None:
-    """W4a: deep link «В Мнемополис» → Knowledge Graph (3D Memory Run).
+def open_mnemo_polis(*, state: Any | None = None, return_from: str | None = None) -> None:
+    """W4a: deep link «В Мнемополис» → Knowledge Graph (delegates to mnemo_nav)."""
+    from app.ui.mnemo_nav import open_mnemo_polis as _open
 
-    Uses ``PENDING_CURRENT_VIEW_KEY`` only (never writes ``current_view`` after
-    the selectbox is instantiated). Optional ``kg_open_3d_hall`` is UI-state for
-    the KG tab to emphasize the embedded 3D hall on arrival.
-    """
-    target = st.session_state if state is None else state
-    target[PENDING_CURRENT_VIEW_KEY] = "Knowledge Graph"
-    target["kg_open_3d_hall"] = True
-    # Ceremonial hub — not home; keep origin for breadcrumb if present.
-    if "home_breadcrumb_origin" not in target:
-        from app.ui.constants import HOME_VIEW
-
-        target["home_breadcrumb_origin"] = HOME_VIEW
+    _open(state=state, return_from=return_from)
 
 
 def _restore_preview_entity_rows(preview: dict) -> dict[str, int]:
@@ -432,7 +422,9 @@ def render_sidebar(index_stats: dict | None):
             key="sidebar_nav_mnemo_polis",
             help="Открыть Knowledge Graph → 3D-зал (город памяти). Главный экран — Mission Control.",
         ):
-            open_mnemo_polis()
+            from app.ui.mnemo_nav import open_mnemo_polis as _open_mnemo
+
+            _open_mnemo()
             st.rerun()
         _cw = st.session_state.pop("coach_weak_spot_topic", None)
         if _cw:

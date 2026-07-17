@@ -649,6 +649,21 @@ def _render_interactive_quiz_tab() -> None:
             f"Результат: **{pct_done:.0f}%** ({ok}/{total}). "
             f"Граф: обновлено **{n_marked}** концепт(ов). История сессии {sid[:8]}…"
         )
+        # W4b: return to ceremonial hub — quiz channel updates ✓ / dawn honestly.
+        try:
+            from app.ui.mnemo_nav import render_return_to_mnemo_cta
+
+            if render_return_to_mnemo_cta(
+                key="interactive_quiz_return_mnemo",
+                return_from="quiz",
+                caption=(
+                    "Мир покажет quiz-след: ✓ на остановках и небо/фонари "
+                    "(не SR/туман и не ◆ — у них свои каналы)."
+                ),
+            ):
+                st.rerun()
+        except Exception:  # noqa: BLE001 - return CTA must not break finish path
+            pass
 
     # ── CTA: convert quiz to flashcards (E12) ──
     if st.session_state.get("interactive_quiz_data") and questions:

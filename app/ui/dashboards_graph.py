@@ -1738,9 +1738,19 @@ def _render_knowledge_graph_tab() -> None:
         keeper_guide = None
         keeper_threats = None
 
-    # W4a: deep link from sidebar «В Мнемополис» lands on this hall section.
-    if st.session_state.pop("kg_open_3d_hall", False):
-        st.success("🌆 Мнемополис · Memory Run (3D-зал). Mission Control остаётся главным экраном.")
+    # W4a/W4b: deep link / return-from-quiz lands on this hall section.
+    try:
+        from app.ui.mnemo_nav import arrival_banner_message
+
+        _mnemo_msg = arrival_banner_message()
+        if _mnemo_msg:
+            st.success(_mnemo_msg)
+    except Exception:  # noqa: BLE001 - banner is non-critical
+        if st.session_state.pop("kg_open_3d_hall", False):
+            st.success(
+                "🌆 Мнемополис · Memory Run (3D-зал). "
+                "Mission Control остаётся главным экраном."
+            )
     st.markdown("##### 🏛 3D-зал (embedded) · Мнемополис")
     st.caption(
         "Memory Run · ▶ Начать · 🔁 Повторить · В конспект · "

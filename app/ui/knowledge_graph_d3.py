@@ -934,6 +934,60 @@ def _normalize_concept_sections(
     return vm
 
 
+def _normalize_keeper_guide(
+    keeper_guide: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """W3b: coerce the Хранитель guide view-model into a safe baked dict."""
+    if isinstance(keeper_guide, Mapping) and keeper_guide:
+        by_stop = keeper_guide.get("by_stop")
+        return {
+            "text": str(keeper_guide.get("text") or ""),
+            "source": str(keeper_guide.get("source") or "degrade"),
+            "reason": str(keeper_guide.get("reason") or ""),
+            "by_stop": dict(by_stop) if isinstance(by_stop, Mapping) else {},
+            "used_llm": bool(keeper_guide.get("used_llm")),
+        }
+    return {"text": "", "source": "none", "reason": "", "by_stop": {}, "used_llm": False}
+
+
+def _normalize_keeper_threats(
+    keeper_threats: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """W3c: coerce the threats view-model (deterministic items + optional prose)."""
+    if not (isinstance(keeper_threats, Mapping) and keeper_threats):
+        return {
+            "text": "",
+            "source": "none",
+            "reason": "",
+            "items": [],
+            "count": 0,
+            "used_llm": False,
+            "review_action": "review",
+        }
+    items_raw = keeper_threats.get("items") or []
+    items_list: list[dict[str, Any]] = []
+    if isinstance(items_raw, (list, tuple)):
+        for it in items_raw:
+            if isinstance(it, Mapping):
+                items_list.append(
+                    {
+                        "id": str(it.get("id") or ""),
+                        "label": str(it.get("label") or it.get("id") or ""),
+                        "forget_pct": int(it.get("forget_pct") or 0),
+                        "due": it.get("due"),
+                    }
+                )
+    return {
+        "text": str(keeper_threats.get("text") or ""),
+        "source": str(keeper_threats.get("source") or "degrade"),
+        "reason": str(keeper_threats.get("reason") or ""),
+        "items": items_list,
+        "count": int(keeper_threats.get("count") or len(items_list)),
+        "used_llm": bool(keeper_threats.get("used_llm")),
+        "review_action": "review",
+    }
+
+
 def build_kg_3d_html(
     payload: Mapping[str, Any],
     *,
@@ -979,56 +1033,8 @@ def build_kg_3d_html(
         sections_vm = _normalize_concept_sections(concept_sections)
         onboard = bool(show_onboarding)
 
-    # Keeper guide: always bake a safe dict (export may include static degrade).
-    guide_vm: dict[str, Any]
-    if isinstance(keeper_guide, Mapping) and keeper_guide:
-        guide_vm = {
-            "text": str(keeper_guide.get("text") or ""),
-            "source": str(keeper_guide.get("source") or "degrade"),
-            "reason": str(keeper_guide.get("reason") or ""),
-            "by_stop": dict(keeper_guide.get("by_stop") or {})
-            if isinstance(keeper_guide.get("by_stop"), Mapping)
-            else {},
-            "used_llm": bool(keeper_guide.get("used_llm")),
-        }
-    else:
-        guide_vm = {"text": "", "source": "none", "reason": "", "by_stop": {}, "used_llm": False}
-
-    # W3c threats: deterministic items + optional prose.
-    threats_vm: dict[str, Any]
-    if isinstance(keeper_threats, Mapping) and keeper_threats:
-        items_raw = keeper_threats.get("items") or []
-        items_list: list[dict[str, Any]] = []
-        if isinstance(items_raw, (list, tuple)):
-            for it in items_raw:
-                if isinstance(it, Mapping):
-                    items_list.append(
-                        {
-                            "id": str(it.get("id") or ""),
-                            "label": str(it.get("label") or it.get("id") or ""),
-                            "forget_pct": int(it.get("forget_pct") or 0),
-                            "due": it.get("due"),
-                        }
-                    )
-        threats_vm = {
-            "text": str(keeper_threats.get("text") or ""),
-            "source": str(keeper_threats.get("source") or "degrade"),
-            "reason": str(keeper_threats.get("reason") or ""),
-            "items": items_list,
-            "count": int(keeper_threats.get("count") or len(items_list)),
-            "used_llm": bool(keeper_threats.get("used_llm")),
-            "review_action": "review",
-        }
-    else:
-        threats_vm = {
-            "text": "",
-            "source": "none",
-            "reason": "",
-            "items": [],
-            "count": 0,
-            "used_llm": False,
-            "review_action": "review",
-        }
+    guide_vm = _normalize_keeper_guide(keeper_guide)
+    threats_vm = _normalize_keeper_threats(keeper_threats)
 
     replacements = {
         "__NODES__": _json_for_script(payload.get("nodes", [])),

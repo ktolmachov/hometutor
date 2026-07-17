@@ -218,6 +218,21 @@ def render_scoped_self_check_quiz(
             )
         if submitted_count >= total and total > 0:
             st.divider()
+            # W4b: return to Mnemonopolis after full quiz completion (quiz channel).
+            try:
+                from app.ui.mnemo_nav import render_return_to_mnemo_cta
+
+                if render_return_to_mnemo_cta(
+                    key=f"{source_key}_return_mnemo",
+                    return_from="quiz",
+                    caption=(
+                        "Квиз завершён · в мире обновится quiz-след (✓ / рассвет), "
+                        "не «всё, что вы сделали»."
+                    ),
+                ):
+                    st.rerun()
+            except Exception:  # noqa: BLE001 - optional CTA
+                pass
             st.markdown("##### Карточки для повторения")
             qid = str(meta.get("identifier") or meta.get("relative_path") or "").strip()
             deck_label = qid[:48] if qid else "квиз"

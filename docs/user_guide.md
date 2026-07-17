@@ -268,6 +268,8 @@ Flashcards — это human-in-the-loop генерация:
   vault-ссылок. Подписи ≤8; JSON в HTML script-safe.
 - **🌆 В Мнемополис** (сайдбар) — deep link на вкладку Knowledge Graph / 3D-зал
   (город памяти). **Не** заменяет Mission Control: home остаётся главным экраном.
+- **🌆 Вернуться в Мнемополис** — после завершения interactive/scoped quiz: мир
+  покажет **quiz-след** (✓ / рассвет), не SR/туман и не ◆ (свои каналы).
 - **🏛 3D-зал (embedded)** на вкладке Knowledge Graph — живой Memory Run рядом с 2D-картой.
   **Каналы действий (надёжность iframe):** primary — `setComponentValue` с envelope
   `{kind: 'kg3d_action', envelope}` (работает внутри Streamlit component iframe);

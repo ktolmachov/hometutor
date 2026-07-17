@@ -207,7 +207,12 @@
   .stop.done .stop-index{border-color:var(--kgx-green);color:var(--kgx-green)}
   .stop-index{
     width:24px;height:24px;border-radius:50%;border:1px solid var(--kgx-line);
-    display:grid;place-items:center;font-size:0.65rem;flex:none;
+    display:grid;place-items:center;font-size:0.65rem;flex:none;position:relative;
+  }
+  .stop-check{
+    position:absolute;right:-5px;top:-6px;width:14px;height:14px;border-radius:50%;
+    display:grid;place-items:center;background:var(--kgx-panel);border:1px solid var(--kgx-green);
+    color:var(--kgx-green);font-size:0.58rem;line-height:1;box-shadow:0 0 10px rgba(114,241,165,0.26);
   }
   .stop-copy{min-width:0}
   .stop-copy strong{color:inherit;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.75rem}
@@ -2204,7 +2209,14 @@ function buildTopList() {
     if (doneConceptIds.has(n.id)) d.classList.add('done');
     const index = document.createElement('span');
     index.className = 'stop-index';
-    index.textContent = doneConceptIds.has(n.id) ? '✓' : String(idx + 1);
+    index.textContent = String(idx + 1);
+    if (doneConceptIds.has(n.id)) {
+      const check = document.createElement('span');
+      check.className = 'stop-check';
+      check.textContent = '✓';
+      check.setAttribute('aria-label', 'был в квизе');
+      index.appendChild(check);
+    }
     d.appendChild(index);
     const copy = document.createElement('span');
     copy.className = 'stop-copy';

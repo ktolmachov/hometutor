@@ -1693,6 +1693,22 @@ class TestKg3dMemoryAndInventoryContract:
         )
         assert "return new Set(allow.slice(0, 8));" in html
 
+    def test_route_stop_done_check_overlays_index(self):
+        html = build_kg_3d_html(
+            {
+                "nodes": [{"id": "a", "label": "A"}],
+                "edges": [],
+                "stats": {},
+                "day_route": ["a"],
+                "mastery_history": [{"date": "2026-07-16", "mastery": {"a": 40.0}}],
+            },
+            exported_at="2026-07-17",
+        )
+        assert "index.textContent = String(idx + 1);" in html
+        assert "check.className = 'stop-check';" in html
+        assert "index.appendChild(check);" in html
+        assert "index.textContent = doneConceptIds.has(n.id) ? '✓' : String(idx + 1);" not in html
+
     def test_default_hall_component_key_is_not_2d_name(self):
         import inspect
 

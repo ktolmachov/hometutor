@@ -25,7 +25,8 @@ function setFrameHeight(height) {
 function setComponentValue(value) {
   const v = String(value || '').trim();
   if (!v) return;
-  // Selection channel (string concept id). Actions use setActionValue(envelope).
+  // Selection-only channel (string concept id). Actions never go through setComponentValue
+  // (plan G0: sole delivery path is query-param _kg3d — no dual delivery).
   streamlitMessage('streamlit:setComponentValue', { value: v, dataType: 'json' });
 }
 
@@ -35,13 +36,6 @@ function syncConceptSelection(conceptId) {
   setComponentValue(v);
 }
 
-function setActionValue(envelope) {
-  streamlitMessage('streamlit:setComponentValue', {
-    value: { kind: 'kg3d_action', envelope },
-    dataType: 'json',
-  });
-}
-
 function b64urlEncodeUtf8(str) {
   const bytes = new TextEncoder().encode(str);
   let bin = '';
@@ -49,7 +43,7 @@ function b64urlEncodeUtf8(str) {
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
-// Action bridge: only query-param _kg3d delivers intent to Python (full rerun).
+// Sole action bridge: encode envelope into _kg3d and force a full Streamlit rerun.
 function syncKg3dAction(envelope) {
   try {
     const raw = b64urlEncodeUtf8(JSON.stringify(envelope));
@@ -96,8 +90,8 @@ window.addEventListener('message', (event) => {
     frame.style.height = height + 'px';
     frame.srcdoc = String(args.html || '');
     setFrameHeight(height);
-    // Strip _kg3d only after host has had a chance to consume it on this run.
-    // Do not strip on bare component load (races Python before remove).
+    // Strip _kg3d only after host had a chance to consume it on this run.
+    // Never strip on bare component load (races Python before remove).
     cleanupKg3dParam();
     return;
   }
@@ -108,7 +102,7 @@ window.addEventListener('message', (event) => {
   }
   if (data.type === 'hometutor:kg-action') {
     if (!isValidActionEnvelope(data)) return;
-    const envelope = {
+    syncKg3dAction({
       version: 1,
       source: 'kg3d',
       event_id: String(data.event_id).trim(),
@@ -116,10 +110,7 @@ window.addEventListener('message', (event) => {
       concept_id: String(data.concept_id).trim(),
       action: data.action,
       ts: Number(data.ts),
-    };
-    setActionValue(envelope);
-    // Fallback for Streamlit builds that drop component values during full reruns.
-    window.setTimeout(() => syncKg3dAction(envelope), 250);
+    });
   }
 });
 

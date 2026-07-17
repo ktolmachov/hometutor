@@ -67,6 +67,8 @@ window.addEventListener('message',event=>{
     frame.style.height=height+'px';
     frame.srcdoc=String(args.html||'');
     setFrameHeight(height);
+    // Strip _kgc only after host had a chance to consume it (same race fix as 3D _kg3d).
+    cleanupConceptParam();
     return;
   }
   if(data.type==='hometutor:kg-select'&&data.concept){
@@ -76,7 +78,6 @@ window.addEventListener('message',event=>{
 });
 
 setComponentReady();
-cleanupConceptParam();
 </script>
 </body>
 </html>

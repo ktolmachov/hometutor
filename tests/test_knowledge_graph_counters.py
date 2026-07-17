@@ -540,12 +540,13 @@ class Test3DCoverageAndContracts:
             payload = {**payload, "day_route": ["b", "c", "a"]}
         html3 = build_kg_3d_html(payload)
 
-        # Default route scene + mode switcher
+        # Default route scene + mode switcher (Memory Run skin / U0)
         assert "viewMode = 'route'" in html3 or 'viewMode = "route"' in html3
         assert "modeRoute" in html3
         assert "modeLocal" in html3
         assert "modeAll" in html3
         assert "Вся карта" in html3
+        assert "Созвездие" in html3
         assert "Стоп" in html3
         assert "Home" in html3 or "homebtn" in html3
         # Tour state machine (L2), not raw setInterval flight
@@ -576,17 +577,23 @@ class Test3DCoverageAndContracts:
         assert "function drawActiveReasonCallout" in html3
         assert "Стоп ${idx + 1}/${route.length} · ${name} · ${reason}" in html3
         assert "!(viewMode === 'route' && isActive)" in html3
-        assert "#side{width:300px" in html3
-        assert "overflow:hidden" in html3.split("#side{width:300px", 1)[1].split("}", 1)[0]
-        assert ".list{overflow:auto" in html3
+        # Memory Run panel + topbar design contract (U0)
+        assert 'id="topbar"' in html3
+        assert "#side{" in html3 and "width:314px" in html3
+        side_css = html3.split("#side{", 1)[1].split("}", 1)[0]
+        assert "overflow:hidden" in side_css
+        assert "min-height:40px" in html3  # CTA height
+        assert "12px system-ui" in html3  # canvas labels ≥12px
         assert "function hoverAt" in html3
-        assert "hover — причина" in html3
-        assert "клик — фокус" in html3
-        assert "topbar" not in html3
-        # G0/G2 render-contract extensions (placeholders substituted)
+        assert "function openInterior" in html3
+        assert "function openOnboarding" in html3
+        assert "kgx-action-primary" in html3
+        assert "masteryring" in html3
+        # G0/G2/U2 render-contract extensions (placeholders substituted)
         assert "HOST_MODE" in html3
         assert "MASTERY_HISTORY" in html3
         assert "SNAPSHOT_DATE" in html3
+        assert "CONCEPT_SECTIONS" in html3
         assert "startbtn" in html3 and "collectbtn" in html3
         assert "function beginAction" in html3
         assert "function drawMemoryTrace" in html3
@@ -594,6 +601,8 @@ class Test3DCoverageAndContracts:
         assert "hometutor:kg-action" in html3
         assert "__HOST_MODE__" not in html3
         assert "__MASTERY_HISTORY__" not in html3
+        assert "__CONCEPT_SECTIONS__" not in html3
+        assert "__SHOW_ONBOARDING__" not in html3
         assert "viewMode = 'route';" in html3.split("document.getElementById('homebtn').onclick", 1)[1]
         assert "function routePlatformWorldPoints" in html3
         assert "targetW" in html3 and "targetH" in html3
@@ -628,14 +637,64 @@ class Test3DCoverageAndContracts:
         for rid in payload["day_route"]:
             assert rid in html3
 
-    def test_3d_visual_smoke_opt_in(self, tmp_path):
-        """V2 visual gate: production ``build_kg_3d_html`` on viewport matrix.
+    def test_3d_memory_run_design_contract_static(self):
+        """V2′ structural design contract (no browser): topbar, CTA, tokens, doors off in export."""
+        payload = {
+            "nodes": [
+                {"id": "a", "label": "Agent", "worth": 6.1, "worth_reason": "к повторению", "due": 1},
+                {"id": "b", "label": "RAG", "worth": 5.5, "worth_reason": "новое", "novel": True},
+            ],
+            "edges": [],
+            "stats": {"total_concepts": 2},
+            "day_route": ["a", "b"],
+            "mastery_history": [{"date": "2026-07-16", "mastery": {"a": 40.0}}],
+        }
+        html = build_kg_3d_html(payload, exported_at="2026-07-17")
+        assert 'id="topbar"' in html
+        assert "kgx-action-primary" in html
+        assert "min-height:40px" in html
+        assert "--kgx-cyan" in html and "--kgx-lime" in html
+        assert "function openInterior" in html
+        assert "function openOnboarding" in html
+        assert "Правила зала" in html
+        # Export must not bake live doors / onboarding host flag
+        assert "CONCEPT_SECTIONS = {}" in html or "CONCEPT_SECTIONS ={}" in html.replace(" ", "")
+        assert "SHOW_ONBOARDING = false" in html or "SHOW_ONBOARDING=false" in html.replace(" ", "")
+        assert "obsidian://" not in html
+        assert "__CONCEPT_SECTIONS__" not in html
 
-        Opt-in with ``HT_RUN_KG_3D_VISUAL=1`` (Playwright browsers required).
-        Default unit suite stays free of browser binaries; CI can enable the flag.
+        embedded = build_kg_3d_html(
+            payload,
+            host_mode="embedded",
+            session_nonce="a" * 32,
+            concept_sections={
+                "a": [
+                    {
+                        "heading": "Retrieval",
+                        "in_basket": True,
+                        "obsidian_uri": "obsidian://open?vault=t&file=x",
+                    }
+                ]
+            },
+            show_onboarding=True,
+        )
+        assert "obsidian://open" in embedded
+        assert "SHOW_ONBOARDING = true" in embedded or "SHOW_ONBOARDING=true" in embedded.replace(
+            " ", ""
+        )
+        assert "Открыть раздел" in embedded
+
+    def test_3d_visual_smoke_viewport_matrix(self, tmp_path):
+        """V2′ visual gate: production ``build_kg_3d_html`` on viewport matrix.
+
+        Always-on when Playwright + Chromium are installed (importorskip otherwise).
+        Structural design contract (``test_3d_memory_run_design_contract_static``) runs
+        without a browser. This test proves the running production HTML: canvas not
+        empty, Memory Run skin (topbar/CTA≥40px), route orientation, export inert.
+        Opt-out: ``HT_SKIP_KG_3D_VISUAL=1`` (for environments without browsers).
         """
-        if os.environ.get("HT_RUN_KG_3D_VISUAL") != "1":
-            pytest.skip("set HT_RUN_KG_3D_VISUAL=1 to run the browser smoke")
+        if os.environ.get("HT_SKIP_KG_3D_VISUAL") == "1":
+            pytest.skip("HT_SKIP_KG_3D_VISUAL=1")
 
         sync_api = pytest.importorskip("playwright.sync_api")
         concepts = {
@@ -699,19 +758,23 @@ class Test3DCoverageAndContracts:
                           }
                           const start = document.querySelector('#startbtn');
                           const collect = document.querySelector('#collectbtn');
+                          const startH = start ? start.getBoundingClientRect().height : 0;
                           const bodyOverflowX = document.documentElement.scrollWidth >
                             document.documentElement.clientWidth + 1;
                           return {
                             nonBg,
                             routeOn: document.querySelector('#modeRoute')?.classList.contains('on'),
-                            topbarGone: !document.querySelector('#topbar'),
+                            topbarPresent: !!document.querySelector('#topbar'),
                             stopCount: document.querySelectorAll('.stop').length,
                             stopInfo: document.querySelector('#stopinfo')?.textContent || '',
+                            stopName: document.querySelector('#stopname')?.textContent || '',
                             snapshot: document.querySelector('#snapshotline')?.textContent || '',
                             startDisabled: !!start?.disabled,
                             collectDisabled: !!collect?.disabled,
+                            startMinH: startH,
                             bodyOverflowX,
                             canvasCssH: canvas?.clientHeight || 0,
+                            hasPrimaryCtaClass: !!document.querySelector('.kgx-action-primary'),
                           };
                         }
                         """
@@ -720,12 +783,15 @@ class Test3DCoverageAndContracts:
 
                     assert result["nonBg"] > 100, viewport
                     assert result["routeOn"] is True, viewport
-                    assert result["topbarGone"] is True, viewport
+                    assert result["topbarPresent"] is True, viewport
+                    assert result["hasPrimaryCtaClass"] is True, viewport
                     assert result["stopCount"] == len(route), viewport
                     assert f"Стоп 1/{len(route)}" in result["stopInfo"], viewport
+                    assert result["stopName"], viewport
                     assert "снимок от 2026-07-17" in result["snapshot"], viewport
                     assert result["startDisabled"] is True, viewport
                     assert result["collectDisabled"] is True, viewport
+                    assert result["startMinH"] >= 40, viewport
                     assert result["bodyOverflowX"] is False, viewport
                     min_h = 400 if viewport["width"] <= 560 else 450
                     assert result["canvasCssH"] >= min_h, viewport
@@ -1163,7 +1229,8 @@ class TestKg3dProductActions:
         assert dg._query_param_first_str("_kgc") == ""
         assert dg._query_param_first_str("missing") == ""
 
-    def test_component_wrapper_uses_component_value_with_kg3d_fallback(self):
+    def test_component_wrapper_sole_kg3d_action_channel(self):
+        """Plan G0: actions only via _kg3d; setComponentValue is selection-only."""
         from pathlib import Path
 
         html = Path("app/ui/assets/kg_3d_component/index.html").read_text(
@@ -1173,15 +1240,23 @@ class TestKg3dProductActions:
         assert "hometutor:kg-action" in html
         assert "setComponentValue" in html
         assert "streamlit:setComponentValue" in html
-        assert "setActionValue(envelope)" in html
-        assert "kind: 'kg3d_action'" in html
         assert "syncKg3dAction" in html
-        assert "window.setTimeout(() => syncKg3dAction(envelope), 250)" in html
         assert "KG3D_MAX_RAW" in html
+        # No dual delivery via component-value action envelopes
+        assert "setActionValue" not in html
+        assert "kg3d_action" not in html
+        assert "window.setTimeout(() => syncKg3dAction" not in html
         # cleanup only after streamlit:render — not on bare load (race with Python)
         assert "cleanupKg3dParam();" in html
         load_tail = html.split("setComponentReady();", 1)[1]
         assert "cleanupKg3dParam()" not in load_tail
+        # 2D mirror: _kgc cleanup also deferred to streamlit:render
+        html2d = Path("app/ui/assets/kg_d3_component/index.html").read_text(
+            encoding="utf-8"
+        )
+        assert "cleanupConceptParam();" in html2d
+        load_tail_2d = html2d.split("setComponentReady();", 1)[1]
+        assert "cleanupConceptParam()" not in load_tail_2d
 
     def test_consume_returns_action_result_after_execute(self, monkeypatch):
         """Host returns one-shot ack for the same render (no NameError / stale pop)."""
@@ -1246,65 +1321,11 @@ class TestKg3dProductActions:
         # one-shot: popped from session after return
         assert KG_3D_ACTION_RESULT_KEY not in state
 
-    def test_component_value_action_returns_action_result(self, monkeypatch):
-        """Primary action channel: component value → execute → one-shot ack."""
+    def test_no_component_value_action_consumer(self):
+        """Dual-channel component-value action path must not exist (plan G0)."""
         from app.ui import dashboards_graph as dg
 
-        state: dict = {
-            "kg_3d_session_nonce": "b" * 32,
-        }
-        calls = {"n": 0}
-
-        class _KG:
-            def get_related_documents(self, concept):
-                return ["doc1.md"]
-
-            def get_concepts(self):
-                return {"rag": {"label": "RAG"}}
-
-        def fake_collect(**kwargs):
-            calls["n"] += 1
-            return (1, 0)
-
-        monkeypatch.setattr(dg, "_collect_concept_sections_to_workbench", fake_collect)
-
-        class _FakeSt:
-            session_state = state
-
-            @staticmethod
-            def toast(*a, **k):
-                pass
-
-            @staticmethod
-            def error(*a, **k):
-                pass
-
-        monkeypatch.setattr(dg, "st", _FakeSt)
-        value = {
-            "kind": "kg3d_action",
-            "envelope": {
-                "version": 1,
-                "source": "kg3d",
-                "event_id": "12345678-1234-1234-1234-1234567890aa",
-                "session_nonce": "b" * 32,
-                "concept_id": "rag",
-                "action": "collect",
-                "ts": int(time.time()),
-            },
-        }
-
-        result = dg._consume_and_apply_kg_3d_component_value(
-            value,
-            node_ids=["rag"],
-            knowledge_graph=_KG(),
-            doc_index={},
-        )
-
-        assert calls["n"] == 1
-        assert isinstance(result, dict)
-        assert result["status"] == "succeeded"
-        assert result["added"] == 1
-        assert KG_3D_ACTION_RESULT_KEY not in state
+        assert not hasattr(dg, "_consume_and_apply_kg_3d_component_value")
 
 
 class TestKg3dMemoryAndInventoryContract:

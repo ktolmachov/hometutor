@@ -35,10 +35,8 @@ from app.ui.knowledge_graph_d3 import (
     consume_kg_3d_query_param,
     ensure_kg_3d_session_nonce,
     mark_kg_3d_event,
-    reserve_kg_3d_event_id,
     render_d3_knowledge_graph,
     render_kg_3d_hall,
-    validate_kg_3d_envelope,
 )
 from app.ui.topics_catalog import load_topics_catalog as _load_topics_catalog
 from app.ui.tutor_mastery_forecast_panel import (
@@ -412,40 +410,6 @@ def _consume_and_apply_kg_3d_query(
     return result if isinstance(result, dict) else None
 
 
-def _consume_and_apply_kg_3d_component_value(
-    value,
-    *,
-    node_ids: list[str],
-    knowledge_graph,
-    doc_index: dict,
-) -> dict | None:
-    """Apply action delivered by Streamlit component value; ``_kg3d`` is fallback."""
-    if not isinstance(value, dict):
-        return None
-    if value.get("kind") != "kg3d_action":
-        return None
-    raw_env = value.get("envelope")
-    if not isinstance(raw_env, dict):
-        return None
-    nonce = ensure_kg_3d_session_nonce(st.session_state)
-    env = validate_kg_3d_envelope(
-        raw_env,
-        session_nonce=nonce,
-        node_ids=node_ids,
-    )
-    if env is None:
-        return None
-    if not reserve_kg_3d_event_id(st.session_state, env["event_id"]):
-        return None
-    _execute_kg_3d_action(
-        env,
-        knowledge_graph=knowledge_graph,
-        doc_index=doc_index,
-    )
-    result = st.session_state.pop(KG_3D_ACTION_RESULT_KEY, None)
-    return result if isinstance(result, dict) else None
-
-
 def _add_section_to_workbench_state(section, state=None) -> bool:
     from app import workbench_service
 
@@ -519,6 +483,120 @@ def _collect_concept_sections_to_workbench(
         else:
             duplicates += 1
     return added, duplicates
+
+
+def _concept_sections_view_model(
+    *,
+    concept_ids: list[str],
+    knowledge_graph,
+    doc_index: dict,
+    state=None,
+) -> dict[str, list[dict[str, object]]]:
+    """U2: sections + Obsidian doors for hall card/interior (embedded view-model only).
+
+    Same search path as ``_collect_concept_sections_to_workbench`` (best section per
+    related document). Does not mutate the workbench; only reports ``in_basket``.
+    Cached in ``st.session_state`` when ``state`` is None.
+    """
+    from app.obsidian_export import obsidian_uri
+    from app.section_index import best_section_for, build_section_index
+
+    ids = [str(c).strip() for c in concept_ids if str(c or "").strip()]
+    if not ids:
+        return {}
+
+    cache_key = "kg_3d_concept_sections_vm"
+    cache_sig_key = "kg_3d_concept_sections_sig"
+    basket_rows = _workbench_state_rows(state)
+    basket_headings: set[tuple[str, str]] = set()
+    for row in basket_rows:
+        cid = str(row.get("concept") or "").strip()
+        heading = str(row.get("heading_text") or row.get("heading") or "").strip().lower()
+        if cid and heading:
+            basket_headings.add((cid, heading))
+
+    sig = (
+        tuple(ids),
+        tuple(sorted(f"{c}:{h}" for c, h in basket_headings)),
+        len(basket_rows),
+    )
+    target = st.session_state if state is None else state
+    if (
+        isinstance(target, dict)
+        and target.get(cache_sig_key) == sig
+        and isinstance(target.get(cache_key), dict)
+    ):
+        return dict(target[cache_key])  # type: ignore[arg-type]
+    # Streamlit SessionState is not a plain dict — still support cache.
+    if state is None:
+        try:
+            if st.session_state.get(cache_sig_key) == sig and isinstance(
+                st.session_state.get(cache_key), dict
+            ):
+                return dict(st.session_state[cache_key])
+        except Exception:  # noqa: BLE001 - cache is best-effort
+            pass
+
+    out: dict[str, list[dict[str, object]]] = {}
+    try:
+        concepts = knowledge_graph.get_concepts() if knowledge_graph is not None else {}
+    except Exception:  # noqa: BLE001
+        concepts = {}
+    if not isinstance(concepts, dict):
+        concepts = {}
+
+    for concept in ids:
+        raw = concepts.get(concept) if isinstance(concepts, dict) else {}
+        info = raw if isinstance(raw, dict) else {}
+        label = str(info.get("label") or concept)
+        try:
+            related_docs = list(knowledge_graph.get_related_documents(concept) or [])
+        except Exception:  # noqa: BLE001
+            related_docs = []
+        rows: list[dict[str, object]] = []
+        for rel_path in related_docs:
+            meta = doc_index.get(str(rel_path), {}) if isinstance(doc_index, dict) else {}
+            path = meta.get("relative_path") or meta.get("file_name") or str(rel_path)
+            query = " ".join(
+                part
+                for part in [concept, label, " ".join(meta.get("key_concepts") or [])]
+                if part
+            )
+            try:
+                sections = build_section_index(str(path))
+                section = best_section_for(sections, query) if sections else None
+            except Exception:  # noqa: BLE001
+                continue
+            if section is None:
+                continue
+            heading = str(getattr(section, "heading_text", "") or "").strip()
+            md_abs = getattr(section, "konspekt_md_abs", None)
+            uri = ""
+            try:
+                if md_abs:
+                    uri = str(obsidian_uri(md_abs, heading_text=heading) or "")
+            except Exception:  # noqa: BLE001
+                uri = ""
+            rows.append(
+                {
+                    "heading": heading,
+                    "in_basket": (concept, heading.lower()) in basket_headings,
+                    "obsidian_uri": uri,
+                }
+            )
+        if rows:
+            out[concept] = rows
+
+    if state is None:
+        try:
+            st.session_state[cache_key] = out
+            st.session_state[cache_sig_key] = sig
+        except Exception:  # noqa: BLE001
+            pass
+    elif isinstance(target, dict):
+        target[cache_key] = out
+        target[cache_sig_key] = sig
+    return out
 
 
 def _concept_terms(concept_id: str, info: dict) -> list[str]:
@@ -1461,31 +1539,42 @@ def _render_knowledge_graph_tab() -> None:
     except Exception:  # noqa: BLE001
         wb_count = 0
     nonce = ensure_kg_3d_session_nonce(st.session_state)
+    # U2 doors: sections for day_route (+ focused concept) only — keep index work bounded.
+    route_for_vm = list(payload.get("day_route") or [])
+    focus_for_vm = str(
+        st.session_state.get("kg_selected_concept")
+        or st.session_state.get("kg_action_concept")
+        or ""
+    ).strip()
+    vm_ids = [str(x) for x in route_for_vm if str(x or "").strip()]
+    if focus_for_vm and focus_for_vm not in vm_ids:
+        vm_ids.append(focus_for_vm)
+    concept_sections = _concept_sections_view_model(
+        concept_ids=vm_ids,
+        knowledge_graph=knowledge_graph,
+        doc_index=doc_index if isinstance(doc_index, dict) else {},
+    )
+    show_onboarding = not bool(st.session_state.get("kg_3d_onboard_shown"))
+    if show_onboarding:
+        st.session_state["kg_3d_onboard_shown"] = True
     st.markdown("##### 🏛 3D-зал (embedded)")
     st.caption(
-        "Маршрут дня · ▶ Начать (навигация в Quiz) · ➕ В конспект · "
-        "✓ = был в квизе (mastery_history, любой score) · ◆ = в Живом конспекте."
+        "Memory Run · ▶ Начать (Quiz) · В конспект · Открыть раздел (Obsidian) · "
+        "✓ = был в квизе · ◆ = в Живом конспекте · «?» — правила зала."
     )
-    hall_value = render_kg_3d_hall(
+    # Selection only from component value (string concept id). Actions arrive solely
+    # via _kg3d query-param above — never dual-delivered through setComponentValue.
+    hall_selected = render_kg_3d_hall(
         payload,
         session_nonce=nonce,
         collected_concept_ids=collected_ids,
         workbench_count=wb_count,
         action_result=action_result,
+        concept_sections=concept_sections,
+        show_onboarding=show_onboarding,
         height=720,
         key="kg_3d_hall_component",
     )
-    if isinstance(hall_value, dict):
-        result = _consume_and_apply_kg_3d_component_value(
-            hall_value,
-            node_ids=node_ids,
-            knowledge_graph=knowledge_graph,
-            doc_index=doc_index,
-        )
-        if result is not None:
-            st.session_state[KG_3D_ACTION_RESULT_KEY] = result
-            st.rerun()
-    hall_selected = hall_value if isinstance(hall_value, str) else None
     if hall_selected and hall_selected in node_ids:
         st.session_state["kg_selected_concept"] = hall_selected
         st.session_state["kg_action_concept"] = hall_selected

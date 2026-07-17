@@ -5,116 +5,428 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>3D Knowledge Graph — HomeTutor</title>
 <style>
-  :root { --bg:#0a0a0f; --glass:rgba(255,255,255,0.06); --acc:#8b5cf6; --on:#c4b5fd; }
-  html,body{margin:0;height:100%;background:var(--bg);color:#e8e8f0;font-family:system-ui,-apple-system,sans-serif;overflow:hidden}
-  #wrap{display:flex;height:100%;position:relative;overflow:hidden}
-  #cv{flex:1 1 auto;display:block;background:#050508;min-width:0}
-  #side{width:300px;flex:0 0 300px;border-left:1px solid #222;padding:12px 14px;box-sizing:border-box;overflow:hidden;font-size:12px;background:#0c0c12;display:flex;flex-direction:column;min-height:0}
-  .hd{font-weight:700;margin:0 0 8px;font-size:13px;letter-spacing:.3px}
-  .btn{background:var(--glass);border:1px solid #333;color:#ddd;padding:6px 10px;border-radius:6px;cursor:pointer;margin:3px 2px;font-size:11px}
-  .btn:hover{border-color:var(--acc)}
-  .btn.on{border-color:var(--acc);color:var(--on);background:rgba(139,92,246,0.15)}
-  .btn:disabled{opacity:.4;cursor:default}
-  .row{display:flex;flex-wrap:wrap;gap:2px;margin:4px 0}
-  .st{display:flex;gap:6px;margin:4px 0;font-size:11px}
-  .list{overflow:auto;border:1px solid #222;border-radius:6px;padding:4px;min-height:108px;flex:1 1 150px}
-  .stop{padding:5px 6px;margin:3px 0;border-radius:4px;background:#111;cursor:pointer;border:1px solid transparent}
-  .stop:hover{border-color:#333}
-  .stop.active{border-color:var(--acc);background:rgba(139,92,246,0.12)}
-  .stop.next{border-color:rgba(103,232,249,0.45)}
-  .stop b{color:#c4b5fd}
-  .reason{font-size:10px;color:#94a3b8;display:block;margin-top:2px}
-  .badge{display:inline-block;font-size:9px;padding:1px 5px;border-radius:4px;background:#1e1b2e;border:1px solid #333;margin-left:4px;color:#c4b5fd}
-  .legend{font-size:10px;opacity:.7;margin-top:8px;line-height:1.28;flex:0 0 auto}
-  .mini{font-size:10px;opacity:.65;margin-top:6px;line-height:1.28;flex:0 0 auto;max-height:2.8em;overflow:hidden}
-  .stopinfo{margin:8px 0;padding:8px;border-radius:6px;background:#12121a;border:1px solid #2a2a3a;font-size:11px;line-height:1.4}
-  .stopinfo strong{color:#e9d5ff}
-  canvas{cursor:grab}
+  /* Memory Run production skin (UI reference v2 / wave U0) — scoped night hall tokens */
+  :root {
+    --kgx-night: #080812;
+    --kgx-panel: #0e101b;
+    --kgx-panel-2: #151728;
+    --kgx-line: rgba(223, 229, 255, 0.15);
+    --kgx-text: #faf9ff;
+    --kgx-muted: #aeb5cf;
+    --kgx-cyan: #42e8e0;
+    --kgx-violet: #9a6cff;
+    --kgx-gold: #ffc857;
+    --kgx-green: #72f1a5;
+    --kgx-coral: #ff6b8a;
+    --kgx-blue: #4ca4ff;
+    --kgx-lime: #b9f75b;
+    --kgx-accent: var(--kgx-cyan);
+  }
+  html,body{margin:0;height:100%;background:var(--kgx-night);color:var(--kgx-text);
+    font-family:"Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;overflow:hidden}
+  button{font:inherit}
+  #wrap{
+    --kgx-accent: var(--kgx-cyan);
+    display:flex;flex-direction:column;height:100%;position:relative;overflow:hidden;
+    color:var(--kgx-text);background:var(--kgx-night);
+  }
+  #wrap[data-scene-mode="local"], #wrap[data-scene-mode="all"]{ --kgx-accent: var(--kgx-coral); }
+  #wrap[data-memory="on"]{ --kgx-accent: var(--kgx-gold); }
+  #wrap::before{
+    content:"";position:absolute;z-index:8;left:0;right:0;top:0;height:3px;
+    background:linear-gradient(90deg,var(--kgx-cyan),var(--kgx-lime) 24%,var(--kgx-gold) 49%,var(--kgx-coral) 73%,var(--kgx-violet));
+    pointer-events:none;
+  }
+  #topbar{
+    min-height:64px;flex:0 0 auto;display:grid;
+    grid-template-columns:minmax(160px,1fr) auto minmax(160px,1fr);
+    align-items:center;gap:1rem;padding:0.75rem 1rem;
+    border-bottom:1px solid var(--kgx-line);background:rgba(8,8,18,0.96);z-index:3;
+  }
+  .kgx-brand{display:flex;align-items:center;gap:0.65rem;min-width:0}
+  .kgx-brand-mark{
+    width:28px;height:28px;flex:none;position:relative;
+    border:1px solid rgba(66,232,224,0.62);border-radius:50%;
+    box-shadow:0 0 20px rgba(66,232,224,0.18);
+  }
+  .kgx-brand-mark::before,.kgx-brand-mark::after{
+    content:"";position:absolute;inset:5px;border:1px solid var(--kgx-cyan);transform:rotate(45deg);
+  }
+  .kgx-brand-mark::after{inset:10px;background:var(--kgx-coral);border:0}
+  .kgx-brand-copy strong{display:block;font-size:0.8rem;letter-spacing:0.08em;text-transform:uppercase}
+  .kgx-brand-copy span{display:block;color:var(--kgx-muted);font-size:0.7rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .kgx-modes{
+    display:inline-flex;align-items:center;padding:3px;gap:2px;
+    border:1px solid var(--kgx-line);border-radius:6px;background:var(--kgx-panel);
+  }
+  .kgx-mode{
+    border:0;border-radius:4px;padding:0.45rem 0.72rem;background:transparent;
+    color:var(--kgx-muted);cursor:pointer;font-size:0.76rem;font-weight:600;
+  }
+  .kgx-mode:hover{color:var(--kgx-text);background:rgba(255,255,255,0.05)}
+  .kgx-mode.on,.kgx-mode[aria-pressed="true"]{
+    color:#090912;background:var(--kgx-accent);
+    box-shadow:0 0 18px color-mix(in srgb,var(--kgx-accent) 32%,transparent);
+  }
+  .kgx-progress{justify-self:end;display:flex;align-items:center;gap:0.8rem}
+  .kgx-progress-copy{text-align:right}
+  .kgx-progress-copy strong,.progress-line{color:var(--kgx-text);display:block;font-size:0.86rem}
+  .kgx-progress-copy span{color:var(--kgx-muted);display:block;font-size:0.68rem}
+  .kgx-progress-ring{
+    --p:0%;width:36px;height:36px;border-radius:50%;position:relative;flex:none;
+    background:conic-gradient(var(--kgx-gold) var(--p), rgba(255,255,255,0.10) 0);
+  }
+  .kgx-progress-ring::after{
+    content:"";position:absolute;inset:4px;border-radius:50%;background:var(--kgx-night);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,0.05);
+  }
+  #body{display:grid;grid-template-columns:minmax(0,1fr) 314px;flex:1 1 auto;min-height:0}
+  #stage{position:relative;min-width:0;min-height:0;overflow:hidden;background:var(--kgx-night)}
+  #cv{display:block;width:100%;height:100%;background:#050508;cursor:grab}
+  #cv:active{cursor:grabbing}
+  .kgx-stage-status{
+    position:absolute;left:1rem;top:1rem;display:flex;align-items:center;gap:0.55rem;
+    color:var(--kgx-muted);font-size:0.72rem;z-index:2;pointer-events:none;
+  }
+  .kgx-stage-status .st{margin:0;font-size:0.72rem;color:var(--kgx-muted)}
+  .kgx-live-dot{width:7px;height:7px;border-radius:50%;background:var(--kgx-accent);box-shadow:0 0 16px var(--kgx-accent);flex:none}
+  .kgx-depth-btn{
+    min-height:28px;padding:0 0.65rem;margin-left:0.2rem;border:1px solid rgba(255,107,138,0.42);
+    border-radius:4px;color:var(--kgx-coral);background:rgba(255,107,138,0.08);cursor:pointer;
+    font-size:0.68rem;font-weight:700;pointer-events:auto;
+  }
+  .kgx-depth-btn:hover{border-color:var(--kgx-coral);background:rgba(255,107,138,0.15)}
+  .kgx-depth-btn[hidden]{display:none}
+  .kgx-compass{
+    position:absolute;left:1rem;bottom:1rem;width:88px;height:88px;border-radius:50%;
+    border:1px solid var(--kgx-line);color:var(--kgx-muted);pointer-events:none;z-index:2;
+  }
+  .kgx-compass::before,.kgx-compass::after{content:"";position:absolute;background:var(--kgx-line)}
+  .kgx-compass::before{left:43px;top:10px;bottom:10px;width:1px}
+  .kgx-compass::after{top:43px;left:10px;right:10px;height:1px}
+  .kgx-compass span{position:absolute;font-size:0.58rem;letter-spacing:0.08em}
+  .kgx-compass .n{top:5px;left:34px;color:var(--kgx-text)}
+  .kgx-compass .e{right:4px;top:35px}
+  .kgx-compass .s{bottom:4px;left:32px}
+  .kgx-compass .w{left:4px;top:35px}
+  .kgx-compass i{
+    position:absolute;left:39px;top:20px;width:8px;height:27px;background:var(--kgx-accent);
+    clip-path:polygon(50% 0,100% 100%,50% 76%,0 100%);transform:rotate(38deg);transform-origin:50% 23px;
+    filter:drop-shadow(0 0 6px var(--kgx-accent));
+  }
+  .kgx-route-actions{
+    position:absolute;left:50%;bottom:1.15rem;transform:translateX(-50%);
+    display:flex;gap:0.45rem;z-index:2;
+  }
+  .kgx-icon-btn{
+    width:36px;height:36px;border:1px solid var(--kgx-line);border-radius:5px;
+    background:rgba(12,16,20,0.88);color:var(--kgx-text);cursor:pointer;padding:0;
+  }
+  .kgx-icon-btn:hover{border-color:var(--kgx-accent);color:var(--kgx-accent)}
+  .kgx-icon-btn:disabled{opacity:.4;cursor:default}
+  .kgx-icon-btn.on{border-color:var(--kgx-accent);color:var(--kgx-accent)}
+  #side{
+    width:314px;flex:0 0 314px;min-width:0;border-left:1px solid var(--kgx-line);
+    background:var(--kgx-panel);display:flex;flex-direction:column;min-height:0;overflow:hidden;
+    box-sizing:border-box;font-size:12px;
+  }
+  .kgx-panel-head{
+    padding:1rem 1rem 0.9rem;border-bottom:1px solid var(--kgx-line);flex:0 0 auto;
+    background:linear-gradient(135deg,color-mix(in srgb,var(--kgx-accent) 12%,transparent),transparent 62%);
+  }
+  .kgx-eyebrow{color:var(--kgx-accent);font-size:0.68rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase}
+  .kgx-panel-head h3{
+    color:var(--kgx-text);font-family:"Segoe UI",system-ui,sans-serif;font-size:1.52rem;
+    line-height:1.08;margin:0.38rem 0 0.5rem;font-weight:800;letter-spacing:0;
+  }
+  .kgx-reason{color:var(--kgx-muted);font-size:0.78rem;min-height:2.7em;margin:0}
+  .kgx-chips{display:flex;flex-wrap:wrap;gap:0.35rem;margin-top:0.55rem}
+  .kgx-chip{
+    display:inline-flex;align-items:center;gap:0.25rem;padding:0.12rem 0.45rem;
+    border-radius:99px;border:1px solid var(--kgx-line);color:var(--kgx-muted);
+    font-size:0.65rem;font-weight:700;
+  }
+  .kgx-chip.due{border-color:rgba(76,164,255,0.5);color:var(--kgx-blue)}
+  .kgx-chip.novel{border-color:rgba(66,232,224,0.5);color:var(--kgx-cyan)}
+  .kgx-chip.done{border-color:rgba(114,241,165,0.5);color:var(--kgx-green)}
+  .kgx-chip.collected{border-color:rgba(255,107,138,0.5);color:var(--kgx-coral)}
+  .kgx-memory-row{margin-top:0.85rem;display:grid;grid-template-columns:1fr auto;align-items:center;gap:0.7rem}
+  .kgx-memory-copy span{display:block;color:var(--kgx-muted);font-size:0.65rem}
+  .kgx-memory-copy strong{display:block;color:var(--kgx-text);font-size:0.77rem}
+  .kgx-mastery{
+    width:46px;height:46px;border-radius:50%;display:grid;place-items:center;
+    border:1px solid var(--kgx-accent);color:var(--kgx-text);font-size:0.7rem;position:relative;
+    box-shadow:0 0 18px color-mix(in srgb,var(--kgx-accent) 18%,transparent);
+    --m:0%;
+    background:conic-gradient(var(--kgx-accent) var(--m), rgba(255,255,255,0.08) 0);
+  }
+  .kgx-mastery::before{
+    content:"";position:absolute;inset:4px;border-radius:50%;background:var(--kgx-panel);
+    box-shadow:inset 0 0 0 1px rgba(165,138,244,0.24);
+  }
+  .kgx-mastery > span{position:relative;z-index:1;font-weight:700}
+  .kgx-primary-actions{display:grid;grid-template-columns:1fr auto;gap:0.45rem;margin-top:0.9rem}
+  .kgx-action{
+    min-height:40px;border-radius:5px;border:1px solid var(--kgx-line);padding:0.55rem 0.72rem;
+    cursor:pointer;font-size:0.76rem;font-weight:700;
+  }
+  .kgx-action-primary{
+    color:#080812;background:linear-gradient(100deg,var(--kgx-cyan),var(--kgx-lime));
+    border-color:transparent;box-shadow:0 8px 24px rgba(66,232,224,0.16);
+  }
+  .kgx-action-primary:hover:not(:disabled){filter:brightness(1.08) saturate(1.08)}
+  .kgx-action-primary:disabled{color:var(--kgx-muted);background:#1d2728;border-color:var(--kgx-line);cursor:default;filter:none;box-shadow:none}
+  .kgx-action-secondary{color:var(--kgx-text);background:transparent}
+  .kgx-action-secondary:hover:not(:disabled),.kgx-action-secondary.is-on{
+    border-color:var(--kgx-coral);color:var(--kgx-coral);background:rgba(255,107,138,0.06);
+  }
+  .kgx-action-secondary:disabled{opacity:.55;border-color:var(--kgx-line);color:var(--kgx-muted);background:transparent;cursor:default}
+  .kgx-tertiary-actions{display:flex;gap:0.4rem;margin-top:0.45rem}
+  .kgx-link-btn{
+    min-height:32px;padding:0.35rem 0.6rem;border:1px solid var(--kgx-line);border-radius:4px;
+    background:transparent;color:var(--kgx-muted);cursor:pointer;font-size:0.7rem;font-weight:600;
+  }
+  .kgx-link-btn:hover{border-color:var(--kgx-violet);color:var(--kgx-text)}
+  .status-line{font-size:0.68rem;color:var(--kgx-muted);min-height:1.2em;margin-top:0.45rem}
+  .kgx-route-title{
+    padding:0.8rem 1rem 0.45rem;display:flex;align-items:center;justify-content:space-between;
+    color:var(--kgx-muted);font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;flex:0 0 auto;
+  }
+  .kgx-route-title strong{color:var(--kgx-gold);font-size:0.68rem}
+  #toplist.list{
+    display:grid;gap:1px;padding:0 0.55rem 0.55rem;overflow:auto;min-height:108px;flex:1 1 150px;
+  }
+  .stop{
+    width:100%;display:grid;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:0.55rem;
+    min-height:48px;padding:0.35rem 0.45rem;border:0;border-left:2px solid transparent;border-radius:3px;
+    background:transparent;color:var(--kgx-muted);text-align:left;cursor:pointer;box-sizing:border-box;
+  }
+  .stop:hover{background:rgba(255,255,255,0.04);color:var(--kgx-text)}
+  .stop.active{background:color-mix(in srgb,var(--kgx-accent) 12%,transparent);border-left-color:var(--kgx-accent);color:var(--kgx-text)}
+  .stop.next{border-left-color:rgba(66,232,224,0.45)}
+  .stop.done .stop-index{border-color:var(--kgx-green);color:var(--kgx-green)}
+  .stop-index{
+    width:24px;height:24px;border-radius:50%;border:1px solid var(--kgx-line);
+    display:grid;place-items:center;font-size:0.65rem;flex:none;
+  }
+  .stop-copy{min-width:0}
+  .stop-copy strong{color:inherit;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.75rem}
+  .stop-copy span{color:var(--kgx-muted);display:block;font-size:0.62rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .stop .mark{color:var(--kgx-coral);font-size:0.8rem;text-shadow:0 0 10px rgba(255,107,138,0.42)}
+  .kgx-inventory{
+    margin-top:auto;min-height:48px;display:flex;align-items:center;justify-content:space-between;
+    gap:1rem;padding:0.7rem 1rem;border-top:1px solid var(--kgx-line);flex:0 0 auto;
+    background:linear-gradient(90deg,rgba(255,107,138,0.08),rgba(76,164,255,0.06));
+  }
+  .kgx-inventory span{color:var(--kgx-muted);font-size:0.68rem}
+  .kgx-inventory strong{color:var(--kgx-text);font-size:0.76rem}
+  .snapshot{font-size:0.65rem;color:var(--kgx-gold);padding:0 1rem 0.55rem;flex:0 0 auto}
+  .mini{font-size:0.68rem;color:var(--kgx-muted);padding:0 1rem 0.55rem;line-height:1.3;flex:0 0 auto;max-height:2.8em;overflow:hidden}
   #sidetoggle{display:none}
-  .btn.primary{border-color:rgba(139,92,246,0.7);color:#e9d5ff;background:rgba(139,92,246,0.18)}
-  .btn.primary:hover:not(:disabled){border-color:#c4b5fd;background:rgba(139,92,246,0.28)}
-  .btn.secondary{border-color:rgba(255,107,138,0.45);color:#fecdd3}
-  .btn.secondary:hover:not(:disabled){border-color:#ff6b8a}
-  .btn.secondary.is-on{border-color:#ff6b8a;background:rgba(255,107,138,0.14);color:#fecdd3}
-  .btn:focus-visible,.stop:focus-visible,#sidetoggle:focus-visible{outline:2px solid #c4b5fd;outline-offset:2px}
-  .actions{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}
-  .progress-line{font-size:11px;color:#a5b4fc;margin:4px 0 2px}
-  .inventory{font-size:11px;color:#fecdd3;margin-top:8px;padding:6px 8px;border:1px solid rgba(255,107,138,0.28);border-radius:6px;background:rgba(255,107,138,0.06)}
-  .snapshot{font-size:10px;color:#fbbf24;opacity:.9;margin-top:6px}
-  .status-line{font-size:10px;color:#94a3b8;min-height:1.2em;margin-top:4px}
-  .stop.done b{color:#86efac}
-  .stop .mark{float:right;color:#ff6b8a;font-size:11px}
-  #side{width:314px;flex:0 0 314px}
+  .kgx-mode:focus-visible,.kgx-action:focus-visible,.kgx-icon-btn:focus-visible,.stop:focus-visible,
+  #sidetoggle:focus-visible,.kgx-link-btn:focus-visible,.kgx-depth-btn:focus-visible,.kgx-onboard-ok:focus-visible{
+    outline:2px solid var(--kgx-cyan);outline-offset:2px;
+  }
+  /* Interior drill-down (U3) */
+  #interior{
+    display:none;position:absolute;inset:0;z-index:6;background:rgba(8,8,18,0.94);
+    padding:1rem;overflow:auto;box-sizing:border-box;
+  }
+  #wrap.interior-open #interior{display:block}
+  #wrap.interior-open #stage canvas{filter:brightness(0.35) saturate(0.7)}
+  .kgx-interior-head{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:0.9rem}
+  .kgx-interior-head h3{margin:0.25rem 0 0;font-size:1.25rem}
+  .kgx-interior-close{
+    width:36px;height:36px;border:1px solid var(--kgx-line);border-radius:5px;
+    background:transparent;color:var(--kgx-text);cursor:pointer;flex:none;
+  }
+  .kgx-interior-sec{margin:0.85rem 0}
+  .kgx-interior-sec h4{
+    margin:0 0 0.45rem;font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--kgx-muted);
+  }
+  .kgx-section-row{
+    display:flex;align-items:center;justify-content:space-between;gap:0.6rem;
+    padding:0.45rem 0.55rem;border:1px solid var(--kgx-line);border-radius:5px;margin:0.3rem 0;
+  }
+  .kgx-section-row a{color:var(--kgx-cyan);font-size:0.72rem;text-decoration:none}
+  .kgx-section-row a:hover{text-decoration:underline}
+  .kgx-edge-chip{
+    display:inline-block;padding:0.2rem 0.5rem;margin:0.15rem 0.2rem 0.15rem 0;
+    border-radius:4px;border:1px solid var(--kgx-line);font-size:0.7rem;color:var(--kgx-muted);
+  }
+  /* Onboarding overlay (U4) */
+  #onboard{
+    display:none;position:absolute;inset:0;z-index:12;background:rgba(6,8,16,0.82);
+    align-items:center;justify-content:center;padding:1.2rem;box-sizing:border-box;
+  }
+  #onboard.is-open{display:flex}
+  .kgx-onboard-card{
+    max-width:420px;width:100%;padding:1.2rem 1.3rem;border-radius:10px;
+    border:1px solid var(--kgx-line);background:var(--kgx-panel-2);
+    box-shadow:0 24px 60px rgba(0,0,0,0.45);
+  }
+  .kgx-onboard-card h2{margin:0 0 0.7rem;font-size:1.15rem}
+  .kgx-onboard-card ol{margin:0 0 1rem;padding-left:1.2rem;color:var(--kgx-muted);font-size:0.84rem;line-height:1.5}
+  .kgx-onboard-card li{margin:0.35rem 0}
+  .kgx-onboard-ok{
+    min-height:40px;width:100%;border:0;border-radius:5px;cursor:pointer;font-weight:700;
+    color:#080812;background:linear-gradient(100deg,var(--kgx-cyan),var(--kgx-lime));
+  }
+  .kgx-help-btn{
+    width:32px;height:32px;border:1px solid var(--kgx-line);border-radius:50%;
+    background:transparent;color:var(--kgx-muted);cursor:pointer;font-weight:700;margin-left:0.35rem;
+  }
+  .kgx-help-btn:hover{color:var(--kgx-text);border-color:var(--kgx-accent)}
+  .badge{display:inline-block;font-size:0.62rem;padding:1px 5px;border-radius:4px;border:1px solid var(--kgx-line);margin-left:4px;color:var(--kgx-violet)}
+  .reason{font-size:0.68rem;color:var(--kgx-muted)}
   @media (max-width: 860px){
-    #wrap{flex-direction:column}
-    #cv{flex:1 1 auto;width:100%;min-height:480px;height:55vh}
-    #side{width:100%;flex:0 0 auto;max-height:42vh;border-left:0;border-top:1px solid #222}
-    #toplist{display:grid;grid-template-columns:1fr 1fr;gap:4px}
-    #toplist .stop{margin:0}
+    #topbar{grid-template-columns:1fr auto}
+    .kgx-modes{grid-column:1 / -1;grid-row:2;justify-self:stretch}
+    .kgx-mode{flex:1}
+    #body{grid-template-columns:1fr}
+    #stage{min-height:480px;height:55vh}
+    #side{width:100%;flex:0 0 auto;max-height:42vh;border-left:0;border-top:1px solid var(--kgx-line)}
+    #toplist.list{grid-template-columns:repeat(2,minmax(0,1fr))}
     #sidetoggle{
-      display:block;position:absolute;top:8px;right:8px;z-index:2;
+      display:block;position:absolute;top:72px;right:8px;z-index:4;
       width:34px;height:34px;line-height:34px;text-align:center;padding:0;
-      background:rgba(10,10,15,0.72);border:1px solid #333;border-radius:6px;
-      color:#ddd;font-size:16px;cursor:pointer;
+      background:rgba(10,10,15,0.72);border:1px solid var(--kgx-line);border-radius:6px;
+      color:var(--kgx-text);font-size:16px;cursor:pointer;
     }
     #wrap.side-collapsed #side{display:none}
   }
   @media (max-width: 560px){
-    #cv{min-height:420px;height:50vh}
-    #toplist{grid-template-columns:1fr}
-    .actions{flex-direction:column}
-    .actions .btn{width:100%}
+    #topbar{padding:0.65rem;gap:0.55rem}
+    .kgx-progress-copy{display:none}
+    #stage{min-height:420px;height:50vh}
+    .kgx-compass{transform:scale(0.78);transform-origin:left bottom}
+    #toplist.list{grid-template-columns:1fr}
+    .kgx-primary-actions{grid-template-columns:1fr}
+  }
+  @media (prefers-reduced-motion: reduce){
+    #wrap.interior-open #stage canvas{filter:brightness(0.45)}
   }
 </style>
 </head>
 <body>
-<div id="wrap">
+<div id="wrap" data-scene-mode="route" data-memory="off">
   <button id="sidetoggle" type="button" aria-label="Показать/скрыть панель" aria-controls="side" aria-expanded="true">☰</button>
-  <canvas id="cv" width="900" height="700" role="img" aria-label="3D knowledge graph"></canvas>
-  <div id="side">
-    <div class="hd">🏛 3D Knowledge Graph</div>
-    <div id="statsline" class="st"></div>
-
-    <div class="hd" style="margin-top:8px">Режим</div>
-    <div class="row">
-      <button class="btn on" id="modeRoute" type="button" title="Только маршрут дня">Маршрут</button>
-      <button class="btn" id="modeLocal" type="button" title="Остановка + ближайший контекст">Локально</button>
-      <button class="btn" id="modeAll" type="button" title="Полный граф">Вся карта</button>
+  <header id="topbar" class="kgx-topbar">
+    <div class="kgx-brand">
+      <span class="kgx-brand-mark" aria-hidden="true"></span>
+      <span class="kgx-brand-copy">
+        <strong>Hometutor</strong>
+        <span id="brandsub">Memory Run</span>
+      </span>
+      <button class="kgx-help-btn" id="helpbtn" type="button" title="Правила зала" aria-label="Правила зала">?</button>
     </div>
-
-    <div class="hd" style="margin-top:8px">Маршрут дня</div>
-    <div id="progressline" class="progress-line" aria-live="polite">0 из 0 пройдено по квизам</div>
-    <div id="stopinfo" class="stopinfo" aria-live="polite">Стоп — · выберите остановку</div>
-    <div class="actions" id="actionrow">
-      <button class="btn primary" id="startbtn" type="button" title="Начать изучение (квиз/карточки)">▶ Начать</button>
-      <button class="btn secondary" id="collectbtn" type="button" title="Собрать разделы в Живой конспект">➕ В конспект</button>
+    <div class="kgx-modes" role="group" aria-label="Режим сцены и оверлей памяти">
+      <button class="kgx-mode on" id="modeRoute" type="button" title="Только маршрут дня" aria-pressed="true">Маршрут</button>
+      <button class="kgx-mode" id="modeLocal" type="button" title="Остановка + ближайший контекст (Созвездие)" aria-pressed="false">Созвездие</button>
+      <button class="kgx-mode" id="memorybtn" type="button" title="Оверлей следа предыдущего снимка (не отдельный режим)" aria-pressed="false">След памяти</button>
+      <button class="kgx-mode" id="modeAll" type="button" title="Полный граф" hidden aria-pressed="false">Вся карта</button>
     </div>
-    <div id="actionstatus" class="status-line" role="status" aria-live="polite"></div>
-    <div class="row">
-      <button class="btn" id="prevbtn" type="button" title="Предыдущая остановка">◀ Назад</button>
-      <button class="btn" id="playbtn" type="button" title="Тур по остановкам">▶ Тур</button>
-      <button class="btn" id="nextbtn" type="button" title="Следующая остановка">Вперёд ▶</button>
+    <div class="kgx-progress">
+      <span class="kgx-progress-copy">
+        <strong id="progressline" class="progress-line" aria-live="polite">0 из 0 с quiz-следом</strong>
+        <span id="progresshint">маршрут перестраивается по памяти</span>
+      </span>
+      <span id="progressring" class="kgx-progress-ring" aria-hidden="true"></span>
     </div>
-    <div class="row">
-      <button class="btn" id="homebtn" type="button" title="Вернуть читаемый вид маршрута">⌂ Home</button>
-      <button class="btn" id="topbtn" type="button" title="Вид сверху">⊤ Сверху</button>
-      <button class="btn" id="resetbtn" type="button">Сброс</button>
-      <button class="btn" id="memorybtn" type="button" title="Оверлей следа предыдущего снимка (не отдельный режим)">След памяти</button>
+  </header>
+  <div id="body" class="kgx-body">
+    <div id="stage" class="kgx-stage">
+      <canvas id="cv" width="900" height="700" role="img" aria-label="3D knowledge graph — Memory Run"></canvas>
+      <div class="kgx-stage-status">
+        <span class="kgx-live-dot" aria-hidden="true"></span>
+        <div id="statsline" class="st" role="status" aria-live="polite"></div>
+        <button class="kgx-depth-btn" id="depthbtn" type="button" hidden title="Показать полный граф">Вся карта</button>
+      </div>
+      <div class="kgx-compass" aria-hidden="true">
+        <span class="n">КУРС</span><span class="e">→</span><span class="s">ВХОД</span><span class="w">·</span><i></i>
+      </div>
+      <div class="kgx-route-actions" aria-label="Навигация по остановкам">
+        <button class="kgx-icon-btn" id="prevbtn" type="button" title="Предыдущая остановка" aria-label="Предыдущая остановка">←</button>
+        <button class="kgx-icon-btn" id="playbtn" type="button" title="Экскурсия дня" aria-label="Экскурсия дня">▶</button>
+        <button class="kgx-icon-btn" id="nextbtn" type="button" title="Следующая остановка" aria-label="Следующая остановка">→</button>
+        <button class="kgx-icon-btn" id="homebtn" type="button" title="Вернуть читаемый вид маршрута" aria-label="Home">⌂</button>
+        <button class="kgx-icon-btn" id="topbtn" type="button" title="Вид сверху" aria-label="Сверху">⊤</button>
+        <button class="kgx-icon-btn" id="resetbtn" type="button" title="Сброс" aria-label="Сброс">↺</button>
+      </div>
+      <div id="interior" aria-label="Интерьер узла" role="dialog" aria-modal="true" hidden>
+        <div class="kgx-interior-head">
+          <div>
+            <div class="kgx-eyebrow" id="interior-eyebrow">Внутри узла</div>
+            <h3 id="interior-title">—</h3>
+          </div>
+          <button class="kgx-interior-close" id="interior-close" type="button" aria-label="Закрыть интерьер">✕</button>
+        </div>
+        <div class="kgx-interior-sec">
+          <h4>Разделы конспекта</h4>
+          <div id="interior-sections"></div>
+        </div>
+        <div class="kgx-interior-sec">
+          <h4>Связи</h4>
+          <div id="interior-edges"></div>
+        </div>
+        <div class="kgx-interior-sec">
+          <h4>Quiz-события</h4>
+          <div id="interior-quiz"></div>
+        </div>
+        <div class="kgx-primary-actions" style="max-width:420px">
+          <button class="kgx-action kgx-action-primary" id="interior-start" type="button">▶ Начать</button>
+          <button class="kgx-action kgx-action-secondary" id="interior-collect" type="button">В конспект</button>
+        </div>
+      </div>
     </div>
-
-    <div class="hd" style="margin-top:10px">Остановки <span class="badge" id="routebadge">0</span></div>
-    <div id="toplist" class="list"></div>
-    <div id="inventory" class="inventory" hidden>Живой конспект · —</div>
-    <div id="snapshotline" class="snapshot" hidden></div>
-
-    <div class="legend">
-      Первый кадр — чистая дорожка маршрута дня, не весь граф.<br>
-      <b>Маршрут</b>: 1→N, тихие lesson-якоря, worth = ранг/причина.<br>
-      <b>Локально/Вся карта</b>: Y = этаж урока (precedes), X = прогрессия, Z = полоса.<br>
-      <b>✓</b> = был в квизе (mastery_history, любой score; ≥80% — ярче) · <b>◆</b> = в конспекте (embedded).<br>
-      Мышь — поворот · колесо — зум · hover — причина · клик — фокус (локальный контекст) · кнопки — действия.
+    <aside id="side" class="kgx-panel" aria-label="Текущая остановка">
+      <div class="kgx-panel-head">
+        <div class="kgx-eyebrow" id="stopeyebrow">Остановка —</div>
+        <h3 id="stopname">Выберите остановку</h3>
+        <p class="kgx-reason" id="stopreason">Маршрут дня покажет причину и ценность узла.</p>
+        <div class="kgx-chips" id="stopchips"></div>
+        <div class="kgx-memory-row">
+          <div class="kgx-memory-copy">
+            <span>След памяти</span>
+            <strong id="memorycopy">—</strong>
+          </div>
+          <div class="kgx-mastery" id="masteryring" aria-label="Mastery" style="--m:0%"><span id="masterytext">—</span></div>
+        </div>
+        <div class="kgx-primary-actions" id="actionrow">
+          <button class="kgx-action kgx-action-primary" id="startbtn" type="button" title="Начать изучение (квиз/карточки)">▶ Начать</button>
+          <button class="kgx-action kgx-action-secondary" id="collectbtn" type="button" title="Собрать разделы в Живой конспект">В конспект</button>
+        </div>
+        <div class="kgx-tertiary-actions">
+          <button class="kgx-link-btn" id="insidebtn" type="button" title="Провалиться внутрь узла">Внутрь</button>
+          <div id="sectionlinks"></div>
+        </div>
+        <div id="actionstatus" class="status-line" role="status" aria-live="polite"></div>
+        <!-- keep stopinfo for tests / a11y live region mirror -->
+        <div id="stopinfo" class="status-line" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">Стоп — · выберите остановку</div>
+      </div>
+      <div class="kgx-route-title">
+        <span>Маршрут дня <span class="badge" id="routebadge">0</span></span>
+        <strong id="worthbadge">W —</strong>
+      </div>
+      <div id="toplist" class="list"></div>
+      <div id="inventory" class="kgx-inventory" hidden>
+        <span>Живой конспект</span>
+        <strong id="inventorycount">—</strong>
+      </div>
+      <div id="snapshotline" class="snapshot" hidden></div>
+      <div class="mini" id="hint"></div>
+    </aside>
+  </div>
+  <div id="onboard" role="dialog" aria-modal="true" aria-labelledby="onboard-title">
+    <div class="kgx-onboard-card">
+      <h2 id="onboard-title">Правила зала памяти</h2>
+      <ol>
+        <li><strong>Ты здесь</strong> — фиолетовая остановка с шестиугольником на дорожке дня.</li>
+        <li><strong>Дальше сюда, потому что…</strong> — причина и ценность в правой карточке.</li>
+        <li><strong>✓ был в квизе · ◆ в конспекте</strong> — прогресс по памяти и корзине, не XP.</li>
+      </ol>
+      <button class="kgx-onboard-ok" id="onboard-ok" type="button">Понятно</button>
     </div>
-    <div class="mini" id="hint"></div>
   </div>
 </div>
 <script>
@@ -132,6 +444,10 @@ const SESSION_NONCE = __SESSION_NONCE__ || '';
 const COLLECTED_IDS = __COLLECTED_IDS__ || [];
 const ACTION_RESULT = __ACTION_RESULT__ || null;
 const WORKBENCH_COUNT_INIT = __WORKBENCH_COUNT__;
+/** Embedded-only view-model: concept_id → [{heading, in_basket, obsidian_uri}] (U2). */
+const CONCEPT_SECTIONS = __CONCEPT_SECTIONS__ || {};
+/** Host may ask to show onboarding once per Streamlit session (U4). */
+const SHOW_ONBOARDING = __SHOW_ONBOARDING__ === true || __SHOW_ONBOARDING__ === 'true';
 
 const canvas = document.getElementById('cv');
 const ctx = canvas.getContext('2d');
@@ -158,6 +474,8 @@ let animToken = 0;
 let tourTimer = null;
 /** Memory overlay is orthogonal to viewMode (G2). */
 let memoryOverlay = false;
+/** Interior drill-down panel open (U3). */
+let interiorOpen = false;
 /** @type {null|{event_id:string,action:string,concept_id:string,phase:string,label:string}} */
 let pendingAction = null;
 let actionTimeoutTimer = null;
@@ -624,13 +942,14 @@ function roundedRectPath(x, y, w, h, r) {
 function drawSmartLabel(nn, pr, r, isActive, labelBoxes) {
   const raw = String(nn.label || nn.id);
   const text = raw.length > 22 ? raw.slice(0, 21) + '…' : raw;
-  ctx.font = (isActive ? 'bold ' : '') + '10px system-ui';
+  // Memory Run: labels ≥12px with dark halo for AA contrast on night floor.
+  ctx.font = (isActive ? 'bold ' : '600 ') + '12px system-ui';
   const w = ctx.measureText(text).width;
-  const h = 12;
+  const h = 14;
   const candidates = [
     { x: pr.sx + r + 5, y: pr.sy + 4 },
-    { x: pr.sx - w / 2, y: pr.sy - r - 8 },
-    { x: pr.sx - w / 2, y: pr.sy + r + 15 },
+    { x: pr.sx - w / 2, y: pr.sy - r - 10 },
+    { x: pr.sx - w / 2, y: pr.sy + r + 16 },
     { x: pr.sx - r - w - 5, y: pr.sy + 4 },
   ];
   for (const c of candidates) {
@@ -638,7 +957,10 @@ function drawSmartLabel(nn, pr, r, isActive, labelBoxes) {
     if (box.x < 4 || box.y < 4 || box.x + box.w > W - 4 || box.y + box.h > H - 4) continue;
     if (labelBoxes.some(b => labelIntersects(box, b))) continue;
     labelBoxes.push(box);
-    ctx.fillStyle = isActive ? '#f5f3ff' : '#ddd';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(8,8,18,0.88)';
+    ctx.strokeText(text, c.x, c.y);
+    ctx.fillStyle = isActive ? '#faf9ff' : '#e8ebf7';
     ctx.fillText(text, c.x, c.y);
     return true;
   }
@@ -653,9 +975,9 @@ function drawActiveReasonCallout(nn, pr, r, labelBoxes) {
   const name = String(nn.label || nn.id);
   const reason = String(nn.worth_reason || 'в маршруте дня');
   const text = `Стоп ${idx + 1}/${route.length} · ${name} · ${reason}`;
-  ctx.font = '10px system-ui';
-  const w = Math.min(ctx.measureText(text).width + 16, 340);
-  const h = 22;
+  ctx.font = '600 12px system-ui';
+  const w = Math.min(ctx.measureText(text).width + 16, 360);
+  const h = 24;
   const candidates = [
     { x: pr.sx + r + 10, y: pr.sy - h - 8 },
     { x: pr.sx - w / 2, y: pr.sy + r + 14 },
@@ -674,8 +996,8 @@ function drawActiveReasonCallout(nn, pr, r, labelBoxes) {
     roundedRectPath(c.x, c.y, w, h, 5);
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = '#e9d5ff';
-    ctx.fillText(text.length > 54 ? text.slice(0, 53) + '…' : text, c.x + 8, c.y + 14);
+    ctx.fillStyle = '#faf9ff';
+    ctx.fillText(text.length > 54 ? text.slice(0, 53) + '…' : text, c.x + 8, c.y + 16);
     ctx.globalAlpha = 1;
     return;
   }
@@ -709,8 +1031,8 @@ function drawHallWash() {
     ctx.quadraticCurveTo(W * 0.5, H * 0.08, W * (1 - inset), H * 0.92);
     ctx.stroke();
   }
-  ctx.fillStyle = 'rgba(174,181,207,0.55)';
-  ctx.font = '600 10px system-ui';
+  ctx.fillStyle = 'rgba(174,181,207,0.75)';
+  ctx.font = '600 12px system-ui';
   ctx.fillText('ВХОД', W * 0.08, H * 0.94);
   ctx.fillText('СЕГОДНЯ', W * 0.46, H * 0.94);
   ctx.fillText('ДАЛЬШЕ', W * 0.82, H * 0.94);
@@ -892,8 +1214,12 @@ function draw() {
     else if (isNext) col = '#42e8e0';
     else if (onRoute && !isDone) col = '#a78bfa';
 
-    // Depth fade from projection scale (farther → lower alpha)
-    ctx.globalAlpha = quietRouteAnchor ? 0.52 : Math.min(0.95, Math.max(0.35, 0.38 + pr.scale * 0.5));
+    // Depth fade: background/context nodes quieter so route owns attention (U0).
+    let alpha = Math.min(0.95, Math.max(0.35, 0.38 + pr.scale * 0.5));
+    if (quietRouteAnchor) alpha = 0.28;
+    else if (localContextNode) alpha = Math.min(alpha, 0.42);
+    else if (!onRoute && viewMode !== 'route') alpha = Math.min(alpha, 0.38);
+    ctx.globalAlpha = alpha;
     ctx.fillStyle = col;
     ctx.beginPath();
     ctx.arc(pr.sx, pr.sy, r, 0, Math.PI * 2);
@@ -1182,9 +1508,16 @@ function toggleTour() {
 function updatePlayButton() {
   const b = document.getElementById('playbtn');
   if (!b) return;
-  if (tourState === 'playing') b.textContent = '⏸ Пауза';
-  else if (tourState === 'paused') b.textContent = '▶ Продолжить';
-  else b.textContent = '▶ Тур';
+  if (tourState === 'playing') {
+    b.textContent = '⏸';
+    b.title = 'Пауза экскурсии';
+  } else if (tourState === 'paused') {
+    b.textContent = '▶';
+    b.title = 'Продолжить экскурсию';
+  } else {
+    b.textContent = '▶';
+    b.title = 'Экскурсия дня';
+  }
 }
 
 function newEventId() {
@@ -1275,16 +1608,28 @@ function beginAction(action) {
 
 function updateProgressLine() {
   const el = document.getElementById('progressline');
+  const ring = document.getElementById('progressring');
   if (!el) return;
   const route = dayRouteIds();
   const doneN = route.filter(id => doneConceptIds.has(id)).length;
   const learnedN = route.filter(id => learnedConceptIds.has(id)).length;
   el.textContent = `${doneN} из ${route.length} с quiz-следом` +
     (learnedN ? ` · ≥80%: ${learnedN}` : '');
+  if (ring) {
+    const pct = route.length ? Math.round((doneN / route.length) * 100) : 0;
+    ring.style.setProperty('--p', pct + '%');
+  }
+  const hint = document.getElementById('progresshint');
+  if (hint) {
+    hint.textContent = memoryOverlay
+      ? 'след прошлого снимка поверх маршрута'
+      : 'маршрут перестраивается по памяти';
+  }
 }
 
 function updateInventoryLine() {
   const el = document.getElementById('inventory');
+  const countEl = document.getElementById('inventorycount');
   if (!el) return;
   if (!isEmbedded) {
     el.hidden = true;
@@ -1294,7 +1639,11 @@ function updateInventoryLine() {
   const n = workbenchCount != null && Number.isFinite(workbenchCount)
     ? workbenchCount
     : collectedConceptIds.size;
-  el.textContent = `Живой конспект · ${n} раздел(ов) · отмечено на сцене: ${collectedConceptIds.size}`;
+  if (countEl) {
+    countEl.textContent = `${n} раздел(ов) · на сцене ◆ ${collectedConceptIds.size}`;
+  } else {
+    el.textContent = `Живой конспект · ${n} раздел(ов) · отмечено на сцене: ${collectedConceptIds.size}`;
+  }
 }
 
 function updateSnapshotLine() {
@@ -1311,16 +1660,11 @@ function updateSnapshotLine() {
   }
 }
 
-function updateActionUI() {
-  const startBtn = document.getElementById('startbtn');
-  const collectBtn = document.getElementById('collectbtn');
-  const st = document.getElementById('actionstatus');
-  const id = activeRouteId();
+function applyCtaState(startBtn, collectBtn, id) {
   const hasPending = !!pendingAction;
   const collected = id && collectedConceptIds.has(id);
   const startPendingHere = pendingAction && pendingAction.action === 'start' && pendingAction.concept_id === id;
   const collectPendingHere = pendingAction && pendingAction.action === 'collect' && pendingAction.concept_id === id;
-
   if (startBtn) {
     if (!isEmbedded) {
       startBtn.disabled = true;
@@ -1336,15 +1680,22 @@ function updateActionUI() {
     if (!isEmbedded) {
       collectBtn.disabled = true;
       collectBtn.title = 'Только в embedded: откройте 3D-зал в hometutor';
-      collectBtn.textContent = '➕ В конспект';
+      collectBtn.textContent = 'В конспект';
       collectBtn.classList.remove('is-on');
     } else {
       collectBtn.disabled = hasPending || !!collected;
-      collectBtn.textContent = collectPendingHere ? 'Ожидание…' : (collected ? '◆ В конспекте' : '➕ В конспект');
+      collectBtn.textContent = collectPendingHere ? 'Ожидание…' : (collected ? '◆ В конспекте' : 'В конспект');
       collectBtn.classList.toggle('is-on', !!collected);
       collectBtn.setAttribute('aria-busy', String(!!collectPendingHere));
     }
   }
+}
+
+function updateActionUI() {
+  const id = activeRouteId();
+  applyCtaState(document.getElementById('startbtn'), document.getElementById('collectbtn'), id);
+  applyCtaState(document.getElementById('interior-start'), document.getElementById('interior-collect'), id);
+  const st = document.getElementById('actionstatus');
   if (st) {
     if (pendingAction) {
       const an = pendingAction.action === 'start' ? 'открытие режима' : 'сбор в конспект';
@@ -1361,6 +1712,8 @@ function updateActionUI() {
     else mem.classList.remove('on');
     mem.setAttribute('aria-pressed', String(memoryOverlay));
   }
+  const wrap = document.getElementById('wrap');
+  if (wrap) wrap.setAttribute('data-memory', memoryOverlay ? 'on' : 'off');
 }
 
 function applyActionResult() {
@@ -1404,11 +1757,68 @@ function applyActionResult() {
   updateActionUI();
 }
 
+function lastQuizDateFor(conceptId) {
+  if (!MASTERY_HISTORY || !MASTERY_HISTORY.length) return null;
+  for (let i = MASTERY_HISTORY.length - 1; i >= 0; i--) {
+    const snap = MASTERY_HISTORY[i];
+    const mastery = snap && snap.mastery && typeof snap.mastery === 'object' ? snap.mastery : null;
+    if (mastery && Object.prototype.hasOwnProperty.call(mastery, conceptId)) {
+      return String(snap.date || '').trim() || null;
+    }
+  }
+  return null;
+}
+
+function roleFromReason(reason, n) {
+  const r = String(reason || '').toLowerCase();
+  if ((n.due || 0) > 0 || r.includes('повтор')) return 'пора повторить';
+  if (n.novel || r.includes('нов')) return 'новое для тебя';
+  if (r.includes('связ') || r.includes('мост') || r.includes('централ')) return 'связующий узел';
+  if (r.includes('границ') || r.includes('frontier')) return 'на границе знания';
+  if (r.includes('закреп')) return 'пора закрепить';
+  return reason ? String(reason).slice(0, 42) : 'остановка маршрута';
+}
+
+function sectionsForConcept(conceptId) {
+  const raw = CONCEPT_SECTIONS && CONCEPT_SECTIONS[conceptId];
+  return Array.isArray(raw) ? raw : [];
+}
+
+function renderSectionLinks(conceptId, containerId) {
+  const cont = document.getElementById(containerId);
+  if (!cont) return;
+  while (cont.firstChild) cont.removeChild(cont.firstChild);
+  if (!isEmbedded) return;
+  const sections = sectionsForConcept(conceptId).filter(s => s && s.obsidian_uri);
+  sections.slice(0, 3).forEach((s, i) => {
+    const a = document.createElement('a');
+    a.className = 'kgx-link-btn';
+    a.href = String(s.obsidian_uri);
+    a.textContent = i === 0 ? 'Открыть раздел' : String(s.heading || 'раздел').slice(0, 28);
+    a.title = String(s.heading || 'раздел');
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    cont.appendChild(a);
+  });
+}
+
 function updateStopInfo() {
   const el = document.getElementById('stopinfo');
   const route = dayRouteIds();
+  const eyebrow = document.getElementById('stopeyebrow');
+  const nameEl = document.getElementById('stopname');
+  const reasonEl = document.getElementById('stopreason');
+  const chips = document.getElementById('stopchips');
+  const memoryCopy = document.getElementById('memorycopy');
+  const masteryRing = document.getElementById('masteryring');
+  const masteryText = document.getElementById('masterytext');
+  const worthBadge = document.getElementById('worthbadge');
+
   if (!route.length) {
-    if (el) el.innerHTML = 'Нет остановок маршрута дня.';
+    if (el) el.textContent = 'Нет остановок маршрута дня.';
+    if (eyebrow) eyebrow.textContent = 'Остановка —';
+    if (nameEl) nameEl.textContent = 'Нет маршрута дня';
+    if (reasonEl) reasonEl.textContent = 'Добавьте due-карточки или пройдите квиз — маршрут появится.';
     return;
   }
   const i = activeStopIndex;
@@ -1416,64 +1826,73 @@ function updateStopInfo() {
   const n = byId.get(id) || {};
   const reason = String(n.worth_reason || 'в маршруте дня');
   const label = String(n.label || id);
+  const role = roleFromReason(reason, n);
   const next = nextRouteId();
   const nextLabel = next ? String((byId.get(next) || {}).label || next) : '—';
-  if (el) {
-    el.innerHTML = '';
-    const line = document.createElement('div');
-    const s = document.createElement('strong');
-    s.textContent = `Стоп ${i + 1}/${route.length}`;
-    line.appendChild(s);
-    line.appendChild(document.createTextNode(` · ${label}`));
-    if (doneConceptIds.has(id)) {
-      const ok = document.createElement('span');
-      ok.className = 'badge';
-      ok.textContent = learnedConceptIds.has(id) ? '✓ ≥80%' : '✓ quiz';
-      ok.title = learnedConceptIds.has(id)
-        ? 'mastery ≥80% в последнем снимке'
-        : 'был в квизе (любой score в mastery_history)';
-      line.appendChild(ok);
-    }
-    if (isEmbedded && collectedConceptIds.has(id)) {
-      const mk = document.createElement('span');
-      mk.className = 'badge';
-      mk.textContent = '◆ конспект';
-      line.appendChild(mk);
-    }
-    el.appendChild(line);
-    const r = document.createElement('div');
-    r.className = 'reason';
-    r.textContent = `потому что: ${reason}`;
-    el.appendChild(r);
-    const mastery = (typeof n.mastery === 'number') ? n.mastery
-      : (MASTERY_HISTORY.length ? (MASTERY_HISTORY[MASTERY_HISTORY.length - 1].mastery || {})[id] : null);
-    if (mastery != null) {
-      const m = document.createElement('div');
-      m.className = 'mini';
-      m.textContent = `mastery ${Math.round(Number(mastery))}%`;
-      el.appendChild(m);
-    }
-    const nx = document.createElement('div');
-    nx.className = 'mini';
-    nx.style.marginTop = '4px';
-    if (next) {
-      nx.textContent = `дальше: ${nextLabel}`;
+  const masteryRaw = (typeof n.mastery === 'number') ? n.mastery
+    : (MASTERY_HISTORY.length ? (MASTERY_HISTORY[MASTERY_HISTORY.length - 1].mastery || {})[id] : null);
+  const masteryPct = masteryRaw != null && Number.isFinite(Number(masteryRaw))
+    ? Math.max(0, Math.min(100, Math.round(Number(masteryRaw))))
+    : null;
+  const quizDate = lastQuizDateFor(id);
+
+  if (eyebrow) eyebrow.textContent = `Остановка ${i + 1} · ${role}`;
+  if (nameEl) nameEl.textContent = label;
+  if (reasonEl) reasonEl.textContent = reason ? `потому что: ${reason}` : 'в маршруте дня';
+  if (worthBadge) worthBadge.textContent = `W ${(n.worth || 0).toFixed(1)}`;
+  if (masteryRing) {
+    masteryRing.style.setProperty('--m', (masteryPct != null ? masteryPct : 0) + '%');
+    masteryRing.setAttribute('aria-label', masteryPct != null ? `Освоено на ${masteryPct} процентов` : 'Mastery неизвестен');
+  }
+  if (masteryText) masteryText.textContent = masteryPct != null ? `${masteryPct}%` : '—';
+  if (memoryCopy) {
+    if (quizDate) {
+      memoryCopy.textContent = HOST_MODE === 'export'
+        ? `квиз в снимке · ${quizDate}`
+        : `последний квиз · ${quizDate}`;
+    } else if (prevSnapshotConceptIds.has(id)) {
+      memoryCopy.textContent = 'был в предыдущем снимке';
     } else {
+      memoryCopy.textContent = 'ещё не встречался в квизе';
+    }
+  }
+  if (chips) {
+    while (chips.firstChild) chips.removeChild(chips.firstChild);
+    const addChip = (cls, text) => {
+      const c = document.createElement('span');
+      c.className = 'kgx-chip' + (cls ? ' ' + cls : '');
+      c.textContent = text;
+      chips.appendChild(c);
+    };
+    if ((n.due || 0) > 0) addChip('due', `due ${n.due}`);
+    if (n.novel) addChip('novel', 'novel');
+    if (doneConceptIds.has(id)) addChip('done', learnedConceptIds.has(id) ? '✓ ≥80%' : '✓ quiz');
+    if (isEmbedded && collectedConceptIds.has(id)) addChip('collected', '◆ конспект');
+  }
+  renderSectionLinks(id, 'sectionlinks');
+
+  // Hidden live region for a11y + structural tests (Стоп N/M · label)
+  if (el) {
+    let mirror = `Стоп ${i + 1}/${route.length} · ${label}`;
+    if (doneConceptIds.has(id)) mirror += learnedConceptIds.has(id) ? ' · ✓ ≥80%' : ' · ✓ quiz';
+    if (isEmbedded && collectedConceptIds.has(id)) mirror += ' · ◆ конспект';
+    if (next) mirror += ` · дальше: ${nextLabel}`;
+    else {
       const incomplete = route.find(rid => !doneConceptIds.has(rid));
       if (incomplete) {
-        const incLabel = String((byId.get(incomplete) || {}).label || incomplete);
-        nx.textContent = `Дальше: ${incLabel}`;
+        mirror += ` · Дальше: ${String((byId.get(incomplete) || {}).label || incomplete)}`;
       } else {
-        nx.textContent = 'это последняя остановка';
+        mirror += ' · это последняя остановка';
       }
     }
-    el.appendChild(nx);
+    el.textContent = mirror;
   }
   const badge = document.getElementById('routebadge');
   if (badge) badge.textContent = String(route.length);
   updateNavButtons();
   updateActionUI();
   updateProgressLine();
+  if (interiorOpen) fillInterior(id);
 }
 
 function updateNavButtons() {
@@ -1498,8 +1917,8 @@ function setViewMode(mode) {
   syncModeButtons();
   const h = document.getElementById('hint');
   if (h) {
-    if (mode === 'route') h.textContent = 'Режим маршрута: чистая дорожка дня; контекст раскрывается в «Локально»';
-    else if (mode === 'local') h.textContent = 'Локально: активная остановка + immediate prereqs/unlocks';
+    if (mode === 'route') h.textContent = 'Режим маршрута: чистая дорожка дня; контекст — в «Созвездии»';
+    else if (mode === 'local') h.textContent = 'Созвездие: активная остановка + immediate prereqs/unlocks';
     else h.textContent = 'Вся карта: полный граф (подписи по-прежнему ограничены)';
   }
   buildTopList();
@@ -1513,11 +1932,159 @@ function syncModeButtons() {
     if (!b) continue;
     if (m === viewMode) b.classList.add('on');
     else b.classList.remove('on');
+    b.setAttribute('aria-pressed', String(m === viewMode));
   }
+  const wrap = document.getElementById('wrap');
+  if (wrap) wrap.setAttribute('data-scene-mode', viewMode);
+  // «Вся карта» is depth action inside Созвездие, not a topbar segment.
+  const depth = document.getElementById('depthbtn');
+  if (depth) {
+    const showDepth = viewMode === 'local' || viewMode === 'all';
+    depth.hidden = !showDepth;
+    depth.textContent = viewMode === 'all' ? 'Созвездие' : 'Вся карта';
+  }
+  const modeAll = document.getElementById('modeAll');
+  if (modeAll) modeAll.hidden = true;
+}
+
+function fillInterior(conceptId) {
+  const n = byId.get(conceptId) || {};
+  const title = document.getElementById('interior-title');
+  const eye = document.getElementById('interior-eyebrow');
+  if (title) title.textContent = String(n.label || conceptId);
+  if (eye) eye.textContent = `Внутри · W ${(n.worth || 0).toFixed(1)}`;
+  const sec = document.getElementById('interior-sections');
+  if (sec) {
+    while (sec.firstChild) sec.removeChild(sec.firstChild);
+    const sections = sectionsForConcept(conceptId);
+    if (!sections.length) {
+      const empty = document.createElement('div');
+      empty.className = 'mini';
+      empty.style.padding = '0';
+      empty.textContent = isEmbedded
+        ? 'Разделы конспекта не найдены (или vault ещё пуст).'
+        : 'Export read-only · двери в Obsidian только в embedded.';
+      sec.appendChild(empty);
+    } else {
+      sections.forEach(s => {
+        const row = document.createElement('div');
+        row.className = 'kgx-section-row';
+        const left = document.createElement('span');
+        left.textContent = (s.in_basket ? '◆ ' : '') + String(s.heading || 'раздел');
+        row.appendChild(left);
+        if (s.obsidian_uri && isEmbedded) {
+          const a = document.createElement('a');
+          a.href = String(s.obsidian_uri);
+          a.textContent = 'Открыть';
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          row.appendChild(a);
+        }
+        sec.appendChild(row);
+      });
+    }
+  }
+  const edgesEl = document.getElementById('interior-edges');
+  if (edgesEl) {
+    while (edgesEl.firstChild) edgesEl.removeChild(edgesEl.firstChild);
+    const prereqs = (n.prereqs || []).slice(0, 8);
+    const unlocks = (n.unlocks || []).slice(0, 8);
+    const addEdge = (cid, kind) => {
+      const chip = document.createElement('span');
+      chip.className = 'kgx-edge-chip';
+      const other = byId.get(cid) || {};
+      chip.textContent = `${kind}: ${other.label || cid}`;
+      edgesEl.appendChild(chip);
+    };
+    prereqs.forEach(p => addEdge(p, 'precede'));
+    unlocks.forEach(u => addEdge(u, 'follows'));
+    if (!prereqs.length && !unlocks.length) {
+      const empty = document.createElement('div');
+      empty.className = 'mini';
+      empty.style.padding = '0';
+      empty.textContent = 'Связей precede/follows нет в payload.';
+      edgesEl.appendChild(empty);
+    }
+  }
+  const quizEl = document.getElementById('interior-quiz');
+  if (quizEl) {
+    while (quizEl.firstChild) quizEl.removeChild(quizEl.firstChild);
+    const events = [];
+    (MASTERY_HISTORY || []).forEach(snap => {
+      const m = snap && snap.mastery && typeof snap.mastery === 'object' ? snap.mastery : null;
+      if (!m || !Object.prototype.hasOwnProperty.call(m, conceptId)) return;
+      events.push({ date: snap.date || '—', score: m[conceptId] });
+    });
+    if (!events.length) {
+      const empty = document.createElement('div');
+      empty.className = 'mini';
+      empty.style.padding = '0';
+      empty.textContent = 'Quiz-событий по концепту пока нет.';
+      quizEl.appendChild(empty);
+    } else {
+      events.slice(-6).reverse().forEach(ev => {
+        const row = document.createElement('div');
+        row.className = 'kgx-edge-chip';
+        row.textContent = `${ev.date}: ${Math.round(Number(ev.score))}%`;
+        quizEl.appendChild(row);
+      });
+    }
+  }
+  updateActionUI();
+}
+
+function openInterior(conceptId) {
+  const id = conceptId || activeRouteId();
+  if (!id) return;
+  interiorOpen = true;
+  const wrap = document.getElementById('wrap');
+  const panel = document.getElementById('interior');
+  if (wrap) wrap.classList.add('interior-open');
+  if (panel) {
+    panel.hidden = false;
+    panel.style.display = 'block';
+  }
+  // Short fly-in (~200ms); reduced-motion → instant.
+  const o = nodes3d.find(x => x.n.id === id);
+  if (o) {
+    const target = cameraForNode(o);
+    target.zoom = Math.min(1.55, (target.zoom || 1.15) * 1.18);
+    animateCamera(target, prefersReducedMotion ? 0 : 200);
+  }
+  fillInterior(id);
+}
+
+function closeInterior() {
+  interiorOpen = false;
+  const wrap = document.getElementById('wrap');
+  const panel = document.getElementById('interior');
+  if (wrap) wrap.classList.remove('interior-open');
+  if (panel) {
+    panel.hidden = true;
+    panel.style.display = 'none';
+  }
+  render();
+}
+
+function openOnboarding() {
+  const el = document.getElementById('onboard');
+  if (el) el.classList.add('is-open');
+}
+
+function closeOnboarding() {
+  const el = document.getElementById('onboard');
+  if (el) el.classList.remove('is-open');
+  try { sessionStorage.setItem('ht_kg3d_onboard_seen', '1'); } catch (_) {}
 }
 
 function focus(n) {
   if (!n) return;
+  // Second click on already-active stop → interior (U3).
+  if (focusId === n.id && activeRouteId() === n.id && !interiorOpen) {
+    openInterior(n.id);
+    return;
+  }
+  if (interiorOpen) closeInterior();
   focusId = n.id;
   const route = dayRouteIds();
   const ri = route.indexOf(n.id);
@@ -1561,6 +2128,7 @@ function hoverAt(mx, my) {
 
 function buildTopList() {
   const cont = document.getElementById('toplist');
+  if (!cont) return;
   while (cont.firstChild) cont.removeChild(cont.firstChild);
   const route = dayRouteIds();
   let stops = route.map(id => byId.get(id)).filter(Boolean);
@@ -1578,48 +2146,56 @@ function buildTopList() {
     return;
   }
   stops.forEach((n, idx) => {
-    const d = document.createElement('div');
+    const d = document.createElement('button');
+    d.type = 'button';
     d.className = 'stop';
-    d.setAttribute('role', 'button');
-    d.tabIndex = 0;
-    if (idx === activeStopIndex) d.classList.add('active');
+    if (idx === activeStopIndex) {
+      d.classList.add('active');
+      d.setAttribute('aria-current', 'step');
+    }
     if (idx === activeStopIndex + 1) d.classList.add('next');
     if (doneConceptIds.has(n.id)) d.classList.add('done');
-    const title = document.createElement('b');
-    const rankText = doneConceptIds.has(n.id) ? `✓${idx + 1}` : `${idx + 1}`;
-    title.textContent = `${rankText}. ${String(n.label || n.id).slice(0, 24)}`;
-    d.appendChild(title);
+    const index = document.createElement('span');
+    index.className = 'stop-index';
+    index.textContent = doneConceptIds.has(n.id) ? '✓' : String(idx + 1);
+    d.appendChild(index);
+    const copy = document.createElement('span');
+    copy.className = 'stop-copy';
+    const title = document.createElement('strong');
+    title.textContent = String(n.label || n.id).slice(0, 28);
+    copy.appendChild(title);
+    const sub = document.createElement('span');
+    const role = roleFromReason(n.worth_reason, n);
+    sub.textContent = role || String(n.worth_reason || 'в маршруте дня');
+    copy.appendChild(sub);
+    d.appendChild(copy);
     if (isEmbedded && collectedConceptIds.has(n.id)) {
       const mark = document.createElement('span');
       mark.className = 'mark';
       mark.textContent = '◆';
       mark.setAttribute('aria-label', 'в конспекте');
       d.appendChild(mark);
+    } else {
+      const w = document.createElement('span');
+      w.className = 'badge';
+      w.textContent = `W${(n.worth || 0).toFixed(1)}`;
+      d.appendChild(w);
     }
-    const w = document.createElement('span');
-    w.className = 'badge';
-    w.textContent = `W=${(n.worth || 0).toFixed(1)}`;
-    d.appendChild(w);
-    const reason = document.createElement('span');
-    reason.className = 'reason';
-    reason.textContent = String(n.worth_reason || 'в маршруте дня');
-    d.appendChild(reason);
     const go = () => {
       stopTour();
       tourState = 'step';
+      if (interiorOpen) closeInterior();
       goToStop(idx, { animate: true });
       postSelect(n.id);
     };
     d.onclick = go;
-    d.onkeydown = (ev) => {
-      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); go(); }
-    };
     cont.appendChild(d);
   });
 }
 
 function updateStats() {
   const el = document.getElementById('statsline');
+  if (!el) return;
   const tc = STATS.total_concepts || STATS.total || (NODES || []).filter(n => !n.is_lesson).length;
   const tl = STATS.total_lessons || (NODES || []).filter(n => n.is_lesson).length;
   while (el.firstChild) el.removeChild(el.firstChild);
@@ -1629,6 +2205,9 @@ function updateStats() {
   if (HEALTH && typeof HEALTH.score === 'number') {
     text += ` · quality ${Math.round(HEALTH.score)}`;
   }
+  if (viewMode === 'route') text = 'Сцена: маршрут дня · ' + text;
+  else if (viewMode === 'local') text = 'Сцена: созвездие · ' + text;
+  else text = 'Сцена: вся карта · ' + text;
   row.textContent = text;
   el.appendChild(row);
 }
@@ -1700,41 +2279,80 @@ document.getElementById('sidetoggle').onclick = () => {
 };
 document.getElementById('modeRoute').onclick = () => setViewMode('route');
 document.getElementById('modeLocal').onclick = () => setViewMode('local');
-document.getElementById('modeAll').onclick = () => setViewMode('all');
+const modeAllBtn = document.getElementById('modeAll');
+if (modeAllBtn) modeAllBtn.onclick = () => setViewMode('all');
+const depthBtn = document.getElementById('depthbtn');
+if (depthBtn) {
+  depthBtn.onclick = () => {
+    if (viewMode === 'all') setViewMode('local');
+    else setViewMode('all');
+  };
+}
 document.getElementById('prevbtn').onclick = () => {
   stopTour();
   tourState = 'step';
+  if (interiorOpen) closeInterior();
   goToStop(activeStopIndex - 1, { animate: true });
 };
 document.getElementById('nextbtn').onclick = () => {
   stopTour();
   tourState = 'step';
+  if (interiorOpen) closeInterior();
   goToStop(activeStopIndex + 1, { animate: true });
 };
 document.getElementById('playbtn').onclick = () => toggleTour();
 document.getElementById('startbtn').onclick = () => beginAction('start');
 document.getElementById('collectbtn').onclick = () => beginAction('collect');
+const interiorStart = document.getElementById('interior-start');
+const interiorCollect = document.getElementById('interior-collect');
+if (interiorStart) interiorStart.onclick = () => beginAction('start');
+if (interiorCollect) interiorCollect.onclick = () => beginAction('collect');
+const insideBtn = document.getElementById('insidebtn');
+if (insideBtn) insideBtn.onclick = () => openInterior(activeRouteId());
+const interiorClose = document.getElementById('interior-close');
+if (interiorClose) interiorClose.onclick = () => closeInterior();
 document.getElementById('memorybtn').onclick = () => {
   memoryOverlay = !memoryOverlay;
   updateActionUI();
+  updateProgressLine();
   render();
 };
+const helpBtn = document.getElementById('helpbtn');
+if (helpBtn) helpBtn.onclick = () => openOnboarding();
+const onboardOk = document.getElementById('onboard-ok');
+if (onboardOk) onboardOk.onclick = () => closeOnboarding();
 window.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (interiorOpen) {
+      e.preventDefault();
+      closeInterior();
+      return;
+    }
+    const onboard = document.getElementById('onboard');
+    if (onboard && onboard.classList.contains('is-open')) {
+      e.preventDefault();
+      closeOnboarding();
+      return;
+    }
+  }
   if (e.key === 'ArrowLeft') {
     e.preventDefault();
     stopTour();
     tourState = 'step';
+    if (interiorOpen) closeInterior();
     goToStop(activeStopIndex - 1, { animate: true });
   } else if (e.key === 'ArrowRight') {
     e.preventDefault();
     stopTour();
     tourState = 'step';
+    if (interiorOpen) closeInterior();
     goToStop(activeStopIndex + 1, { animate: true });
   }
 });
 document.getElementById('homebtn').onclick = () => {
   stopTour();
   tourState = 'idle';
+  if (interiorOpen) closeInterior();
   viewMode = 'route';
   syncModeButtons();
   fitRouteCamera();
@@ -1750,6 +2368,7 @@ document.getElementById('topbtn').onclick = () => {
 document.getElementById('resetbtn').onclick = () => {
   stopTour();
   tourState = 'idle';
+  if (interiorOpen) closeInterior();
   viewMode = 'route';
   activeStopIndex = 0;
   focusId = dayRouteIds()[0] || null;
@@ -1777,10 +2396,22 @@ function init() {
   updateActionUI();
   applyActionResult();
   updateProgressLine();
+  const brand = document.getElementById('brandsub');
+  if (brand) {
+    brand.textContent = HOST_MODE === 'export' && SNAPSHOT_DATE
+      ? `Memory Run · снимок ${SNAPSHOT_DATE}`
+      : (SNAPSHOT_DATE ? `Memory Run · ${SNAPSHOT_DATE}` : 'Memory Run');
+  }
   render();
   const h = document.getElementById('hint');
   if (h) {
     h.textContent = `${(NODES || []).length} узлов · маршрут ${route.length}/${route.length} · режим route · ${HOST_MODE}`;
+  }
+  // U4: onboarding once per browser tab for embedded, or when host requests it.
+  let seen = false;
+  try { seen = sessionStorage.getItem('ht_kg3d_onboard_seen') === '1'; } catch (_) {}
+  if ((SHOW_ONBOARDING || isEmbedded) && !seen) {
+    openOnboarding();
   }
 }
 init();

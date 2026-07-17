@@ -915,6 +915,8 @@ def build_kg_3d_html(
     workbench_count: int | None = None,
     action_result: Mapping[str, Any] | None = None,
     exported_at: str | None = None,
+    concept_sections: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
+    show_onboarding: bool = False,
 ) -> str:
     """Self-contained offline 3D Knowledge Graph hall (no CDN).
 
@@ -928,6 +930,8 @@ def build_kg_3d_html(
     - ``collected_concept_ids`` / ``workbench_count``: embedded inventory view-model
     - ``action_result``: one-shot embedded ack/error after Python consumes an action
     - mastery_history / decay_vector / snapshot_date: G2 memory overlay inputs
+    - ``concept_sections``: embedded-only doors into Obsidian (U2)
+    - ``show_onboarding``: first-open hall rules overlay (U4)
     """
     mode = "embedded" if str(host_mode or "").strip().lower() == "embedded" else "export"
     t = _load_3d_template()
@@ -944,10 +948,34 @@ def build_kg_3d_html(
         wb_count: int | None = None
         nonce = ""
         result: Mapping[str, Any] | None = None
+        sections_vm: dict[str, list[dict[str, Any]]] = {}
+        onboard = False
     else:
         wb_count = int(workbench_count) if workbench_count is not None else None
         nonce = str(session_nonce or "").strip()
         result = action_result if isinstance(action_result, Mapping) else None
+        sections_vm = {}
+        if isinstance(concept_sections, Mapping):
+            for cid, rows in concept_sections.items():
+                key = str(cid or "").strip()
+                if not key or not isinstance(rows, Sequence):
+                    continue
+                clean: list[dict[str, Any]] = []
+                for row in rows:
+                    if not isinstance(row, Mapping):
+                        continue
+                    heading = str(row.get("heading") or "").strip()
+                    uri = str(row.get("obsidian_uri") or "").strip()
+                    clean.append(
+                        {
+                            "heading": heading,
+                            "in_basket": bool(row.get("in_basket")),
+                            "obsidian_uri": uri,
+                        }
+                    )
+                if clean:
+                    sections_vm[key] = clean
+        onboard = bool(show_onboarding)
     return (
         t.replace("__NODES__", _json_for_script(payload.get("nodes", [])))
         .replace("__EDGES__", _json_for_script(payload.get("edges", [])))
@@ -965,6 +993,8 @@ def build_kg_3d_html(
             "__WORKBENCH_COUNT__",
             _json_for_script(wb_count if wb_count is not None else None),
         )
+        .replace("__CONCEPT_SECTIONS__", _json_for_script(sections_vm))
+        .replace("__SHOW_ONBOARDING__", "true" if onboard else "false")
     )
 
 
@@ -989,14 +1019,16 @@ def render_kg_3d_hall(
     collected_concept_ids: Sequence[str] | None = None,
     workbench_count: int | None = None,
     action_result: Mapping[str, Any] | None = None,
+    concept_sections: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
+    show_onboarding: bool = False,
     height: int = 720,
     key: str = "kg_3d_hall_component",
-) -> Any:
+) -> str | None:
     """Render embedded 3D hall via dedicated Streamlit component.
 
     Returns selected concept id (string) from ``setComponentValue`` if any.
-    Actions return as ``{"kind": "kg3d_action", "envelope": ...}``; ``_kg3d``
-    remains a URL fallback for component-value delivery races.
+    Actions are delivered exclusively via the ``_kg3d`` query-param bridge
+    (never through component value — avoids dual delivery of one event).
     """
     html = build_kg_3d_html(
         payload,
@@ -1005,6 +1037,8 @@ def render_kg_3d_hall(
         collected_concept_ids=collected_concept_ids,
         workbench_count=workbench_count,
         action_result=action_result,
+        concept_sections=concept_sections,
+        show_onboarding=show_onboarding,
     )
     selected = _kg_3d_component()(
         html=html,
@@ -1014,8 +1048,6 @@ def render_kg_3d_hall(
     )
     if isinstance(selected, str) and selected.strip():
         return selected.strip()
-    if isinstance(selected, Mapping):
-        return dict(selected)
     return None
 
 

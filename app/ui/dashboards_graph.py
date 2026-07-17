@@ -1510,7 +1510,7 @@ def _build_keeper_view_models(payload) -> tuple[dict | None, dict | None]:
         hist = payload.get("mastery_history") or []
         if hist and isinstance(hist[-1], dict):
             snap_date = str(hist[-1].get("date") or "")
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001 - malformed mastery history must not block keeper build
         snap_date = ""
     try:
         from app.mnemo_keeper_views import (
@@ -1560,7 +1560,7 @@ def _render_keeper_control_panel() -> None:
             from app.mnemo_keeper import KEEPER_CACHE_SESSION_KEY
 
             st.session_state.pop(KEEPER_CACHE_SESSION_KEY, None)
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001 - cache clear is best-effort, must not block the button action
             pass
 
     with k_cols[0]:

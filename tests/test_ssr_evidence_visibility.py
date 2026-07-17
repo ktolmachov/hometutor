@@ -84,3 +84,33 @@ def test_ml_audit_tail_also_hidden_for_non_debug(monkeypatch):
     html_out = mc._build_ssr_banner_html(_sample_rec(), index_stats=None)
 
     assert "recovery_ladder_step" not in html_out
+
+
+def test_banner_heading_uses_primary_label_ru(monkeypatch):
+    """Заголовок баннера отражает конкретную рекомендацию, а не статичный текст."""
+    monkeypatch.setattr(mc, "build_ssr_evidence_for_banner", _patched_evidence)
+    monkeypatch.setattr(mc, "feature_visible_by_id", lambda _fid, **_kw: False)
+
+    html_out = mc._build_ssr_banner_html(_sample_rec(), index_stats=None)
+
+    assert '<h2 id="mc_ssr_heading">Свериться с базой</h2>' in html_out
+
+
+def test_banner_heading_falls_back_when_primary_label_ru_blank(monkeypatch):
+    """Пустой primary_label_ru не должен рендериться как пустой заголовок."""
+    monkeypatch.setattr(mc, "build_ssr_evidence_for_banner", _patched_evidence)
+    monkeypatch.setattr(mc, "feature_visible_by_id", lambda _fid, **_kw: False)
+
+    rec = _sample_rec()
+    blank_rec = mc.SmartStudyRecommendation(
+        hint_kind=rec.hint_kind,
+        primary_label_ru="   ",
+        why_now_ru=rec.why_now_ru,
+        primary_nav=rec.primary_nav,
+        secondaries=rec.secondaries,
+        route_pedagogy_ru=rec.route_pedagogy_ru,
+        ml_audit_ru=rec.ml_audit_ru,
+    )
+    html_out = mc._build_ssr_banner_html(blank_rec, index_stats=None)
+
+    assert '<h2 id="mc_ssr_heading">С чего можно продолжить</h2>' in html_out

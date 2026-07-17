@@ -114,6 +114,20 @@
     opacity:0.85;color:var(--kgx-muted);border-style:dashed;
   }
   #actionrow.kgx-has-review{grid-template-columns:1fr auto auto}
+  /* W3b: Keeper guide (narrative, data-bound; never blocks CTAs) */
+  .kgx-keeper{
+    margin-top:0.65rem;padding:0.55rem 0.65rem;border-radius:6px;
+    border:1px solid rgba(154,108,255,0.28);
+    background:linear-gradient(135deg,rgba(154,108,255,0.08),rgba(66,232,224,0.05));
+  }
+  .kgx-keeper .kgx-eyebrow{margin:0 0 0.25rem;color:var(--kgx-violet)}
+  .kgx-keeper p{
+    margin:0;color:var(--kgx-text);font-size:0.78rem;line-height:1.4;
+    min-height:2.4em;
+  }
+  .kgx-keeper .kgx-keeper-meta{
+    margin-top:0.35rem;font-size:0.62rem;color:var(--kgx-muted);letter-spacing:0.04em;
+  }
   #body{display:grid;grid-template-columns:minmax(0,1fr) 314px;flex:1 1 auto;min-height:0}
   #stage{position:relative;min-width:0;min-height:0;overflow:hidden;background:var(--kgx-night)}
   #cv{display:block;width:100%;height:100%;background:#050508;cursor:grab}
@@ -511,6 +525,11 @@
         <div class="kgx-eyebrow" id="stopeyebrow">Остановка —</div>
         <h3 id="stopname">Выберите остановку</h3>
         <p class="kgx-reason" id="stopreason">Маршрут дня покажет причину и ценность узла.</p>
+        <div class="kgx-keeper" id="keeperbox" hidden>
+          <div class="kgx-eyebrow">Хранитель · экскурсия</div>
+          <p id="keeperline">—</p>
+          <div class="kgx-keeper-meta" id="keepersource"></div>
+        </div>
         <div class="kgx-chips" id="stopchips"></div>
         <div class="kgx-memory-row">
           <div class="kgx-memory-copy">
@@ -555,6 +574,7 @@
         <li><strong>✓ был в квизе · ◆ в конспекте</strong> — прогресс по памяти и корзине, не XP.</li>
         <li><strong>Рассвет и фонари</strong> — небо и огни на тропе отражают quiz-след маршрута дня.</li>
         <li><strong>Туман</strong> — низкий retention (`decay_vector`); кнопка ◌ «Спокойный мир» скрывает его. Туман никогда не блокирует «Начать».</li>
+        <li><strong>Хранитель</strong> — короткий рассказ об остановке (офлайн из причины маршрута; LLM — только по кнопке в продукте).</li>
       </ol>
       <p class="kgx-onboard-diag" id="onboard-diag" hidden></p>
       <button class="kgx-onboard-ok" id="onboard-ok" type="button">Понятно</button>
@@ -575,6 +595,8 @@ const HOST_MODE = __HOST_MODE__ || 'export'; // export | embedded — channel/ga
 const SESSION_NONCE = __SESSION_NONCE__ || '';
 const COLLECTED_IDS = __COLLECTED_IDS__ || [];
 const ACTION_RESULT = __ACTION_RESULT__ || null;
+/** W3b: {text, source, by_stop, reason, used_llm} — baked at render; no client LLM. */
+const KEEPER_GUIDE = __KEEPER_GUIDE__;
 const WORKBENCH_COUNT_INIT = __WORKBENCH_COUNT__;
 /** Embedded-only view-model: concept_id → [{heading, in_basket, obsidian_uri}] (U2). */
 const CONCEPT_SECTIONS = __CONCEPT_SECTIONS__ || {};
@@ -2568,6 +2590,35 @@ function appendObsidianLink(parent, uri, label) {
   parent.appendChild(a);
 }
 
+/** W3b: show per-stop Keeper line (baked guide; never blocks actions). */
+function updateKeeperLine(conceptId) {
+  const box = document.getElementById('keeperbox');
+  const lineEl = document.getElementById('keeperline');
+  const metaEl = document.getElementById('keepersource');
+  if (!box || !lineEl) return;
+  const guide = (KEEPER_GUIDE && typeof KEEPER_GUIDE === 'object') ? KEEPER_GUIDE : null;
+  const byStop = guide && guide.by_stop && typeof guide.by_stop === 'object' ? guide.by_stop : {};
+  let line = conceptId ? String(byStop[conceptId] || '').trim() : '';
+  if (!line && guide && guide.text) {
+    // Fallback: full text only when single-stop route
+    const route = dayRouteIds();
+    if (route.length === 1 && route[0] === conceptId) line = String(guide.text).trim();
+  }
+  if (!line) {
+    box.hidden = true;
+    lineEl.textContent = '—';
+    if (metaEl) metaEl.textContent = '';
+    return;
+  }
+  box.hidden = false;
+  lineEl.textContent = line;
+  if (metaEl) {
+    const src = String((guide && guide.source) || 'degrade');
+    const srcLabel = src === 'llm' ? 'LLM' : (src === 'cache' ? 'кэш' : (src === 'degrade' ? 'офлайн' : src));
+    metaEl.textContent = guide && guide.used_llm ? `источник · ${srcLabel}` : `источник · ${srcLabel} · без записи в домен`;
+  }
+}
+
 function updateStopInfo() {
   const el = document.getElementById('stopinfo');
   const route = dayRouteIds();
@@ -2612,6 +2663,7 @@ function updateStopInfo() {
   if (eyebrow) eyebrow.textContent = `Остановка ${i + 1} · ${role}`;
   if (nameEl) nameEl.textContent = label;
   if (reasonEl) reasonEl.textContent = reason ? `потому что: ${reason}` : 'в маршруте дня';
+  updateKeeperLine(id);
   if (worthBadge) worthBadge.textContent = `W ${(n.worth || 0).toFixed(1)}`;
   if (masteryRing) {
     masteryRing.style.setProperty('--m', (masteryPct != null ? masteryPct : 0) + '%');

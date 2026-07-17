@@ -210,3 +210,50 @@ def test_estimate_tokens_and_budget_can_afford():
     assert b.can_afford(est_input=100, est_output=50)
     b.calls = b.max_calls
     assert not b.can_afford(est_input=10, est_output=10)
+
+
+def test_build_guide_view_model_w3b():
+    payload = {
+        "nodes": [
+            {"id": "rag", "label": "RAG", "worth_reason": "пора повторить"},
+            {"id": "agent", "label": "Agent", "worth_reason": "новое"},
+        ],
+        "day_route": ["rag", "agent"],
+        "mastery_history": [{"date": "2026-07-18", "mastery": {}}],
+    }
+    state: dict = {}
+    vm = keeper.build_guide_view_model(payload, session_state=state, allow_llm=False)
+    assert vm["source"] == "degrade"
+    assert vm["used_llm"] is False
+    assert "rag" in vm["by_stop"]
+    assert "agent" in vm["by_stop"]
+    assert "пора повторить" in vm["by_stop"]["rag"] or "RAG" in vm["text"]
+
+    # LLM path with mock — separate cache mode
+    def fake(system: str, user: str) -> str:
+        return "1. RAG: рассказ.\n2. Agent: дальше."
+
+    vm2 = keeper.build_guide_view_model(
+        payload, session_state=state, allow_llm=True, llm_complete=fake
+    )
+    assert vm2["source"] == "llm"
+    assert vm2["used_llm"] is True
+    assert "рассказ" in vm2["by_stop"].get("rag", "") or "рассказ" in vm2["text"]
+
+
+def test_guide_html_bakes_keeper_placeholder():
+    from app.ui.knowledge_graph_d3 import build_kg_3d_html
+
+    payload = {
+        "nodes": [{"id": "rag", "label": "RAG", "worth_reason": "x", "worth": 1}],
+        "edges": [],
+        "stats": {},
+        "day_route": ["rag"],
+    }
+    guide = keeper.build_guide_view_model(payload, allow_llm=False)
+    html = build_kg_3d_html(payload, keeper_guide=guide)
+    assert "keeperbox" in html
+    assert "updateKeeperLine" in html
+    assert "__KEEPER_GUIDE__" not in html  # replaced
+    assert "пора" in html or "маршруте" in html or "RAG" in html
+    assert "function updateKeeperLine" in html

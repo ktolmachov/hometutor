@@ -702,6 +702,10 @@ class Test3DCoverageAndContracts:
         assert 'id="reviewbtn"' in html
         assert "beginAction('review')" in html or 'beginAction("review")' in html or "action === 'review'" in html
         assert "shouldShowReviewCta" in html
+        # W3b Keeper guide surface
+        assert "keeperbox" in html
+        assert "updateKeeperLine" in html
+        assert "KEEPER_GUIDE" in html
         # G4.1 floor tint + G4.2 history scrubber (G4.3 photo export deferred / privacy)
         assert "function floorProgressScore" in html
         assert "function refreshMemorySetsFromHistory" in html

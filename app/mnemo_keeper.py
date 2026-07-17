@@ -133,13 +133,17 @@ def build_cache_key(
     route_fp: str = "",
     concept_hash: str = "",
     locale: str = "ru",
+    mode: str = "static",
 ) -> str:
+    """Cache key. ``mode`` separates static degrade from LLM prose (W3b)."""
+    mode_s = "llm" if str(mode or "").strip().lower() == "llm" else "static"
     parts = [
         str(scenario or "").strip(),
         str(snapshot_date or "").strip() or "no-date",
         str(route_fp or "").strip() or "no-route",
         str(concept_hash or "").strip() or "no-concepts",
         str(locale or "ru").strip() or "ru",
+        mode_s,
     ]
     return "|".join(parts)
 
@@ -332,6 +336,7 @@ def request_keeper(
         route_fp=route_fp,
         concept_hash=c_hash,
         locale=locale,
+        mode="llm" if allow_llm else "static",
     )
     budget = budget_from_session(session_state)
     cache = cache_from_session(session_state)
@@ -491,3 +496,111 @@ def _default_llm_complete(system: str, user: str) -> str:
         resp = llm.chat(prompt)
         return str(resp)
     raise TypeError("LLM client has no complete/chat")
+
+
+# ── W3b: guide view-model for 3D hall (render-contract only) ─────────────
+
+
+def stops_from_kg_payload(payload: Mapping[str, Any] | None) -> list[dict[str, str]]:
+    """Build compact stop rows from KG payload day_route + nodes."""
+    payload = payload or {}
+    nodes = payload.get("nodes") or []
+    by_id: dict[str, Mapping[str, Any]] = {}
+    for n in nodes:
+        if not isinstance(n, Mapping):
+            continue
+        cid = str(n.get("id") or "").strip()
+        if cid:
+            by_id[cid] = n
+    route = payload.get("day_route") or []
+    stops: list[dict[str, str]] = []
+    for raw_id in route:
+        cid = str(raw_id or "").strip()
+        if not cid:
+            continue
+        n = by_id.get(cid) or {}
+        stops.append(
+            {
+                "id": cid,
+                "label": str(n.get("label") or cid),
+                "worth_reason": str(n.get("worth_reason") or ""),
+            }
+        )
+    return stops
+
+
+def guide_lines_by_stop(
+    text: str,
+    stops: list[dict[str, str]],
+) -> dict[str, str]:
+    """Map guide prose lines to concept ids (best-effort parse of «N. Name: text»)."""
+    by_stop: dict[str, str] = {}
+    lines = [ln.strip() for ln in str(text or "").splitlines() if ln.strip()]
+    # Prefer positional match to day_route order.
+    for i, stop in enumerate(stops):
+        cid = str(stop.get("id") or "").strip()
+        if not cid:
+            continue
+        if i < len(lines):
+            line = lines[i]
+            # Strip leading "N." / "N:"
+            cleaned = line
+            if ". " in line[:4]:
+                cleaned = line.split(". ", 1)[-1]
+            label = str(stop.get("label") or "")
+            if label and cleaned.lower().startswith(label.lower()):
+                rest = cleaned[len(label) :].lstrip(" :-—")
+                by_stop[cid] = rest or cleaned
+            else:
+                by_stop[cid] = cleaned
+        else:
+            reason = str(stop.get("worth_reason") or "").strip()
+            by_stop[cid] = reason or "в маршруте дня"
+    return by_stop
+
+
+def build_guide_view_model(
+    payload: Mapping[str, Any] | None,
+    *,
+    session_state: MutableMapping[str, Any] | None = None,
+    allow_llm: bool = False,
+    snapshot_date: str = "",
+    llm_complete: Callable[[str, str], str] | None = None,
+) -> dict[str, Any]:
+    """W3b: hall-ready guide dict ``{text, source, reason, by_stop, silent}``.
+
+    First paint should call with ``allow_llm=False`` (static worth_reason narrative).
+    Host may call again with ``allow_llm=True`` after explicit user action (LLM).
+    """
+    payload = payload or {}
+    stops = stops_from_kg_payload(payload)
+    route = [str(s.get("id") or "") for s in stops]
+    snap = str(snapshot_date or "").strip()
+    if not snap:
+        hist = payload.get("mastery_history") or []
+        if hist and isinstance(hist[-1], Mapping):
+            snap = str(hist[-1].get("date") or "").strip()
+    result = request_keeper(
+        prompts.SCENARIO_GUIDE,
+        snapshot_date=snap,
+        day_route=route,
+        stops=stops,
+        allow_llm=allow_llm,
+        session_state=session_state,
+        llm_complete=llm_complete,
+    )
+    by_stop = guide_lines_by_stop(result.text, stops)
+    # Guarantee every route stop has a line (honest degrade).
+    for s in stops:
+        cid = str(s.get("id") or "")
+        if cid and cid not in by_stop:
+            by_stop[cid] = str(s.get("worth_reason") or "в маршруте дня")
+    return {
+        "text": result.text,
+        "source": result.source,
+        "reason": result.reason,
+        "by_stop": by_stop,
+        "silent": result.text.strip() == KEEPER_SILENT_COPY,
+        "used_llm": result.used_llm,
+        "budget": result.budget_snapshot,
+    }

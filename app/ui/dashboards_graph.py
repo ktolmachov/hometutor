@@ -1615,16 +1615,24 @@ def _render_knowledge_graph_tab() -> None:
     )
 
     # 3D hall export: same payload; first frame = day route; worth = rank/reason (not height).
+    # W3b: bake offline Keeper guide (no LLM) so export stays self-contained.
+    export_guide = None
+    try:
+        from app.mnemo_keeper import build_guide_view_model
+
+        export_guide = build_guide_view_model(payload, allow_llm=False)
+    except Exception:  # noqa: BLE001 - export must not fail if keeper missing
+        export_guide = None
     st.download_button(
         "⬇ Скачать 3D-зал (HTML)",
-        data=build_kg_3d_html(payload),
+        data=build_kg_3d_html(payload, keeper_guide=export_guide),
         file_name="knowledge_graph_3d.html",
         mime="text/html",
         key="kg_download_3d_html",
         help=(
             "Офлайн 3D-зал: первый кадр — маршрут дня (не весь граф); "
             "этажи по урокам (precedes); worth — ранг и причина, не высота; "
-            "управляемый тур по остановкам. Export read-only (без действий)."
+            "Хранитель (офлайн-рассказ); export read-only (без действий)."
         ),
     )
 
@@ -1682,11 +1690,64 @@ def _render_knowledge_graph_tab() -> None:
     show_onboarding = not bool(st.session_state.get("kg_3d_onboard_shown"))
     if show_onboarding:
         st.session_state["kg_3d_onboard_shown"] = True
+
+    # W3b Keeper guide: offline degrade on every paint (never blocks); LLM only on button.
+    keeper_guide = None
+    try:
+        from app.mnemo_keeper import build_guide_view_model
+
+        want_llm = bool(st.session_state.pop("kg_3d_keeper_guide_llm_once", False))
+        keeper_guide = build_guide_view_model(
+            payload,
+            session_state=st.session_state,
+            allow_llm=want_llm,
+            snapshot_date=str(
+                (payload.get("mastery_history") or [{}])[-1].get("date") or ""
+            )
+            if payload.get("mastery_history")
+            else "",
+        )
+        # Remember last source for caption (UI-state only).
+        st.session_state["kg_3d_keeper_guide_source"] = str(
+            (keeper_guide or {}).get("source") or ""
+        )
+    except Exception:  # noqa: BLE001 - keeper is optional; hall must still render
+        keeper_guide = None
+
     st.markdown("##### 🏛 3D-зал (embedded)")
     st.caption(
-        "Memory Run · ▶ Начать (Quiz) · В конспект · Открыть раздел (Obsidian) · "
-        "✓ = был в квизе · ◆ = в Живом конспекте · «?» — правила зала."
+        "Memory Run · ▶ Начать (Quiz) · 🔁 Повторить (Flashcards) · В конспект · "
+        "Хранитель · ✓ квиз · ◆ конспект · «?» — правила · ◌ спокойный мир."
     )
+    k_src = str(st.session_state.get("kg_3d_keeper_guide_source") or "")
+    k_cols = st.columns([1, 1, 2])
+    with k_cols[0]:
+        if st.button(
+            "📖 Хранитель (офлайн)",
+            key="kg_3d_keeper_static",
+            help="Обновить рассказ из worth_reason без LLM (мгновенно).",
+        ):
+            # Bust static cache for this route by clearing session cache entry — simplest: full cache clear of keeper static keys is heavy; force rebuild via flag.
+            try:
+                from app.mnemo_keeper import KEEPER_CACHE_SESSION_KEY
+
+                st.session_state.pop(KEEPER_CACHE_SESSION_KEY, None)
+            except Exception:  # noqa: BLE001
+                pass
+            st.session_state["kg_3d_keeper_guide_llm_once"] = False
+            st.rerun()
+    with k_cols[1]:
+        if st.button(
+            "✨ Хранитель (LLM)",
+            key="kg_3d_keeper_llm",
+            help="Один LLM-вызов с бюджетом Keeper (W3a). При сбое — офлайн-текст.",
+        ):
+            st.session_state["kg_3d_keeper_guide_llm_once"] = True
+            st.rerun()
+    with k_cols[2]:
+        if k_src:
+            st.caption(f"Хранитель · источник: **{k_src}**")
+
     hall_value = render_kg_3d_hall(
         payload,
         session_nonce=nonce,
@@ -1695,6 +1756,7 @@ def _render_knowledge_graph_tab() -> None:
         action_result=action_result,
         concept_sections=concept_sections,
         show_onboarding=show_onboarding,
+        keeper_guide=keeper_guide,
         height=720,
         key="kg_3d_hall_component",
     )

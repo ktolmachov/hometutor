@@ -945,6 +945,7 @@ def build_kg_3d_html(
     exported_at: str | None = None,
     concept_sections: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
     show_onboarding: bool = False,
+    keeper_guide: Mapping[str, Any] | None = None,
 ) -> str:
     """Self-contained offline 3D Knowledge Graph hall (no CDN).
 
@@ -960,6 +961,7 @@ def build_kg_3d_html(
     - mastery_history / decay_vector / snapshot_date: G2 memory overlay inputs
     - ``concept_sections``: embedded-only doors into Obsidian (U2)
     - ``show_onboarding``: first-open hall rules overlay (U4)
+    - ``keeper_guide``: W3b Хранитель view-model ``{text, source, by_stop, ...}``
     """
     mode = "embedded" if str(host_mode or "").strip().lower() == "embedded" else "export"
     snap = str(exported_at or "").strip() or date.today().isoformat()
@@ -974,6 +976,21 @@ def build_kg_3d_html(
         result = action_result if isinstance(action_result, Mapping) else None
         sections_vm = _normalize_concept_sections(concept_sections)
         onboard = bool(show_onboarding)
+
+    # Keeper guide: always bake a safe dict (export may include static degrade).
+    guide_vm: dict[str, Any]
+    if isinstance(keeper_guide, Mapping) and keeper_guide:
+        guide_vm = {
+            "text": str(keeper_guide.get("text") or ""),
+            "source": str(keeper_guide.get("source") or "degrade"),
+            "reason": str(keeper_guide.get("reason") or ""),
+            "by_stop": dict(keeper_guide.get("by_stop") or {})
+            if isinstance(keeper_guide.get("by_stop"), Mapping)
+            else {},
+            "used_llm": bool(keeper_guide.get("used_llm")),
+        }
+    else:
+        guide_vm = {"text": "", "source": "none", "reason": "", "by_stop": {}, "used_llm": False}
 
     replacements = {
         "__NODES__": _json_for_script(payload.get("nodes", [])),
@@ -991,6 +1008,7 @@ def build_kg_3d_html(
         "__WORKBENCH_COUNT__": _json_for_script(wb_count),
         "__CONCEPT_SECTIONS__": _json_for_script(sections_vm),
         "__SHOW_ONBOARDING__": "true" if onboard else "false",
+        "__KEEPER_GUIDE__": _json_for_script(guide_vm),
     }
     html = _load_3d_template()
     for placeholder, value in replacements.items():
@@ -1047,6 +1065,7 @@ def render_kg_3d_hall(
     action_result: Mapping[str, Any] | None = None,
     concept_sections: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
     show_onboarding: bool = False,
+    keeper_guide: Mapping[str, Any] | None = None,
     height: int = 720,
     key: str = "kg_3d_hall_component",
 ) -> Any:
@@ -1069,6 +1088,7 @@ def render_kg_3d_hall(
         action_result=action_result,
         concept_sections=concept_sections,
         show_onboarding=show_onboarding,
+        keeper_guide=keeper_guide,
     )
     return _kg_3d_component()(
         html=html,

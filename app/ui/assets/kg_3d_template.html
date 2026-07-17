@@ -87,6 +87,21 @@
     content:"";position:absolute;inset:3px;border-radius:50%;background:var(--kgx-night);
     box-shadow:inset 0 0 0 1px rgba(255,255,255,0.12);
   }
+  /* W2a: calm world toggle — turns off fog antagonists (UI-state only) */
+  .kgx-calm-btn{
+    min-width:32px;height:32px;border:1px solid var(--kgx-line);border-radius:50%;
+    background:transparent;color:var(--kgx-muted);cursor:pointer;font-size:0.72rem;font-weight:700;
+    padding:0 0.35rem;line-height:1;
+  }
+  .kgx-calm-btn:hover{border-color:var(--kgx-cyan);color:var(--kgx-text)}
+  .kgx-calm-btn.on,.kgx-calm-btn[aria-pressed="true"]{
+    border-color:rgba(174,181,207,0.55);color:var(--kgx-text);
+    background:rgba(174,181,207,0.12);box-shadow:0 0 12px rgba(174,181,207,0.15);
+  }
+  .kgx-chip.fog{
+    border-color:rgba(148,163,184,0.55);color:#cbd5e1;
+    background:rgba(100,116,139,0.14);
+  }
   #body{display:grid;grid-template-columns:minmax(0,1fr) 314px;flex:1 1 auto;min-height:0}
   #stage{position:relative;min-width:0;min-height:0;overflow:hidden;background:var(--kgx-night)}
   #cv{display:block;width:100%;height:100%;background:#050508;cursor:grab}
@@ -285,7 +300,8 @@
   }
   #sidetoggle{display:none}
   .kgx-mode:focus-visible,.kgx-action:focus-visible,.kgx-icon-btn:focus-visible,.stop:focus-visible,
-  #sidetoggle:focus-visible,.kgx-link-btn:focus-visible,.kgx-depth-btn:focus-visible,.kgx-onboard-ok:focus-visible{
+  #sidetoggle:focus-visible,.kgx-link-btn:focus-visible,.kgx-depth-btn:focus-visible,.kgx-onboard-ok:focus-visible,
+  .kgx-calm-btn:focus-visible,.kgx-help-btn:focus-visible{
     outline:2px solid var(--kgx-cyan);outline-offset:2px;
   }
   /* Interior drill-down (U3) */
@@ -392,7 +408,7 @@
 </style>
 </head>
 <body>
-<div id="wrap" data-scene-mode="route" data-memory="off">
+<div id="wrap" data-scene-mode="route" data-memory="off" data-calm="off">
   <button id="sidetoggle" type="button" aria-label="Показать/скрыть панель" aria-controls="side" aria-expanded="true">☰</button>
   <header id="topbar" class="kgx-topbar">
     <div class="kgx-brand">
@@ -414,6 +430,9 @@
         <span id="progresshint">маршрут перестраивается по памяти</span>
       </span>
       <span id="progressring" class="kgx-progress-ring" aria-hidden="true"></span>
+      <button class="kgx-calm-btn" id="calmbtn" type="button"
+        title="Спокойный мир: скрыть туман забывания (доступность / вкус)"
+        aria-label="Спокойный мир" aria-pressed="false">◌</button>
       <button class="kgx-help-btn" id="helpbtn" type="button" title="Правила зала" aria-label="Правила зала">?</button>
     </div>
   </header>
@@ -521,6 +540,7 @@
         <li><strong>Дальше сюда, потому что…</strong> — причина и ценность в правой карточке.</li>
         <li><strong>✓ был в квизе · ◆ в конспекте</strong> — прогресс по памяти и корзине, не XP.</li>
         <li><strong>Рассвет и фонари</strong> — небо и огни на тропе отражают quiz-след маршрута дня.</li>
+        <li><strong>Туман</strong> — низкий retention (`decay_vector`); кнопка ◌ «Спокойный мир» скрывает его. Туман никогда не блокирует «Начать».</li>
       </ol>
       <p class="kgx-onboard-diag" id="onboard-diag" hidden></p>
       <button class="kgx-onboard-ok" id="onboard-ok" type="button">Понятно</button>
@@ -572,8 +592,16 @@ let animToken = 0;
 let tourTimer = null;
 /** Memory overlay is orthogonal to viewMode (G2). */
 let memoryOverlay = false;
+/**
+ * W2a: calm world — UI preference only (sessionStorage).
+ * When true, fog antagonists are fully hidden; CTAs never depend on fog.
+ */
+let calmWorld = false;
+try { calmWorld = sessionStorage.getItem('ht_kg3d_calm_world') === '1'; } catch (_) { calmWorld = false; }
 /** Interior drill-down panel open (U3). */
 let interiorOpen = false;
+/** Forgetting strength to start drawing fog (retention = DECAY_VECTOR 0..1). */
+const FOG_FORGET_MIN = 0.28;
 /** @type {null|{event_id:string,action:string,concept_id:string,phase:string,label:string}} */
 let pendingAction = null;
 let toastTimer = 0;
@@ -1140,9 +1168,13 @@ function strokeSmoothPath(pts) {
   ctx.stroke();
 }
 
-function drawSmartLabel(nn, pr, r, isActive, labelBoxes) {
+function drawSmartLabel(nn, pr, r, isActive, labelBoxes, forget = 0) {
   const raw = String(nn.label || nn.id);
-  const text = raw.length > 22 ? raw.slice(0, 21) + '…' : raw;
+  // W2a: partial glyphs only on canvas when foggy; side card keeps full name.
+  const useFogGlyph = !calmWorld && forget >= 0.45 && viewMode !== 'route';
+  const text = useFogGlyph
+    ? fogCanvasLabel(raw, forget)
+    : (raw.length > 22 ? raw.slice(0, 21) + '…' : raw);
   // Memory Run: labels ≥12px with dark halo for AA contrast on night floor.
   ctx.font = (isActive ? 'bold ' : '600 ') + '12px system-ui';
   const w = ctx.measureText(text).width;
@@ -1161,7 +1193,9 @@ function drawSmartLabel(nn, pr, r, isActive, labelBoxes) {
     ctx.lineWidth = 3;
     ctx.strokeStyle = 'rgba(8,8,18,0.88)';
     ctx.strokeText(text, c.x, c.y);
-    ctx.fillStyle = isActive ? '#faf9ff' : '#e8ebf7';
+    ctx.fillStyle = useFogGlyph
+      ? (isActive ? '#d8dee9' : '#aeb5cf')
+      : (isActive ? '#faf9ff' : '#e8ebf7');
     ctx.fillText(text, c.x, c.y);
     return true;
   }
@@ -1215,6 +1249,93 @@ function quizRouteProgress() {
   if (!route.length) return 0;
   const doneN = route.filter(id => doneConceptIds.has(id)).length;
   return Math.max(0, Math.min(1, doneN / route.length));
+}
+
+/**
+ * W2a: retention 0..1 from decay_vector (code contract), or null if no signal.
+ * Forgetting = 1 - retention. No data → no fog (honest empty).
+ */
+function retentionFor(conceptId) {
+  if (!conceptId || !DECAY_VECTOR || typeof DECAY_VECTOR !== 'object') return null;
+  if (!Object.prototype.hasOwnProperty.call(DECAY_VECTOR, conceptId)) return null;
+  const v = Number(DECAY_VECTOR[conceptId]);
+  if (!Number.isFinite(v)) return null;
+  return Math.max(0, Math.min(1, v));
+}
+
+function forgettingFor(conceptId) {
+  const r = retentionFor(conceptId);
+  if (r == null) return 0;
+  return Math.max(0, Math.min(1, 1 - r));
+}
+
+/** True when fog should draw for this concept (respects calm world + threshold). */
+function fogActiveFor(conceptId) {
+  if (calmWorld) return false;
+  return forgettingFor(conceptId) >= FOG_FORGET_MIN;
+}
+
+/** Canvas label with optional partial glyphs when heavily forgotten (side panel always full name). */
+function fogCanvasLabel(rawLabel, forget) {
+  const raw = String(rawLabel || '');
+  if (!raw || forget < 0.45) return raw.length > 22 ? raw.slice(0, 21) + '…' : raw;
+  const chars = [...raw];
+  if (chars.length <= 4) return raw;
+  // Keep edges; thin the middle proportional to forgetting (canvas-only).
+  let out = chars[0];
+  for (let i = 1; i < chars.length - 1; i++) {
+    const drop = forget >= 0.75 ? (i % 2 === 1) : (i % 3 === 1);
+    if (drop) {
+      if (!out.endsWith('…')) out += '…';
+    } else {
+      out += chars[i];
+    }
+  }
+  out += chars[chars.length - 1];
+  out = out.replace(/(…)+/g, '…');
+  return out.length > 22 ? out.slice(0, 21) + '…' : out;
+}
+
+/**
+ * W2a fog draw.
+ * route: quiet marker only (orientation kill switch — no full antagonist scene).
+ * local/all: full soft mist (data-bound alpha from forgetting).
+ */
+function drawForgettingFog(pr, r, forget, { full = false } = {}) {
+  if (forget < FOG_FORGET_MIN) return;
+  const strength = Math.min(1, (forget - FOG_FORGET_MIN) / (1 - FOG_FORGET_MIN));
+  ctx.save();
+  if (!full) {
+    // Quiet route marker: thin cool ring under the stop
+    ctx.globalAlpha = 0.25 + strength * 0.35;
+    ctx.strokeStyle = 'rgba(148,163,184,0.85)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(pr.sx, pr.sy, r * 1.55, 0, Math.PI * 2);
+    ctx.stroke();
+    if (!prefersReducedMotion) {
+      ctx.globalAlpha = 0.12 + strength * 0.18;
+      ctx.fillStyle = 'rgba(148,163,184,0.55)';
+      ctx.beginPath();
+      ctx.arc(pr.sx, pr.sy + r * 0.15, r * 0.9, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+    return;
+  }
+  // Full mist (local/all)
+  const rad = Math.max(18, r * (2.4 + strength * 1.6));
+  const g = ctx.createRadialGradient(pr.sx, pr.sy, r * 0.2, pr.sx, pr.sy, rad);
+  const a0 = prefersReducedMotion ? (0.18 + strength * 0.22) : (0.28 + strength * 0.38);
+  g.addColorStop(0, `rgba(148,163,184,${a0.toFixed(3)})`);
+  g.addColorStop(0.45, `rgba(100,116,139,${(a0 * 0.55).toFixed(3)})`);
+  g.addColorStop(1, 'rgba(71,85,105,0)');
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(pr.sx, pr.sy, rad, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 function drawHallWash() {
@@ -1561,6 +1682,14 @@ function draw() {
       drawRouteLantern(pr, r);
     }
 
+    // W2a fog: under node so stop remains clickable/visible (never hides content).
+    const forget = forgettingFor(nn.id);
+    if (fogActiveFor(nn.id) && !quietRouteAnchor) {
+      const fullFog = viewMode === 'local' || viewMode === 'all';
+      // Route = quiet markers only (first-frame orientation kill switch).
+      drawForgettingFog(pr, r, forget, { full: fullFog });
+    }
+
     // Depth fade: background/context nodes quieter so route owns attention (U0/R3).
     let alpha = Math.min(0.96, Math.max(0.38, 0.42 + pr.scale * 0.5));
     if (quietRouteAnchor) alpha = 0.18;
@@ -1568,6 +1697,10 @@ function draw() {
     else if (!onRoute && viewMode === 'route') alpha = Math.min(alpha, 0.22);
     else if (!onRoute && viewMode !== 'route') alpha = Math.min(alpha, 0.34);
     if (onRoute) alpha = Math.max(alpha, isActive ? 0.98 : 0.88);
+    // Fog does not hide the stop — slight desaturate only when full mist
+    if (fogActiveFor(nn.id) && viewMode !== 'route') {
+      alpha = Math.min(alpha, 0.78 + (1 - forget) * 0.18);
+    }
     ctx.globalAlpha = alpha;
     ctx.fillStyle = col;
     ctx.beginPath();
@@ -1635,6 +1768,7 @@ function draw() {
       const routeRankValue = routeRank.get(nn.id) || 99;
       labelQueue.push({
         nn, pr, r, isActive,
+        forget: forgettingFor(nn.id),
         priority: isActive ? 0 : isNext ? 1 : routeRankValue + 2,
       });
     }
@@ -1643,7 +1777,7 @@ function draw() {
   labelQueue.sort((a, b) => a.priority - b.priority);
   for (const item of labelQueue) {
     ctx.globalAlpha = Math.min(1, Math.max(0.55, 0.5 + item.pr.scale * 0.45));
-    drawSmartLabel(item.nn, item.pr, item.r, item.isActive, labelBoxes);
+    drawSmartLabel(item.nn, item.pr, item.r, item.isActive, labelBoxes, item.forget || 0);
   }
   if (activeVisual) drawActiveReasonCallout(activeVisual.nn, activeVisual.pr, activeVisual.r, labelBoxes);
   ctx.globalAlpha = 1;
@@ -2252,8 +2386,21 @@ function updateActionUI() {
     else mem.classList.remove('on');
     mem.setAttribute('aria-pressed', String(memoryOverlay));
   }
+  const calmBtn = document.getElementById('calmbtn');
+  if (calmBtn) {
+    calmBtn.classList.toggle('on', calmWorld);
+    calmBtn.setAttribute('aria-pressed', String(calmWorld));
+    calmBtn.title = calmWorld
+      ? 'Спокойный мир включён — туман скрыт. Нажмите, чтобы показать забывание.'
+      : 'Спокойный мир: скрыть туман забывания (доступность / вкус)';
+  }
   const wrap = document.getElementById('wrap');
-  if (wrap) wrap.setAttribute('data-memory', memoryOverlay ? 'on' : 'off');
+  if (wrap) {
+    wrap.setAttribute('data-memory', memoryOverlay ? 'on' : 'off');
+    wrap.setAttribute('data-calm', calmWorld ? 'on' : 'off');
+  }
+  // W2a invariant: fog never disables primary actions (re-assert after any UI update).
+  // applyCtaState already ignores fog; this documents the contract for tests/readers.
 }
 
 function applyActionResult() {
@@ -2412,6 +2559,8 @@ function updateStopInfo() {
     masteryRing.setAttribute('aria-label', masteryPct != null ? `Освоено на ${masteryPct} процентов` : 'Mastery неизвестен');
   }
   if (masteryText) masteryText.textContent = masteryPct != null ? `${masteryPct}%` : '—';
+  const forget = forgettingFor(id);
+  const ret = retentionFor(id);
   if (memoryCopy) {
     if (quizDate) {
       memoryCopy.textContent = HOST_MODE === 'export'
@@ -2421,6 +2570,13 @@ function updateStopInfo() {
       memoryCopy.textContent = 'был в предыдущем снимке';
     } else {
       memoryCopy.textContent = 'ещё не встречался в квизе';
+    }
+    // W2a: honest retention line when we have decay signal (full name stays in title)
+    if (ret != null && forget >= FOG_FORGET_MIN && !calmWorld) {
+      const pct = Math.round(forget * 100);
+      memoryCopy.textContent += ` · туман ~${pct}%`;
+    } else if (ret != null && calmWorld && forget >= FOG_FORGET_MIN) {
+      memoryCopy.textContent += ' · спокойный мир';
     }
   }
   if (chips) {
@@ -2439,7 +2595,11 @@ function updateStopInfo() {
     if (n.novel) addChip('novel', 'новое');
     if (doneConceptIds.has(id)) addChip('done', learnedConceptIds.has(id) ? '✓ ≥80%' : '✓ квиз');
     if (isEmbedded && collectedConceptIds.has(id)) addChip('collected', '◆ конспект');
+    // W2a: invitation chip — never shame; never disables CTA
+    if (fogActiveFor(id)) addChip('fog', 'туман · можно войти');
   }
+  // Full concept name always in nameEl (a11y / anti-shame) — never fog-glyph the panel.
+  if (nameEl) nameEl.textContent = label;
   renderSectionLinks(id, 'sectionlinks');
 
   // Hidden live region for a11y + structural tests (Стоп N/M · label)
@@ -2902,6 +3062,16 @@ const insideBtn = document.getElementById('insidebtn');
 if (insideBtn) insideBtn.onclick = () => openInterior(activeRouteId());
 const interiorClose = document.getElementById('interior-close');
 if (interiorClose) interiorClose.onclick = () => closeInterior();
+const calmBtnEl = document.getElementById('calmbtn');
+if (calmBtnEl) {
+  calmBtnEl.onclick = () => {
+    calmWorld = !calmWorld;
+    try { sessionStorage.setItem('ht_kg3d_calm_world', calmWorld ? '1' : '0'); } catch (_) {}
+    updateActionUI();
+    updateStopInfo();
+    render();
+  };
+}
 document.getElementById('memorybtn').onclick = () => {
   memoryOverlay = !memoryOverlay;
   updateActionUI();

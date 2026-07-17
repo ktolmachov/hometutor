@@ -690,6 +690,14 @@ class Test3DCoverageAndContracts:
             "kgx-compass span" in html and "display:none" in html
         )  # W0′-R2 variant A
         assert "небо теплеет" in html or "рассвет" in html  # W1 progress copy
+        # W2a fog of forgetting + calm world (visual only; no new action)
+        assert "function forgettingFor" in html
+        assert "function drawForgettingFog" in html
+        assert "function fogActiveFor" in html
+        assert 'id="calmbtn"' in html
+        assert "ht_kg3d_calm_world" in html
+        assert "FOG_FORGET_MIN" in html
+        assert "туман · можно войти" in html  # non-blocking invitation chip
         # G4.1 floor tint + G4.2 history scrubber (G4.3 photo export deferred / privacy)
         assert "function floorProgressScore" in html
         assert "function refreshMemorySetsFromHistory" in html

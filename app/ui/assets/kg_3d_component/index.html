@@ -74,7 +74,8 @@ function isValidActionEnvelope(data) {
   const concept = String(data.concept_id || '').trim();
   const eventId = String(data.event_id || '').trim();
   const nonce = String(data.session_nonce || '').trim();
-  return !!(concept && eventId && nonce);
+  const ts = Number(data.ts);
+  return !!(concept && eventId && nonce && Number.isFinite(ts) && ts > 0);
 }
 
 window.__kg3dSetConcept = syncConceptSelection;
@@ -104,6 +105,7 @@ window.addEventListener('message', (event) => {
       session_nonce: String(data.session_nonce).trim(),
       concept_id: String(data.concept_id).trim(),
       action: data.action,
+      ts: Number(data.ts),
     });
   }
 });

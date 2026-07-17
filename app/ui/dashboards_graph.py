@@ -26,6 +26,7 @@ from app.ui.home_hub import (
 )
 from app.ui.knowledge_graph_d3 import (
     KG_3D_ACTION_KEY,
+    KG_3D_ACTION_RESULT_KEY,
     KG_3D_QUERY_PARAM,
     _is_lesson_node as _is_lesson_concept,
     build_kg_3d_html,
@@ -161,6 +162,48 @@ def _workbench_collected_concept_ids(state=None) -> list[str]:
     return ids
 
 
+def _query_param_first_str(name: str) -> str:
+    raw = st.query_params.get(name)
+    if raw is None:
+        return ""
+    if isinstance(raw, list):
+        raw = raw[0] if raw else ""
+    return str(raw or "").strip()
+
+
+def _kg_3d_concept_label(knowledge_graph, concept_id: str) -> str:
+    try:
+        concepts = knowledge_graph.get_concepts() if knowledge_graph is not None else {}
+    except Exception:  # noqa: BLE001 - label lookup must not block action execution
+        concepts = {}
+    raw = concepts.get(concept_id) if isinstance(concepts, dict) else {}
+    info = raw if isinstance(raw, dict) else {}
+    return str(info.get("label") or concept_id)
+
+
+def _set_kg_3d_action_result(
+    state,
+    *,
+    envelope: dict,
+    status: str,
+    label: str,
+    message: str = "",
+    added: int = 0,
+    duplicates: int = 0,
+) -> None:
+    target = st.session_state if state is None else state
+    target[KG_3D_ACTION_RESULT_KEY] = {
+        "status": status,
+        "action": str(envelope.get("action") or ""),
+        "concept_id": str(envelope.get("concept_id") or ""),
+        "event_id": str(envelope.get("event_id") or ""),
+        "label": label,
+        "message": message,
+        "added": int(added or 0),
+        "duplicates": int(duplicates or 0),
+    }
+
+
 def _execute_kg_3d_action(
     envelope: dict,
     *,
@@ -175,8 +218,16 @@ def _execute_kg_3d_action(
     action = str(envelope.get("action") or "")
     concept_id = str(envelope.get("concept_id") or "").strip()
     event_id = str(envelope.get("event_id") or "").strip()
+    label = _kg_3d_concept_label(knowledge_graph, concept_id)
     if not concept_id or action not in {"start", "collect"}:
         mark_kg_3d_event(target, event_id, "failed")
+        _set_kg_3d_action_result(
+            state,
+            envelope=envelope,
+            status="failed",
+            label=label or concept_id,
+            message="Некорректное действие",
+        )
         return
 
     target[KG_3D_ACTION_KEY] = {
@@ -186,12 +237,27 @@ def _execute_kg_3d_action(
     }
     target["kg_selected_concept"] = concept_id
     target["kg_action_concept"] = concept_id
+    target["interactive_quiz_focus_concept"] = concept_id
+    target["current_topic"] = label
 
     try:
         if action == "start":
             # Navigation only — no workbench / mastery write (G1 boundary).
+            for key in (
+                "interactive_quiz_data",
+                "interactive_quiz_gen_id",
+                "interactive_quiz_saved_for_gen_id",
+                "interactive_quiz_error",
+            ):
+                target.pop(key, None)
             target[PENDING_CURRENT_VIEW_KEY] = "Интерактивный Quiz"
             mark_kg_3d_event(target, event_id, "succeeded")
+            _set_kg_3d_action_result(
+                state,
+                envelope=envelope,
+                status="succeeded",
+                label=label,
+            )
             if state is None:
                 st.toast(f"▶ Старт из 3D-зала: **{concept_id}** → Quiz", icon="🎮")
                 # PENDING is applied at the start of a run; force another pass so
@@ -201,10 +267,6 @@ def _execute_kg_3d_action(
 
         # collect: same domain path as 2D «Собрать всё по концепту»
         related_docs = list(knowledge_graph.get_related_documents(concept_id) or [])
-        concepts = knowledge_graph.get_concepts() if knowledge_graph is not None else {}
-        raw = concepts.get(concept_id) if isinstance(concepts, dict) else {}
-        info = raw if isinstance(raw, dict) else {}
-        label = str(info.get("label") or concept_id)
         query_text = " ".join(part for part in [concept_id, label] if part)
         added, duplicates = _collect_concept_sections_to_workbench(
             concept=concept_id,
@@ -214,6 +276,14 @@ def _execute_kg_3d_action(
             state=state,
         )
         mark_kg_3d_event(target, event_id, "succeeded")
+        _set_kg_3d_action_result(
+            state,
+            envelope=envelope,
+            status="succeeded",
+            label=label,
+            added=added,
+            duplicates=duplicates,
+        )
         if state is None:
             if added or duplicates:
                 st.toast(
@@ -228,6 +298,13 @@ def _execute_kg_3d_action(
                 )
     except Exception as exc:  # noqa: BLE001 - action must fail closed without breaking the tab
         mark_kg_3d_event(target, event_id, "failed")
+        _set_kg_3d_action_result(
+            state,
+            envelope=envelope,
+            status="failed",
+            label=label,
+            message=_format_request_error(exc),
+        )
         if state is None:
             st.error(f"3D-зал: не удалось выполнить «{action}»: {_format_request_error(exc)}")
 
@@ -239,7 +316,7 @@ def _consume_and_apply_kg_3d_query(
     doc_index: dict,
 ) -> None:
     """Order: validate → remove ``_kg3d`` → reserve → execute → ack (G0)."""
-    raw = str(st.query_params.get(KG_3D_QUERY_PARAM) or "").strip()
+    raw = _query_param_first_str(KG_3D_QUERY_PARAM)
     # Always strip the param so a bad/stale URL cannot loop full reruns.
     if KG_3D_QUERY_PARAM in st.query_params or raw:
         try:
@@ -1275,6 +1352,7 @@ def _render_knowledge_graph_tab() -> None:
     except Exception:  # noqa: BLE001
         wb_count = 0
     nonce = ensure_kg_3d_session_nonce(st.session_state)
+    action_result = st.session_state.pop(KG_3D_ACTION_RESULT_KEY, None)
     st.markdown("##### 🏛 3D-зал (embedded)")
     st.caption(
         "Маршрут дня · ▶ Начать (навигация в Quiz) · ➕ В конспект · "
@@ -1285,6 +1363,7 @@ def _render_knowledge_graph_tab() -> None:
         session_nonce=nonce,
         collected_concept_ids=collected_ids,
         workbench_count=wb_count,
+        action_result=action_result,
         height=720,
         key="kg_3d_hall_component",
     )
@@ -1297,7 +1376,7 @@ def _render_knowledge_graph_tab() -> None:
     # the component returns the selected concept id to Python; `_kgc` remains as
     # a legacy URL fallback for older single-iframe rendering.
     component_concept = str(payload.get("selected_concept") or "").strip()
-    _kgc_param = str(st.query_params.get("_kgc") or "").strip()
+    _kgc_param = _query_param_first_str("_kgc")
     bridged_concept = component_concept if component_concept in node_ids else _kgc_param
     if hall_selected and hall_selected in node_ids:
         bridged_concept = hall_selected

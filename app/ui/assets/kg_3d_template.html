@@ -112,7 +112,7 @@
       <b>Маршрут</b>: 1→N, тихие lesson-якоря, worth = ранг/причина.<br>
       <b>Локально/Вся карта</b>: Y = этаж урока (precedes), X = прогрессия, Z = полоса.<br>
       <b>✓</b> = quiz-прогресс · <b>◆</b> = в конспекте (только embedded).<br>
-      Мышь — поворот · колесо — зум · hover — причина · клик — фокус · кнопки — действия.
+      Мышь — поворот · колесо — зум · hover — причина · клик — фокус (локальный контекст) · кнопки — действия.
     </div>
     <div class="mini" id="hint"></div>
   </div>
@@ -130,6 +130,7 @@ const SNAPSHOT_DATE = __SNAPSHOT_DATE__ || '';
 const HOST_MODE = __HOST_MODE__ || 'export'; // export | embedded — channel/gating axis
 const SESSION_NONCE = __SESSION_NONCE__ || '';
 const COLLECTED_IDS = __COLLECTED_IDS__ || [];
+const ACTION_RESULT = __ACTION_RESULT__ || null;
 const WORKBENCH_COUNT = __WORKBENCH_COUNT__;
 
 const canvas = document.getElementById('cv');
@@ -1206,6 +1207,7 @@ function postAction(action, conceptId) {
       session_nonce: SESSION_NONCE,
       concept_id: String(conceptId),
       action,
+      ts: Math.floor(Date.now() / 1000),
     }, '*');
   } catch (_) {
     pendingAction = null;
@@ -1330,6 +1332,38 @@ function updateActionUI() {
     else mem.classList.remove('on');
     mem.setAttribute('aria-pressed', String(memoryOverlay));
   }
+}
+
+function applyActionResult() {
+  if (!ACTION_RESULT || !isEmbedded) return;
+  const st = document.getElementById('actionstatus');
+  if (!st) return;
+  const status = String(ACTION_RESULT.status || '').trim();
+  const action = String(ACTION_RESULT.action || '').trim();
+  const conceptId = String(ACTION_RESULT.concept_id || '').trim();
+  const label = String(ACTION_RESULT.label || conceptId || 'концепт');
+  const added = Number(ACTION_RESULT.added || 0);
+  const duplicates = Number(ACTION_RESULT.duplicates || 0);
+  st.dataset.sticky = '1';
+  if (status === 'succeeded') {
+    if (action === 'collect') {
+      if (conceptId) collectedConceptIds.add(conceptId);
+      st.textContent = added || duplicates
+        ? `Ack: «${label}» добавлено в конспект · +${added}` + (duplicates ? ` · уже было ${duplicates}` : '')
+        : `Ack: «${label}» · подходящих разделов не нашлось`;
+      updateInventoryLine();
+      buildTopList();
+    } else if (action === 'start') {
+      st.textContent = `Ack: «${label}» · Quiz открыт`;
+    } else {
+      st.textContent = `Ack: «${label}» · действие выполнено`;
+    }
+  } else if (status === 'failed') {
+    st.textContent = `Ошибка: «${label}» · ${String(ACTION_RESULT.message || 'действие не выполнено')}`;
+  }
+  pendingAction = null;
+  if (actionTimeoutTimer) clearTimeout(actionTimeoutTimer);
+  updateActionUI();
 }
 
 function updateStopInfo() {
@@ -1700,6 +1734,7 @@ function init() {
   updateInventoryLine();
   updateSnapshotLine();
   updateActionUI();
+  applyActionResult();
   updateProgressLine();
   render();
   const h = document.getElementById('hint');

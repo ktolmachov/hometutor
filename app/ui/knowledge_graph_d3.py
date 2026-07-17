@@ -27,7 +27,7 @@ import re
 import secrets
 from collections import OrderedDict, deque
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 from functools import lru_cache
 from hmac import compare_digest
 from pathlib import Path
@@ -56,11 +56,13 @@ _3D_COMPONENT_PATH = Path(__file__).resolve().parent / "assets" / "kg_3d_compone
 
 # G0 action bridge (embedded 3D hall → Python). UI-state only; no per-user table.
 KG_3D_ACTION_KEY = "kg_3d_action"
+KG_3D_ACTION_RESULT_KEY = "kg_3d_action_result"
 KG_3D_SESSION_NONCE_KEY = "kg_3d_session_nonce"
 KG_3D_DEDUP_KEY = "kg_3d_event_dedup"
 KG_3D_QUERY_PARAM = "_kg3d"
 KG_3D_MAX_RAW_LEN = 600
 KG_3D_DEDUP_MAX = 64
+KG_3D_FRESHNESS_SECONDS = 600
 _KG3D_UUID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
@@ -775,6 +777,7 @@ def validate_kg_3d_envelope(
     *,
     session_nonce: str,
     node_ids: Iterable[str],
+    now_ts: int | None = None,
 ) -> dict[str, Any] | None:
     """Validate G0 envelope fields; constant-time nonce compare."""
     if not isinstance(env, Mapping):
@@ -789,9 +792,20 @@ def validate_kg_3d_envelope(
     concept_id = str(env.get("concept_id") or "").strip()
     event_id = str(env.get("event_id") or "").strip()
     nonce = str(env.get("session_nonce") or "").strip()
+    try:
+        ts = int(env.get("ts"))
+    except (TypeError, ValueError):
+        return None
     if not concept_id or not event_id or not nonce:
         return None
     if not _valid_event_id(event_id):
+        return None
+    current_ts = (
+        int(now_ts)
+        if now_ts is not None
+        else int(datetime.now(timezone.utc).timestamp())
+    )
+    if abs(current_ts - ts) > KG_3D_FRESHNESS_SECONDS:
         return None
     # Constant-time: pad/truncate comparison length only after length match.
     expected = str(session_nonce or "")
@@ -807,6 +821,7 @@ def validate_kg_3d_envelope(
         "session_nonce": nonce,
         "concept_id": concept_id,
         "action": action,
+        "ts": ts,
     }
 
 
@@ -863,6 +878,7 @@ def consume_kg_3d_query_param(
     session_nonce: str,
     node_ids: Iterable[str],
     state: MutableMapping[str, Any],
+    now_ts: int | None = None,
 ) -> dict[str, Any] | None:
     """Validate → reserve event_id. Caller removes query param always.
 
@@ -873,6 +889,7 @@ def consume_kg_3d_query_param(
         decode_kg_3d_query_raw(str(raw or "")),
         session_nonce=session_nonce,
         node_ids=node_ids,
+        now_ts=now_ts,
     )
     if env is None:
         return None
@@ -894,6 +911,7 @@ def build_kg_3d_html(
     session_nonce: str = "",
     collected_concept_ids: Sequence[str] | None = None,
     workbench_count: int | None = None,
+    action_result: Mapping[str, Any] | None = None,
     exported_at: str | None = None,
 ) -> str:
     """Self-contained offline 3D Knowledge Graph hall (no CDN).
@@ -906,6 +924,7 @@ def build_kg_3d_html(
     - ``host_mode``: ``export`` (inert actions) | ``embedded`` (action bridge)
     - ``session_nonce``: embedded-only envelope binding
     - ``collected_concept_ids`` / ``workbench_count``: embedded inventory view-model
+    - ``action_result``: one-shot embedded ack/error after Python consumes an action
     - mastery_history / decay_vector / snapshot_date: G2 memory overlay inputs
     """
     mode = "embedded" if str(host_mode or "").strip().lower() == "embedded" else "export"
@@ -922,9 +941,11 @@ def build_kg_3d_html(
         collected = []
         wb_count: int | None = None
         nonce = ""
+        result: Mapping[str, Any] | None = None
     else:
         wb_count = int(workbench_count) if workbench_count is not None else None
         nonce = str(session_nonce or "").strip()
+        result = action_result if isinstance(action_result, Mapping) else None
     return (
         t.replace("__NODES__", _json_for_script(payload.get("nodes", [])))
         .replace("__EDGES__", _json_for_script(payload.get("edges", [])))
@@ -937,6 +958,7 @@ def build_kg_3d_html(
         .replace("__HOST_MODE__", _json_for_script(mode))
         .replace("__SESSION_NONCE__", _json_for_script(nonce))
         .replace("__COLLECTED_IDS__", _json_for_script(collected))
+        .replace("__ACTION_RESULT__", _json_for_script(result))
         .replace(
             "__WORKBENCH_COUNT__",
             _json_for_script(wb_count if wb_count is not None else None),
@@ -964,6 +986,7 @@ def render_kg_3d_hall(
     session_nonce: str,
     collected_concept_ids: Sequence[str] | None = None,
     workbench_count: int | None = None,
+    action_result: Mapping[str, Any] | None = None,
     height: int = 720,
     key: str = "kg_3d_component",
 ) -> str | None:
@@ -978,6 +1001,7 @@ def render_kg_3d_hall(
         session_nonce=session_nonce,
         collected_concept_ids=collected_concept_ids,
         workbench_count=workbench_count,
+        action_result=action_result,
     )
     selected = _kg_3d_component()(
         html=html,

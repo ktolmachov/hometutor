@@ -12,12 +12,15 @@ from __future__ import annotations
 
 import inspect
 import os
+import time
 
 import pytest
 
 from app.ui.knowledge_graph_d3 import (
     KG_3D_ACTION_KEY,
+    KG_3D_ACTION_RESULT_KEY,
     KG_3D_DEDUP_KEY,
+    KG_3D_FRESHNESS_SECONDS,
     KG_3D_MAX_RAW_LEN,
     build_kg_3d_html,
     build_kg_html,
@@ -922,6 +925,7 @@ class TestKg3dActionBridge:
             "session_nonce": "a" * 32,
             "concept_id": "rag",
             "action": "start",
+            "ts": int(time.time()),
         }
         base.update(overrides)
         return base
@@ -984,6 +988,16 @@ class TestKg3dActionBridge:
             is None
         )
 
+    def test_rejects_stale_timestamp(self):
+        assert (
+            validate_kg_3d_envelope(
+                self._env(ts=int(time.time()) - KG_3D_FRESHNESS_SECONDS - 5),
+                session_nonce="a" * 32,
+                node_ids=["rag"],
+            )
+            is None
+        )
+
     def test_dedup_window_at_most_once(self):
         state: dict = {}
         nonce = ensure_kg_3d_session_nonce(state)
@@ -1019,6 +1033,7 @@ class TestKg3dActionBridge:
         assert 'HOST_MODE = "export"' in html
         assert 'SESSION_NONCE = ""' in html
         assert "COLLECTED_IDS = []" in html
+        assert "ACTION_RESULT = null" in html
         assert "2026-07-17" in html
         assert '"rag": 50' in html or '"rag":50' in html
         assert "<script src=" not in html.lower()
@@ -1037,11 +1052,23 @@ class TestKg3dActionBridge:
             session_nonce="abcd" * 8,
             collected_concept_ids=["rag"],
             workbench_count=4,
+            action_result={
+                "status": "succeeded",
+                "action": "collect",
+                "concept_id": "rag",
+                "event_id": "12345678-1234-1234-1234-1234567890ab",
+                "label": "RAG",
+                "message": "добавлено: 2",
+                "added": 2,
+                "duplicates": 0,
+            },
         )
         assert 'HOST_MODE = "embedded"' in html
         assert "abcd" * 8 in html
         assert '"rag"' in html
         assert "WORKBENCH_COUNT = 4" in html
+        assert "ACTION_RESULT" in html
+        assert "добавлено: 2" in html
 
 
 class TestKg3dProductActions:
@@ -1084,6 +1111,10 @@ class TestKg3dProductActions:
         )
         assert state[PENDING_CURRENT_VIEW_KEY] == "Интерактивный Quiz"
         assert state[KG_3D_ACTION_KEY]["action"] == "start"
+        assert state["interactive_quiz_focus_concept"] == "rag"
+        assert state["kg_action_concept"] == "rag"
+        assert state[KG_3D_ACTION_RESULT_KEY]["status"] == "succeeded"
+        assert state[KG_3D_ACTION_RESULT_KEY]["action"] == "start"
         assert calls["collect"] == 0
 
     def test_collect_calls_workbench_once(self, monkeypatch):
@@ -1115,6 +1146,20 @@ class TestKg3dProductActions:
         )
         assert calls["n"] == 1
         assert state[KG_3D_ACTION_KEY]["action"] == "collect"
+        assert state[KG_3D_ACTION_RESULT_KEY]["status"] == "succeeded"
+        assert state[KG_3D_ACTION_RESULT_KEY]["label"] == "RAG"
+        assert state[KG_3D_ACTION_RESULT_KEY]["added"] == 2
+
+    def test_query_param_reader_accepts_streamlit_list_values(self, monkeypatch):
+        from app.ui import dashboards_graph as dg
+
+        class _FakeSt:
+            query_params = {"_kg3d": ["raw-action"], "_kgc": []}
+
+        monkeypatch.setattr(dg, "st", _FakeSt)
+        assert dg._query_param_first_str("_kg3d") == "raw-action"
+        assert dg._query_param_first_str("_kgc") == ""
+        assert dg._query_param_first_str("missing") == ""
 
     def test_component_wrapper_uses_kg3d_param_not_envelope_component_value(self):
         from pathlib import Path

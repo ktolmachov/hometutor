@@ -399,8 +399,28 @@ def _render_interactive_quiz_tab() -> None:
     learned_from_graph = [n for n, d in concepts.items() if isinstance(d, dict) and d.get("learned")]
     learned_union = sorted(set(learned_session) | set(learned_from_graph))
     graph_summary = knowledge_graph.get_graph_summary(learned_union)
-    topic_guess = ", ".join(sorted(concepts.keys())[:12]) if concepts else "общая тема RAG и базы знаний"
-    concept_names = ", ".join(sorted(concepts.keys())[:80]) if concepts else "(граф концептов пуст — опирайся на тему)"
+    focus_concept = str(
+        st.session_state.get("interactive_quiz_focus_concept")
+        or st.session_state.get("kg_action_concept")
+        or ""
+    ).strip()
+    focus_label = ""
+    if focus_concept and focus_concept in concepts:
+        raw_focus = concepts.get(focus_concept)
+        focus_info = raw_focus if isinstance(raw_focus, dict) else {}
+        focus_label = str(focus_info.get("label") or focus_concept).strip()
+    sorted_concepts = sorted(concepts.keys())
+    if focus_concept and focus_concept in sorted_concepts:
+        sorted_concepts = [focus_concept] + [c for c in sorted_concepts if c != focus_concept]
+    topic_guess = (
+        focus_label
+        or (", ".join(sorted_concepts[:12]) if concepts else "общая тема RAG и базы знаний")
+    )
+    concept_names = (
+        ", ".join(sorted_concepts[:80])
+        if concepts
+        else "(граф концептов пуст — опирайся на тему)"
+    )
 
     hist_msgs = session_store.get(sid)
     recent_parts: list[str] = []

@@ -15,7 +15,12 @@ def _doc(path: str, chunk_id: str):
     )
 
 
-def test_relation_with_invalid_chunk_gets_same_doc_chunk_fallback():
+def test_relation_with_invalid_chunk_is_not_silently_healed():
+    """Explicit hallucinated chunk ids stay as-is so the evidence gate can fail (#290).
+
+    Only *empty* evidence_chunk_id is filled from same-doc metadata
+    (see ``test_relation_evidence_gate_accepts_metadata_chunk_fallback``).
+    """
     def extract(_doc_id, _rows):
         return (
             {
@@ -58,7 +63,10 @@ def test_relation_with_invalid_chunk_gets_same_doc_chunk_fallback():
         if rel["source_concept_id"] == "task-board" and rel["target_concept_id"] == "deep-agents"
     )
     assert relation["evidence_doc_id"] == "course/deep-agents.md"
-    assert relation["evidence_chunk_id"] == "chunk-1"
+    # Do not rewrite invent-ed chunk ids into real ones (honest gate).
+    assert relation["evidence_chunk_id"] == "missing-chunk"
+    metrics = result.quality_report.metrics
+    assert metrics["relations_with_evidence_pct"] < 100.0
 
 
 def test_relation_evidence_gate_accepts_metadata_chunk_fallback():

@@ -1,16 +1,31 @@
 """KG 3D-hall action handlers extracted from dashboards_graph (size budget).
 
-W5a ask handoff and related helpers live here so the main dashboard module
+W5a ask handoff + W5c inline brief live here so the main dashboard module
 does not grow past the architecture peak-file ceiling.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import streamlit as st
 
 from app.ui.knowledge_graph_d3 import KG_3D_ACTION_RESULT_KEY, mark_kg_3d_event
+
+# Cap for hall status / interior panel (honest short retrieval, not a tutor essay).
+_BRIEF_MAX_CHARS = 900
+
+
+def kg_3d_concept_label(knowledge_graph: Any, concept_id: str) -> str:
+    """Best-effort display label for a concept id."""
+    try:
+        concepts = knowledge_graph.get_concepts() if knowledge_graph is not None else {}
+    except Exception:  # noqa: BLE001 - label lookup must not block action execution
+        concepts = {}
+    raw = concepts.get(concept_id) if isinstance(concepts, dict) else {}
+    info = raw if isinstance(raw, dict) else {}
+    return str(info.get("label") or concept_id)
 
 
 def _kg_3d_tutor_context(
@@ -114,3 +129,103 @@ def run_kg_3d_ask_action(
     if state is None:
         st.toast(f"💬 Спросить о **{label or concept_id}** → Тьютор", icon="🎓")
         st.rerun()
+
+
+def _related_doc_names(knowledge_graph: Any, concept_id: str, *, limit: int = 4) -> list[str]:
+    if knowledge_graph is None:
+        return []
+    try:
+        raw = list(knowledge_graph.get_related_documents(concept_id) or [])
+    except Exception:  # noqa: BLE001
+        return []
+    names: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        path = str(item or "").strip()
+        if not path:
+            continue
+        name = Path(path.replace("\\", "/")).name or path
+        if name in seen:
+            continue
+        seen.add(name)
+        names.append(name)
+        if len(names) >= limit:
+            break
+    return names
+
+
+def build_concept_brief_text(
+    concept_id: str,
+    *,
+    label: str,
+    knowledge_graph: Any = None,
+) -> str:
+    """W5c: deterministic read-only concept brief from graph data (no LLM).
+
+    Degrade path for Keeper C2 — grounded only on concept metadata, mastery,
+    prereqs, and related document basenames already available to the host.
+    """
+    info, mastery_pct, prereqs, related_docs_count, is_frontier = _kg_3d_tutor_context(
+        knowledge_graph, concept_id, label
+    )
+    title = str(label or concept_id or "концепт").strip()
+    level = str(info.get("level") or "—").strip() or "—"
+    desc = str(info.get("description") or "").strip()
+    lines = [
+        f"{title}",
+        f"Уровень: {level} · mastery ~{mastery_pct:.0f}%",
+    ]
+    if desc:
+        lines.append(desc[:320] + ("…" if len(desc) > 320 else ""))
+    if prereqs:
+        shown = [str(p).strip() for p in prereqs[:5] if str(p).strip()]
+        if shown:
+            lines.append("Опоры: " + ", ".join(shown))
+    docs = _related_doc_names(knowledge_graph, concept_id)
+    if docs:
+        lines.append("Источники: " + ", ".join(docs))
+    elif related_docs_count:
+        lines.append(f"Связанных документов: {related_docs_count}")
+    if is_frontier:
+        lines.append("На границе обучения — пресреквизиты выглядят освоенными.")
+    lines.append("Полный разговор: «Спросить» → Тьютор (не в зале).")
+    text = "\n".join(lines).strip()
+    if len(text) > _BRIEF_MAX_CHARS:
+        text = text[: _BRIEF_MAX_CHARS - 1].rstrip() + "…"
+    return text or f"{title}: данных графа пока мало."
+
+
+def run_kg_3d_brief_action(
+    *,
+    target: Any,
+    envelope: dict,
+    knowledge_graph: Any,
+    concept_id: str,
+    event_id: str,
+    label: str,
+    state: Any,
+) -> None:
+    """W5c: «Кратко здесь» — stay in hall; action_result carries brief text.
+
+    No domain write, no PENDING navigation, no inline LLM (C2 retrieval only).
+    """
+    text = build_concept_brief_text(
+        concept_id, label=label, knowledge_graph=knowledge_graph
+    )
+    target["kg_selected_concept"] = concept_id
+    target["kg_action_concept"] = concept_id
+    if label:
+        target["current_topic"] = label
+    mark_kg_3d_event(target, event_id, "succeeded")
+    target[KG_3D_ACTION_RESULT_KEY] = {
+        "status": "succeeded",
+        "action": str(envelope.get("action") or "brief"),
+        "concept_id": concept_id,
+        "event_id": event_id,
+        "label": label or concept_id,
+        "message": text,
+        "added": 0,
+        "duplicates": 0,
+    }
+    if state is None:
+        st.toast(f"📜 Кратко · **{label or concept_id}**", icon="📖")

@@ -284,8 +284,10 @@ quality-сигнал для следующей пересборки. Если ac
 promoted graph bundle из-за failed gate, read-path графа использует последний
 существующий bundle `previous_generation`. Graph build scope фильтрует
 служебные `_test*`/`test-*`/cache/graph-artifact источники до compiler stage;
-если relation ссылается на документ, но указывает несуществующий chunk, compiler
-подставляет первый валидный chunk того же документа как локальный evidence fallback.
+если relation ссылается на документ, но **не указывает** chunk id, compiler
+подставляет первый валидный chunk того же документа (metadata fallback);
+явный несуществующий / hallucinated `evidence_chunk_id` сохраняется и
+ломает relation-evidence gate (честная публикация, без silent heal).
 Course/Knowledge Graph UI показывает publish read-path и последний failed staging
 report, чтобы distinguish published graph, previous fallback и diagnostic-only bundle.
 Операционная graph-only пересборка выполняется `scripts/rebuild_knowledge_graph.py`:

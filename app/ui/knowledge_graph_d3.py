@@ -67,11 +67,12 @@ _KG3D_UUID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
 _KG3D_ULID_RE = re.compile(r"^[0-9A-HJKMNP-TV-Z]{26}$", re.IGNORECASE)
-# W2b: review = Flashcards nav; W4c: district doors; W5a: ask = tutor handoff.
+# W2b: review = Flashcards nav; W4c: district doors; W5a: ask = tutor handoff;
+# W5c: brief = inline read-only concept retrieval (stay in hall).
 _KG3D_DOOR_ACTIONS = frozenset(
     {"door_quiz", "door_flashcards", "door_plan", "door_konspekt"}
 )
-_KG3D_ACTIONS = frozenset({"start", "collect", "review", "ask"}) | _KG3D_DOOR_ACTIONS
+_KG3D_ACTIONS = frozenset({"start", "collect", "review", "ask", "brief"}) | _KG3D_DOOR_ACTIONS
 
 # Door action → product view (PENDING_CURRENT_VIEW_KEY).
 KG_3D_DOOR_VIEWS: dict[str, str] = {

@@ -128,6 +128,20 @@
   .kgx-keeper .kgx-keeper-meta{
     margin-top:0.35rem;font-size:0.62rem;color:var(--kgx-muted);letter-spacing:0.04em;
   }
+  /* W5c: inline concept brief (graph retrieval; stay in hall) */
+  .kgx-brief{
+    margin-top:0.55rem;padding:0.5rem 0.6rem;border-radius:6px;
+    border:1px solid rgba(66,232,224,0.28);
+    background:rgba(66,232,224,0.06);
+  }
+  .kgx-brief .kgx-eyebrow{margin:0 0 0.25rem;color:var(--kgx-cyan,#42e8e0)}
+  .kgx-brief pre,.kgx-brief p{
+    margin:0;white-space:pre-wrap;word-break:break-word;
+    color:var(--kgx-text);font-size:0.74rem;line-height:1.4;
+    font-family:inherit;
+  }
+  .kgx-brief .kgx-keeper-meta{margin-top:0.3rem}
+  #interior .kgx-brief{margin:0.65rem 1rem 0}
   /* W3c: threats summary (deterministic items + optional prose) */
   .kgx-threats{
     margin-top:0.55rem;padding:0.5rem 0.6rem;border-radius:6px;
@@ -557,12 +571,18 @@
           <h4>Quiz-события</h4>
           <div id="interior-quiz"></div>
         </div>
+        <div class="kgx-brief" id="interior-briefbox" hidden>
+          <div class="kgx-eyebrow">Кратко · данные графа</div>
+          <pre id="interior-brief-text">—</pre>
+          <div class="kgx-keeper-meta" id="interior-brief-meta">без LLM · read-only</div>
+        </div>
         <div class="kgx-primary-actions kgx-has-review" style="max-width:420px">
           <button class="kgx-action kgx-action-primary" id="interior-start" type="button">▶ Начать</button>
           <button class="kgx-action kgx-action-review" id="interior-review" type="button" title="Повторить карточки">🔁 Повторить</button>
           <button class="kgx-action kgx-action-secondary" id="interior-collect" type="button">В конспект</button>
         </div>
         <div class="kgx-tertiary-actions" style="padding:0 1rem 1rem">
+          <button class="kgx-link-btn" id="interior-brief" type="button" title="Краткая справка из графа (остаётесь в зале)">📜 Кратко здесь</button>
           <button class="kgx-link-btn" id="interior-ask" type="button" title="Спросить тьютора об этом концепте">💬 Спросить об этом</button>
         </div>
       </div>
@@ -611,8 +631,14 @@
           <button class="kgx-action kgx-action-review" id="reviewbtn" type="button" title="Повторить карточки (Flashcards) — развеять туман" hidden>🔁 Повторить</button>
           <button class="kgx-action kgx-action-secondary" id="collectbtn" type="button" title="Собрать разделы в Живой конспект">В конспект</button>
         </div>
+        <div class="kgx-brief" id="conceptbrief" hidden>
+          <div class="kgx-eyebrow">Кратко · данные графа</div>
+          <pre id="conceptbrief-text">—</pre>
+          <div class="kgx-keeper-meta" id="conceptbrief-meta">без LLM · read-only</div>
+        </div>
         <div class="kgx-tertiary-actions">
           <button class="kgx-link-btn" id="insidebtn" type="button" title="Провалиться внутрь узла">Внутрь</button>
+          <button class="kgx-link-btn" id="briefbtn" type="button" title="Краткая справка из графа (остаётесь в зале)">📜 Кратко</button>
           <button class="kgx-link-btn" id="askbtn" type="button" title="Спросить тьютора об этом концепте">💬 Спросить</button>
           <div id="sectionlinks"></div>
         </div>
@@ -647,7 +673,7 @@
         <li><strong>Туман</strong> — низкий retention (`decay_vector`); кнопка ◌ «Спокойный мир» скрывает его. Туман никогда не блокирует «Начать».</li>
         <li><strong>Хранитель</strong> — рассказ об остановке и список угроз забывания (офлайн; LLM — по кнопке в продукте). 🔁 развеет туман.</li>
         <li><strong>Районы</strong> — в Созвездии / Всей карте: Арена, Оранжерея, Магистраль, Кузница (двери в разделы). Не в первом кадре Маршрута.</li>
-        <li><strong>Спросить</strong> — handoff в «Чат с тьютором» с префиллом по концепту (без inline-LLM в зале).</li>
+        <li><strong>Кратко</strong> — справка из данных графа в зале (read-only, без LLM). <strong>Спросить</strong> — handoff в «Чат с тьютором».</li>
       </ol>
       <p class="kgx-onboard-diag" id="onboard-diag" hidden></p>
       <button class="kgx-onboard-ok" id="onboard-ok" type="button">Понятно</button>
@@ -2285,9 +2311,9 @@ function beginAction(action) {
     return;
   }
   // collect is add-only: already-collected stays disabled.
-  // start / review / ask always allowed (nav handoffs).
+  // start / review / ask / brief always allowed (nav or stay-in-hall).
   if (action === 'collect' && collectedConceptIds.has(id)) return;
-  if (!isDoor && action !== 'start' && action !== 'collect' && action !== 'review' && action !== 'ask') return;
+  if (!isDoor && action !== 'start' && action !== 'collect' && action !== 'review' && action !== 'ask' && action !== 'brief') return;
   if (isDoor && !DOOR_ACTIONS[action]) return;
   postAction(action, id || '_district');
 }
@@ -2564,9 +2590,11 @@ function updateActionUI() {
           ? 'открытие Flashcards'
           : (act === 'ask'
             ? 'открытие Тьютора'
-            : (String(act || '').startsWith('door_')
-              ? 'переход в район'
-              : 'сбор в конспект')));
+            : (act === 'brief'
+              ? 'краткая справка'
+              : (String(act || '').startsWith('door_')
+                ? 'переход в район'
+                : 'сбор в конспект'))));
       st.textContent = `Ожидание: ${an} · «${pendingAction.label}»`;
     } else if (!isEmbedded) {
       // W0′ R7: clearer export hierarchy copy
@@ -2607,7 +2635,33 @@ function updateActionUI() {
       b.title = 'Спросить тьютора об этом концепте';
     }
   });
+  // W5c: inline brief (graph retrieval; export inert).
+  ['briefbtn', 'interior-brief'].forEach((bid) => {
+    const b = document.getElementById(bid);
+    if (!b) return;
+    if (!isEmbedded) {
+      b.disabled = true;
+      b.title = 'Доступно в продукте: Кратко → справка из графа';
+    } else {
+      b.disabled = !!pendingAction || !activeRouteId();
+      b.title = 'Краткая справка из графа (остаётесь в зале)';
+    }
+  });
   // W2a invariant: fog never disables primary actions (re-assert after any UI update).
+}
+
+function showConceptBrief(label, message) {
+  const msg = String(message || '').trim() || 'Данных графа пока мало.';
+  const fill = (boxId, textId, metaId) => {
+    const box = document.getElementById(boxId);
+    const text = document.getElementById(textId);
+    const meta = document.getElementById(metaId);
+    if (text) text.textContent = msg;
+    if (meta) meta.textContent = 'источник: graph · без LLM · read-only';
+    if (box) box.hidden = false;
+  };
+  fill('conceptbrief', 'conceptbrief-text', 'conceptbrief-meta');
+  fill('interior-briefbox', 'interior-brief-text', 'interior-brief-meta');
 }
 
 function applyActionResult() {
@@ -2648,6 +2702,11 @@ function applyActionResult() {
     } else if (action === 'start') {
       st.textContent = `Ack: «${label}» · Quiz открыт`;
       showToast(`Открываем · «${label}»`);
+    } else if (action === 'brief') {
+      const msg = String(ACTION_RESULT.message || '').trim();
+      showConceptBrief(label, msg);
+      st.textContent = `📜 Кратко · «${label}» · данные графа`;
+      showToast(`Кратко · «${label}»`);
     } else {
       st.textContent = `Ack: «${label}» · действие выполнено`;
       showToast(`Готово · «${label}»`);
@@ -3381,12 +3440,16 @@ const interiorStart = document.getElementById('interior-start');
 const interiorCollect = document.getElementById('interior-collect');
 const interiorReview = document.getElementById('interior-review');
 const interiorAsk = document.getElementById('interior-ask');
+const interiorBrief = document.getElementById('interior-brief');
 if (interiorStart) interiorStart.onclick = () => beginAction('start');
 if (interiorCollect) interiorCollect.onclick = () => beginAction('collect');
 if (interiorReview) interiorReview.onclick = () => beginAction('review');
+if (interiorBrief) interiorBrief.onclick = () => beginAction('brief');
 if (interiorAsk) interiorAsk.onclick = () => beginAction('ask');
 const insideBtn = document.getElementById('insidebtn');
 if (insideBtn) insideBtn.onclick = () => openInterior(activeRouteId());
+const briefBtn = document.getElementById('briefbtn');
+if (briefBtn) briefBtn.onclick = () => beginAction('brief');
 const askBtn = document.getElementById('askbtn');
 if (askBtn) askBtn.onclick = () => beginAction('ask');
 const interiorClose = document.getElementById('interior-close');

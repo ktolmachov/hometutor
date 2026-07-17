@@ -724,6 +724,12 @@ class Test3DCoverageAndContracts:
         assert 'id="askbtn"' in html
         assert 'id="interior-ask"' in html
         assert "beginAction('ask')" in html or 'beginAction("ask")' in html or "action !== 'ask'" in html
+        # W5c inline brief (graph retrieval, stay in hall)
+        assert 'id="briefbtn"' in html
+        assert 'id="interior-brief"' in html
+        assert 'id="conceptbrief"' in html
+        assert "beginAction('brief')" in html or 'beginAction("brief")' in html or "action !== 'brief'" in html
+        assert "showConceptBrief" in html
         # G4.1 floor tint + G4.2 history scrubber (G4.3 photo export deferred / privacy)
         assert "function floorProgressScore" in html
         assert "function refreshMemorySetsFromHistory" in html
@@ -1507,6 +1513,15 @@ class TestKg3dActionBridge:
         assert ok is not None
         assert ok["action"] == "ask"
 
+    def test_accepts_brief_action(self):
+        """W5c: brief = inline graph retrieval (stay in hall)."""
+        env = self._env(action="brief")
+        ok = validate_kg_3d_envelope(
+            env, session_nonce="a" * 32, node_ids=["rag"]
+        )
+        assert ok is not None
+        assert ok["action"] == "brief"
+
     def test_rejects_bad_event_id(self):
         assert (
             validate_kg_3d_envelope(
@@ -1776,6 +1791,71 @@ class TestKg3dProductActions:
         assert state.get("tutor_cta_action", "").startswith("KG3D:rag:")
         assert KG_3D_ACTION_RESULT_KEY not in state
         assert calls["collect"] == 0
+
+    def test_brief_stays_in_hall_without_tutor_or_workbench(self, monkeypatch):
+        """W5c: brief → action_result message; no PENDING, no tutor, no workbench."""
+        from app.ui import dashboards_graph as dg
+        from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
+
+        state: dict = {}
+        calls = {"collect": 0}
+
+        def boom(**kwargs):
+            calls["collect"] += 1
+            return (0, 0)
+
+        monkeypatch.setattr(dg, "_collect_concept_sections_to_workbench", boom)
+
+        class _FakeSt:
+            @staticmethod
+            def toast(*a, **k):
+                pass
+
+            @staticmethod
+            def rerun():
+                pass
+
+            @staticmethod
+            def error(*a, **k):
+                pass
+
+        monkeypatch.setattr(dg, "st", _FakeSt)
+
+        class _KG:
+            def get_concepts(self):
+                return {
+                    "rag": {
+                        "label": "RAG",
+                        "level": "core",
+                        "description": "Retrieval-augmented generation.",
+                    }
+                }
+
+            def get_prerequisites(self, concept):
+                return ["embeddings"]
+
+            def get_related_documents(self, concept):
+                return ["course/rag.md", "notes/retrieval.txt"]
+
+        env = {
+            "action": "brief",
+            "concept_id": "rag",
+            "event_id": "12345678-1234-1234-1234-1234567890cc",
+        }
+        dg._execute_kg_3d_action(
+            env, knowledge_graph=_KG(), doc_index={}, state=state
+        )
+        assert PENDING_CURRENT_VIEW_KEY not in state
+        assert "tutor_pending_prompt" not in state
+        assert calls["collect"] == 0
+        result = state.get(KG_3D_ACTION_RESULT_KEY) or {}
+        assert result.get("status") == "succeeded"
+        assert result.get("action") == "brief"
+        assert result.get("concept_id") == "rag"
+        msg = str(result.get("message") or "")
+        assert "RAG" in msg or "rag" in msg.lower()
+        assert "Retrieval-augmented" in msg or "mastery" in msg.lower()
+        assert "rag.md" in msg or "Источники" in msg
 
     def test_collect_calls_workbench_once(self, monkeypatch):
         from app.ui import dashboards_graph as dg

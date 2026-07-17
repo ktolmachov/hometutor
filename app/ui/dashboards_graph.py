@@ -24,7 +24,11 @@ from app.ui.home_hub import (
     _find_topic_for_concept,
     _topic_documents_index,
 )
-from app.ui.dashboards_graph_kg3d_actions import run_kg_3d_ask_action
+from app.ui.dashboards_graph_kg3d_actions import (
+    kg_3d_concept_label as _kg_3d_concept_label,
+    run_kg_3d_ask_action,
+    run_kg_3d_brief_action,
+)
 from app.ui.dashboards_graph_state import (
     _prime_kg_3d_action_focus,
     _workbench_collected_concept_ids,
@@ -138,16 +142,6 @@ def build_tutor_prompt_for_concept(
         f"{context}\n\n"
         f"Расскажи мне всё самое важное про «{concept_id}», что нужно знать для практической работы."
     )
-
-def _kg_3d_concept_label(knowledge_graph, concept_id: str) -> str:
-    try:
-        concepts = knowledge_graph.get_concepts() if knowledge_graph is not None else {}
-    except Exception:  # noqa: BLE001 - label lookup must not block action execution
-        concepts = {}
-    raw = concepts.get(concept_id) if isinstance(concepts, dict) else {}
-    info = raw if isinstance(raw, dict) else {}
-    return str(info.get("label") or concept_id)
-
 
 def _query_param_first_str(name: str) -> str:
     raw = st.query_params.get(name)
@@ -434,6 +428,11 @@ def _execute_kg_3d_action(
                 label=label,
                 state=state,
                 build_tutor_prompt=build_tutor_prompt_for_concept,
+            )
+        elif action == "brief":
+            run_kg_3d_brief_action(
+                target=target, envelope=envelope, knowledge_graph=knowledge_graph,
+                concept_id=concept_id, event_id=event_id, label=label, state=state,
             )
         elif action in _KG3D_DOOR_ACTIONS:
             _run_kg_3d_door_action(

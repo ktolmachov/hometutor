@@ -1,9 +1,34 @@
 """Кэш каталога тем в session_state."""
 from __future__ import annotations
 
+import logging
+import time
+
+import requests
 import streamlit as st
 
 from app.ui_client import fetch_json
+
+_TOPICS_ERROR_TTL_SECONDS = 60
+_TOPICS_ERROR_KEY = "topics_catalog_error"
+_TOPICS_ERROR_TS_KEY = "topics_catalog_error_ts"
+
+
+def _recent_topics_error() -> bool:
+    ts = float(st.session_state.get(_TOPICS_ERROR_TS_KEY) or 0.0)
+    return (time.monotonic() - ts) < _TOPICS_ERROR_TTL_SECONDS
+
+
+def _format_topics_error(exc: Exception) -> str:
+    if isinstance(exc, requests.HTTPError) and exc.response is not None:
+        try:
+            payload = exc.response.json()
+        except ValueError:
+            payload = {}
+        detail = payload.get("detail") if isinstance(payload, dict) else None
+        if detail:
+            return str(detail)
+    return str(exc)
 
 
 def _inject_team_workflow_prompt_topics(catalog: dict) -> dict:
@@ -69,12 +94,17 @@ def _inject_team_workflow_prompt_topics(catalog: dict) -> dict:
 def load_topics_catalog(force: bool = False):
     if st.session_state["topics_catalog"] is not None and not force:
         return st.session_state["topics_catalog"]
+    if not force and _recent_topics_error():
+        return None
     try:
         st.session_state["topics_catalog"] = _inject_team_workflow_prompt_topics(
             fetch_json("GET", "/topics", timeout=20)
         )
+        st.session_state.pop(_TOPICS_ERROR_KEY, None)
+        st.session_state.pop(_TOPICS_ERROR_TS_KEY, None)
     except Exception as _exc:  # noqa: BLE001
-        import logging  # noqa: BLE001
         logging.getLogger(__name__).debug("! caught exception: %s", _exc)
+        st.session_state[_TOPICS_ERROR_KEY] = _format_topics_error(_exc)
+        st.session_state[_TOPICS_ERROR_TS_KEY] = time.monotonic()
         st.session_state["topics_catalog"] = None
     return st.session_state["topics_catalog"]

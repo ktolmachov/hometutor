@@ -576,7 +576,9 @@ class Test3DCoverageAndContracts:
         assert "function drawActiveReasonCallout" in html3
         assert "Стоп ${idx + 1}/${route.length} · ${name} · ${reason}" in html3
         assert "!(viewMode === 'route' && isActive)" in html3
-        assert ".list{overflow:visible" in html3
+        assert "#side{width:300px" in html3
+        assert "overflow:hidden" in html3.split("#side{width:300px", 1)[1].split("}", 1)[0]
+        assert ".list{overflow:auto" in html3
         assert "function hoverAt" in html3
         assert "hover — причина" in html3
         assert "клик — фокус" in html3

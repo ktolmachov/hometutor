@@ -7,9 +7,9 @@
 <style>
   :root { --bg:#0a0a0f; --glass:rgba(255,255,255,0.06); --acc:#8b5cf6; --on:#c4b5fd; }
   html,body{margin:0;height:100%;background:var(--bg);color:#e8e8f0;font-family:system-ui,-apple-system,sans-serif;overflow:hidden}
-  #wrap{display:flex;height:100%;position:relative}
+  #wrap{display:flex;height:100%;position:relative;overflow:hidden}
   #cv{flex:1 1 auto;display:block;background:#050508;min-width:0}
-  #side{width:300px;flex:0 0 300px;border-left:1px solid #222;padding:12px 14px;box-sizing:border-box;overflow:auto;font-size:12px;background:#0c0c12}
+  #side{width:300px;flex:0 0 300px;border-left:1px solid #222;padding:12px 14px;box-sizing:border-box;overflow:hidden;font-size:12px;background:#0c0c12;display:flex;flex-direction:column;min-height:0}
   .hd{font-weight:700;margin:0 0 8px;font-size:13px;letter-spacing:.3px}
   .btn{background:var(--glass);border:1px solid #333;color:#ddd;padding:6px 10px;border-radius:6px;cursor:pointer;margin:3px 2px;font-size:11px}
   .btn:hover{border-color:var(--acc)}
@@ -17,7 +17,7 @@
   .btn:disabled{opacity:.4;cursor:default}
   .row{display:flex;flex-wrap:wrap;gap:2px;margin:4px 0}
   .st{display:flex;gap:6px;margin:4px 0;font-size:11px}
-  .list{overflow:visible;border:1px solid #222;border-radius:6px;padding:4px}
+  .list{overflow:auto;border:1px solid #222;border-radius:6px;padding:4px;min-height:108px;flex:1 1 150px}
   .stop{padding:5px 6px;margin:3px 0;border-radius:4px;background:#111;cursor:pointer;border:1px solid transparent}
   .stop:hover{border-color:#333}
   .stop.active{border-color:var(--acc);background:rgba(139,92,246,0.12)}
@@ -25,8 +25,8 @@
   .stop b{color:#c4b5fd}
   .reason{font-size:10px;color:#94a3b8;display:block;margin-top:2px}
   .badge{display:inline-block;font-size:9px;padding:1px 5px;border-radius:4px;background:#1e1b2e;border:1px solid #333;margin-left:4px;color:#c4b5fd}
-  .legend{font-size:10px;opacity:.7;margin-top:10px;line-height:1.35}
-  .mini{font-size:10px;opacity:.65;margin-top:8px;line-height:1.35}
+  .legend{font-size:10px;opacity:.7;margin-top:8px;line-height:1.28;flex:0 0 auto}
+  .mini{font-size:10px;opacity:.65;margin-top:6px;line-height:1.28;flex:0 0 auto;max-height:2.8em;overflow:hidden}
   .stopinfo{margin:8px 0;padding:8px;border-radius:6px;background:#12121a;border:1px solid #2a2a3a;font-size:11px;line-height:1.4}
   .stopinfo strong{color:#e9d5ff}
   canvas{cursor:grab}

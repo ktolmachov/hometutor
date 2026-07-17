@@ -49,6 +49,23 @@ def _view_visible(target_view: str) -> bool:
     return feature_visible(spec, level=get_ui_level(), overrides=get_overrides())
 
 
+def open_mnemo_polis(*, state: Any | None = None) -> None:
+    """W4a: deep link «В Мнемополис» → Knowledge Graph (3D Memory Run).
+
+    Uses ``PENDING_CURRENT_VIEW_KEY`` only (never writes ``current_view`` after
+    the selectbox is instantiated). Optional ``kg_open_3d_hall`` is UI-state for
+    the KG tab to emphasize the embedded 3D hall on arrival.
+    """
+    target = st.session_state if state is None else state
+    target[PENDING_CURRENT_VIEW_KEY] = "Knowledge Graph"
+    target["kg_open_3d_hall"] = True
+    # Ceremonial hub — not home; keep origin for breadcrumb if present.
+    if "home_breadcrumb_origin" not in target:
+        from app.ui.constants import HOME_VIEW
+
+        target["home_breadcrumb_origin"] = HOME_VIEW
+
+
 def _restore_preview_entity_rows(preview: dict) -> dict[str, int]:
     counts = preview.get("table_row_counts") if isinstance(preview, dict) else {}
     if not isinstance(counts, dict):
@@ -408,6 +425,15 @@ def render_sidebar(index_stats: dict | None):
             st.toast(f"Следующий шаг: {nxt}")
         if feature_visible_by_id("page:analytics") and st.button("Аналитика", width='stretch', key="sidebar_nav_analytics"):
             st.switch_page("pages/4_Аналитика.py")
+        # W4a: ceremonial deep link to Memory Run / 3D hall (not Mission Control home).
+        if _view_visible("Knowledge Graph") and st.button(
+            "🌆 В Мнемополис",
+            width="stretch",
+            key="sidebar_nav_mnemo_polis",
+            help="Открыть Knowledge Graph → 3D-зал (город памяти). Главный экран — Mission Control.",
+        ):
+            open_mnemo_polis()
+            st.rerun()
         _cw = st.session_state.pop("coach_weak_spot_topic", None)
         if _cw:
             st.info(

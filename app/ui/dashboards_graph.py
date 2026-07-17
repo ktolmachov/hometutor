@@ -1738,7 +1738,10 @@ def _render_knowledge_graph_tab() -> None:
         keeper_guide = None
         keeper_threats = None
 
-    st.markdown("##### 🏛 3D-зал (embedded)")
+    # W4a: deep link from sidebar «В Мнемополис» lands on this hall section.
+    if st.session_state.pop("kg_open_3d_hall", False):
+        st.success("🌆 Мнемополис · Memory Run (3D-зал). Mission Control остаётся главным экраном.")
+    st.markdown("##### 🏛 3D-зал (embedded) · Мнемополис")
     st.caption(
         "Memory Run · ▶ Начать · 🔁 Повторить · В конспект · "
         "Хранитель (экскурсия + угрозы) · ✓ · ◆ · «?» · ◌ спокойный мир."

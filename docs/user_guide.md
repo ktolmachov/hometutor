@@ -266,6 +266,8 @@ Flashcards — это human-in-the-loop генерация:
   туман. Export:
   **«снимок от YYYY-MM-DD»**, CTA read-only («… · в продукте»), без корзины и
   vault-ссылок. Подписи ≤8; JSON в HTML script-safe.
+- **🌆 В Мнемополис** (сайдбар) — deep link на вкладку Knowledge Graph / 3D-зал
+  (город памяти). **Не** заменяет Mission Control: home остаётся главным экраном.
 - **🏛 3D-зал (embedded)** на вкладке Knowledge Graph — живой Memory Run рядом с 2D-картой.
   **Каналы действий (надёжность iframe):** primary — `setComponentValue` с envelope
   `{kind: 'kg3d_action', envelope}` (работает внутри Streamlit component iframe);

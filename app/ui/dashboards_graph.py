@@ -24,6 +24,7 @@ from app.ui.home_hub import (
     _find_topic_for_concept,
     _topic_documents_index,
 )
+from app.ui.dashboards_graph_kg3d_actions import run_kg_3d_ask_action
 from app.ui.dashboards_graph_state import (
     _prime_kg_3d_action_focus,
     _workbench_collected_concept_ids,
@@ -310,93 +311,6 @@ def _run_kg_3d_review_action(
         st.rerun()
 
 
-def _run_kg_3d_ask_action(
-    *,
-    target,
-    envelope: dict,
-    knowledge_graph,
-    concept_id: str,
-    event_id: str,
-    label: str,
-    state,
-) -> None:
-    """W5a: interior/panel «Спросить об этом» → Чат с тьютором (nav only).
-
-    Uses existing ``build_tutor_prompt_for_concept`` + ``tutor_pending_prompt``.
-    No domain write; no inline LLM in the hall (C1 handoff only).
-    """
-    from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
-
-    info: dict = {}
-    mastery_pct = 0.0
-    prereqs: list[str] = []
-    related_docs_count = 0
-    is_frontier = False
-    mastery_01: dict = {}
-    if knowledge_graph is not None:
-        try:
-            concepts = knowledge_graph.get_concepts() or {}
-            raw = concepts.get(concept_id) if isinstance(concepts, dict) else None
-            info = raw if isinstance(raw, dict) else {}
-        except Exception:  # noqa: BLE001 - best-effort graph context
-            info = {}
-        try:
-            from app.knowledge_service import get_mastery_vector
-
-            mastery_01 = get_mastery_vector() or {}
-            raw_m = mastery_01.get(concept_id)
-            if raw_m is not None:
-                mastery_pct = float(raw_m)
-                if mastery_pct <= 1.0:
-                    mastery_pct *= 100.0
-        except Exception:  # noqa: BLE001
-            mastery_pct = 0.0
-            mastery_01 = {}
-        try:
-            prereqs = list(knowledge_graph.get_prerequisites(concept_id) or [])[:8]
-        except Exception:  # noqa: BLE001
-            prereqs = []
-        try:
-            related_docs_count = len(list(knowledge_graph.get_related_documents(concept_id) or []))
-        except Exception:  # noqa: BLE001
-            related_docs_count = 0
-        # Same frontier heuristic as 2D concept panel (KG has no is_frontier()).
-        try:
-            is_frontier = bool(info.get("frontier")) or (
-                mastery_pct < 80.0
-                and all(float(mastery_01.get(p, 0.0) or 0.0) >= 0.8 for p in prereqs)
-            )
-        except Exception:  # noqa: BLE001
-            is_frontier = False
-
-    if not info:
-        info = {"level": "—", "description": ""}
-    if not str(info.get("description") or "").strip() and label:
-        info = {**info, "description": f"Концепт «{label}» из 3D-зала Мнемополиса."}
-
-    prompt = build_tutor_prompt_for_concept(
-        concept_id,
-        info=info,
-        mastery_pct=mastery_pct,
-        prereqs=[str(p) for p in prereqs if str(p).strip()],
-        related_docs_count=int(related_docs_count or 0),
-        is_frontier=bool(is_frontier),
-        mode="explain",
-    )
-    target["tutor_pending_prompt"] = prompt
-    target["tutor_pending_session_id"] = target.get("tutor_session_id")
-    target["tutor_cta_action"] = f"KG3D:{concept_id}:explain"
-    target["current_topic"] = label or concept_id
-    target["kg_selected_concept"] = concept_id
-    target["kg_action_concept"] = concept_id
-    target[PENDING_CURRENT_VIEW_KEY] = "Чат с тьютором"
-    mark_kg_3d_event(target, event_id, "succeeded")
-    target.pop(KG_3D_ACTION_RESULT_KEY, None)
-    if state is None:
-        st.toast(f"💬 Спросить о **{label or concept_id}** → Тьютор", icon="🎓")
-        st.rerun()
-
-
 def _run_kg_3d_collect_action(
     *,
     target,
@@ -512,14 +426,14 @@ def _execute_kg_3d_action(
                 state=state,
             )
         elif action == "ask":
-            _run_kg_3d_ask_action(
+            run_kg_3d_ask_action(
                 target=target,
-                envelope=envelope,
                 knowledge_graph=knowledge_graph,
                 concept_id=concept_id,
                 event_id=event_id,
                 label=label,
                 state=state,
+                build_tutor_prompt=build_tutor_prompt_for_concept,
             )
         elif action in _KG3D_DOOR_ACTIONS:
             _run_kg_3d_door_action(

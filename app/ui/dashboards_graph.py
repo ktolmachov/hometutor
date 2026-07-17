@@ -257,6 +257,47 @@ def _run_kg_3d_start_action(
         st.rerun()
 
 
+def _run_kg_3d_review_action(
+    *,
+    target,
+    envelope: dict,
+    concept_id: str,
+    event_id: str,
+    label: str,
+    state,
+) -> None:
+    """W2b: navigation-only → Flashcards review (dispel fog / retrieval practice).
+
+    Best-available preselect: concept focus keys + review section pending.
+    Does not invent flashcard rows or write domain state (nav only, like start).
+    """
+    from app.ui.flashcards_sections import FC_MAIN_SECTION_REVIEW, pending_section_key
+    from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
+
+    # Session focus for review surfaces (UI-state; optional consumers).
+    target["flashcards_focus_concept"] = concept_id
+    target["flashcards_subview"] = "review"
+    target[pending_section_key()] = FC_MAIN_SECTION_REVIEW
+    # Clear any prior in-progress queue so review opens cleanly on the concept context.
+    target["flashcards_review_queue"] = []
+    target["flashcards_review_index"] = 0
+    target["flashcards_card_flipped"] = False
+    target["flashcards_review_stats"] = {"again": 0, "hard": 0, "good": 0, "easy": 0}
+    target["flashcards_review_session_status"] = "idle"
+    target["flashcards_review_session_error"] = None
+    target["flashcards_review_session_deck_id"] = None
+    target["flashcards_review_deck_sync_pending"] = None
+    # Soft topic hint for human-readable context (not a domain write).
+    target["flashcards_review_session_tags_text"] = str(label or concept_id)
+    target[PENDING_CURRENT_VIEW_KEY] = "Flashcards"
+    mark_kg_3d_event(target, event_id, "succeeded")
+    # Same as start: navigate away — no sticky hall action_result.
+    target.pop(KG_3D_ACTION_RESULT_KEY, None)
+    if state is None:
+        st.toast(f"🔁 Повтор из 3D-зала: **{label or concept_id}** → Flashcards", icon="🃏")
+        st.rerun()
+
+
 def _run_kg_3d_collect_action(
     *,
     target,
@@ -304,13 +345,13 @@ def _execute_kg_3d_action(
     doc_index: dict,
     state=None,
 ) -> None:
-    """G1: apply start (nav only) or collect (workbench write) for a validated envelope."""
+    """G1/W2b: start|review (nav only) or collect (workbench write) for a validated envelope."""
     target = st.session_state if state is None else state
     action = str(envelope.get("action") or "")
     concept_id = str(envelope.get("concept_id") or "").strip()
     event_id = str(envelope.get("event_id") or "").strip()
     label = _kg_3d_concept_label(knowledge_graph, concept_id)
-    if not concept_id or action not in {"start", "collect"}:
+    if not concept_id or action not in {"start", "collect", "review"}:
         mark_kg_3d_event(target, event_id, "failed")
         _set_kg_3d_action_result(
             state,
@@ -332,6 +373,15 @@ def _execute_kg_3d_action(
     try:
         if action == "start":
             _run_kg_3d_start_action(
+                target=target,
+                envelope=envelope,
+                concept_id=concept_id,
+                event_id=event_id,
+                label=label,
+                state=state,
+            )
+        elif action == "review":
+            _run_kg_3d_review_action(
                 target=target,
                 envelope=envelope,
                 concept_id=concept_id,

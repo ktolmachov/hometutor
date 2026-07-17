@@ -67,7 +67,8 @@ _KG3D_UUID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
 )
 _KG3D_ULID_RE = re.compile(r"^[0-9A-HJKMNP-TV-Z]{26}$", re.IGNORECASE)
-_KG3D_ACTIONS = frozenset({"start", "collect"})
+# W2b: review = navigation to Flashcards (nav-only, like start); collect still writes.
+_KG3D_ACTIONS = frozenset({"start", "collect", "review"})
 _MISSING_TEMPLATE_HTML = """<!DOCTYPE html>
 <html lang="ru">
 <head>

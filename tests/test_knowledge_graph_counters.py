@@ -698,6 +698,10 @@ class Test3DCoverageAndContracts:
         assert "ht_kg3d_calm_world" in html
         assert "FOG_FORGET_MIN" in html
         assert "туман · можно войти" in html  # non-blocking invitation chip
+        # W2b review action door (Flashcards nav)
+        assert 'id="reviewbtn"' in html
+        assert "beginAction('review')" in html or 'beginAction("review")' in html or "action === 'review'" in html
+        assert "shouldShowReviewCta" in html
         # G4.1 floor tint + G4.2 history scrubber (G4.3 photo export deferred / privacy)
         assert "function floorProgressScore" in html
         assert "function refreshMemorySetsFromHistory" in html
@@ -1405,6 +1409,15 @@ class TestKg3dActionBridge:
             is None
         )
 
+    def test_accepts_review_action(self):
+        """W2b: review is a valid G0 whitelist action (Flashcards nav)."""
+        env = self._env(action="review")
+        ok = validate_kg_3d_envelope(
+            env, session_nonce="a" * 32, node_ids=["rag", "tutor"]
+        )
+        assert ok is not None
+        assert ok["action"] == "review"
+
     def test_rejects_bad_event_id(self):
         assert (
             validate_kg_3d_envelope(
@@ -1541,6 +1554,51 @@ class TestKg3dProductActions:
         assert state["interactive_quiz_focus_concept"] == "rag"
         assert state["kg_action_concept"] == "rag"
         # start: toast + view switch; no sticky hall action_result (would stale on return)
+        assert KG_3D_ACTION_RESULT_KEY not in state
+        assert calls["collect"] == 0
+
+    def test_review_sets_flashcards_pending_without_workbench(self, monkeypatch):
+        """W2b: review → Flashcards section; nav only; no workbench write."""
+        from app.ui import dashboards_graph as dg
+        from app.ui.flashcards_sections import FC_MAIN_SECTION_REVIEW, pending_section_key
+        from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
+
+        state: dict = {}
+        calls = {"collect": 0}
+
+        def boom(**kwargs):
+            calls["collect"] += 1
+            return (0, 0)
+
+        monkeypatch.setattr(dg, "_collect_concept_sections_to_workbench", boom)
+
+        class _FakeSt:
+            @staticmethod
+            def toast(*a, **k):
+                pass
+
+            @staticmethod
+            def rerun():
+                pass
+
+            @staticmethod
+            def error(*a, **k):
+                pass
+
+        monkeypatch.setattr(dg, "st", _FakeSt)
+        env = {
+            "action": "review",
+            "concept_id": "rag",
+            "event_id": "12345678-1234-1234-1234-1234567890ef",
+        }
+        dg._execute_kg_3d_action(
+            env, knowledge_graph=None, doc_index={}, state=state
+        )
+        assert state[PENDING_CURRENT_VIEW_KEY] == "Flashcards"
+        assert state[pending_section_key()] == FC_MAIN_SECTION_REVIEW
+        assert state["flashcards_focus_concept"] == "rag"
+        assert state["kg_action_concept"] == "rag"
+        assert state[KG_3D_ACTION_KEY]["action"] == "review"
         assert KG_3D_ACTION_RESULT_KEY not in state
         assert calls["collect"] == 0
 

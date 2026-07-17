@@ -121,7 +121,8 @@ function isValidActionEnvelope(data) {
   if (!data || typeof data !== 'object') return false;
   if (Number(data.version) !== 1) return false;
   if (data.source !== 'kg3d') return false;
-  if (data.action !== 'start' && data.action !== 'collect') return false;
+  // W2b: review = Flashcards nav (same envelope channel as start/collect).
+  if (data.action !== 'start' && data.action !== 'collect' && data.action !== 'review') return false;
   const concept = String(data.concept_id || '').trim();
   const eventId = String(data.event_id || '').trim();
   const nonce = String(data.session_nonce || '').trim();

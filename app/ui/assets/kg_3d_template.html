@@ -102,6 +102,18 @@
     border-color:rgba(148,163,184,0.55);color:#cbd5e1;
     background:rgba(100,116,139,0.14);
   }
+  .kgx-action-review{
+    color:var(--kgx-text);background:rgba(148,163,184,0.12);
+    border-color:rgba(148,163,184,0.45);
+  }
+  .kgx-action-review:hover:not(:disabled){
+    border-color:rgba(203,213,225,0.75);background:rgba(148,163,184,0.20);
+  }
+  .kgx-action-review:disabled{opacity:.55;cursor:default}
+  .kgx-action-review.kgx-export-inert:disabled{
+    opacity:0.85;color:var(--kgx-muted);border-style:dashed;
+  }
+  #actionrow.kgx-has-review{grid-template-columns:1fr auto auto}
   #body{display:grid;grid-template-columns:minmax(0,1fr) 314px;flex:1 1 auto;min-height:0}
   #stage{position:relative;min-width:0;min-height:0;overflow:hidden;background:var(--kgx-night)}
   #cv{display:block;width:100%;height:100%;background:#050508;cursor:grab}
@@ -487,8 +499,9 @@
           <h4>Quiz-события</h4>
           <div id="interior-quiz"></div>
         </div>
-        <div class="kgx-primary-actions" style="max-width:420px">
+        <div class="kgx-primary-actions kgx-has-review" style="max-width:420px">
           <button class="kgx-action kgx-action-primary" id="interior-start" type="button">▶ Начать</button>
+          <button class="kgx-action kgx-action-review" id="interior-review" type="button" title="Повторить карточки">🔁 Повторить</button>
           <button class="kgx-action kgx-action-secondary" id="interior-collect" type="button">В конспект</button>
         </div>
       </div>
@@ -507,7 +520,8 @@
           <div class="kgx-mastery" id="masteryring" aria-label="Mastery" style="--m:0%"><span id="masterytext">—</span></div>
         </div>
         <div class="kgx-primary-actions" id="actionrow">
-          <button class="kgx-action kgx-action-primary" id="startbtn" type="button" title="Начать изучение (квиз/карточки)">▶ Начать</button>
+          <button class="kgx-action kgx-action-primary" id="startbtn" type="button" title="Начать изучение (квиз)">▶ Начать</button>
+          <button class="kgx-action kgx-action-review" id="reviewbtn" type="button" title="Повторить карточки (Flashcards) — развеять туман" hidden>🔁 Повторить</button>
           <button class="kgx-action kgx-action-secondary" id="collectbtn" type="button" title="Собрать разделы в Живой конспект">В конспект</button>
         </div>
         <div class="kgx-tertiary-actions">
@@ -2169,9 +2183,19 @@ function beginAction(action) {
     return;
   }
   // collect is add-only: already-collected stays disabled.
-  // start always allowed (re-study), even if quiz-seen.
+  // start / review always allowed (re-study / retrieval practice).
   if (action === 'collect' && collectedConceptIds.has(id)) return;
+  if (action !== 'start' && action !== 'collect' && action !== 'review') return;
   postAction(action, id);
+}
+
+/** W2b: show review CTA when retrieval practice is honest (fog or due). */
+function shouldShowReviewCta(conceptId) {
+  if (!conceptId) return false;
+  // Calm world hides mist, but low retention still warrants a practice door.
+  if (forgettingFor(conceptId) >= FOG_FORGET_MIN) return true;
+  const n = byId.get(conceptId) || {};
+  return (n.due || 0) > 0;
 }
 
 function updateProgressLine() {
@@ -2329,11 +2353,12 @@ function updateSnapshotLine() {
   }
 }
 
-function applyCtaState(startBtn, collectBtn, id) {
+function applyCtaState(startBtn, collectBtn, id, reviewBtn) {
   const hasPending = !!pendingAction;
   const collected = id && collectedConceptIds.has(id);
   const startPendingHere = pendingAction && pendingAction.action === 'start' && pendingAction.concept_id === id;
   const collectPendingHere = pendingAction && pendingAction.action === 'collect' && pendingAction.concept_id === id;
+  const reviewPendingHere = pendingAction && pendingAction.action === 'review' && pendingAction.concept_id === id;
   if (startBtn) {
     if (!isEmbedded) {
       startBtn.disabled = true;
@@ -2362,20 +2387,54 @@ function applyCtaState(startBtn, collectBtn, id) {
       collectBtn.setAttribute('aria-busy', String(!!collectPendingHere));
     }
   }
+  if (reviewBtn) {
+    const show = shouldShowReviewCta(id);
+    reviewBtn.hidden = !show && isEmbedded;
+    if (!isEmbedded) {
+      // Export: keep visible as inert practice door when fog/due would show it.
+      reviewBtn.hidden = !shouldShowReviewCta(id);
+      reviewBtn.disabled = true;
+      reviewBtn.classList.add('kgx-export-inert');
+      reviewBtn.textContent = '🔁 Повторить · в продукте';
+      reviewBtn.title = 'Доступно в продукте: Flashcards из 3D-зала';
+    } else {
+      reviewBtn.disabled = hasPending;
+      reviewBtn.classList.remove('kgx-export-inert');
+      reviewBtn.textContent = reviewPendingHere ? 'Ожидание…' : '🔁 Повторить';
+      reviewBtn.title = forgettingFor(id) >= FOG_FORGET_MIN
+        ? 'Развеять туман: повторение карточек (Flashcards)'
+        : 'Повторить карточки по концепту (Flashcards)';
+      reviewBtn.setAttribute('aria-busy', String(!!reviewPendingHere));
+    }
+  }
 }
 
 function updateActionUI() {
   const id = activeRouteId();
-  applyCtaState(document.getElementById('startbtn'), document.getElementById('collectbtn'), id);
-  applyCtaState(document.getElementById('interior-start'), document.getElementById('interior-collect'), id);
+  applyCtaState(
+    document.getElementById('startbtn'),
+    document.getElementById('collectbtn'),
+    id,
+    document.getElementById('reviewbtn'),
+  );
+  applyCtaState(
+    document.getElementById('interior-start'),
+    document.getElementById('interior-collect'),
+    id,
+    document.getElementById('interior-review'),
+  );
+  const row = document.getElementById('actionrow');
+  if (row) row.classList.toggle('kgx-has-review', shouldShowReviewCta(id));
   const st = document.getElementById('actionstatus');
   if (st) {
     if (pendingAction) {
-      const an = pendingAction.action === 'start' ? 'открытие режима' : 'сбор в конспект';
+      const an = pendingAction.action === 'start'
+        ? 'открытие Quiz'
+        : (pendingAction.action === 'review' ? 'открытие Flashcards' : 'сбор в конспект');
       st.textContent = `Ожидание: ${an} · «${pendingAction.label}»`;
     } else if (!isEmbedded) {
       // W0′ R7: clearer export hierarchy copy
-      st.textContent = 'Снимок только для просмотра · «Начать» и «В конспект» — в hometutor';
+      st.textContent = 'Снимок только для просмотра · действия — в hometutor';
     } else if (!st.dataset.sticky) {
       st.textContent = '';
     }
@@ -3054,10 +3113,14 @@ document.getElementById('nextbtn').onclick = () => {
 document.getElementById('playbtn').onclick = () => toggleTour();
 document.getElementById('startbtn').onclick = () => beginAction('start');
 document.getElementById('collectbtn').onclick = () => beginAction('collect');
+const reviewBtn = document.getElementById('reviewbtn');
+if (reviewBtn) reviewBtn.onclick = () => beginAction('review');
 const interiorStart = document.getElementById('interior-start');
 const interiorCollect = document.getElementById('interior-collect');
+const interiorReview = document.getElementById('interior-review');
 if (interiorStart) interiorStart.onclick = () => beginAction('start');
 if (interiorCollect) interiorCollect.onclick = () => beginAction('collect');
+if (interiorReview) interiorReview.onclick = () => beginAction('review');
 const insideBtn = document.getElementById('insidebtn');
 if (insideBtn) insideBtn.onclick = () => openInterior(activeRouteId());
 const interiorClose = document.getElementById('interior-close');

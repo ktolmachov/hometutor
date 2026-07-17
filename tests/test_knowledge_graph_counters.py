@@ -653,10 +653,16 @@ class Test3DCoverageAndContracts:
         assert 'id="topbar"' in html
         assert "kgx-action-primary" in html
         assert "min-height:40px" in html
+        assert "min-height:64px" in html  # topbar
+        assert "width:314px" in html  # side panel
         assert "--kgx-cyan" in html and "--kgx-lime" in html
         assert "function openInterior" in html
         assert "function openOnboarding" in html
         assert "Правила зала" in html
+        assert ".stop-check{" in html  # U0/G2 rank stays; ✓ overlay
+        assert "prefers-reduced-motion" in html
+        assert "three.js" not in html.lower()
+        assert "<script src=" not in html.lower()
         # Export must not bake live doors / onboarding host flag
         assert "CONCEPT_SECTIONS = {}" in html or "CONCEPT_SECTIONS ={}" in html.replace(" ", "")
         assert "SHOW_ONBOARDING = false" in html or "SHOW_ONBOARDING=false" in html.replace(" ", "")
@@ -761,11 +767,38 @@ class Test3DCoverageAndContracts:
                           const startH = start ? start.getBoundingClientRect().height : 0;
                           const bodyOverflowX = document.documentElement.scrollWidth >
                             document.documentElement.clientWidth + 1;
+                          const topbar = document.querySelector('#topbar');
+                          const side = document.querySelector('#side');
+                          const stops = [...document.querySelectorAll('.stop')].map((el, i) => {
+                            const idxEl = el.querySelector('.stop-index');
+                            const check = el.querySelector('.stop-check');
+                            // First text node of .stop-index is the rank; ✓ lives in .stop-check.
+                            const rankNode = idxEl
+                              ? [...idxEl.childNodes].find(
+                                  (n) => n.nodeType === Node.TEXT_NODE && String(n.textContent || '').trim()
+                                )
+                              : null;
+                            const rankText = rankNode
+                              ? String(rankNode.textContent || '').trim()
+                              : (idxEl?.textContent || '').replace('✓', '').trim();
+                            const checkStyle = check ? getComputedStyle(check) : null;
+                            return {
+                              index: i + 1,
+                              done: el.classList.contains('done'),
+                              rankText,
+                              hasCheck: !!check,
+                              checkText: check?.textContent || '',
+                              checkPosition: checkStyle?.position || '',
+                            };
+                          });
                           return {
                             nonBg,
                             routeOn: document.querySelector('#modeRoute')?.classList.contains('on'),
-                            topbarPresent: !!document.querySelector('#topbar'),
+                            topbarPresent: !!topbar,
+                            topbarMinH: topbar ? topbar.getBoundingClientRect().height : 0,
+                            sideWidth: side ? side.getBoundingClientRect().width : 0,
                             stopCount: document.querySelectorAll('.stop').length,
+                            stops,
                             stopInfo: document.querySelector('#stopinfo')?.textContent || '',
                             stopName: document.querySelector('#stopname')?.textContent || '',
                             snapshot: document.querySelector('#snapshotline')?.textContent || '',
@@ -775,6 +808,7 @@ class Test3DCoverageAndContracts:
                             bodyOverflowX,
                             canvasCssH: canvas?.clientHeight || 0,
                             hasPrimaryCtaClass: !!document.querySelector('.kgx-action-primary'),
+                            hasExternalScript: !!document.querySelector('script[src]'),
                           };
                         }
                         """
@@ -795,6 +829,24 @@ class Test3DCoverageAndContracts:
                     assert result["bodyOverflowX"] is False, viewport
                     min_h = 400 if viewport["width"] <= 560 else 450
                     assert result["canvasCssH"] >= min_h, viewport
+                    # U0 layout tokens (desktop grid); mobile collapses side — skip width there.
+                    if viewport["width"] >= 1024:
+                        assert result["topbarMinH"] >= 64, viewport
+                        assert 300 <= result["sideWidth"] <= 330, viewport
+                    # G2 / U0: rank stays visible; ✓ is absolute overlay on done stops only.
+                    # Payload mastery last-snapshot keys: study-session-agent, rag → stops 1 & 2.
+                    assert result["hasExternalScript"] is False, viewport
+                    done_stops = [s for s in result["stops"] if s["done"]]
+                    open_stops = [s for s in result["stops"] if not s["done"]]
+                    assert len(done_stops) >= 2, (viewport, result["stops"])
+                    for s in result["stops"]:
+                        assert s["rankText"] == str(s["index"]), (viewport, s)
+                    for s in done_stops:
+                        assert s["hasCheck"] is True, (viewport, s)
+                        assert s["checkText"] == "✓", (viewport, s)
+                        assert s["checkPosition"] == "absolute", (viewport, s)
+                    for s in open_stops:
+                        assert s["hasCheck"] is False, (viewport, s)
             finally:
                 browser.close()
 
@@ -1694,6 +1746,7 @@ class TestKg3dMemoryAndInventoryContract:
         assert "return new Set(allow.slice(0, 8));" in html
 
     def test_route_stop_done_check_overlays_index(self):
+        """U0/G2: done stop keeps rank number; ✓ is .stop-check overlay, not a replacement."""
         html = build_kg_3d_html(
             {
                 "nodes": [{"id": "a", "label": "A"}],
@@ -1707,7 +1760,12 @@ class TestKg3dMemoryAndInventoryContract:
         assert "index.textContent = String(idx + 1);" in html
         assert "check.className = 'stop-check';" in html
         assert "index.appendChild(check);" in html
+        assert ".stop-check{" in html
+        assert "position:absolute" in html.split(".stop-check{", 1)[1].split("}", 1)[0]
         assert "index.textContent = doneConceptIds.has(n.id) ? '✓' : String(idx + 1);" not in html
+        # Canvas badge uses the same overlay contract (rank + adjacent ✓).
+        assert "ctx.fillText(String(rank), bx, by);" in html
+        assert "ctx.fillText('✓', bx + 11, by - 1);" in html
 
     def test_default_hall_component_key_is_not_2d_name(self):
         import inspect

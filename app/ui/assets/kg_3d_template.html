@@ -928,21 +928,28 @@ function drawFloorPlane(yy) {
 }
 
 function drawRoutePlatform() {
+  // R3: lit corridor pad under the day route so path reads as hall floor, not free float.
   const route = dayRouteIds();
   const x0 = -((Math.max(route.length, 1) - 1) / 2) * ROUTE_X_STEP - 90;
   const x1 = ((Math.max(route.length, 1) - 1) / 2) * ROUTE_X_STEP + 90;
   const z0 = -112, z1 = 112, y = 54;
   const a = project(x0, y, z0), b = project(x1, y, z0);
   const c2 = project(x1, y, z1), d = project(x0, y, z1);
-  ctx.strokeStyle = 'rgba(120,120,180,0.18)';
-  ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.lineTo(c2.sx, c2.sy); ctx.lineTo(d.sx, d.sy); ctx.closePath();
+  const pad = ctx.createLinearGradient(a.sx, a.sy, d.sx, d.sy);
+  pad.addColorStop(0, 'rgba(66,232,224,0.06)');
+  pad.addColorStop(0.5, 'rgba(154,108,255,0.09)');
+  pad.addColorStop(1, 'rgba(255,107,138,0.05)');
+  ctx.fillStyle = pad;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(120,120,180,0.22)';
+  ctx.lineWidth = 1;
   ctx.stroke();
-  ctx.strokeStyle = 'rgba(196,181,253,0.16)';
+  ctx.strokeStyle = 'rgba(196,181,253,0.28)';
   ctx.beginPath();
   ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke();
-  ctx.fillStyle = 'rgba(196,181,253,0.65)';
+  ctx.fillStyle = 'rgba(196,181,253,0.72)';
   const arrow = project(x1 + 28, y, z0);
   ctx.font = '11px system-ui';
   ctx.fillText('курс →', arrow.sx, arrow.sy);
@@ -1043,34 +1050,85 @@ function drawActiveReasonCallout(nn, pr, r, labelBoxes) {
 }
 
 function drawHallWash() {
-  // Architectural night-hall wash (no particles / stars / bokeh).
+  // R3: stronger night-hall architecture (no particles / stars / bokeh / new entities).
+  const horizon = H * 0.24;
+  const floorTop = H * 0.30;
+  const floorBottom = H * 0.95;
+  const vanishX = W * 0.5;
   const wash = ctx.createLinearGradient(0, 0, 0, H);
   if (memoryOverlay) {
-    wash.addColorStop(0, 'rgba(255,200,87,0.10)');
+    wash.addColorStop(0, 'rgba(255,200,87,0.13)');
   } else if (viewMode !== 'route') {
-    wash.addColorStop(0, 'rgba(255,107,138,0.08)');
+    wash.addColorStop(0, 'rgba(255,107,138,0.11)');
   } else {
-    wash.addColorStop(0, 'rgba(66,232,224,0.08)');
+    wash.addColorStop(0, 'rgba(66,232,224,0.11)');
   }
-  wash.addColorStop(0.5, 'rgba(5,5,8,0)');
-  wash.addColorStop(1, 'rgba(54,30,92,0.22)');
+  wash.addColorStop(0.48, 'rgba(5,5,8,0)');
+  wash.addColorStop(1, 'rgba(54,30,92,0.32)');
   ctx.fillStyle = wash;
   ctx.fillRect(0, 0, W, H);
-  // Portal frame arcs (state-bearing depth cues, not decorative entities)
-  ctx.lineWidth = 1.1;
+
+  // Perspective color lanes on the floor (depth cue, not graph entities)
+  const laneColors = [
+    'rgba(66,232,224,0.045)',
+    'rgba(185,247,91,0.032)',
+    'rgba(255,200,87,0.036)',
+    'rgba(255,107,138,0.038)',
+    'rgba(154,108,255,0.048)',
+  ];
+  for (let i = 0; i < laneColors.length; i++) {
+    const left = W * (0.04 + i * 0.185);
+    const right = left + W * 0.185;
+    const topLeft = vanishX + (i - 2.5) * 10;
+    const topRight = vanishX + (i - 1.5) * 10;
+    ctx.fillStyle = laneColors[i];
+    ctx.beginPath();
+    ctx.moveTo(left, floorBottom);
+    ctx.lineTo(topLeft, horizon);
+    ctx.lineTo(topRight, horizon);
+    ctx.lineTo(right, floorBottom);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Floor grid → vanishing point
+  ctx.lineWidth = 1;
+  for (let i = -6; i <= 6; i++) {
+    const bottomX = W * 0.5 + i * W * 0.11;
+    ctx.strokeStyle = i === 0 ? 'rgba(66,232,224,0.28)' : 'rgba(191,199,226,0.09)';
+    ctx.beginPath();
+    ctx.moveTo(bottomX, floorBottom);
+    ctx.lineTo(vanishX + i * 7, horizon);
+    ctx.stroke();
+  }
+  for (let i = 0; i < 11; i++) {
+    const t = i / 10;
+    const eased = t * t;
+    const y = floorTop + eased * (floorBottom - floorTop);
+    const half = W * (0.10 + eased * 0.50);
+    ctx.strokeStyle = i === 10 ? 'rgba(154,108,255,0.28)' : 'rgba(191,199,226,0.09)';
+    ctx.beginPath();
+    ctx.moveTo(vanishX - half, y);
+    ctx.lineTo(vanishX + half, y);
+    ctx.stroke();
+  }
+
+  // Portal frame arcs (depth cues)
+  ctx.lineWidth = 1.2;
   const arches = [
-    [0.16, 'rgba(66,232,224,0.14)'],
-    [0.28, 'rgba(255,107,138,0.10)'],
-    [0.40, 'rgba(154,108,255,0.14)'],
+    [0.16, 'rgba(66,232,224,0.18)'],
+    [0.28, 'rgba(255,107,138,0.13)'],
+    [0.40, 'rgba(154,108,255,0.17)'],
   ];
   for (const [inset, col] of arches) {
     ctx.strokeStyle = col;
     ctx.beginPath();
-    ctx.moveTo(W * inset, H * 0.92);
-    ctx.quadraticCurveTo(W * 0.5, H * 0.08, W * (1 - inset), H * 0.92);
+    ctx.moveTo(W * inset, floorBottom);
+    ctx.quadraticCurveTo(W * 0.5, H * 0.06, W * (1 - inset), floorBottom);
     ctx.stroke();
   }
-  ctx.fillStyle = 'rgba(174,181,207,0.75)';
+  // Orientation labels only (already first-frame contract; not new entities)
+  ctx.fillStyle = 'rgba(174,181,207,0.78)';
   ctx.font = '600 12px system-ui';
   ctx.fillText('ВХОД', W * 0.08, H * 0.94);
   ctx.fillText('СЕГОДНЯ', W * 0.46, H * 0.94);
@@ -1154,36 +1212,61 @@ function draw() {
 
   drawMemoryTrace(map3, route, vis);
 
-  // Route trail 1→N (denser solid for quiz-done segments)
+  // Route trail 1→N (glow underlay + denser solid for quiz-done segments)
   if (route.length >= 2) {
-    ctx.strokeStyle = 'rgba(196,181,253,0.55)';
-    ctx.lineWidth = 2.2;
-    ctx.setLineDash([6, 4]);
-    ctx.beginPath();
-    let started = false;
+    const routePts = [];
     for (const id of route) {
       const o = map3.get(id);
       if (!o || !vis.has(id)) continue;
       const p = scenePos(o);
-      const pr = project(p.x, p.y, p.z);
-      if (!started) { ctx.moveTo(pr.sx, pr.sy); started = true; }
-      else ctx.lineTo(pr.sx, pr.sy);
+      routePts.push(project(p.x, p.y, p.z));
     }
-    ctx.stroke();
-    ctx.setLineDash([]);
+    if (routePts.length >= 2) {
+      // Soft violet underglow so path owns the hall (R3)
+      ctx.strokeStyle = 'rgba(154,108,255,0.14)';
+      ctx.lineWidth = 9;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      routePts.forEach((pr, i) => {
+        if (i === 0) ctx.moveTo(pr.sx, pr.sy);
+        else ctx.lineTo(pr.sx, pr.sy);
+      });
+      ctx.stroke();
+      // Future path: dashed multi-stop gradient
+      const g = ctx.createLinearGradient(routePts[0].sx, 0, routePts[routePts.length - 1].sx, 0);
+      g.addColorStop(0, 'rgba(114,241,165,0.85)');
+      g.addColorStop(0.35, 'rgba(66,232,224,0.90)');
+      g.addColorStop(0.7, 'rgba(154,108,255,0.85)');
+      g.addColorStop(1, 'rgba(255,107,138,0.75)');
+      ctx.strokeStyle = g;
+      ctx.lineWidth = 2.4;
+      ctx.setLineDash([6, 5]);
+      ctx.beginPath();
+      routePts.forEach((pr, i) => {
+        if (i === 0) ctx.moveTo(pr.sx, pr.sy);
+        else ctx.lineTo(pr.sx, pr.sy);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.lineCap = 'butt';
+      ctx.lineJoin = 'miter';
+    }
     // Solid lime path across consecutive done stops
     const donePts = [];
     for (const id of route) {
       if (!doneConceptIds.has(id)) {
         if (donePts.length >= 2) {
-          ctx.strokeStyle = 'rgba(114,241,165,0.85)';
-          ctx.lineWidth = 2.6;
+          ctx.strokeStyle = 'rgba(114,241,165,0.92)';
+          ctx.lineWidth = 3.2;
+          ctx.lineCap = 'round';
           ctx.beginPath();
           donePts.forEach((pr, i) => {
             if (i === 0) ctx.moveTo(pr.sx, pr.sy);
             else ctx.lineTo(pr.sx, pr.sy);
           });
           ctx.stroke();
+          ctx.lineCap = 'butt';
         }
         donePts.length = 0;
         continue;
@@ -1194,24 +1277,35 @@ function draw() {
       donePts.push(project(p.x, p.y, p.z));
     }
     if (donePts.length >= 2) {
-      ctx.strokeStyle = 'rgba(114,241,165,0.85)';
-      ctx.lineWidth = 2.6;
+      ctx.strokeStyle = 'rgba(114,241,165,0.92)';
+      ctx.lineWidth = 3.2;
+      ctx.lineCap = 'round';
       ctx.beginPath();
       donePts.forEach((pr, i) => {
         if (i === 0) ctx.moveTo(pr.sx, pr.sy);
         else ctx.lineTo(pr.sx, pr.sy);
       });
       ctx.stroke();
+      ctx.lineCap = 'butt';
     }
   }
 
-  // Edges (only between visible nodes)
-  ctx.strokeStyle = viewMode === 'all' ? 'rgba(160,140,255,0.16)' : 'rgba(160,140,255,0.28)';
-  ctx.lineWidth = 0.8;
+  // Edges (only between visible nodes) — quieter in route so path owns attention
   for (const e of (EDGES || [])) {
     if (!edgeVisibleInMode(e, vis)) continue;
     const a = map3.get(e.source), b = map3.get(e.target);
     if (!a || !b) continue;
+    const bothRoute = routeSet.has(e.source) && routeSet.has(e.target);
+    if (viewMode === 'route' && !bothRoute) {
+      ctx.strokeStyle = 'rgba(160,140,255,0.06)';
+      ctx.lineWidth = 0.6;
+    } else if (viewMode === 'all') {
+      ctx.strokeStyle = 'rgba(160,140,255,0.14)';
+      ctx.lineWidth = 0.75;
+    } else {
+      ctx.strokeStyle = bothRoute ? 'rgba(160,140,255,0.22)' : 'rgba(160,140,255,0.12)';
+      ctx.lineWidth = 0.8;
+    }
     const ap = scenePos(a), bp = scenePos(b);
     const pa = project(ap.x, ap.y, ap.z);
     const pb = project(bp.x, bp.y, bp.z);
@@ -1253,11 +1347,13 @@ function draw() {
     else if (isNext) col = '#42e8e0';
     else if (onRoute && !isDone) col = '#a78bfa';
 
-    // Depth fade: background/context nodes quieter so route owns attention (U0).
-    let alpha = Math.min(0.95, Math.max(0.35, 0.38 + pr.scale * 0.5));
-    if (quietRouteAnchor) alpha = 0.28;
-    else if (localContextNode) alpha = Math.min(alpha, 0.42);
-    else if (!onRoute && viewMode !== 'route') alpha = Math.min(alpha, 0.38);
+    // Depth fade: background/context nodes quieter so route owns attention (U0/R3).
+    let alpha = Math.min(0.96, Math.max(0.38, 0.42 + pr.scale * 0.5));
+    if (quietRouteAnchor) alpha = 0.18;
+    else if (localContextNode) alpha = Math.min(alpha, 0.36);
+    else if (!onRoute && viewMode === 'route') alpha = Math.min(alpha, 0.22);
+    else if (!onRoute && viewMode !== 'route') alpha = Math.min(alpha, 0.34);
+    if (onRoute) alpha = Math.max(alpha, isActive ? 0.98 : 0.88);
     ctx.globalAlpha = alpha;
     ctx.fillStyle = col;
     ctx.beginPath();

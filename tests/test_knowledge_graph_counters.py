@@ -665,6 +665,10 @@ class Test3DCoverageAndContracts:
         assert 'id="homebtn"' in html and 'id="topbtn"' in html and 'id="resetbtn"' in html
         assert 'id="toast"' in html and "kgx-toast" in html  # R2 action ack toast
         assert "function showToast" in html
+        # R3 hall architecture (lanes + route underglow); no Three.js entities
+        assert "laneColors" in html
+        assert "rgba(154,108,255,0.14)" in html  # route underglow
+        assert "no particles" in html.lower() or "no particles / stars / bokeh" in html
         assert "prefers-reduced-motion" in html
         assert "three.js" not in html.lower()
         assert "<script src=" not in html.lower()

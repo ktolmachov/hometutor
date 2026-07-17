@@ -654,12 +654,17 @@ class Test3DCoverageAndContracts:
         assert "kgx-action-primary" in html
         assert "min-height:40px" in html
         assert "min-height:64px" in html  # topbar
+        assert "max-height:72px" in html  # R1 desktop chrome cap
         assert "width:314px" in html  # side panel
         assert "--kgx-cyan" in html and "--kgx-lime" in html
         assert "function openInterior" in html
         assert "function openOnboarding" in html
         assert "Правила зала" in html
         assert ".stop-check{" in html  # U0/G2 rank stays; ✓ overlay
+        assert 'id="morebtn"' in html  # R1 camera tools collapsed
+        assert 'id="homebtn"' in html and 'id="topbtn"' in html and 'id="resetbtn"' in html
+        assert 'id="toast"' in html and "kgx-toast" in html  # R2 action ack toast
+        assert "function showToast" in html
         assert "prefers-reduced-motion" in html
         assert "three.js" not in html.lower()
         assert "<script src=" not in html.lower()
@@ -769,6 +774,10 @@ class Test3DCoverageAndContracts:
                             document.documentElement.clientWidth + 1;
                           const topbar = document.querySelector('#topbar');
                           const side = document.querySelector('#side');
+                          // Visible primary strip only (⋯ keeps Home/Top/Reset collapsed).
+                          const primaryIconCount = document.querySelectorAll(
+                            '.kgx-route-actions > .kgx-icon-btn, .kgx-route-actions > .kgx-route-more > #morebtn'
+                          ).length;
                           const stops = [...document.querySelectorAll('.stop')].map((el, i) => {
                             const idxEl = el.querySelector('.stop-index');
                             const check = el.querySelector('.stop-check');
@@ -809,6 +818,9 @@ class Test3DCoverageAndContracts:
                             canvasCssH: canvas?.clientHeight || 0,
                             hasPrimaryCtaClass: !!document.querySelector('.kgx-action-primary'),
                             hasExternalScript: !!document.querySelector('script[src]'),
+                            primaryIconCount,
+                            hasRouteMore: !!document.querySelector('#morebtn'),
+                            hasHomebtn: !!document.querySelector('#homebtn'),
                           };
                         }
                         """
@@ -829,10 +841,14 @@ class Test3DCoverageAndContracts:
                     assert result["bodyOverflowX"] is False, viewport
                     min_h = 400 if viewport["width"] <= 560 else 450
                     assert result["canvasCssH"] >= min_h, viewport
-                    # U0 layout tokens (desktop grid); mobile collapses side — skip width there.
+                    # U0/R1 layout tokens (desktop grid); mobile collapses side — skip width there.
                     if viewport["width"] >= 1024:
                         assert result["topbarMinH"] >= 64, viewport
+                        assert result["topbarMinH"] <= 72, viewport
                         assert 300 <= result["sideWidth"] <= 330, viewport
+                        # Primary strip: ← tour → + ⋯ (camera tools collapsed)
+                        assert result.get("primaryIconCount", 0) >= 3, viewport
+                        assert result.get("primaryIconCount", 99) <= 4, viewport
                     # G2 / U0: rank stays visible; ✓ is absolute overlay on done stops only.
                     # Payload mastery last-snapshot keys: study-session-agent, rag → stops 1 & 2.
                     assert result["hasExternalScript"] is False, viewport
@@ -1091,9 +1107,15 @@ window.addEventListener('message', (event) => {{
                 ack_text = frame2.locator("#actionstatus").inner_text()
                 collect_text = frame2.locator("#collectbtn").inner_text()
                 inv = frame2.locator("#inventorycount").inner_text()
+                toast = frame2.locator("#toast")
                 assert "Ack" in ack_text or "конспект" in ack_text.lower(), ack_text
                 assert "◆" in collect_text or "конспект" in collect_text.lower()
                 assert "2" in inv or "раздел" in inv
+                # R2: toast surfaces collect ack (still visible within ~1.8s)
+                assert toast.count() == 1
+                toast_text = toast.inner_text()
+                assert "конспект" in toast_text.lower() or "RAG" in toast_text, toast_text
+                assert "is-visible" in (toast.get_attribute("class") or "")
             finally:
                 browser.close()
 

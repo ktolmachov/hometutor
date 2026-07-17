@@ -38,46 +38,51 @@
     pointer-events:none;
   }
   #topbar{
+    /* U0/R1: chrome tight — desktop target 64–72px (was ~89 with help in brand). */
     min-height:64px;flex:0 0 auto;display:grid;
-    grid-template-columns:minmax(160px,1fr) auto minmax(160px,1fr);
-    align-items:center;gap:1rem;padding:0.75rem 1rem;
+    grid-template-columns:minmax(140px,1fr) auto minmax(140px,1fr);
+    align-items:center;gap:0.65rem;padding:0.4rem 0.85rem;
     border-bottom:1px solid var(--kgx-line);background:rgba(8,8,18,0.96);z-index:3;
+    box-sizing:border-box;
   }
-  .kgx-brand{display:flex;align-items:center;gap:0.65rem;min-width:0}
+  @media (min-width: 861px){
+    #topbar{ max-height:72px; }
+  }
+  .kgx-brand{display:flex;align-items:center;gap:0.55rem;min-width:0}
   .kgx-brand-mark{
-    width:28px;height:28px;flex:none;position:relative;
+    width:24px;height:24px;flex:none;position:relative;
     border:1px solid rgba(66,232,224,0.62);border-radius:50%;
-    box-shadow:0 0 20px rgba(66,232,224,0.18);
+    box-shadow:0 0 16px rgba(66,232,224,0.18);
   }
   .kgx-brand-mark::before,.kgx-brand-mark::after{
-    content:"";position:absolute;inset:5px;border:1px solid var(--kgx-cyan);transform:rotate(45deg);
+    content:"";position:absolute;inset:4px;border:1px solid var(--kgx-cyan);transform:rotate(45deg);
   }
-  .kgx-brand-mark::after{inset:10px;background:var(--kgx-coral);border:0}
-  .kgx-brand-copy strong{display:block;font-size:0.8rem;letter-spacing:0.08em;text-transform:uppercase}
-  .kgx-brand-copy span{display:block;color:var(--kgx-muted);font-size:0.7rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .kgx-brand-mark::after{inset:8px;background:var(--kgx-coral);border:0}
+  .kgx-brand-copy strong{display:block;font-size:0.74rem;letter-spacing:0.08em;text-transform:uppercase;line-height:1.15}
+  .kgx-brand-copy span{display:block;color:var(--kgx-muted);font-size:0.62rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2}
   .kgx-modes{
-    display:inline-flex;align-items:center;padding:3px;gap:2px;
+    display:inline-flex;align-items:center;padding:2px;gap:2px;
     border:1px solid var(--kgx-line);border-radius:6px;background:var(--kgx-panel);
   }
   .kgx-mode{
-    border:0;border-radius:4px;padding:0.45rem 0.72rem;background:transparent;
-    color:var(--kgx-muted);cursor:pointer;font-size:0.76rem;font-weight:600;
+    border:0;border-radius:4px;padding:0.32rem 0.62rem;background:transparent;
+    color:var(--kgx-muted);cursor:pointer;font-size:0.72rem;font-weight:600;line-height:1.2;
   }
   .kgx-mode:hover{color:var(--kgx-text);background:rgba(255,255,255,0.05)}
   .kgx-mode.on,.kgx-mode[aria-pressed="true"]{
     color:#090912;background:var(--kgx-accent);
     box-shadow:0 0 18px color-mix(in srgb,var(--kgx-accent) 32%,transparent);
   }
-  .kgx-progress{justify-self:end;display:flex;align-items:center;gap:0.8rem}
+  .kgx-progress{justify-self:end;display:flex;align-items:center;gap:0.55rem}
   .kgx-progress-copy{text-align:right}
-  .kgx-progress-copy strong,.progress-line{color:var(--kgx-text);display:block;font-size:0.86rem}
-  .kgx-progress-copy span{color:var(--kgx-muted);display:block;font-size:0.68rem}
+  .kgx-progress-copy strong,.progress-line{color:var(--kgx-text);display:block;font-size:0.78rem;line-height:1.15}
+  .kgx-progress-copy span{color:var(--kgx-muted);display:block;font-size:0.62rem;line-height:1.15}
   .kgx-progress-ring{
-    --p:0%;width:36px;height:36px;border-radius:50%;position:relative;flex:none;
+    --p:0%;width:32px;height:32px;border-radius:50%;position:relative;flex:none;
     background:conic-gradient(var(--kgx-gold) var(--p), rgba(255,255,255,0.10) 0);
   }
   .kgx-progress-ring::after{
-    content:"";position:absolute;inset:4px;border-radius:50%;background:var(--kgx-night);
+    content:"";position:absolute;inset:3px;border-radius:50%;background:var(--kgx-night);
     box-shadow:inset 0 0 0 1px rgba(255,255,255,0.05);
   }
   #body{display:grid;grid-template-columns:minmax(0,1fr) 314px;flex:1 1 auto;min-height:0}
@@ -116,7 +121,7 @@
   }
   .kgx-route-actions{
     position:absolute;left:50%;bottom:1.15rem;transform:translateX(-50%);
-    display:flex;gap:0.45rem;z-index:2;
+    display:flex;align-items:center;gap:0.4rem;z-index:2;
   }
   .kgx-icon-btn{
     width:36px;height:36px;border:1px solid var(--kgx-line);border-radius:5px;
@@ -125,6 +130,15 @@
   .kgx-icon-btn:hover{border-color:var(--kgx-accent);color:var(--kgx-accent)}
   .kgx-icon-btn:disabled{opacity:.4;cursor:default}
   .kgx-icon-btn.on{border-color:var(--kgx-accent);color:var(--kgx-accent)}
+  /* R1: primary strip matches reference (← · tour · →); camera tools behind ⋯ */
+  .kgx-route-more{position:relative;display:flex;align-items:center}
+  .kgx-route-more-panel{
+    display:none;position:absolute;left:50%;bottom:calc(100% + 6px);transform:translateX(-50%);
+    gap:0.35rem;padding:0.3rem;border:1px solid var(--kgx-line);border-radius:6px;
+    background:rgba(12,16,20,0.94);box-shadow:0 10px 28px rgba(0,0,0,0.35);
+  }
+  .kgx-route-more.is-open .kgx-route-more-panel{display:flex}
+  .kgx-route-more.is-open #morebtn{border-color:var(--kgx-accent);color:var(--kgx-accent)}
   #side{
     width:314px;flex:0 0 314px;min-width:0;border-left:1px solid var(--kgx-line);
     background:var(--kgx-panel);display:flex;flex-direction:column;min-height:0;overflow:hidden;
@@ -278,10 +292,22 @@
     color:#080812;background:linear-gradient(100deg,var(--kgx-cyan),var(--kgx-lime));
   }
   .kgx-help-btn{
-    width:32px;height:32px;border:1px solid var(--kgx-line);border-radius:50%;
-    background:transparent;color:var(--kgx-muted);cursor:pointer;font-weight:700;margin-left:0.35rem;
+    width:28px;height:28px;border:1px solid var(--kgx-line);border-radius:50%;
+    background:transparent;color:var(--kgx-muted);cursor:pointer;font-weight:700;flex:none;
+    font-size:0.78rem;line-height:1;
   }
   .kgx-help-btn:hover{color:var(--kgx-text);border-color:var(--kgx-accent)}
+  /* R2: action ack toast (reference Memory Run surface) */
+  .kgx-toast{
+    position:absolute;z-index:9;left:50%;top:78px;transform:translate(-50%,-8px);
+    max-width:min(420px,calc(100% - 2rem));padding:0.55rem 0.85rem;
+    border:1px solid rgba(114,241,165,0.45);border-radius:5px;
+    background:rgba(15,18,35,0.96);color:var(--kgx-text);font-size:0.74rem;
+    opacity:0;pointer-events:none;transition:opacity 160ms ease,transform 160ms ease;
+    box-shadow:0 12px 32px rgba(0,0,0,0.35);text-align:center;
+  }
+  .kgx-toast.is-visible{opacity:1;transform:translate(-50%,0)}
+  .kgx-toast.is-error{border-color:rgba(255,107,138,0.55)}
   .badge{display:inline-block;font-size:0.62rem;padding:1px 5px;border-radius:4px;border:1px solid var(--kgx-line);margin-left:4px;color:var(--kgx-violet)}
   .reason{font-size:0.68rem;color:var(--kgx-muted)}
   @media (max-width: 860px){
@@ -310,6 +336,7 @@
   }
   @media (prefers-reduced-motion: reduce){
     #wrap.interior-open #stage canvas{filter:brightness(0.45)}
+    .kgx-toast{transition:none}
   }
 </style>
 </head>
@@ -323,7 +350,6 @@
         <strong>Hometutor</strong>
         <span id="brandsub">Memory Run</span>
       </span>
-      <button class="kgx-help-btn" id="helpbtn" type="button" title="Правила зала" aria-label="Правила зала">?</button>
     </div>
     <div class="kgx-modes" role="group" aria-label="Режим сцены и оверлей памяти">
       <button class="kgx-mode on" id="modeRoute" type="button" title="Только маршрут дня" aria-pressed="true">Маршрут</button>
@@ -337,6 +363,7 @@
         <span id="progresshint">маршрут перестраивается по памяти</span>
       </span>
       <span id="progressring" class="kgx-progress-ring" aria-hidden="true"></span>
+      <button class="kgx-help-btn" id="helpbtn" type="button" title="Правила зала" aria-label="Правила зала">?</button>
     </div>
   </header>
   <div id="body" class="kgx-body">
@@ -354,9 +381,14 @@
         <button class="kgx-icon-btn" id="prevbtn" type="button" title="Предыдущая остановка" aria-label="Предыдущая остановка">←</button>
         <button class="kgx-icon-btn" id="playbtn" type="button" title="Экскурсия дня" aria-label="Экскурсия дня">▶</button>
         <button class="kgx-icon-btn" id="nextbtn" type="button" title="Следующая остановка" aria-label="Следующая остановка">→</button>
-        <button class="kgx-icon-btn" id="homebtn" type="button" title="Вернуть читаемый вид маршрута" aria-label="Home">⌂</button>
-        <button class="kgx-icon-btn" id="topbtn" type="button" title="Вид сверху" aria-label="Сверху">⊤</button>
-        <button class="kgx-icon-btn" id="resetbtn" type="button" title="Сброс" aria-label="Сброс">↺</button>
+        <div class="kgx-route-more" id="routemore">
+          <button class="kgx-icon-btn" id="morebtn" type="button" title="Камера и сброс" aria-label="Ещё: Home, сверху, сброс" aria-expanded="false" aria-controls="routemorepanel">⋯</button>
+          <div class="kgx-route-more-panel" id="routemorepanel" role="group" aria-label="Камера">
+            <button class="kgx-icon-btn" id="homebtn" type="button" title="Вернуть читаемый вид маршрута" aria-label="Home">⌂</button>
+            <button class="kgx-icon-btn" id="topbtn" type="button" title="Вид сверху" aria-label="Сверху">⊤</button>
+            <button class="kgx-icon-btn" id="resetbtn" type="button" title="Сброс" aria-label="Сброс">↺</button>
+          </div>
+        </div>
       </div>
       <div id="interior" aria-label="Интерьер узла" role="dialog" aria-modal="true" hidden>
         <div class="kgx-interior-head">
@@ -422,6 +454,7 @@
       <div class="mini" id="hint"></div>
     </aside>
   </div>
+  <div id="toast" class="kgx-toast" role="status" aria-live="polite"></div>
   <div id="onboard" role="dialog" aria-modal="true" aria-labelledby="onboard-title">
     <div class="kgx-onboard-card">
       <h2 id="onboard-title">Правила зала памяти</h2>
@@ -483,6 +516,7 @@ let memoryOverlay = false;
 let interiorOpen = false;
 /** @type {null|{event_id:string,action:string,concept_id:string,phase:string,label:string}} */
 let pendingAction = null;
+let toastTimer = 0;
 let actionTimeoutTimer = null;
 // ✓ = «был в квизе» (ключ есть в последнем mastery_history snapshot),
 // NOT 2D learned (≥80%). Plan G2: quiz-event signal only; any score counts.
@@ -1545,6 +1579,25 @@ function postSelect(conceptId) {
   } catch (_) {}
 }
 
+/** R2: brief surface ack (reference toast); status-line remains for sticky detail. */
+function showToast(message, opts) {
+  const el = document.getElementById('toast');
+  if (!el) return;
+  const isError = !!(opts && opts.error);
+  el.textContent = String(message || '').trim();
+  if (!el.textContent) {
+    el.classList.remove('is-visible', 'is-error');
+    return;
+  }
+  el.classList.toggle('is-error', isError);
+  el.classList.add('is-visible');
+  if (toastTimer) clearTimeout(toastTimer);
+  const ms = prefersReducedMotion ? 900 : 1800;
+  toastTimer = setTimeout(() => {
+    el.classList.remove('is-visible');
+  }, ms);
+}
+
 function postAction(action, conceptId) {
   // Gated: export never attaches a live action path (kill-switch inert contract).
   if (!isEmbedded) return;
@@ -1578,6 +1631,7 @@ function postAction(action, conceptId) {
       st.dataset.sticky = '1';
       st.textContent = `Ошибка: не удалось отправить «${label}» (postMessage)`;
     }
+    showToast(`Не отправлено · «${label}»`, { error: true });
     updateActionUI();
     return;
   }
@@ -1594,6 +1648,7 @@ function postAction(action, conceptId) {
       // Release lock so user can retry with a new event_id. Sticky status
       // remains visible until the next action/ack overwrites it.
       pendingAction = null;
+      showToast(`Таймаут · «${label}»`, { error: true });
       updateActionUI();
     }
   }, 12000);
@@ -1628,6 +1683,7 @@ window.addEventListener('message', (event) => {
   if (status === 'component_failed' || status === 'invalid' || status === 'delivery_failed') {
     st.dataset.sticky = '1';
     st.textContent = `Ошибка доставки: «${pendingAction.label}» · ${detail || status}`;
+    showToast(`Ошибка доставки · «${pendingAction.label}»`, { error: true });
     pendingAction = null;
     if (actionTimeoutTimer) clearTimeout(actionTimeoutTimer);
     updateActionUI();
@@ -1786,16 +1842,24 @@ function applyActionResult() {
       st.textContent = added || duplicates
         ? `Ack: «${label}» добавлено в конспект · +${added}` + (duplicates ? ` · уже было ${duplicates}` : '')
         : `Ack: «${label}» · подходящих разделов не нашлось`;
+      showToast(
+        added || duplicates
+          ? `В конспект · «${label}»` + (added ? ` · +${added}` : '')
+          : `Нет разделов · «${label}»`
+      );
       updateInventoryLine();
       buildTopList();
       render();
     } else if (action === 'start') {
       st.textContent = `Ack: «${label}» · Quiz открыт`;
+      showToast(`Открываем · «${label}»`);
     } else {
       st.textContent = `Ack: «${label}» · действие выполнено`;
+      showToast(`Готово · «${label}»`);
     }
   } else if (status === 'failed') {
     st.textContent = `Ошибка: «${label}» · ${String(ACTION_RESULT.message || 'действие не выполнено')}`;
+    showToast(`Ошибка · «${label}»`, { error: true });
   }
   pendingAction = null;
   if (actionTimeoutTimer) clearTimeout(actionTimeoutTimer);
@@ -2382,6 +2446,12 @@ const onboardOk = document.getElementById('onboard-ok');
 if (onboardOk) onboardOk.onclick = () => closeOnboarding();
 window.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
+    const moreWrap = document.getElementById('routemore');
+    if (moreWrap && moreWrap.classList.contains('is-open')) {
+      e.preventDefault();
+      closeRouteMore();
+      return;
+    }
     if (interiorOpen) {
       e.preventDefault();
       closeInterior();
@@ -2408,6 +2478,29 @@ window.addEventListener('keydown', e => {
     goToStop(activeStopIndex + 1, { animate: true });
   }
 });
+function closeRouteMore() {
+  const wrap = document.getElementById('routemore');
+  const more = document.getElementById('morebtn');
+  if (wrap) wrap.classList.remove('is-open');
+  if (more) more.setAttribute('aria-expanded', 'false');
+}
+const moreBtn = document.getElementById('morebtn');
+if (moreBtn) {
+  moreBtn.onclick = (ev) => {
+    ev.stopPropagation();
+    const wrap = document.getElementById('routemore');
+    if (!wrap) return;
+    const open = !wrap.classList.contains('is-open');
+    wrap.classList.toggle('is-open', open);
+    moreBtn.setAttribute('aria-expanded', String(open));
+  };
+}
+document.addEventListener('click', (ev) => {
+  const wrap = document.getElementById('routemore');
+  if (!wrap || !wrap.classList.contains('is-open')) return;
+  if (wrap.contains(ev.target)) return;
+  closeRouteMore();
+});
 document.getElementById('homebtn').onclick = () => {
   stopTour();
   tourState = 'idle';
@@ -2418,10 +2511,12 @@ document.getElementById('homebtn').onclick = () => {
   updateStopInfo();
   buildTopList();
   updatePlayButton();
+  closeRouteMore();
   render();
 };
 document.getElementById('topbtn').onclick = () => {
   stopTour();
+  closeRouteMore();
   animateCamera({ cx, cy, cz, yaw: 0.2, pitch: 1.05, zoom: Math.max(zoom, 1.0) }, prefersReducedMotion ? 0 : 800);
 };
 document.getElementById('resetbtn').onclick = () => {
@@ -2436,6 +2531,7 @@ document.getElementById('resetbtn').onclick = () => {
   updateStopInfo();
   buildTopList();
   updatePlayButton();
+  closeRouteMore();
   render();
 };
 

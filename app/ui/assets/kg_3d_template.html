@@ -2606,16 +2606,18 @@ function applyActionResult() {
           workbenchCount += added;
         }
       }
+      // W4d: honest ◆ channel — user already in the hall; markers update in place.
       st.textContent = added || duplicates
-        ? `Ack: «${label}» добавлено в конспект · +${added}` + (duplicates ? ` · уже было ${duplicates}` : '')
+        ? `◆ Кузница · в конспект · «${label}» · +${added}` + (duplicates ? ` · уже было ${duplicates}` : '') + ' · мир обновлён'
         : `Ack: «${label}» · подходящих разделов не нашлось`;
       showToast(
         added || duplicates
-          ? `В конспект · «${label}»` + (added ? ` · +${added}` : '')
+          ? `◆ в кузнице · «${label}»` + (added ? ` · +${added}` : '')
           : `Нет разделов · «${label}»`
       );
       updateInventoryLine();
       buildTopList();
+      updateDistrictDoors();
       render();
     } else if (action === 'start') {
       st.textContent = `Ack: «${label}» · Quiz открыт`;

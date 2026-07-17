@@ -358,6 +358,21 @@ def _render_review_completion(
                 st.session_state[PROGRESS_FOCUS_SECTION_KEY] = PROGRESS_FOCUS_STREAK_WEEKLY
                 st.rerun()
         st.markdown(review_summary_html(stats, total, nr_val), unsafe_allow_html=True)
+        # W4d: return to ceremonial hub — SR channel (decay/fog), not quiz/◆.
+        try:
+            from app.ui.mnemo_nav import render_return_to_mnemo_cta
+
+            if render_return_to_mnemo_cta(
+                key="flashcards_review_return_mnemo",
+                return_from="flashcards",
+                caption=(
+                    "Повторение записано в SR · в мире обновится туман/retention "
+                    "(decay_vector), не quiz-✓ и не ◆."
+                ),
+            ):
+                st.rerun()
+        except Exception:  # noqa: BLE001 - optional CTA must not break completion
+            pass
     if st.button("🔁 Начать снова", width='stretch', type="secondary"):
         reset_review_session_state(st.session_state)
         st.rerun()
@@ -860,10 +875,8 @@ def _render_active_review_card(
             "linear-gradient(160deg, rgba(185,86,49,0.07) 0%, rgba(36,59,44,0.05) 100%)",
         ),
     )
-    # scrolling=True is a safety net, not the primary sizing mechanism: the
-    # JS resize inside the card (see flashcards_interactive_card.py) can only
-    # resize its own inner div, not this outer iframe box — components.html()
-    # renders a plain iframe that Streamlit never resizes from postMessage.
+    # scrolling=True is a safety net, not the primary sizing mechanism: JS resize
+    # inside the card can only resize its inner div, not this outer iframe box.
     # If estimate_interactive_card_height() ever undershoots the real
     # rendered content, scrolling=True means an ugly in-iframe scrollbar
     # instead of the bottom of the card (rating chips, tutor-handoff button)

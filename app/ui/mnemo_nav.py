@@ -1,4 +1,4 @@
-"""Мнемополис navigation helpers (W4a/W4b).
+"""Мнемополис navigation helpers (W4a/W4b/W4d).
 
 Deep links use ``PENDING_CURRENT_VIEW_KEY`` only — never write ``current_view``
 after the main selectbox is instantiated (StreamlitAPIException).
@@ -57,10 +57,34 @@ def arrival_banner_message() -> str | None:
             "🌆 Мир обновился по SR-каналу: туман/retention (decay_vector). "
             "Mission Control остаётся главным экраном."
         )
+    if channel == "collect":
+        return (
+            "🌆 Мир обновился: ◆ в кузнице (workbench / корзина конспекта). "
+            "Mission Control остаётся главным экраном."
+        )
     return (
         "🌆 Мнемополис · Memory Run (3D-зал). "
         "Mission Control остаётся главным экраном."
     )
+
+
+def _default_help(return_from: str) -> str:
+    if return_from == "quiz":
+        return (
+            "Открыть 3D-зал: честный quiz-след (✓ / рассвет). "
+            "Не заменяет Mission Control."
+        )
+    if return_from == "flashcards":
+        return (
+            "Открыть 3D-зал: честный SR-след (туман/retention). "
+            "Не заменяет Mission Control."
+        )
+    if return_from == "collect":
+        return (
+            "Открыть 3D-зал: ◆ на остановках (workbench). "
+            "Не заменяет Mission Control."
+        )
+    return "Открыть 3D-зал (Мнемополис)."
 
 
 def render_return_to_mnemo_cta(
@@ -74,11 +98,7 @@ def render_return_to_mnemo_cta(
     """Render return CTA. Returns True if clicked (after open + will need rerun)."""
     if caption:
         st.caption(caption)
-    help_default = (
-        "Открыть 3D-зал: честный quiz-след (✓ / рассвет). Не заменяет Mission Control."
-        if return_from == "quiz"
-        else "Открыть 3D-зал (Мнемополис)."
-    )
+    help_default = _default_help(return_from)
     if st.button(
         label,
         key=key,

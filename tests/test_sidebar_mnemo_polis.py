@@ -29,6 +29,15 @@ def test_open_mnemo_polis_return_from_quiz_channel():
     assert state[KG_OPEN_3D_HALL_KEY] is True
 
 
+def test_open_mnemo_polis_return_from_flashcards_and_collect():
+    state: dict = {}
+    open_mnemo_polis(state=state, return_from="flashcards")
+    assert state[KG_RETURN_FROM_KEY] == "flashcards"
+    state2: dict = {}
+    open_mnemo_polis(state=state2, return_from="collect")
+    assert state2[KG_RETURN_FROM_KEY] == "collect"
+
+
 def test_arrival_banner_quiz_channel_message():
     import streamlit as st
 
@@ -42,6 +51,22 @@ def test_arrival_banner_quiz_channel_message():
     assert "quiz" in msg.lower() or "✓" in msg
     assert KG_OPEN_3D_HALL_KEY not in st.session_state
     assert KG_RETURN_FROM_KEY not in st.session_state
+
+
+def test_arrival_banner_flashcards_and_collect_channels():
+    import streamlit as st
+
+    from app.ui.mnemo_nav import arrival_banner_message
+
+    st.session_state[KG_OPEN_3D_HALL_KEY] = True
+    st.session_state[KG_RETURN_FROM_KEY] = "flashcards"
+    msg_fc = arrival_banner_message()
+    assert msg_fc and ("SR" in msg_fc or "туман" in msg_fc or "retention" in msg_fc)
+
+    st.session_state[KG_OPEN_3D_HALL_KEY] = True
+    st.session_state[KG_RETURN_FROM_KEY] = "collect"
+    msg_c = arrival_banner_message()
+    assert msg_c and "◆" in msg_c
 
 
 def _app_sidebar_mnemo_button() -> None:
@@ -82,3 +107,6 @@ class TestSidebarMnemoPolisNavigation:
         iq = Path("app/ui/interactive_quiz.py").read_text(encoding="utf-8")
         assert "interactive_quiz_return_mnemo" in iq
         assert "render_return_to_mnemo_cta" in iq
+        fc = Path("app/ui/flashcards_review_view.py").read_text(encoding="utf-8")
+        assert "flashcards_review_return_mnemo" in fc
+        assert "return_from=\"flashcards\"" in fc or "return_from='flashcards'" in fc

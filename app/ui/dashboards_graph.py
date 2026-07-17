@@ -24,6 +24,11 @@ from app.ui.home_hub import (
     _find_topic_for_concept,
     _topic_documents_index,
 )
+from app.ui.dashboards_graph_state import (
+    _prime_kg_3d_action_focus,
+    _workbench_collected_concept_ids,
+    _workbench_state_rows,
+)
 from app.ui.knowledge_graph_d3 import (
     KG_3D_ACTION_KEY,
     KG_3D_ACTION_RESULT_KEY,
@@ -133,27 +138,14 @@ def build_tutor_prompt_for_concept(
         f"Расскажи мне всё самое важное про «{concept_id}», что нужно знать для практической работы."
     )
 
-
-def _workbench_state_rows(state=None) -> list[dict]:
-    from app import workbench_service
-
-    source = st.session_state if state is None else state
-    return workbench_service.normalize_runtime_rows(
-        list(source.get(workbench_service.WORKBENCH_SECTIONS_KEY) or [])
-    )
-
-
-def _workbench_collected_concept_ids(state=None) -> list[str]:
-    """Concept ids that already have at least one section in the workbench basket."""
-    ids: list[str] = []
-    seen: set[str] = set()
-    for row in _workbench_state_rows(state):
-        cid = str(row.get("concept") or "").strip()
-        if not cid or cid in seen:
-            continue
-        seen.add(cid)
-        ids.append(cid)
-    return ids
+def _kg_3d_concept_label(knowledge_graph, concept_id: str) -> str:
+    try:
+        concepts = knowledge_graph.get_concepts() if knowledge_graph is not None else {}
+    except Exception:  # noqa: BLE001 - label lookup must not block action execution
+        concepts = {}
+    raw = concepts.get(concept_id) if isinstance(concepts, dict) else {}
+    info = raw if isinstance(raw, dict) else {}
+    return str(info.get("label") or concept_id)
 
 
 def _query_param_first_str(name: str) -> str:
@@ -163,16 +155,6 @@ def _query_param_first_str(name: str) -> str:
     if isinstance(raw, list):
         raw = raw[0] if raw else ""
     return str(raw or "").strip()
-
-
-def _kg_3d_concept_label(knowledge_graph, concept_id: str) -> str:
-    try:
-        concepts = knowledge_graph.get_concepts() if knowledge_graph is not None else {}
-    except Exception:  # noqa: BLE001 - label lookup must not block action execution
-        concepts = {}
-    raw = concepts.get(concept_id) if isinstance(concepts, dict) else {}
-    info = raw if isinstance(raw, dict) else {}
-    return str(info.get("label") or concept_id)
 
 
 def _set_kg_3d_action_result(
@@ -196,25 +178,6 @@ def _set_kg_3d_action_result(
         "added": int(added or 0),
         "duplicates": int(duplicates or 0),
     }
-
-
-def _prime_kg_3d_action_focus(
-    target,
-    *,
-    action: str,
-    concept_id: str,
-    event_id: str,
-    label: str,
-) -> None:
-    target[KG_3D_ACTION_KEY] = {
-        "action": action,
-        "concept_id": concept_id,
-        "event_id": event_id,
-    }
-    target["kg_selected_concept"] = concept_id
-    target["kg_action_concept"] = concept_id
-    target["interactive_quiz_focus_concept"] = concept_id
-    target["current_topic"] = label
 
 
 def _run_kg_3d_start_action(
@@ -379,7 +342,11 @@ def _run_kg_3d_collect_action(
     if state is None:
         if added or duplicates:
             suffix = f" (уже было: {duplicates})" if duplicates else ""
-            st.toast(f"В рабочий конспект: +{added}{suffix}", icon="📚")
+            # W4d: honest ◆ channel copy (user stays in hall; world already shows ◆).
+            st.toast(
+                f"◆ В кузнице: +{added}{suffix} · Мнемополис обновил маркеры",
+                icon="📚",
+            )
         else:
             st.toast(
                 "Подходящих разделов не нашлось — возможно, конспекты ещё не созданы.",

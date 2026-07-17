@@ -20,12 +20,18 @@ Public API (unchanged):
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
-from collections import deque
+import re
+import secrets
+from collections import OrderedDict, deque
 from dataclasses import dataclass
+from datetime import date
 from functools import lru_cache
+from hmac import compare_digest
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Sequence
 
 from app.ui.knowledge_graph_d3_analysis import (
     build_cluster_labels,
@@ -46,6 +52,20 @@ _D3_PATH = Path(__file__).resolve().parent / "assets" / "d3.v7.min.js"
 _HTML_TEMPLATE_PATH = Path(__file__).resolve().parent / "assets" / "knowledge_graph_d3_template.html"
 _3D_TEMPLATE_PATH = Path(__file__).resolve().parent / "assets" / "kg_3d_template.html"
 _COMPONENT_PATH = Path(__file__).resolve().parent / "assets" / "kg_d3_component"
+_3D_COMPONENT_PATH = Path(__file__).resolve().parent / "assets" / "kg_3d_component"
+
+# G0 action bridge (embedded 3D hall → Python). UI-state only; no per-user table.
+KG_3D_ACTION_KEY = "kg_3d_action"
+KG_3D_SESSION_NONCE_KEY = "kg_3d_session_nonce"
+KG_3D_DEDUP_KEY = "kg_3d_event_dedup"
+KG_3D_QUERY_PARAM = "_kg3d"
+KG_3D_MAX_RAW_LEN = 600
+KG_3D_DEDUP_MAX = 64
+_KG3D_UUID_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+_KG3D_ULID_RE = re.compile(r"^[0-9A-HJKMNP-TV-Z]{26}$", re.IGNORECASE)
+_KG3D_ACTIONS = frozenset({"start", "collect"})
 _MISSING_TEMPLATE_HTML = """<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -716,21 +736,211 @@ def build_kg_html(payload: Mapping[str, Any]) -> str:
     )
 
 
-def build_kg_3d_html(payload: Mapping[str, Any]) -> str:
+def ensure_kg_3d_session_nonce(state: MutableMapping[str, Any]) -> str:
+    """128-bit random nonce for the current Streamlit session (action envelope)."""
+    existing = str(state.get(KG_3D_SESSION_NONCE_KEY) or "").strip()
+    if existing:
+        return existing
+    nonce = secrets.token_hex(16)
+    state[KG_3D_SESSION_NONCE_KEY] = nonce
+    return nonce
+
+
+def _valid_event_id(event_id: str) -> bool:
+    if _KG3D_UUID_RE.match(event_id):
+        return True
+    return bool(_KG3D_ULID_RE.match(event_id))
+
+
+def decode_kg_3d_query_raw(raw: str) -> dict[str, Any] | None:
+    """Decode base64url(minified JSON) action envelope; length-capped.
+
+    Returns None for empty/malformed/oversized payloads. Does not validate
+    domain fields (nonce, concept membership) — see :func:`validate_kg_3d_envelope`.
+    """
+    text = str(raw or "").strip()
+    if not text or len(text) > KG_3D_MAX_RAW_LEN:
+        return None
+    try:
+        pad = "=" * (-len(text) % 4)
+        data = base64.urlsafe_b64decode(text + pad)
+        env = json.loads(data.decode("utf-8"))
+    except (ValueError, binascii.Error, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    return env if isinstance(env, dict) else None
+
+
+def validate_kg_3d_envelope(
+    env: Mapping[str, Any] | None,
+    *,
+    session_nonce: str,
+    node_ids: Iterable[str],
+) -> dict[str, Any] | None:
+    """Validate G0 envelope fields; constant-time nonce compare."""
+    if not isinstance(env, Mapping):
+        return None
+    if int(env.get("version") or 0) != 1:
+        return None
+    if str(env.get("source") or "") != "kg3d":
+        return None
+    action = str(env.get("action") or "").strip()
+    if action not in _KG3D_ACTIONS:
+        return None
+    concept_id = str(env.get("concept_id") or "").strip()
+    event_id = str(env.get("event_id") or "").strip()
+    nonce = str(env.get("session_nonce") or "").strip()
+    if not concept_id or not event_id or not nonce:
+        return None
+    if not _valid_event_id(event_id):
+        return None
+    # Constant-time: pad/truncate comparison length only after length match.
+    expected = str(session_nonce or "")
+    if len(nonce) != len(expected) or not compare_digest(nonce, expected):
+        return None
+    allowed = {str(n).strip() for n in node_ids if str(n).strip()}
+    if concept_id not in allowed:
+        return None
+    return {
+        "version": 1,
+        "source": "kg3d",
+        "event_id": event_id,
+        "session_nonce": nonce,
+        "concept_id": concept_id,
+        "action": action,
+    }
+
+
+def _kg_3d_dedup_map(state: MutableMapping[str, Any]) -> OrderedDict[str, str]:
+    raw = state.get(KG_3D_DEDUP_KEY)
+    if isinstance(raw, OrderedDict):
+        return raw
+    if isinstance(raw, dict):
+        od: OrderedDict[str, str] = OrderedDict()
+        for k, v in raw.items():
+            key = str(k).strip()
+            status = str(v or "").strip()
+            if key and status in {"processing", "succeeded", "failed"}:
+                od[key] = status
+        state[KG_3D_DEDUP_KEY] = od
+        return od
+    od = OrderedDict()
+    state[KG_3D_DEDUP_KEY] = od
+    return od
+
+
+def reserve_kg_3d_event_id(state: MutableMapping[str, Any], event_id: str) -> bool:
+    """Reserve ``event_id`` before side effect. False if already seen in window."""
+    eid = str(event_id or "").strip()
+    if not eid:
+        return False
+    dedup = _kg_3d_dedup_map(state)
+    if eid in dedup:
+        return False
+    dedup[eid] = "processing"
+    while len(dedup) > KG_3D_DEDUP_MAX:
+        dedup.popitem(last=False)
+    return True
+
+
+def mark_kg_3d_event(
+    state: MutableMapping[str, Any], event_id: str, status: str
+) -> None:
+    """Mark reserved event as succeeded|failed (or processing)."""
+    eid = str(event_id or "").strip()
+    if not eid:
+        return
+    if status not in {"processing", "succeeded", "failed"}:
+        return
+    dedup = _kg_3d_dedup_map(state)
+    dedup[eid] = status
+    while len(dedup) > KG_3D_DEDUP_MAX:
+        dedup.popitem(last=False)
+
+
+def consume_kg_3d_query_param(
+    *,
+    raw: str | None,
+    session_nonce: str,
+    node_ids: Iterable[str],
+    state: MutableMapping[str, Any],
+) -> dict[str, Any] | None:
+    """Validate → reserve event_id. Caller removes query param always.
+
+    Order (plan G0): validate → remove query param (caller) → reserve → execute → ack.
+    Returns a validated envelope ready for execute, or None if rejected/duplicate.
+    """
+    env = validate_kg_3d_envelope(
+        decode_kg_3d_query_raw(str(raw or "")),
+        session_nonce=session_nonce,
+        node_ids=node_ids,
+    )
+    if env is None:
+        return None
+    if not reserve_kg_3d_event_id(state, env["event_id"]):
+        return None
+    return env
+
+
+def encode_kg_3d_query_raw(envelope: Mapping[str, Any]) -> str:
+    """Test/helper: encode envelope as base64url(minified JSON)."""
+    raw = json.dumps(dict(envelope), ensure_ascii=False, separators=(",", ":"))
+    return base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii").rstrip("=")
+
+
+def build_kg_3d_html(
+    payload: Mapping[str, Any],
+    *,
+    host_mode: str = "export",
+    session_nonce: str = "",
+    collected_concept_ids: Sequence[str] | None = None,
+    workbench_count: int | None = None,
+    exported_at: str | None = None,
+) -> str:
     """Self-contained offline 3D Knowledge Graph hall (no CDN).
 
     Same payload as the 2D map: nodes (worth/due/novel), edges, stats, and
     precomputed ``day_route`` (A2 stops). Export defaults to **route scene**
     (first frame = day path, not full graph); worth is rank/reason, not height.
+
+    Render-contract extensions (not domain schema):
+    - ``host_mode``: ``export`` (inert actions) | ``embedded`` (action bridge)
+    - ``session_nonce``: embedded-only envelope binding
+    - ``collected_concept_ids`` / ``workbench_count``: embedded inventory view-model
+    - mastery_history / decay_vector / snapshot_date: G2 memory overlay inputs
     """
+    mode = "embedded" if str(host_mode or "").strip().lower() == "embedded" else "export"
     t = _load_3d_template()
     route_ids = _day_route_ids(payload)
+    snap = str(exported_at or "").strip() or date.today().isoformat()
+    collected = [
+        str(c).strip()
+        for c in (collected_concept_ids or [])
+        if str(c).strip()
+    ]
+    # Export never bakes live basket state (honest offline contract).
+    if mode == "export":
+        collected = []
+        wb_count: int | None = None
+        nonce = ""
+    else:
+        wb_count = int(workbench_count) if workbench_count is not None else None
+        nonce = str(session_nonce or "").strip()
     return (
         t.replace("__NODES__", _json_for_script(payload.get("nodes", [])))
-         .replace("__EDGES__", _json_for_script(payload.get("edges", [])))
-         .replace("__STATS__", _json_for_script(payload.get("stats", {})))
-         .replace("__HEALTH__", _json_for_script(payload.get("health")))
-         .replace("__DAY_ROUTE__", _json_for_script(route_ids))
+        .replace("__EDGES__", _json_for_script(payload.get("edges", [])))
+        .replace("__STATS__", _json_for_script(payload.get("stats", {})))
+        .replace("__HEALTH__", _json_for_script(payload.get("health")))
+        .replace("__DAY_ROUTE__", _json_for_script(route_ids))
+        .replace("__MASTERY_HISTORY__", _json_for_script(payload.get("mastery_history", [])))
+        .replace("__DECAY_VECTOR__", _json_for_script(payload.get("decay_vector", {})))
+        .replace("__SNAPSHOT_DATE__", _json_for_script(snap))
+        .replace("__HOST_MODE__", _json_for_script(mode))
+        .replace("__SESSION_NONCE__", _json_for_script(nonce))
+        .replace("__COLLECTED_IDS__", _json_for_script(collected))
+        .replace(
+            "__WORKBENCH_COUNT__",
+            _json_for_script(wb_count if wb_count is not None else None),
+        )
     )
 
 
@@ -739,6 +949,45 @@ def _kg_d3_component():
     import streamlit.components.v1 as components
 
     return components.declare_component("kg_d3", path=str(_COMPONENT_PATH))
+
+
+@lru_cache(maxsize=1)
+def _kg_3d_component():
+    import streamlit.components.v1 as components
+
+    return components.declare_component("kg_3d", path=str(_3D_COMPONENT_PATH))
+
+
+def render_kg_3d_hall(
+    payload: Mapping[str, Any],
+    *,
+    session_nonce: str,
+    collected_concept_ids: Sequence[str] | None = None,
+    workbench_count: int | None = None,
+    height: int = 720,
+    key: str = "kg_3d_component",
+) -> str | None:
+    """Render embedded 3D hall via dedicated Streamlit component.
+
+    Returns selected concept id (string) from ``setComponentValue`` if any.
+    Actions are delivered exclusively via ``_kg3d`` query-param (not component value).
+    """
+    html = build_kg_3d_html(
+        payload,
+        host_mode="embedded",
+        session_nonce=session_nonce,
+        collected_concept_ids=collected_concept_ids,
+        workbench_count=workbench_count,
+    )
+    selected = _kg_3d_component()(
+        html=html,
+        height=height,
+        default=None,
+        key=key,
+    )
+    if isinstance(selected, str) and selected.strip():
+        return selected.strip()
+    return None
 
 
 def render_d3_knowledge_graph(

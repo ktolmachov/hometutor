@@ -25,11 +25,17 @@ from app.ui.home_hub import (
     _topic_documents_index,
 )
 from app.ui.knowledge_graph_d3 import (
+    KG_3D_ACTION_KEY,
+    KG_3D_QUERY_PARAM,
     _is_lesson_node as _is_lesson_concept,
     build_kg_3d_html,
     build_kg_html,
     collect_kg_learned_set,
+    consume_kg_3d_query_param,
+    ensure_kg_3d_session_nonce,
+    mark_kg_3d_event,
     render_d3_knowledge_graph,
+    render_kg_3d_hall,
 )
 from app.ui.topics_catalog import load_topics_catalog as _load_topics_catalog
 from app.ui.tutor_mastery_forecast_panel import (
@@ -139,6 +145,122 @@ def _workbench_state_rows(state=None) -> list[dict]:
     source = st.session_state if state is None else state
     return workbench_service.normalize_runtime_rows(
         list(source.get(workbench_service.WORKBENCH_SECTIONS_KEY) or [])
+    )
+
+
+def _workbench_collected_concept_ids(state=None) -> list[str]:
+    """Concept ids that already have at least one section in the workbench basket."""
+    ids: list[str] = []
+    seen: set[str] = set()
+    for row in _workbench_state_rows(state):
+        cid = str(row.get("concept") or "").strip()
+        if not cid or cid in seen:
+            continue
+        seen.add(cid)
+        ids.append(cid)
+    return ids
+
+
+def _execute_kg_3d_action(
+    envelope: dict,
+    *,
+    knowledge_graph,
+    doc_index: dict,
+    state=None,
+) -> None:
+    """G1: apply start (nav only) or collect (workbench write) for a validated envelope."""
+    from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
+
+    target = st.session_state if state is None else state
+    action = str(envelope.get("action") or "")
+    concept_id = str(envelope.get("concept_id") or "").strip()
+    event_id = str(envelope.get("event_id") or "").strip()
+    if not concept_id or action not in {"start", "collect"}:
+        mark_kg_3d_event(target, event_id, "failed")
+        return
+
+    target[KG_3D_ACTION_KEY] = {
+        "action": action,
+        "concept_id": concept_id,
+        "event_id": event_id,
+    }
+    target["kg_selected_concept"] = concept_id
+    target["kg_action_concept"] = concept_id
+
+    try:
+        if action == "start":
+            # Navigation only — no workbench / mastery write (G1 boundary).
+            target[PENDING_CURRENT_VIEW_KEY] = "Интерактивный Quiz"
+            mark_kg_3d_event(target, event_id, "succeeded")
+            if state is None:
+                st.toast(f"▶ Старт из 3D-зала: **{concept_id}** → Quiz", icon="🎮")
+                # PENDING is applied at the start of a run; force another pass so
+                # the view switch is not lost mid-tab render after the _kg3d reload.
+                st.rerun()
+            return
+
+        # collect: same domain path as 2D «Собрать всё по концепту»
+        related_docs = list(knowledge_graph.get_related_documents(concept_id) or [])
+        concepts = knowledge_graph.get_concepts() if knowledge_graph is not None else {}
+        raw = concepts.get(concept_id) if isinstance(concepts, dict) else {}
+        info = raw if isinstance(raw, dict) else {}
+        label = str(info.get("label") or concept_id)
+        query_text = " ".join(part for part in [concept_id, label] if part)
+        added, duplicates = _collect_concept_sections_to_workbench(
+            concept=concept_id,
+            related_docs=related_docs,
+            doc_index=doc_index if isinstance(doc_index, dict) else {},
+            base_query=query_text,
+            state=state,
+        )
+        mark_kg_3d_event(target, event_id, "succeeded")
+        if state is None:
+            if added or duplicates:
+                st.toast(
+                    f"В рабочий конспект: +{added}"
+                    + (f" (уже было: {duplicates})" if duplicates else ""),
+                    icon="📚",
+                )
+            else:
+                st.toast(
+                    "Подходящих разделов не нашлось — возможно, конспекты ещё не созданы.",
+                    icon="ℹ️",
+                )
+    except Exception as exc:  # noqa: BLE001 - action must fail closed without breaking the tab
+        mark_kg_3d_event(target, event_id, "failed")
+        if state is None:
+            st.error(f"3D-зал: не удалось выполнить «{action}»: {_format_request_error(exc)}")
+
+
+def _consume_and_apply_kg_3d_query(
+    *,
+    node_ids: list[str],
+    knowledge_graph,
+    doc_index: dict,
+) -> None:
+    """Order: validate → remove ``_kg3d`` → reserve → execute → ack (G0)."""
+    raw = str(st.query_params.get(KG_3D_QUERY_PARAM) or "").strip()
+    # Always strip the param so a bad/stale URL cannot loop full reruns.
+    if KG_3D_QUERY_PARAM in st.query_params or raw:
+        try:
+            st.query_params.pop(KG_3D_QUERY_PARAM, None)
+        except Exception:  # noqa: BLE001 - query_params API may vary by Streamlit version
+            pass
+    if not raw:
+        return
+    nonce = ensure_kg_3d_session_nonce(st.session_state)
+    env = consume_kg_3d_query_param(
+        raw=raw,
+        session_nonce=nonce,
+        node_ids=node_ids,
+        state=st.session_state,
+    )
+    if env is None:
+        return
+    _execute_kg_3d_action(
+        env,
+        knowledge_graph=knowledge_graph,
+        doc_index=doc_index,
     )
 
 
@@ -1118,7 +1240,7 @@ def _render_knowledge_graph_tab() -> None:
         help=(
             "Офлайн 3D-зал: первый кадр — маршрут дня (не весь граф); "
             "этажи по урокам (precedes); worth — ранг и причина, не высота; "
-            "управляемый тур по остановкам."
+            "управляемый тур по остановкам. Export read-only (без действий)."
         ),
     )
 
@@ -1129,6 +1251,47 @@ def _render_knowledge_graph_tab() -> None:
 
     node_ids = [n["id"] for n in payload.get("nodes", [])]
 
+    # ── 3D hall action bridge (G0/G1): _kg3d query-param only ──────────
+    # Must run before embedding so collect updates inventory view-model args.
+    _consume_and_apply_kg_3d_query(
+        node_ids=node_ids,
+        knowledge_graph=knowledge_graph,
+        doc_index=doc_index,
+    )
+
+    # Embedded 3D hall (C1): live payload + action bridge. Export remains download above.
+    try:
+        from app import workbench_service
+
+        if workbench_service.WORKBENCH_SECTIONS_KEY not in st.session_state:
+            st.session_state[workbench_service.WORKBENCH_SECTIONS_KEY] = (
+                workbench_service.load_rows()
+            )
+    except Exception:  # noqa: BLE001 - workbench optional for hall render
+        pass
+    collected_ids = _workbench_collected_concept_ids()
+    try:
+        wb_count = len(_workbench_state_rows())
+    except Exception:  # noqa: BLE001
+        wb_count = 0
+    nonce = ensure_kg_3d_session_nonce(st.session_state)
+    st.markdown("##### 🏛 3D-зал (embedded)")
+    st.caption(
+        "Маршрут дня · ▶ Начать (навигация в Quiz) · ➕ В конспект · "
+        "✓ = quiz-прогресс · ◆ = уже в Живом конспекте."
+    )
+    hall_selected = render_kg_3d_hall(
+        payload,
+        session_nonce=nonce,
+        collected_concept_ids=collected_ids,
+        workbench_count=wb_count,
+        height=720,
+        key="kg_3d_hall_component",
+    )
+    if hall_selected and hall_selected in node_ids:
+        st.session_state["kg_selected_concept"] = hall_selected
+        st.session_state["kg_action_concept"] = hall_selected
+
     # ── D3 → Streamlit concept bridge ──────────────────────────────────
     # The D3 graph is rendered as a Streamlit custom component. On node click,
     # the component returns the selected concept id to Python; `_kgc` remains as
@@ -1136,6 +1299,8 @@ def _render_knowledge_graph_tab() -> None:
     component_concept = str(payload.get("selected_concept") or "").strip()
     _kgc_param = str(st.query_params.get("_kgc") or "").strip()
     bridged_concept = component_concept if component_concept in node_ids else _kgc_param
+    if hall_selected and hall_selected in node_ids:
+        bridged_concept = hall_selected
 
     # Default to a "frontier" (ready-to-learn) concept when available.
     default_sel = next(

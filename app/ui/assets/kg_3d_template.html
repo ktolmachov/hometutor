@@ -31,10 +31,26 @@
   .stopinfo strong{color:#e9d5ff}
   canvas{cursor:grab}
   #sidetoggle{display:none}
-  @media (max-width: 768px){
+  .btn.primary{border-color:rgba(139,92,246,0.7);color:#e9d5ff;background:rgba(139,92,246,0.18)}
+  .btn.primary:hover:not(:disabled){border-color:#c4b5fd;background:rgba(139,92,246,0.28)}
+  .btn.secondary{border-color:rgba(255,107,138,0.45);color:#fecdd3}
+  .btn.secondary:hover:not(:disabled){border-color:#ff6b8a}
+  .btn.secondary.is-on{border-color:#ff6b8a;background:rgba(255,107,138,0.14);color:#fecdd3}
+  .btn:focus-visible,.stop:focus-visible,#sidetoggle:focus-visible{outline:2px solid #c4b5fd;outline-offset:2px}
+  .actions{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}
+  .progress-line{font-size:11px;color:#a5b4fc;margin:4px 0 2px}
+  .inventory{font-size:11px;color:#fecdd3;margin-top:8px;padding:6px 8px;border:1px solid rgba(255,107,138,0.28);border-radius:6px;background:rgba(255,107,138,0.06)}
+  .snapshot{font-size:10px;color:#fbbf24;opacity:.9;margin-top:6px}
+  .status-line{font-size:10px;color:#94a3b8;min-height:1.2em;margin-top:4px}
+  .stop.done b{color:#86efac}
+  .stop .mark{float:right;color:#ff6b8a;font-size:11px}
+  #side{width:314px;flex:0 0 314px}
+  @media (max-width: 860px){
     #wrap{flex-direction:column}
-    #cv{flex:1 1 auto;width:100%;height:60vh}
-    #side{width:100%;flex:0 0 auto;max-height:40vh;border-left:0;border-top:1px solid #222}
+    #cv{flex:1 1 auto;width:100%;min-height:480px;height:55vh}
+    #side{width:100%;flex:0 0 auto;max-height:42vh;border-left:0;border-top:1px solid #222}
+    #toplist{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+    #toplist .stop{margin:0}
     #sidetoggle{
       display:block;position:absolute;top:8px;right:8px;z-index:2;
       width:34px;height:34px;line-height:34px;text-align:center;padding:0;
@@ -42,6 +58,12 @@
       color:#ddd;font-size:16px;cursor:pointer;
     }
     #wrap.side-collapsed #side{display:none}
+  }
+  @media (max-width: 560px){
+    #cv{min-height:420px;height:50vh}
+    #toplist{grid-template-columns:1fr}
+    .actions{flex-direction:column}
+    .actions .btn{width:100%}
   }
 </style>
 </head>
@@ -61,7 +83,13 @@
     </div>
 
     <div class="hd" style="margin-top:8px">Маршрут дня</div>
+    <div id="progressline" class="progress-line" aria-live="polite">0 из 0 пройдено по квизам</div>
     <div id="stopinfo" class="stopinfo" aria-live="polite">Стоп — · выберите остановку</div>
+    <div class="actions" id="actionrow">
+      <button class="btn primary" id="startbtn" type="button" title="Начать изучение (квиз/карточки)">▶ Начать</button>
+      <button class="btn secondary" id="collectbtn" type="button" title="Собрать разделы в Живой конспект">➕ В конспект</button>
+    </div>
+    <div id="actionstatus" class="status-line" role="status" aria-live="polite"></div>
     <div class="row">
       <button class="btn" id="prevbtn" type="button" title="Предыдущая остановка">◀ Назад</button>
       <button class="btn" id="playbtn" type="button" title="Тур по остановкам">▶ Тур</button>
@@ -71,16 +99,20 @@
       <button class="btn" id="homebtn" type="button" title="Вернуть читаемый вид маршрута">⌂ Home</button>
       <button class="btn" id="topbtn" type="button" title="Вид сверху">⊤ Сверху</button>
       <button class="btn" id="resetbtn" type="button">Сброс</button>
+      <button class="btn" id="memorybtn" type="button" title="Оверлей следа предыдущего снимка (не отдельный режим)">След памяти</button>
     </div>
 
     <div class="hd" style="margin-top:10px">Остановки <span class="badge" id="routebadge">0</span></div>
     <div id="toplist" class="list"></div>
+    <div id="inventory" class="inventory" hidden>Живой конспект · —</div>
+    <div id="snapshotline" class="snapshot" hidden></div>
 
     <div class="legend">
       Первый кадр — чистая дорожка маршрута дня, не весь граф.<br>
       <b>Маршрут</b>: 1→N, тихие lesson-якоря, worth = ранг/причина.<br>
       <b>Локально/Вся карта</b>: Y = этаж урока (precedes), X = прогрессия, Z = полоса.<br>
-      Мышь — поворот · колесо — зум · hover — причина · клик — локальный контекст.
+      <b>✓</b> = quiz-прогресс · <b>◆</b> = в конспекте (только embedded).<br>
+      Мышь — поворот · колесо — зум · hover — причина · клик — фокус · кнопки — действия.
     </div>
     <div class="mini" id="hint"></div>
   </div>
@@ -92,10 +124,18 @@ const EDGES = __EDGES__ || [];
 const STATS = __STATS__ || {};
 const HEALTH = __HEALTH__ || null; // optional graph health from payload (score in statsline)
 const DAY_ROUTE = __DAY_ROUTE__ || [];
+const MASTERY_HISTORY = __MASTERY_HISTORY__ || [];
+const DECAY_VECTOR = __DECAY_VECTOR__ || {};
+const SNAPSHOT_DATE = __SNAPSHOT_DATE__ || '';
+const HOST_MODE = __HOST_MODE__ || 'export'; // export | embedded — channel/gating axis
+const SESSION_NONCE = __SESSION_NONCE__ || '';
+const COLLECTED_IDS = __COLLECTED_IDS__ || [];
+const WORKBENCH_COUNT = __WORKBENCH_COUNT__;
 
 const canvas = document.getElementById('cv');
 const ctx = canvas.getContext('2d');
 let W = canvas.width, H = canvas.height;
+let cssW = W, cssH = H;
 
 // Fixed isometric-style view (honest 2.5D; cz is pan depth offset only)
 let yaw = 0.55, pitch = 0.38, zoom = 1.0;
@@ -111,6 +151,24 @@ let activeStopIndex = 0;
 let focusId = null;
 let animToken = 0;
 let tourTimer = null;
+/** Memory overlay is orthogonal to viewMode (G2). */
+let memoryOverlay = false;
+/** @type {null|{event_id:string,action:string,concept_id:string,phase:string,label:string}} */
+let pendingAction = null;
+let actionTimeoutTimer = null;
+const doneConceptIds = (() => {
+  const last = (MASTERY_HISTORY || []).length ? MASTERY_HISTORY[MASTERY_HISTORY.length - 1] : null;
+  const mastery = last && last.mastery && typeof last.mastery === 'object' ? last.mastery : {};
+  return new Set(Object.keys(mastery).map(String));
+})();
+const prevSnapshotConceptIds = (() => {
+  if (!MASTERY_HISTORY || MASTERY_HISTORY.length < 2) return new Set();
+  const prev = MASTERY_HISTORY[MASTERY_HISTORY.length - 2];
+  const mastery = prev && prev.mastery && typeof prev.mastery === 'object' ? prev.mastery : {};
+  return new Set(Object.keys(mastery).map(String));
+})();
+const collectedConceptIds = new Set((COLLECTED_IDS || []).map(String));
+const isEmbedded = HOST_MODE === 'embedded';
 
 const prefersReducedMotion = (() => {
   try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
@@ -120,8 +178,14 @@ const prefersReducedMotion = (() => {
 const byId = new Map((NODES || []).map(n => [n.id, n]));
 
 function resize() {
-  W = canvas.width = canvas.clientWidth || 900;
-  H = canvas.height = canvas.clientHeight || 700;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  cssW = canvas.clientWidth || 900;
+  cssH = canvas.clientHeight || 700;
+  canvas.width = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  W = cssW;
+  H = cssH;
 }
 window.addEventListener('resize', () => {
   resize();
@@ -593,9 +657,90 @@ function drawActiveReasonCallout(nn, pr, r, labelBoxes) {
   }
 }
 
+function drawHallWash() {
+  // Architectural night-hall wash (no particles / stars / bokeh).
+  const wash = ctx.createLinearGradient(0, 0, 0, H);
+  if (memoryOverlay) {
+    wash.addColorStop(0, 'rgba(255,200,87,0.10)');
+  } else if (viewMode !== 'route') {
+    wash.addColorStop(0, 'rgba(255,107,138,0.08)');
+  } else {
+    wash.addColorStop(0, 'rgba(66,232,224,0.08)');
+  }
+  wash.addColorStop(0.5, 'rgba(5,5,8,0)');
+  wash.addColorStop(1, 'rgba(54,30,92,0.22)');
+  ctx.fillStyle = wash;
+  ctx.fillRect(0, 0, W, H);
+  // Portal frame arcs (state-bearing depth cues, not decorative entities)
+  ctx.lineWidth = 1.1;
+  const arches = [
+    [0.16, 'rgba(66,232,224,0.14)'],
+    [0.28, 'rgba(255,107,138,0.10)'],
+    [0.40, 'rgba(154,108,255,0.14)'],
+  ];
+  for (const [inset, col] of arches) {
+    ctx.strokeStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(W * inset, H * 0.92);
+    ctx.quadraticCurveTo(W * 0.5, H * 0.08, W * (1 - inset), H * 0.92);
+    ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(174,181,207,0.55)';
+  ctx.font = '600 10px system-ui';
+  ctx.fillText('ВХОД', W * 0.08, H * 0.94);
+  ctx.fillText('СЕГОДНЯ', W * 0.46, H * 0.94);
+  ctx.fillText('ДАЛЬШЕ', W * 0.82, H * 0.94);
+}
+
+function drawMemoryTrace(map3, route, vis) {
+  if (!memoryOverlay || route.length < 2) return;
+  const pts = [];
+  for (const id of route) {
+    const o = map3.get(id);
+    if (!o || !vis.has(id)) continue;
+    const p = scenePos(o);
+    // Slight depth offset so the previous snapshot sits beside the current path.
+    const pr = project(p.x, p.y + 6, p.z - 14);
+    pts.push(pr);
+  }
+  if (pts.length < 2) return;
+  ctx.save();
+  ctx.setLineDash([3, 8]);
+  ctx.lineWidth = 2;
+  const g = ctx.createLinearGradient(pts[0].sx, 0, pts[pts.length - 1].sx, 0);
+  g.addColorStop(0, 'rgba(255,200,87,0.50)');
+  g.addColorStop(0.55, 'rgba(255,107,138,0.75)');
+  g.addColorStop(1, 'rgba(76,164,255,0.55)');
+  ctx.strokeStyle = g;
+  ctx.beginPath();
+  pts.forEach((pr, i) => {
+    if (i === 0) ctx.moveTo(pr.sx, pr.sy);
+    else ctx.lineTo(pr.sx, pr.sy);
+  });
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // Diamond ticks on stops that appeared in the previous mastery snapshot
+  for (let i = 0; i < route.length; i++) {
+    const id = route[i];
+    if (!prevSnapshotConceptIds.has(id)) continue;
+    const o = map3.get(id);
+    if (!o || !vis.has(id)) continue;
+    const p = scenePos(o);
+    const pr = project(p.x, p.y + 6, p.z - 14);
+    ctx.save();
+    ctx.translate(pr.sx, pr.sy);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = i === route.length - 1 ? '#4ca4ff' : '#ffc857';
+    ctx.fillRect(-3, -3, 6, 6);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 function draw() {
   ctx.fillStyle = '#050508';
   ctx.fillRect(0, 0, W, H);
+  drawHallWash();
 
   const vis = visibleIdSet();
   const labels = labelAllowSet(vis);
@@ -622,7 +767,9 @@ function draw() {
     }
   }
 
-  // Route trail 1→N
+  drawMemoryTrace(map3, route, vis);
+
+  // Route trail 1→N (denser solid for quiz-done segments)
   if (route.length >= 2) {
     ctx.strokeStyle = 'rgba(196,181,253,0.55)';
     ctx.lineWidth = 2.2;
@@ -639,6 +786,38 @@ function draw() {
     }
     ctx.stroke();
     ctx.setLineDash([]);
+    // Solid lime path across consecutive done stops
+    const donePts = [];
+    for (const id of route) {
+      if (!doneConceptIds.has(id)) {
+        if (donePts.length >= 2) {
+          ctx.strokeStyle = 'rgba(114,241,165,0.85)';
+          ctx.lineWidth = 2.6;
+          ctx.beginPath();
+          donePts.forEach((pr, i) => {
+            if (i === 0) ctx.moveTo(pr.sx, pr.sy);
+            else ctx.lineTo(pr.sx, pr.sy);
+          });
+          ctx.stroke();
+        }
+        donePts.length = 0;
+        continue;
+      }
+      const o = map3.get(id);
+      if (!o || !vis.has(id)) continue;
+      const p = scenePos(o);
+      donePts.push(project(p.x, p.y, p.z));
+    }
+    if (donePts.length >= 2) {
+      ctx.strokeStyle = 'rgba(114,241,165,0.85)';
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      donePts.forEach((pr, i) => {
+        if (i === 0) ctx.moveTo(pr.sx, pr.sy);
+        else ctx.lineTo(pr.sx, pr.sy);
+      });
+      ctx.stroke();
+    }
   }
 
   // Edges (only between visible nodes)
@@ -679,11 +858,14 @@ function draw() {
     const localCap = nn.is_lesson ? 5.8 : 9.2;
     const baseR = onRoute ? Math.min(rawBaseR, 15.5) : (localContextNode ? Math.min(rawBaseR, localCap) : rawBaseR);
     const r = baseR * (0.65 + pr.scale * 0.7) * (isActive ? 1.16 : isNext ? 1.08 : 1);
+    const isDone = doneConceptIds.has(nn.id);
+    const isCollected = isEmbedded && collectedConceptIds.has(nn.id);
     let col = nn.is_lesson ? '#64748b' : (nn.novel ? '#67e8f9' : ((nn.due || 0) > 0 ? '#60a5fa' : '#a5b4fc'));
     if (quietRouteAnchor) col = '#475569';
-    if (isActive) col = '#c4b5fd';
-    else if (isNext) col = '#67e8f9';
-    else if (onRoute) col = '#a78bfa';
+    if (isDone && onRoute) col = '#72f1a5';
+    if (isActive) col = '#9a6cff';
+    else if (isNext) col = '#42e8e0';
+    else if (onRoute && !isDone) col = '#a78bfa';
 
     // Depth fade from projection scale (farther → lower alpha)
     ctx.globalAlpha = quietRouteAnchor ? 0.52 : Math.min(0.95, Math.max(0.35, 0.38 + pr.scale * 0.5));
@@ -697,22 +879,56 @@ function draw() {
       ctx.lineWidth = isActive ? 2.0 : 1.4;
       ctx.beginPath(); ctx.arc(pr.sx, pr.sy, r * 1.34, 0, Math.PI * 2); ctx.stroke();
     }
+    // Hex focus frame for active stop (mockup contract)
+    if (isActive) {
+      ctx.save();
+      ctx.translate(pr.sx, pr.sy);
+      ctx.strokeStyle = 'rgba(255,200,87,0.70)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let side = 0; side < 6; side++) {
+        const a = (Math.PI * 2 * side) / 6;
+        const hx = Math.cos(a) * (r * 1.55);
+        const hy = Math.sin(a) * (r * 1.55);
+        if (side === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+    }
 
-    // Rank badge for route stops (worth as rank, not height)
+    // Rank badge for route stops — rank stays visible; ✓ is overlay (G2)
     if (onRoute) {
       const rank = routeRank.get(nn.id) || 0;
+      const bx = pr.sx - r * 0.9, by = pr.sy - r * 0.9;
       ctx.globalAlpha = 1;
-      ctx.fillStyle = '#0a0a0f';
+      ctx.fillStyle = isDone ? '#14532d' : '#0a0a0f';
       ctx.beginPath();
-      ctx.arc(pr.sx - r * 0.9, pr.sy - r * 0.9, 7, 0, Math.PI * 2);
+      ctx.arc(bx, by, 7, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = '#e9d5ff';
+      ctx.fillStyle = isDone ? '#86efac' : '#e9d5ff';
       ctx.font = 'bold 9px system-ui';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(String(rank), pr.sx - r * 0.9, pr.sy - r * 0.9);
+      ctx.fillText(String(rank), bx, by);
+      if (isDone) {
+        // ✓ overlay next to rank — does not replace the number
+        ctx.fillStyle = '#72f1a5';
+        ctx.font = 'bold 10px system-ui';
+        ctx.fillText('✓', bx + 11, by - 1);
+      }
       ctx.textAlign = 'start';
       ctx.textBaseline = 'alphabetic';
+    }
+    // Collected diamond on existing node (G3, embedded-only)
+    if (isCollected && onRoute) {
+      ctx.save();
+      ctx.globalAlpha = 1;
+      ctx.translate(pr.sx + r * 0.78, pr.sy - r * 0.75);
+      ctx.rotate(Math.PI / 4);
+      ctx.fillStyle = '#ff6b8a';
+      ctx.fillRect(-4, -4, 8, 8);
+      ctx.restore();
     }
 
     if (labels.has(nn.id) && !(viewMode === 'route' && isActive)) {
@@ -840,6 +1056,7 @@ function goToStop(index, { animate = true, fromTour = false } = {}) {
   updateStopInfo();
   buildTopList();
   syncModeButtons();
+  if (!fromTour) postSelect(id);
   if (o) {
     const target = cameraForNode(o);
     const ms = animate ? (fromTour ? 1500 : 900) : 0;
@@ -868,7 +1085,20 @@ function scheduleNextTour() {
     render();
     updatePlayButton();
     const h = document.getElementById('hint');
-    if (h) h.textContent = 'Маршрут дня завершён';
+    if (h) {
+      const incomplete = route.find(rid => !doneConceptIds.has(rid));
+      if (incomplete) {
+        const incLabel = String((byId.get(incomplete) || {}).label || incomplete);
+        h.textContent = isEmbedded
+          ? `Дальше: ${incLabel} — ▶ Начать или ➕ В конспект`
+          : `Дальше: ${incLabel} · откройте в hometutor → Knowledge Graph → 3D-зал`;
+      } else {
+        h.textContent = isEmbedded
+          ? 'Маршрут пройден по квизам — выберите остановку для повторения'
+          : 'Маршрут дня завершён · откройте в hometutor → Knowledge Graph → 3D-зал';
+      }
+    }
+    updateActionUI();
     return;
   }
   const delay = prefersReducedMotion ? 200 : 400;
@@ -932,6 +1162,176 @@ function updatePlayButton() {
   else b.textContent = '▶ Тур';
 }
 
+function newEventId() {
+  try {
+    if (crypto && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  } catch (_) {}
+  // ULID-ish fallback (26 crockford chars) if randomUUID unavailable
+  const alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+  let out = '';
+  const arr = new Uint8Array(26);
+  try { crypto.getRandomValues(arr); } catch (_) { for (let i = 0; i < 26; i++) arr[i] = (Math.random() * 256) | 0; }
+  for (let i = 0; i < 26; i++) out += alphabet[arr[i] % 32];
+  return out;
+}
+
+function postSelect(conceptId) {
+  if (!isEmbedded || !conceptId) return;
+  try {
+    window.parent.postMessage({ type: 'hometutor:kg-select', concept: String(conceptId) }, '*');
+  } catch (_) {}
+}
+
+function postAction(action, conceptId) {
+  // Gated: export never attaches a live action path (kill-switch inert contract).
+  if (!isEmbedded) return;
+  if (!SESSION_NONCE) return;
+  const event_id = newEventId();
+  const n = byId.get(conceptId) || {};
+  const label = String(n.label || conceptId);
+  pendingAction = {
+    event_id,
+    action,
+    concept_id: String(conceptId),
+    phase: 'pending',
+    label,
+  };
+  updateActionUI();
+  try {
+    window.parent.postMessage({
+      type: 'hometutor:kg-action',
+      version: 1,
+      source: 'kg3d',
+      event_id,
+      session_nonce: SESSION_NONCE,
+      concept_id: String(conceptId),
+      action,
+    }, '*');
+  } catch (_) {
+    pendingAction = null;
+    updateActionUI();
+    return;
+  }
+  if (actionTimeoutTimer) clearTimeout(actionTimeoutTimer);
+  // Soft timeout: release CTA lock if host never acks (no domain change).
+  actionTimeoutTimer = setTimeout(() => {
+    if (pendingAction && pendingAction.event_id === event_id) {
+      pendingAction = { ...pendingAction, phase: 'timeout' };
+      const st = document.getElementById('actionstatus');
+      if (st) {
+        st.textContent = `Таймаут: «${pendingAction.label}» — повторите действие`;
+      }
+      // Release lock so user can retry with a new event_id
+      pendingAction = null;
+      updateActionUI();
+    }
+  }, 12000);
+}
+
+function beginAction(action) {
+  const id = activeRouteId();
+  if (!id) return;
+  if (pendingAction) return;
+  if (!isEmbedded) {
+    const st = document.getElementById('actionstatus');
+    if (st) {
+      st.textContent = 'Откройте в hometutor → Knowledge Graph → 3D-зал, чтобы выполнить действие';
+    }
+    return;
+  }
+  if (action === 'collect' && collectedConceptIds.has(id)) return;
+  if (action === 'start' && doneConceptIds.has(id)) {
+    // Still allow start for review; mockup disables when done — product allows re-study.
+  }
+  postAction(action, id);
+}
+
+function updateProgressLine() {
+  const el = document.getElementById('progressline');
+  if (!el) return;
+  const route = dayRouteIds();
+  const doneN = route.filter(id => doneConceptIds.has(id)).length;
+  el.textContent = `${doneN} из ${route.length} пройдено по квизам`;
+}
+
+function updateInventoryLine() {
+  const el = document.getElementById('inventory');
+  if (!el) return;
+  if (!isEmbedded) {
+    el.hidden = true;
+    return;
+  }
+  el.hidden = false;
+  const n = WORKBENCH_COUNT != null ? WORKBENCH_COUNT : collectedConceptIds.size;
+  el.textContent = `Живой конспект · ${n} раздел(ов) · отмечено на сцене: ${collectedConceptIds.size}`;
+}
+
+function updateSnapshotLine() {
+  const el = document.getElementById('snapshotline');
+  if (!el) return;
+  if (HOST_MODE === 'export' && SNAPSHOT_DATE) {
+    el.hidden = false;
+    el.textContent = `снимок от ${SNAPSHOT_DATE}`;
+  } else if (isEmbedded && SNAPSHOT_DATE) {
+    el.hidden = false;
+    el.textContent = `live · данные на ${SNAPSHOT_DATE}`;
+  } else {
+    el.hidden = true;
+  }
+}
+
+function updateActionUI() {
+  const startBtn = document.getElementById('startbtn');
+  const collectBtn = document.getElementById('collectbtn');
+  const st = document.getElementById('actionstatus');
+  const id = activeRouteId();
+  const hasPending = !!pendingAction;
+  const collected = id && collectedConceptIds.has(id);
+  const startPendingHere = pendingAction && pendingAction.action === 'start' && pendingAction.concept_id === id;
+  const collectPendingHere = pendingAction && pendingAction.action === 'collect' && pendingAction.concept_id === id;
+
+  if (startBtn) {
+    if (!isEmbedded) {
+      startBtn.disabled = true;
+      startBtn.title = 'Только в embedded: откройте 3D-зал в hometutor';
+      startBtn.textContent = '▶ Начать';
+    } else {
+      startBtn.disabled = hasPending;
+      startBtn.textContent = startPendingHere ? 'Ожидание…' : '▶ Начать';
+      startBtn.setAttribute('aria-busy', String(!!startPendingHere));
+    }
+  }
+  if (collectBtn) {
+    if (!isEmbedded) {
+      collectBtn.disabled = true;
+      collectBtn.title = 'Только в embedded: откройте 3D-зал в hometutor';
+      collectBtn.textContent = '➕ В конспект';
+      collectBtn.classList.remove('is-on');
+    } else {
+      collectBtn.disabled = hasPending || !!collected;
+      collectBtn.textContent = collectPendingHere ? 'Ожидание…' : (collected ? '◆ В конспекте' : '➕ В конспект');
+      collectBtn.classList.toggle('is-on', !!collected);
+      collectBtn.setAttribute('aria-busy', String(!!collectPendingHere));
+    }
+  }
+  if (st) {
+    if (pendingAction) {
+      const an = pendingAction.action === 'start' ? 'открытие режима' : 'сбор в конспект';
+      st.textContent = `Ожидание: ${an} · «${pendingAction.label}»`;
+    } else if (!isEmbedded) {
+      st.textContent = 'Export read-only · действия доступны в продукте';
+    } else if (!st.dataset.sticky) {
+      st.textContent = '';
+    }
+  }
+  const mem = document.getElementById('memorybtn');
+  if (mem) {
+    if (memoryOverlay) mem.classList.add('on');
+    else mem.classList.remove('on');
+    mem.setAttribute('aria-pressed', String(memoryOverlay));
+  }
+}
+
 function updateStopInfo() {
   const el = document.getElementById('stopinfo');
   const route = dayRouteIds();
@@ -953,20 +1353,52 @@ function updateStopInfo() {
     s.textContent = `Стоп ${i + 1}/${route.length}`;
     line.appendChild(s);
     line.appendChild(document.createTextNode(` · ${label}`));
+    if (doneConceptIds.has(id)) {
+      const ok = document.createElement('span');
+      ok.className = 'badge';
+      ok.textContent = '✓ quiz';
+      line.appendChild(ok);
+    }
+    if (isEmbedded && collectedConceptIds.has(id)) {
+      const mk = document.createElement('span');
+      mk.className = 'badge';
+      mk.textContent = '◆ конспект';
+      line.appendChild(mk);
+    }
     el.appendChild(line);
     const r = document.createElement('div');
     r.className = 'reason';
     r.textContent = `потому что: ${reason}`;
     el.appendChild(r);
+    const mastery = (typeof n.mastery === 'number') ? n.mastery
+      : (MASTERY_HISTORY.length ? (MASTERY_HISTORY[MASTERY_HISTORY.length - 1].mastery || {})[id] : null);
+    if (mastery != null) {
+      const m = document.createElement('div');
+      m.className = 'mini';
+      m.textContent = `mastery ${Math.round(Number(mastery))}%`;
+      el.appendChild(m);
+    }
     const nx = document.createElement('div');
     nx.className = 'mini';
     nx.style.marginTop = '4px';
-    nx.textContent = next ? `дальше: ${nextLabel}` : 'это последняя остановка';
+    if (next) {
+      nx.textContent = `дальше: ${nextLabel}`;
+    } else {
+      const incomplete = route.find(rid => !doneConceptIds.has(rid));
+      if (incomplete) {
+        const incLabel = String((byId.get(incomplete) || {}).label || incomplete);
+        nx.textContent = `Дальше: ${incLabel}`;
+      } else {
+        nx.textContent = 'это последняя остановка';
+      }
+    }
     el.appendChild(nx);
   }
   const badge = document.getElementById('routebadge');
   if (badge) badge.textContent = String(route.length);
   updateNavButtons();
+  updateActionUI();
+  updateProgressLine();
 }
 
 function updateNavButtons() {
@@ -1025,6 +1457,8 @@ function focus(n) {
   if (o) animateCamera(cameraForNode(o), prefersReducedMotion ? 0 : 700);
   updateStopInfo();
   buildTopList();
+  // Selection sync only (string id) — never an action.
+  postSelect(n.id);
   const s = document.getElementById('hint');
   if (s) {
     const reason = n.worth_reason ? ` · ${n.worth_reason}` : '';
@@ -1071,11 +1505,22 @@ function buildTopList() {
   stops.forEach((n, idx) => {
     const d = document.createElement('div');
     d.className = 'stop';
+    d.setAttribute('role', 'button');
+    d.tabIndex = 0;
     if (idx === activeStopIndex) d.classList.add('active');
     if (idx === activeStopIndex + 1) d.classList.add('next');
+    if (doneConceptIds.has(n.id)) d.classList.add('done');
     const title = document.createElement('b');
-    title.textContent = `${idx + 1}. ${String(n.label || n.id).slice(0, 24)}`;
+    const rankText = doneConceptIds.has(n.id) ? `✓${idx + 1}` : `${idx + 1}`;
+    title.textContent = `${rankText}. ${String(n.label || n.id).slice(0, 24)}`;
     d.appendChild(title);
+    if (isEmbedded && collectedConceptIds.has(n.id)) {
+      const mark = document.createElement('span');
+      mark.className = 'mark';
+      mark.textContent = '◆';
+      mark.setAttribute('aria-label', 'в конспекте');
+      d.appendChild(mark);
+    }
     const w = document.createElement('span');
     w.className = 'badge';
     w.textContent = `W=${(n.worth || 0).toFixed(1)}`;
@@ -1084,10 +1529,15 @@ function buildTopList() {
     reason.className = 'reason';
     reason.textContent = String(n.worth_reason || 'в маршруте дня');
     d.appendChild(reason);
-    d.onclick = () => {
+    const go = () => {
       stopTour();
       tourState = 'step';
       goToStop(idx, { animate: true });
+      postSelect(n.id);
+    };
+    d.onclick = go;
+    d.onkeydown = (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); go(); }
     };
     cont.appendChild(d);
   });
@@ -1187,6 +1637,13 @@ document.getElementById('nextbtn').onclick = () => {
   goToStop(activeStopIndex + 1, { animate: true });
 };
 document.getElementById('playbtn').onclick = () => toggleTour();
+document.getElementById('startbtn').onclick = () => beginAction('start');
+document.getElementById('collectbtn').onclick = () => beginAction('collect');
+document.getElementById('memorybtn').onclick = () => {
+  memoryOverlay = !memoryOverlay;
+  updateActionUI();
+  render();
+};
 window.addEventListener('keydown', e => {
   if (e.key === 'ArrowLeft') {
     e.preventDefault();
@@ -1240,10 +1697,14 @@ function init() {
   updateStopInfo();
   syncModeButtons();
   updatePlayButton();
+  updateInventoryLine();
+  updateSnapshotLine();
+  updateActionUI();
+  updateProgressLine();
   render();
   const h = document.getElementById('hint');
   if (h) {
-    h.textContent = `${(NODES || []).length} узлов · маршрут ${route.length}/${route.length} · режим route · worth = rank/reason`;
+    h.textContent = `${(NODES || []).length} узлов · маршрут ${route.length}/${route.length} · режим route · ${HOST_MODE}`;
   }
 }
 init();

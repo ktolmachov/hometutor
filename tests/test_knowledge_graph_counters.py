@@ -16,11 +16,20 @@ import os
 import pytest
 
 from app.ui.knowledge_graph_d3 import (
+    KG_3D_ACTION_KEY,
+    KG_3D_DEDUP_KEY,
+    KG_3D_MAX_RAW_LEN,
     build_kg_3d_html,
     build_kg_html,
     build_kg_payload,
     collect_kg_learned_set,
     compute_kg_counters,
+    consume_kg_3d_query_param,
+    decode_kg_3d_query_raw,
+    encode_kg_3d_query_raw,
+    ensure_kg_3d_session_nonce,
+    mark_kg_3d_event,
+    validate_kg_3d_envelope,
 )
 from app.ui.knowledge_graph_d3_analysis import node_worth, top_worth_factor, DUE_WEIGHT, NOVEL_WEIGHT
 
@@ -567,8 +576,19 @@ class Test3DCoverageAndContracts:
         assert ".list{overflow:visible" in html3
         assert "function hoverAt" in html3
         assert "hover — причина" in html3
-        assert "клик — локальный контекст" in html3
+        assert "клик — фокус" in html3
         assert "topbar" not in html3
+        # G0/G2 render-contract extensions (placeholders substituted)
+        assert "HOST_MODE" in html3
+        assert "MASTERY_HISTORY" in html3
+        assert "SNAPSHOT_DATE" in html3
+        assert "startbtn" in html3 and "collectbtn" in html3
+        assert "function beginAction" in html3
+        assert "function drawMemoryTrace" in html3
+        assert "function drawHallWash" in html3
+        assert "hometutor:kg-action" in html3
+        assert "__HOST_MODE__" not in html3
+        assert "__MASTERY_HISTORY__" not in html3
         assert "viewMode = 'route';" in html3.split("document.getElementById('homebtn').onclick", 1)[1]
         assert "function routePlatformWorldPoints" in html3
         assert "targetW" in html3 and "targetH" in html3
@@ -604,11 +624,10 @@ class Test3DCoverageAndContracts:
             assert rid in html3
 
     def test_3d_visual_smoke_opt_in(self, tmp_path):
-        """V1: optional browser smoke for the offline 3D export.
+        """V2 visual gate: production ``build_kg_3d_html`` on viewport matrix.
 
-        Run locally with HT_RUN_KG_3D_VISUAL=1 when Playwright browsers are installed.
-        The normal unit suite keeps this skipped to avoid making browser binaries a CI
-        dependency.
+        Opt-in with ``HT_RUN_KG_3D_VISUAL=1`` (Playwright browsers required).
+        Default unit suite stays free of browser binaries; CI can enable the flag.
         """
         if os.environ.get("HT_RUN_KG_3D_VISUAL") != "1":
             pytest.skip("set HT_RUN_KG_3D_VISUAL=1 to run the browser smoke")
@@ -623,29 +642,45 @@ class Test3DCoverageAndContracts:
             "tutor": {"label": "Тьютор", "prerequisites": ["memory-loop"]},
             "lesson:01": {"label": "Урок 1", "level": "lesson"},
         }
+        route = [
+            "study-session-agent",
+            "rag",
+            "hometutor",
+            "ai-agent",
+            "memory-loop",
+            "tutor",
+        ]
         payload = build_kg_payload(concepts)
         payload = {
             **payload,
-            "day_route": [
-                "study-session-agent",
-                "rag",
-                "hometutor",
-                "ai-agent",
-                "memory-loop",
-                "tutor",
+            "day_route": route,
+            "mastery_history": [
+                {"date": "2026-07-15", "mastery": {"rag": 40.0}},
+                {
+                    "date": "2026-07-16",
+                    "mastery": {"rag": 55.0, "study-session-agent": 38.0},
+                },
             ],
         }
         html_path = tmp_path / "kg_3d_visual_smoke.html"
-        html_path.write_text(build_kg_3d_html(payload), encoding="utf-8")
+        html_path.write_text(
+            build_kg_3d_html(payload, exported_at="2026-07-17"), encoding="utf-8"
+        )
 
+        viewports = (
+            {"width": 1366, "height": 768},
+            {"width": 1920, "height": 1080},
+            {"width": 1024, "height": 768},
+            {"width": 390, "height": 844},
+        )
         with sync_api.sync_playwright() as p:
             browser = p.chromium.launch()
             try:
-                for viewport in ({"width": 1366, "height": 768}, {"width": 1920, "height": 1080}):
+                for viewport in viewports:
                     page = browser.new_page(viewport=viewport)
                     page.goto(html_path.as_uri())
                     page.wait_for_load_state("load")
-                    page.wait_for_timeout(250)
+                    page.wait_for_timeout(300)
                     result = page.evaluate(
                         """
                         () => {
@@ -657,23 +692,38 @@ class Test3DCoverageAndContracts:
                             const r = img[i], g = img[i + 1], b = img[i + 2];
                             if (!(r <= 8 && g <= 8 && b <= 12)) nonBg++;
                           }
+                          const start = document.querySelector('#startbtn');
+                          const collect = document.querySelector('#collectbtn');
+                          const bodyOverflowX = document.documentElement.scrollWidth >
+                            document.documentElement.clientWidth + 1;
                           return {
                             nonBg,
                             routeOn: document.querySelector('#modeRoute')?.classList.contains('on'),
                             topbarGone: !document.querySelector('#topbar'),
                             stopCount: document.querySelectorAll('.stop').length,
                             stopInfo: document.querySelector('#stopinfo')?.textContent || '',
+                            snapshot: document.querySelector('#snapshotline')?.textContent || '',
+                            startDisabled: !!start?.disabled,
+                            collectDisabled: !!collect?.disabled,
+                            bodyOverflowX,
+                            canvasCssH: canvas?.clientHeight || 0,
                           };
                         }
                         """
                     )
                     page.close()
 
-                    assert result["nonBg"] > 100
-                    assert result["routeOn"] is True
-                    assert result["topbarGone"] is True
-                    assert result["stopCount"] == 6
-                    assert "Стоп 1/6" in result["stopInfo"]
+                    assert result["nonBg"] > 100, viewport
+                    assert result["routeOn"] is True, viewport
+                    assert result["topbarGone"] is True, viewport
+                    assert result["stopCount"] == len(route), viewport
+                    assert f"Стоп 1/{len(route)}" in result["stopInfo"], viewport
+                    assert "снимок от 2026-07-17" in result["snapshot"], viewport
+                    assert result["startDisabled"] is True, viewport
+                    assert result["collectDisabled"] is True, viewport
+                    assert result["bodyOverflowX"] is False, viewport
+                    min_h = 400 if viewport["width"] <= 560 else 450
+                    assert result["canvasCssH"] >= min_h, viewport
             finally:
                 browser.close()
 
@@ -859,3 +909,255 @@ class TestA1NodePriceSignals:
         assert '"due": 1' in html or '"due":1' in html
         assert "C1" in html  # label present after template processing
         # No crash and fields survive to renderer (JS uses d.due ?? 0 etc)
+
+
+class TestKg3dActionBridge:
+    """G0: _kg3d envelope encode/validate/dedup; export inert."""
+
+    def _env(self, **overrides):
+        base = {
+            "version": 1,
+            "source": "kg3d",
+            "event_id": "12345678-1234-1234-1234-1234567890ab",
+            "session_nonce": "a" * 32,
+            "concept_id": "rag",
+            "action": "start",
+        }
+        base.update(overrides)
+        return base
+
+    def test_encode_decode_roundtrip(self):
+        env = self._env()
+        raw = encode_kg_3d_query_raw(env)
+        assert len(raw) <= KG_3D_MAX_RAW_LEN
+        assert decode_kg_3d_query_raw(raw) == env
+
+    def test_rejects_oversized_raw(self):
+        assert decode_kg_3d_query_raw("x" * (KG_3D_MAX_RAW_LEN + 1)) is None
+
+    def test_rejects_malformed_raw(self):
+        assert decode_kg_3d_query_raw("%%%not-b64%%%") is None
+
+    def test_validate_happy_path(self):
+        env = self._env()
+        ok = validate_kg_3d_envelope(
+            env, session_nonce="a" * 32, node_ids=["rag", "tutor"]
+        )
+        assert ok is not None
+        assert ok["action"] == "start"
+
+    def test_rejects_wrong_nonce(self):
+        env = self._env()
+        assert (
+            validate_kg_3d_envelope(env, session_nonce="b" * 32, node_ids=["rag"])
+            is None
+        )
+
+    def test_rejects_unknown_concept(self):
+        env = self._env(concept_id="ghost")
+        assert (
+            validate_kg_3d_envelope(env, session_nonce="a" * 32, node_ids=["rag"])
+            is None
+        )
+
+    def test_rejects_bad_action_and_source(self):
+        assert (
+            validate_kg_3d_envelope(
+                self._env(action="hack"), session_nonce="a" * 32, node_ids=["rag"]
+            )
+            is None
+        )
+        assert (
+            validate_kg_3d_envelope(
+                self._env(source="other"), session_nonce="a" * 32, node_ids=["rag"]
+            )
+            is None
+        )
+
+    def test_rejects_bad_event_id(self):
+        assert (
+            validate_kg_3d_envelope(
+                self._env(event_id="not-a-uuid"),
+                session_nonce="a" * 32,
+                node_ids=["rag"],
+            )
+            is None
+        )
+
+    def test_dedup_window_at_most_once(self):
+        state: dict = {}
+        nonce = ensure_kg_3d_session_nonce(state)
+        assert len(nonce) == 32
+        env = self._env(session_nonce=nonce)
+        raw = encode_kg_3d_query_raw(env)
+        first = consume_kg_3d_query_param(
+            raw=raw, session_nonce=nonce, node_ids=["rag"], state=state
+        )
+        assert first is not None
+        second = consume_kg_3d_query_param(
+            raw=raw, session_nonce=nonce, node_ids=["rag"], state=state
+        )
+        assert second is None
+        mark_kg_3d_event(state, env["event_id"], "succeeded")
+        assert state[KG_3D_DEDUP_KEY][env["event_id"]] == "succeeded"
+
+    def test_export_html_inert_and_offline(self):
+        html = build_kg_3d_html(
+            {
+                "nodes": [{"id": "rag", "label": "RAG", "worth": 1}],
+                "edges": [],
+                "stats": {},
+                "day_route": ["rag"],
+                "mastery_history": [{"date": "2026-07-16", "mastery": {"rag": 50.0}}],
+            },
+            host_mode="export",
+            collected_concept_ids=["rag"],  # must not bake into export
+            workbench_count=9,
+            session_nonce="should-be-empty",
+            exported_at="2026-07-17",
+        )
+        assert 'HOST_MODE = "export"' in html
+        assert 'SESSION_NONCE = ""' in html
+        assert "COLLECTED_IDS = []" in html
+        assert "2026-07-17" in html
+        assert '"rag": 50' in html or '"rag":50' in html
+        assert "<script src=" not in html.lower()
+        assert "isEmbedded" in html
+        assert "beginAction" in html
+
+    def test_embedded_html_receives_inventory_and_nonce(self):
+        html = build_kg_3d_html(
+            {
+                "nodes": [{"id": "rag", "label": "RAG"}],
+                "edges": [],
+                "stats": {},
+                "day_route": ["rag"],
+            },
+            host_mode="embedded",
+            session_nonce="abcd" * 8,
+            collected_concept_ids=["rag"],
+            workbench_count=4,
+        )
+        assert 'HOST_MODE = "embedded"' in html
+        assert "abcd" * 8 in html
+        assert '"rag"' in html
+        assert "WORKBENCH_COUNT = 4" in html
+
+
+class TestKg3dProductActions:
+    """G1: start is navigation-only; collect uses workbench helper once."""
+
+    def test_start_sets_pending_view_without_workbench(self, monkeypatch):
+        from app.ui import dashboards_graph as dg
+        from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
+
+        state: dict = {}
+        calls = {"collect": 0}
+
+        def boom(**kwargs):
+            calls["collect"] += 1
+            return (0, 0)
+
+        monkeypatch.setattr(dg, "_collect_concept_sections_to_workbench", boom)
+
+        class _FakeSt:
+            @staticmethod
+            def toast(*a, **k):
+                pass
+
+            @staticmethod
+            def rerun():
+                pass
+
+            @staticmethod
+            def error(*a, **k):
+                pass
+
+        monkeypatch.setattr(dg, "st", _FakeSt)
+        env = {
+            "action": "start",
+            "concept_id": "rag",
+            "event_id": "12345678-1234-1234-1234-1234567890ab",
+        }
+        dg._execute_kg_3d_action(
+            env, knowledge_graph=None, doc_index={}, state=state
+        )
+        assert state[PENDING_CURRENT_VIEW_KEY] == "Интерактивный Quiz"
+        assert state[KG_3D_ACTION_KEY]["action"] == "start"
+        assert calls["collect"] == 0
+
+    def test_collect_calls_workbench_once(self, monkeypatch):
+        from app.ui import dashboards_graph as dg
+
+        state: dict = {}
+        calls = {"n": 0}
+
+        class _KG:
+            def get_related_documents(self, concept):
+                return ["doc1.md"]
+
+            def get_concepts(self):
+                return {"rag": {"label": "RAG"}}
+
+        def fake_collect(**kwargs):
+            calls["n"] += 1
+            assert kwargs["concept"] == "rag"
+            return (2, 0)
+
+        monkeypatch.setattr(dg, "_collect_concept_sections_to_workbench", fake_collect)
+        env = {
+            "action": "collect",
+            "concept_id": "rag",
+            "event_id": "12345678-1234-1234-1234-1234567890cd",
+        }
+        dg._execute_kg_3d_action(
+            env, knowledge_graph=_KG(), doc_index={}, state=state
+        )
+        assert calls["n"] == 1
+        assert state[KG_3D_ACTION_KEY]["action"] == "collect"
+
+    def test_component_wrapper_uses_kg3d_param_not_envelope_component_value(self):
+        from pathlib import Path
+
+        html = Path("app/ui/assets/kg_3d_component/index.html").read_text(
+            encoding="utf-8"
+        )
+        assert "_kg3d" in html
+        assert "hometutor:kg-action" in html
+        assert "setComponentValue" in html
+        assert "streamlit:setComponentValue" in html
+        assert "syncKg3dAction" in html
+        assert "KG3D_MAX_RAW" in html
+
+
+class TestKg3dMemoryAndInventoryContract:
+    """G2/G3 render-contract: mastery_history + collected only embedded."""
+
+    def test_mastery_history_and_snapshot_in_export(self):
+        html = build_kg_3d_html(
+            {
+                "nodes": [{"id": "a", "label": "A"}, {"id": "b", "label": "B"}],
+                "edges": [],
+                "stats": {},
+                "day_route": ["a", "b"],
+                "mastery_history": [
+                    {"date": "2026-07-10", "mastery": {"a": 10.0}},
+                    {"date": "2026-07-16", "mastery": {"a": 40.0, "b": 20.0}},
+                ],
+                "decay_vector": {"a": 0.3},
+            },
+            exported_at="2026-07-17",
+        )
+        assert "2026-07-16" in html
+        assert "drawMemoryTrace" in html
+        assert "doneConceptIds" in html
+        assert "DECAY_VECTOR" in html
+        assert "String(rank)" in html
+        assert "isCollected" in html
+
+    def test_label_cap_unchanged(self):
+        html = build_kg_3d_html(
+            {"nodes": [], "edges": [], "stats": {}, "day_route": []}
+        )
+        assert "return new Set(allow.slice(0, 8));" in html
+

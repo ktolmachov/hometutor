@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<style>
+  html,body{margin:0;padding:0;background:#0a0a0f;overflow:hidden;}
+  iframe{display:block;width:100%;border:0;background:#0a0a0f;}
+</style>
+</head>
+<body>
+<iframe id="kg-frame" title="3D Knowledge Graph Hall"></iframe>
+<script>
+const frame = document.getElementById('kg-frame');
+const KG3D_MAX_RAW = 600;
+
+function streamlitMessage(type, data) {
+  window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type }, data || {}), '*');
+}
+function setComponentReady() {
+  streamlitMessage('streamlit:componentReady', { apiVersion: 1 });
+}
+function setFrameHeight(height) {
+  streamlitMessage('streamlit:setFrameHeight', { height });
+}
+function setComponentValue(value) {
+  const v = String(value || '').trim();
+  if (!v) return;
+  // Selection-only channel (string concept id). Actions never go through setComponentValue.
+  streamlitMessage('streamlit:setComponentValue', { value: v, dataType: 'json' });
+}
+
+function syncConceptSelection(conceptId) {
+  const v = String(conceptId || '').trim();
+  if (!v) return;
+  setComponentValue(v);
+}
+
+function b64urlEncodeUtf8(str) {
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+// Action bridge: only query-param _kg3d delivers intent to Python (full rerun).
+function syncKg3dAction(envelope) {
+  try {
+    const raw = b64urlEncodeUtf8(JSON.stringify(envelope));
+    if (!raw || raw.length > KG3D_MAX_RAW) return;
+    const top = window.top;
+    const pu = new URL(top.location.href);
+    if (pu.searchParams.get('_kg3d') === raw) return;
+    pu.searchParams.set('_kg3d', raw);
+    // replace(): transient bridge, not a history entry the user should land back on.
+    top.location.replace(pu.toString());
+  } catch (_) { /* cross-origin or missing top — no-op */ }
+}
+
+function cleanupKg3dParam() {
+  try {
+    const top = window.top;
+    const pu = new URL(top.location.href);
+    if (!pu.searchParams.has('_kg3d')) return;
+    pu.searchParams.delete('_kg3d');
+    top.history.replaceState(top.history.state, '', pu.toString());
+  } catch (_) { /* ignore */ }
+}
+
+function isValidActionEnvelope(data) {
+  if (!data || typeof data !== 'object') return false;
+  if (Number(data.version) !== 1) return false;
+  if (data.source !== 'kg3d') return false;
+  if (data.action !== 'start' && data.action !== 'collect') return false;
+  const concept = String(data.concept_id || '').trim();
+  const eventId = String(data.event_id || '').trim();
+  const nonce = String(data.session_nonce || '').trim();
+  return !!(concept && eventId && nonce);
+}
+
+window.__kg3dSetConcept = syncConceptSelection;
+
+window.addEventListener('message', (event) => {
+  const data = event.data || {};
+  if (data.type === 'streamlit:render') {
+    if (event.source !== window.parent) return;
+    const args = data.args || {};
+    const height = Number(args.height) || 740;
+    frame.style.height = height + 'px';
+    frame.srcdoc = String(args.html || '');
+    setFrameHeight(height);
+    return;
+  }
+  if (event.source !== frame.contentWindow) return;
+  if (data.type === 'hometutor:kg-select' && data.concept) {
+    syncConceptSelection(String(data.concept));
+    return;
+  }
+  if (data.type === 'hometutor:kg-action') {
+    if (!isValidActionEnvelope(data)) return;
+    syncKg3dAction({
+      version: 1,
+      source: 'kg3d',
+      event_id: String(data.event_id).trim(),
+      session_nonce: String(data.session_nonce).trim(),
+      concept_id: String(data.concept_id).trim(),
+      action: data.action,
+    });
+  }
+});
+
+setComponentReady();
+// After a successful Python consume, host also pops _kg3d; cleanup here strips
+// stale params if Python rejected before a full navigation cycle completed.
+cleanupKg3dParam();
+</script>
+</body>
+</html>

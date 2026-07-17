@@ -604,3 +604,93 @@ def build_guide_view_model(
         "used_llm": result.used_llm,
         "budget": result.budget_snapshot,
     }
+
+
+# ── W3c: threats view-model (deterministic list + optional Keeper prose) ─
+
+
+def threats_from_kg_payload(
+    payload: Mapping[str, Any] | None,
+    *,
+    forget_min: float = 0.28,
+    limit: int = 8,
+) -> list[dict[str, object]]:
+    """Build threat rows from payload decay_vector + node labels/due."""
+    payload = payload or {}
+    nodes = payload.get("nodes") or []
+    labels: dict[str, str] = {}
+    due_map: dict[str, Any] = {}
+    for n in nodes:
+        if not isinstance(n, Mapping):
+            continue
+        cid = str(n.get("id") or "").strip()
+        if not cid:
+            continue
+        labels[cid] = str(n.get("label") or cid)
+        if n.get("due") is not None:
+            due_map[cid] = n.get("due")
+    decay = payload.get("decay_vector")
+    if not isinstance(decay, Mapping):
+        decay = {}
+    return build_threats_from_decay(
+        decay_vector=decay,
+        labels=labels,
+        due_map=due_map,
+        forget_min=forget_min,
+        limit=limit,
+    )
+
+
+def build_threats_view_model(
+    payload: Mapping[str, Any] | None,
+    *,
+    session_state: MutableMapping[str, Any] | None = None,
+    allow_llm: bool = False,
+    snapshot_date: str = "",
+    forget_min: float = 0.28,
+    llm_complete: Callable[[str, str], str] | None = None,
+) -> dict[str, Any]:
+    """W3c: hall-ready threats dict.
+
+    ``items`` is always deterministic (decay/due). ``text`` is prose (static or LLM).
+    CTA «Повторить» (W2b) remains the action to dispel fog — not generated here.
+    """
+    payload = payload or {}
+    items = threats_from_kg_payload(payload, forget_min=forget_min)
+    snap = str(snapshot_date or "").strip()
+    if not snap:
+        hist = payload.get("mastery_history") or []
+        if hist and isinstance(hist[-1], Mapping):
+            snap = str(hist[-1].get("date") or "").strip()
+    result = request_keeper(
+        prompts.SCENARIO_THREATS,
+        snapshot_date=snap,
+        threats=items,
+        allow_llm=allow_llm,
+        session_state=session_state,
+        llm_complete=llm_complete,
+    )
+    # Compact rows for canvas/panel (JSON-safe).
+    safe_items: list[dict[str, object]] = []
+    for t in items:
+        safe_items.append(
+            {
+                "id": str(t.get("id") or ""),
+                "label": str(t.get("label") or t.get("id") or ""),
+                "forget_pct": int(t.get("forget_pct") or 0),
+                "due": t.get("due"),
+                "retention": t.get("retention"),
+            }
+        )
+    return {
+        "text": result.text,
+        "source": result.source,
+        "reason": result.reason,
+        "items": safe_items,
+        "count": len(safe_items),
+        "silent": result.text.strip() == KEEPER_SILENT_COPY,
+        "used_llm": result.used_llm,
+        "budget": result.budget_snapshot,
+        # Hint for UI: review action dispels fog (W2b), not a new action.
+        "review_action": "review",
+    }

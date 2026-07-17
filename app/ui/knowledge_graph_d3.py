@@ -946,6 +946,7 @@ def build_kg_3d_html(
     concept_sections: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
     show_onboarding: bool = False,
     keeper_guide: Mapping[str, Any] | None = None,
+    keeper_threats: Mapping[str, Any] | None = None,
 ) -> str:
     """Self-contained offline 3D Knowledge Graph hall (no CDN).
 
@@ -962,6 +963,7 @@ def build_kg_3d_html(
     - ``concept_sections``: embedded-only doors into Obsidian (U2)
     - ``show_onboarding``: first-open hall rules overlay (U4)
     - ``keeper_guide``: W3b Хранитель view-model ``{text, source, by_stop, ...}``
+    - ``keeper_threats``: W3c threats view-model ``{text, items, source, ...}``
     """
     mode = "embedded" if str(host_mode or "").strip().lower() == "embedded" else "export"
     snap = str(exported_at or "").strip() or date.today().isoformat()
@@ -992,6 +994,42 @@ def build_kg_3d_html(
     else:
         guide_vm = {"text": "", "source": "none", "reason": "", "by_stop": {}, "used_llm": False}
 
+    # W3c threats: deterministic items + optional prose.
+    threats_vm: dict[str, Any]
+    if isinstance(keeper_threats, Mapping) and keeper_threats:
+        items_raw = keeper_threats.get("items") or []
+        items_list: list[dict[str, Any]] = []
+        if isinstance(items_raw, (list, tuple)):
+            for it in items_raw:
+                if isinstance(it, Mapping):
+                    items_list.append(
+                        {
+                            "id": str(it.get("id") or ""),
+                            "label": str(it.get("label") or it.get("id") or ""),
+                            "forget_pct": int(it.get("forget_pct") or 0),
+                            "due": it.get("due"),
+                        }
+                    )
+        threats_vm = {
+            "text": str(keeper_threats.get("text") or ""),
+            "source": str(keeper_threats.get("source") or "degrade"),
+            "reason": str(keeper_threats.get("reason") or ""),
+            "items": items_list,
+            "count": int(keeper_threats.get("count") or len(items_list)),
+            "used_llm": bool(keeper_threats.get("used_llm")),
+            "review_action": "review",
+        }
+    else:
+        threats_vm = {
+            "text": "",
+            "source": "none",
+            "reason": "",
+            "items": [],
+            "count": 0,
+            "used_llm": False,
+            "review_action": "review",
+        }
+
     replacements = {
         "__NODES__": _json_for_script(payload.get("nodes", [])),
         "__EDGES__": _json_for_script(payload.get("edges", [])),
@@ -1009,6 +1047,7 @@ def build_kg_3d_html(
         "__CONCEPT_SECTIONS__": _json_for_script(sections_vm),
         "__SHOW_ONBOARDING__": "true" if onboard else "false",
         "__KEEPER_GUIDE__": _json_for_script(guide_vm),
+        "__KEEPER_THREATS__": _json_for_script(threats_vm),
     }
     html = _load_3d_template()
     for placeholder, value in replacements.items():
@@ -1066,6 +1105,7 @@ def render_kg_3d_hall(
     concept_sections: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
     show_onboarding: bool = False,
     keeper_guide: Mapping[str, Any] | None = None,
+    keeper_threats: Mapping[str, Any] | None = None,
     height: int = 720,
     key: str = "kg_3d_hall_component",
 ) -> Any:
@@ -1089,6 +1129,7 @@ def render_kg_3d_hall(
         concept_sections=concept_sections,
         show_onboarding=show_onboarding,
         keeper_guide=keeper_guide,
+        keeper_threats=keeper_threats,
     )
     return _kg_3d_component()(
         html=html,

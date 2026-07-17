@@ -128,6 +128,27 @@
   .kgx-keeper .kgx-keeper-meta{
     margin-top:0.35rem;font-size:0.62rem;color:var(--kgx-muted);letter-spacing:0.04em;
   }
+  /* W3c: threats summary (deterministic items + optional prose) */
+  .kgx-threats{
+    margin-top:0.55rem;padding:0.5rem 0.6rem;border-radius:6px;
+    border:1px solid rgba(148,163,184,0.35);
+    background:rgba(71,85,105,0.14);
+  }
+  .kgx-threats .kgx-eyebrow{margin:0 0 0.3rem;color:#94a3b8}
+  .kgx-threats-list{margin:0;padding:0;list-style:none}
+  .kgx-threats-list li{
+    display:flex;align-items:center;justify-content:space-between;gap:0.4rem;
+    padding:0.28rem 0;border-bottom:1px solid rgba(148,163,184,0.12);
+    font-size:0.72rem;color:var(--kgx-text);
+  }
+  .kgx-threats-list li:last-child{border-bottom:0}
+  .kgx-threats-list li.is-active{color:#e2e8f0;font-weight:700}
+  .kgx-threats-list .pct{color:#cbd5e1;font-variant-numeric:tabular-nums;flex:none}
+  .kgx-threats-prose{
+    margin:0.4rem 0 0;font-size:0.72rem;line-height:1.35;color:var(--kgx-muted);
+  }
+  .kgx-threats-meta{margin-top:0.3rem;font-size:0.6rem;color:var(--kgx-muted)}
+  .kgx-threats-empty{margin:0;font-size:0.72rem;color:var(--kgx-muted)}
   #body{display:grid;grid-template-columns:minmax(0,1fr) 314px;flex:1 1 auto;min-height:0}
   #stage{position:relative;min-width:0;min-height:0;overflow:hidden;background:var(--kgx-night)}
   #cv{display:block;width:100%;height:100%;background:#050508;cursor:grab}
@@ -530,6 +551,13 @@
           <p id="keeperline">—</p>
           <div class="kgx-keeper-meta" id="keepersource"></div>
         </div>
+        <div class="kgx-threats" id="threatsbox" hidden>
+          <div class="kgx-eyebrow">Хранитель · угрозы забывания</div>
+          <ul class="kgx-threats-list" id="threatslist"></ul>
+          <p class="kgx-threats-prose" id="threatsprose" hidden></p>
+          <p class="kgx-threats-empty" id="threatsempty" hidden>Явных угроз в снимке нет.</p>
+          <div class="kgx-threats-meta" id="threatsmeta"></div>
+        </div>
         <div class="kgx-chips" id="stopchips"></div>
         <div class="kgx-memory-row">
           <div class="kgx-memory-copy">
@@ -574,7 +602,7 @@
         <li><strong>✓ был в квизе · ◆ в конспекте</strong> — прогресс по памяти и корзине, не XP.</li>
         <li><strong>Рассвет и фонари</strong> — небо и огни на тропе отражают quiz-след маршрута дня.</li>
         <li><strong>Туман</strong> — низкий retention (`decay_vector`); кнопка ◌ «Спокойный мир» скрывает его. Туман никогда не блокирует «Начать».</li>
-        <li><strong>Хранитель</strong> — короткий рассказ об остановке (офлайн из причины маршрута; LLM — только по кнопке в продукте).</li>
+        <li><strong>Хранитель</strong> — рассказ об остановке и список угроз забывания (офлайн; LLM — по кнопке в продукте). 🔁 развеет туман.</li>
       </ol>
       <p class="kgx-onboard-diag" id="onboard-diag" hidden></p>
       <button class="kgx-onboard-ok" id="onboard-ok" type="button">Понятно</button>
@@ -597,6 +625,8 @@ const COLLECTED_IDS = __COLLECTED_IDS__ || [];
 const ACTION_RESULT = __ACTION_RESULT__ || null;
 /** W3b: {text, source, by_stop, reason, used_llm} — baked at render; no client LLM. */
 const KEEPER_GUIDE = __KEEPER_GUIDE__;
+/** W3c: {text, source, items, count, used_llm} — deterministic threats + prose. */
+const KEEPER_THREATS = __KEEPER_THREATS__;
 const WORKBENCH_COUNT_INIT = __WORKBENCH_COUNT__;
 /** Embedded-only view-model: concept_id → [{heading, in_basket, obsidian_uri}] (U2). */
 const CONCEPT_SECTIONS = __CONCEPT_SECTIONS__ || {};
@@ -2619,6 +2649,83 @@ function updateKeeperLine(conceptId) {
   }
 }
 
+/** W3c: threats list + prose; highlight active concept if threatened. */
+function updateThreatsPanel(conceptId) {
+  const box = document.getElementById('threatsbox');
+  const listEl = document.getElementById('threatslist');
+  const proseEl = document.getElementById('threatsprose');
+  const emptyEl = document.getElementById('threatsempty');
+  const metaEl = document.getElementById('threatsmeta');
+  if (!box || !listEl) return;
+  const data = (KEEPER_THREATS && typeof KEEPER_THREATS === 'object') ? KEEPER_THREATS : null;
+  const items = data && Array.isArray(data.items) ? data.items : [];
+  while (listEl.firstChild) listEl.removeChild(listEl.firstChild);
+
+  if (!items.length) {
+    // Still show box when we have explicit empty state from backend
+    const hasVm = data && data.source && data.source !== 'none';
+    if (!hasVm) {
+      box.hidden = true;
+      return;
+    }
+    box.hidden = false;
+    if (emptyEl) {
+      emptyEl.hidden = false;
+      emptyEl.textContent = 'Явных угроз забывания в снимке нет.';
+    }
+    if (proseEl) { proseEl.hidden = true; proseEl.textContent = ''; }
+    if (metaEl) metaEl.textContent = 'список детерминирован · 🔁 развеет туман';
+    return;
+  }
+
+  box.hidden = false;
+  if (emptyEl) emptyEl.hidden = true;
+  items.forEach((t) => {
+    const id = String(t.id || '');
+    const li = document.createElement('li');
+    if (id && id === conceptId) li.classList.add('is-active');
+    const name = document.createElement('span');
+    name.textContent = String(t.label || id || '?');
+    const pct = document.createElement('span');
+    pct.className = 'pct';
+    const dueBit = (t.due != null && Number(t.due) > 0) ? ` · due ${t.due}` : '';
+    pct.textContent = `~${Number(t.forget_pct) || 0}%${dueBit}`;
+    li.appendChild(name);
+    li.appendChild(pct);
+    // Click focuses stop if on route (no domain write).
+    li.style.cursor = 'pointer';
+    li.title = 'Выбрать остановку · 🔁 Повторить развеет туман';
+    li.onclick = () => {
+      if (!id) return;
+      const route = dayRouteIds();
+      const idx = route.indexOf(id);
+      if (idx >= 0) goToStop(idx, { animate: true });
+      else {
+        // Off-route threat: still select focus for panel
+        const n = byId.get(id);
+        if (n) focus(n);
+      }
+    };
+    listEl.appendChild(li);
+  });
+
+  const prose = data ? String(data.text || '').trim() : '';
+  if (proseEl) {
+    if (prose && items.length) {
+      proseEl.hidden = false;
+      proseEl.textContent = prose.length > 420 ? prose.slice(0, 419) + '…' : prose;
+    } else {
+      proseEl.hidden = true;
+      proseEl.textContent = '';
+    }
+  }
+  if (metaEl) {
+    const src = String((data && data.source) || 'degrade');
+    const srcLabel = src === 'llm' ? 'LLM' : (src === 'cache' ? 'кэш' : 'офлайн');
+    metaEl.textContent = `${items.length} угроз · ${srcLabel} · 🔁 Повторить = retrieval practice`;
+  }
+}
+
 function updateStopInfo() {
   const el = document.getElementById('stopinfo');
   const route = dayRouteIds();
@@ -2636,6 +2743,8 @@ function updateStopInfo() {
     if (eyebrow) eyebrow.textContent = 'Остановка —';
     if (nameEl) nameEl.textContent = 'Нет маршрута дня';
     if (reasonEl) reasonEl.textContent = 'Добавьте due-карточки или пройдите квиз — маршрут появится.';
+    updateKeeperLine('');
+    updateThreatsPanel('');
     return;
   }
   const i = activeStopIndex;
@@ -2664,6 +2773,7 @@ function updateStopInfo() {
   if (nameEl) nameEl.textContent = label;
   if (reasonEl) reasonEl.textContent = reason ? `потому что: ${reason}` : 'в маршруте дня';
   updateKeeperLine(id);
+  updateThreatsPanel(id);
   if (worthBadge) worthBadge.textContent = `W ${(n.worth || 0).toFixed(1)}`;
   if (masteryRing) {
     masteryRing.style.setProperty('--m', (masteryPct != null ? masteryPct : 0) + '%');

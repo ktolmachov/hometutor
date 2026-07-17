@@ -257,3 +257,55 @@ def test_guide_html_bakes_keeper_placeholder():
     assert "__KEEPER_GUIDE__" not in html  # replaced
     assert "пора" in html or "маршруте" in html or "RAG" in html
     assert "function updateKeeperLine" in html
+
+
+def test_build_threats_view_model_w3c():
+    payload = {
+        "nodes": [
+            {"id": "rag", "label": "RAG", "due": 2, "worth": 1},
+            {"id": "ok", "label": "OK", "due": 0, "worth": 1},
+            {"id": "weak", "label": "Weak", "due": 1, "worth": 1},
+        ],
+        "day_route": ["rag", "ok"],
+        "decay_vector": {"rag": 0.2, "ok": 0.95, "weak": 0.35},
+        "mastery_history": [{"date": "2026-07-18", "mastery": {}}],
+    }
+    state: dict = {}
+    vm = keeper.build_threats_view_model(payload, session_state=state, allow_llm=False)
+    assert vm["count"] >= 2
+    ids = {t["id"] for t in vm["items"]}
+    assert "rag" in ids
+    assert "ok" not in ids
+    assert vm["source"] == "degrade"
+    assert vm["review_action"] == "review"
+    assert "RAG" in vm["text"] or "угроз" in vm["text"].lower() or "Сводка" in vm["text"]
+
+    def fake(system: str, user: str) -> str:
+        return "Сфокусируйся на RAG — повторение займёт пару минут."
+
+    vm2 = keeper.build_threats_view_model(
+        payload, session_state=state, allow_llm=True, llm_complete=fake
+    )
+    assert vm2["source"] == "llm"
+    assert "RAG" in vm2["text"] or "пару минут" in vm2["text"]
+    # items still deterministic
+    assert vm2["count"] == vm["count"]
+
+
+def test_threats_html_bakes_panel():
+    from app.ui.knowledge_graph_d3 import build_kg_3d_html
+
+    payload = {
+        "nodes": [{"id": "rag", "label": "RAG", "due": 1, "worth": 1}],
+        "edges": [],
+        "stats": {},
+        "day_route": ["rag"],
+        "decay_vector": {"rag": 0.25},
+    }
+    threats = keeper.build_threats_view_model(payload, allow_llm=False)
+    html = build_kg_3d_html(payload, keeper_threats=threats)
+    assert "threatsbox" in html
+    assert "updateThreatsPanel" in html
+    assert "__KEEPER_THREATS__" not in html
+    assert "RAG" in html
+    assert "forget_pct" in html or "80" in html or "75" in html

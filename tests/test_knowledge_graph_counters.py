@@ -706,6 +706,10 @@ class Test3DCoverageAndContracts:
         assert "keeperbox" in html
         assert "updateKeeperLine" in html
         assert "KEEPER_GUIDE" in html
+        # W3c threats surface
+        assert "threatsbox" in html
+        assert "updateThreatsPanel" in html
+        assert "KEEPER_THREATS" in html
         # G4.1 floor tint + G4.2 history scrubber (G4.3 photo export deferred / privacy)
         assert "function floorProgressScore" in html
         assert "function refreshMemorySetsFromHistory" in html

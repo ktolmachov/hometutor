@@ -556,6 +556,9 @@
           <button class="kgx-action kgx-action-review" id="interior-review" type="button" title="Повторить карточки">🔁 Повторить</button>
           <button class="kgx-action kgx-action-secondary" id="interior-collect" type="button">В конспект</button>
         </div>
+        <div class="kgx-tertiary-actions" style="padding:0 1rem 1rem">
+          <button class="kgx-link-btn" id="interior-ask" type="button" title="Спросить тьютора об этом концепте">💬 Спросить об этом</button>
+        </div>
       </div>
     </div>
     <aside id="side" class="kgx-panel" aria-label="Текущая остановка">
@@ -604,6 +607,7 @@
         </div>
         <div class="kgx-tertiary-actions">
           <button class="kgx-link-btn" id="insidebtn" type="button" title="Провалиться внутрь узла">Внутрь</button>
+          <button class="kgx-link-btn" id="askbtn" type="button" title="Спросить тьютора об этом концепте">💬 Спросить</button>
           <div id="sectionlinks"></div>
         </div>
         <div id="actionstatus" class="status-line" role="status" aria-live="polite"></div>
@@ -635,6 +639,7 @@
         <li><strong>Туман</strong> — низкий retention (`decay_vector`); кнопка ◌ «Спокойный мир» скрывает его. Туман никогда не блокирует «Начать».</li>
         <li><strong>Хранитель</strong> — рассказ об остановке и список угроз забывания (офлайн; LLM — по кнопке в продукте). 🔁 развеет туман.</li>
         <li><strong>Районы</strong> — в Созвездии / Всей карте: Арена, Оранжерея, Магистраль, Кузница (двери в разделы). Не в первом кадре Маршрута.</li>
+        <li><strong>Спросить</strong> — handoff в «Чат с тьютором» с префиллом по концепту (без inline-LLM в зале).</li>
       </ol>
       <p class="kgx-onboard-diag" id="onboard-diag" hidden></p>
       <button class="kgx-onboard-ok" id="onboard-ok" type="button">Понятно</button>
@@ -2272,9 +2277,9 @@ function beginAction(action) {
     return;
   }
   // collect is add-only: already-collected stays disabled.
-  // start / review always allowed (re-study / retrieval practice).
+  // start / review / ask always allowed (nav handoffs).
   if (action === 'collect' && collectedConceptIds.has(id)) return;
-  if (!isDoor && action !== 'start' && action !== 'collect' && action !== 'review') return;
+  if (!isDoor && action !== 'start' && action !== 'collect' && action !== 'review' && action !== 'ask') return;
   if (isDoor && !DOOR_ACTIONS[action]) return;
   postAction(action, id || '_district');
 }
@@ -2549,9 +2554,11 @@ function updateActionUI() {
         ? 'открытие Quiz'
         : (act === 'review'
           ? 'открытие Flashcards'
-          : (String(act || '').startsWith('door_')
-            ? 'переход в район'
-            : 'сбор в конспект'));
+          : (act === 'ask'
+            ? 'открытие Тьютора'
+            : (String(act || '').startsWith('door_')
+              ? 'переход в район'
+              : 'сбор в конспект')));
       st.textContent = `Ожидание: ${an} · «${pendingAction.label}»`;
     } else if (!isEmbedded) {
       // W0′ R7: clearer export hierarchy copy
@@ -2580,8 +2587,19 @@ function updateActionUI() {
     wrap.setAttribute('data-calm', calmWorld ? 'on' : 'off');
   }
   updateDistrictDoors();
+  // W5a: ask handoff buttons (export inert; embedded enabled unless pending).
+  ['askbtn', 'interior-ask'].forEach((bid) => {
+    const b = document.getElementById(bid);
+    if (!b) return;
+    if (!isEmbedded) {
+      b.disabled = true;
+      b.title = 'Доступно в продукте: Спросить → Чат с тьютором';
+    } else {
+      b.disabled = !!pendingAction || !activeRouteId();
+      b.title = 'Спросить тьютора об этом концепте';
+    }
+  });
   // W2a invariant: fog never disables primary actions (re-assert after any UI update).
-  // applyCtaState already ignores fog; this documents the contract for tests/readers.
 }
 
 function applyActionResult() {
@@ -3354,11 +3372,15 @@ if (reviewBtn) reviewBtn.onclick = () => beginAction('review');
 const interiorStart = document.getElementById('interior-start');
 const interiorCollect = document.getElementById('interior-collect');
 const interiorReview = document.getElementById('interior-review');
+const interiorAsk = document.getElementById('interior-ask');
 if (interiorStart) interiorStart.onclick = () => beginAction('start');
 if (interiorCollect) interiorCollect.onclick = () => beginAction('collect');
 if (interiorReview) interiorReview.onclick = () => beginAction('review');
+if (interiorAsk) interiorAsk.onclick = () => beginAction('ask');
 const insideBtn = document.getElementById('insidebtn');
 if (insideBtn) insideBtn.onclick = () => openInterior(activeRouteId());
+const askBtn = document.getElementById('askbtn');
+if (askBtn) askBtn.onclick = () => beginAction('ask');
 const interiorClose = document.getElementById('interior-close');
 if (interiorClose) interiorClose.onclick = () => closeInterior();
 const calmBtnEl = document.getElementById('calmbtn');

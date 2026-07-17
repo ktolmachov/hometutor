@@ -123,7 +123,7 @@ function isValidActionEnvelope(data) {
   if (data.source !== 'kg3d') return false;
   // W2b review + W4c district doors (nav-only product views).
   const allowed = {
-    start: 1, collect: 1, review: 1,
+    start: 1, collect: 1, review: 1, ask: 1,
     door_quiz: 1, door_flashcards: 1, door_plan: 1, door_konspekt: 1,
   };
   if (!allowed[data.action]) return false;

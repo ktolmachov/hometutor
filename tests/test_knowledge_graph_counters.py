@@ -716,6 +716,10 @@ class Test3DCoverageAndContracts:
         assert "door_quiz" in html and "door_flashcards" in html
         assert "updateDistrictDoors" in html
         assert "door_plan" in html and "door_konspekt" in html
+        # W5a tutor ask handoff
+        assert 'id="askbtn"' in html
+        assert 'id="interior-ask"' in html
+        assert "beginAction('ask')" in html or 'beginAction("ask")' in html or "action !== 'ask'" in html
         # G4.1 floor tint + G4.2 history scrubber (G4.3 photo export deferred / privacy)
         assert "function floorProgressScore" in html
         assert "function refreshMemorySetsFromHistory" in html
@@ -1463,6 +1467,15 @@ class TestKg3dActionBridge:
             assert ok is not None, action
             assert ok["action"] == action
 
+    def test_accepts_ask_action(self):
+        """W5a: ask = tutor handoff."""
+        env = self._env(action="ask")
+        ok = validate_kg_3d_envelope(
+            env, session_nonce="a" * 32, node_ids=["rag"]
+        )
+        assert ok is not None
+        assert ok["action"] == "ask"
+
     def test_rejects_bad_event_id(self):
         assert (
             validate_kg_3d_envelope(
@@ -1685,6 +1698,51 @@ class TestKg3dProductActions:
         )
         assert state[PENDING_CURRENT_VIEW_KEY] == "Интерактивный Quiz"
         assert state["interactive_quiz_focus_concept"] == "rag"
+        assert KG_3D_ACTION_RESULT_KEY not in state
+        assert calls["collect"] == 0
+
+    def test_ask_handoff_to_tutor_without_workbench(self, monkeypatch):
+        """W5a: ask → tutor chat with pending prompt; no workbench write."""
+        from app.ui import dashboards_graph as dg
+        from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
+
+        state: dict = {}
+        calls = {"collect": 0}
+
+        def boom(**kwargs):
+            calls["collect"] += 1
+            return (0, 0)
+
+        monkeypatch.setattr(dg, "_collect_concept_sections_to_workbench", boom)
+
+        class _FakeSt:
+            @staticmethod
+            def toast(*a, **k):
+                pass
+
+            @staticmethod
+            def rerun():
+                pass
+
+            @staticmethod
+            def error(*a, **k):
+                pass
+
+        monkeypatch.setattr(dg, "st", _FakeSt)
+        env = {
+            "action": "ask",
+            "concept_id": "rag",
+            "event_id": "12345678-1234-1234-1234-1234567890bb",
+        }
+        dg._execute_kg_3d_action(
+            env, knowledge_graph=None, doc_index={}, state=state
+        )
+        assert state[PENDING_CURRENT_VIEW_KEY] == "Чат с тьютором"
+        assert "tutor_pending_prompt" in state
+        assert "rag" in str(state["tutor_pending_prompt"]).lower() or "RAG" in str(
+            state["tutor_pending_prompt"]
+        )
+        assert state.get("tutor_cta_action", "").startswith("KG3D:rag:")
         assert KG_3D_ACTION_RESULT_KEY not in state
         assert calls["collect"] == 0
 

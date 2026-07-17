@@ -273,6 +273,8 @@ Flashcards — это human-in-the-loop генерация:
 - **Районы (двери)** в режимах Созвездие / Вся карта: ⚔ Арена → Quiz,
   🌿 Оранжерея → Flashcards, 🛤 Магистраль → Адаптивный план, 🔨 Кузница →
   Живой конспект. В первом кадре Маршрута дверей нет (ориентация).
+- **💬 Спросить** (карточка / интерьер узла) — handoff в «Чат с тьютором» с
+  префиллом по концепту (без inline-LLM внутри 3D-зала).
 - **🏛 3D-зал (embedded)** на вкладке Knowledge Graph — живой Memory Run рядом с 2D-картой.
   **Каналы действий (надёжность iframe):** primary — `setComponentValue` с envelope
   `{kind: 'kg3d_action', envelope}` (работает внутри Streamlit component iframe);

@@ -397,8 +397,8 @@ def _assemble_relations(
             weak = rel_type == "related" or confidence < WEAK_EVIDENCE_CONFIDENCE
             evidence_doc_id = str(item.get("evidence_doc_id") or doc_id).strip()
             evidence_chunk_id = str(item.get("evidence_chunk_id") or "").strip()
-            # Empty or hallucinated chunk id → first valid chunk of the evidence doc.
-            if evidence_chunk_id not in valid_chunk_ids.get(evidence_doc_id, set()):
+            # Empty chunk id can be filled; explicit invalid ids must fail evidence gate.
+            if not evidence_chunk_id:
                 evidence_chunk_id = _first_valid_chunk_id(valid_chunk_ids, evidence_doc_id)
             relations.append(
                 _RelationDraft(

@@ -583,6 +583,10 @@ class Test3DCoverageAndContracts:
         side_css = html3.split("#side{", 1)[1].split("}", 1)[0]
         assert "overflow-y:auto" in side_css
         assert "overflow-x:hidden" in side_css
+        panel_head_css = html3.split(".kgx-panel-head{", 1)[1].split("}", 1)[0]
+        assert "max-height:min(38vh, 292px)" in panel_head_css
+        assert "overflow-y:auto" in panel_head_css
+        assert "kgx-route-panel" in html3
         assert "min-height:40px" in html3  # CTA height
         assert "12px system-ui" in html3  # canvas labels ≥12px
         assert "function hoverAt" in html3
@@ -835,6 +839,8 @@ class Test3DCoverageAndContracts:
                           const topbar = document.querySelector('#topbar');
                           const side = document.querySelector('#side');
                           const sideStyle = side ? getComputedStyle(side) : null;
+                          const panelHead = document.querySelector('.kgx-panel-head');
+                          const routePanel = document.querySelector('#routepanel');
                           // Visible primary strip only (⋯ keeps Home/Top/Reset collapsed).
                           const primaryIconCount = document.querySelectorAll(
                             '.kgx-route-actions > .kgx-icon-btn, .kgx-route-actions > .kgx-route-more > #morebtn'
@@ -861,6 +867,23 @@ class Test3DCoverageAndContracts:
                               checkPosition: checkStyle?.position || '',
                             };
                           });
+                          const sideRectInitial = side?.getBoundingClientRect();
+                          const routeTitleRect = document
+                            .querySelector('.kgx-route-title')
+                            ?.getBoundingClientRect();
+                          const firstStopRect = document
+                            .querySelector('#toplist .stop:first-child')
+                            ?.getBoundingClientRect();
+                          const routeTitleVisibleInitial = !!(
+                            sideRectInitial && routeTitleRect &&
+                            routeTitleRect.top >= sideRectInitial.top - 1 &&
+                            routeTitleRect.bottom <= sideRectInitial.bottom + 1
+                          );
+                          const firstStopVisibleInitial = !!(
+                            sideRectInitial && firstStopRect &&
+                            firstStopRect.top >= sideRectInitial.top - 1 &&
+                            firstStopRect.bottom <= sideRectInitial.bottom + 1
+                          );
                           if (side) side.scrollTop = side.scrollHeight;
                           const sideRect = side?.getBoundingClientRect();
                           const lastStopRect = document
@@ -878,6 +901,10 @@ class Test3DCoverageAndContracts:
                             topbarMinH: topbar ? topbar.getBoundingClientRect().height : 0,
                             sideWidth: side ? side.getBoundingClientRect().width : 0,
                             sideOverflowY: sideStyle?.overflowY || '',
+                            panelHeadOverflowY: panelHead ? getComputedStyle(panelHead).overflowY : '',
+                            routePanelPresent: !!routePanel,
+                            routeTitleVisibleInitial,
+                            firstStopVisibleInitial,
                             sideCanScrollY: side ? side.scrollHeight > side.clientHeight + 1 : false,
                             lastStopVisibleAfterSideScroll,
                             stopCount: document.querySelectorAll('.stop').length,
@@ -914,6 +941,10 @@ class Test3DCoverageAndContracts:
                     assert result["startMinH"] >= 40, viewport
                     assert result["bodyOverflowX"] is False, viewport
                     assert result["sideOverflowY"] == "auto", viewport
+                    assert result["panelHeadOverflowY"] == "auto", viewport
+                    assert result["routePanelPresent"] is True, viewport
+                    assert result["routeTitleVisibleInitial"] is True, viewport
+                    assert result["firstStopVisibleInitial"] is True, viewport
                     assert result["lastStopVisibleAfterSideScroll"] is True, viewport
                     min_h = 400 if viewport["width"] <= 560 else 450
                     assert result["canvasCssH"] >= min_h, viewport

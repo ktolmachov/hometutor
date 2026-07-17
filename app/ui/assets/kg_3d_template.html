@@ -243,8 +243,13 @@
     box-sizing:border-box;font-size:12px;
   }
   .kgx-panel-head{
-    padding:1rem 1rem 0.9rem;border-bottom:1px solid var(--kgx-line);flex:0 0 auto;
+    padding:1rem 1rem 0.9rem;border-bottom:1px solid var(--kgx-line);flex:0 1 auto;
+    max-height:min(38vh, 292px);overflow-y:auto;overscroll-behavior:contain;
     background:linear-gradient(135deg,color-mix(in srgb,var(--kgx-accent) 12%,transparent),transparent 62%);
+  }
+  .kgx-route-panel{
+    display:flex;flex-direction:column;min-height:0;flex:1 0 auto;
+    background:linear-gradient(180deg,rgba(8,8,18,0.20),rgba(8,8,18,0));
   }
   .kgx-eyebrow{color:var(--kgx-accent);font-size:0.68rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase}
   .kgx-panel-head h3{
@@ -445,6 +450,7 @@
     #body{grid-template-columns:1fr}
     #stage{min-height:480px;height:55vh}
     #side{width:100%;flex:0 0 auto;max-height:42vh;border-left:0;border-top:1px solid var(--kgx-line)}
+    .kgx-panel-head{max-height:38%;padding-top:0.8rem;padding-bottom:0.7rem}
     #toplist.list{grid-template-columns:repeat(2,minmax(0,1fr))}
     #sidetoggle{
       display:block;position:absolute;top:72px;right:8px;z-index:4;
@@ -614,16 +620,18 @@
         <!-- keep stopinfo for tests / a11y live region mirror -->
         <div id="stopinfo" class="status-line" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">Стоп — · выберите остановку</div>
       </div>
-      <div class="kgx-route-title">
-        <span>Маршрут дня <span class="badge" id="routebadge">0</span></span>
-        <strong id="worthbadge">W —</strong>
+      <div class="kgx-route-panel" id="routepanel">
+        <div class="kgx-route-title">
+          <span>Маршрут дня <span class="badge" id="routebadge">0</span></span>
+          <strong id="worthbadge">W —</strong>
+        </div>
+        <div id="toplist" class="list"></div>
+        <div id="inventory" class="kgx-inventory" hidden>
+          <span>Живой конспект</span>
+          <strong id="inventorycount">—</strong>
+        </div>
+        <div id="snapshotline" class="snapshot" hidden></div>
       </div>
-      <div id="toplist" class="list"></div>
-      <div id="inventory" class="kgx-inventory" hidden>
-        <span>Живой конспект</span>
-        <strong id="inventorycount">—</strong>
-      </div>
-      <div id="snapshotline" class="snapshot" hidden></div>
       <div class="mini" id="hint"></div>
     </aside>
   </div>

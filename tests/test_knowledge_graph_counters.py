@@ -669,10 +669,13 @@ class Test3DCoverageAndContracts:
         assert "laneColors" in html
         assert "rgba(154,108,255,0.14)" in html  # route underglow
         assert "no particles" in html.lower() or "no particles / stars / bokeh" in html
-        # W0 quality (Q1–Q4/Q7): axis above nav, compass axes unique, mobile fit, learner status
+        # W0 quality: axis/nav, mobile fit, learner status, Q5/Q8/Q9
         assert "axisY" in html or "H - 78" in html
         assert "narrow ? 0.90" in html or "W < 560" in html
         assert "Маршрут дня · стоп" in html
+        assert "function strokeSmoothPath" in html  # Q8
+        assert "function appendObsidianLink" in html  # Q5
+        assert "rgba(255,255,255,0.16)" in html  # Q9 ring track
         assert "prefers-reduced-motion" in html
         assert "three.js" not in html.lower()
         assert "<script src=" not in html.lower()

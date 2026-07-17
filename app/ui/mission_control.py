@@ -233,7 +233,7 @@ def _course_options_from_index_stats(index_stats: dict | None) -> tuple[CourseOp
             inferred_set.add("/".join(parts[:2]))
         elif len(parts) == 2 and parts[0] == "uploads":
             has_root_upload_files = True
-        elif parts and parts[0] and parts[0] != "uploads":
+        elif len(parts) >= 2 and parts[0] and parts[0] != "uploads":
             inferred_set.add(parts[0])
     if has_root_upload_files and not has_upload_pack:
         inferred_set.add("uploads")
@@ -342,6 +342,7 @@ def _build_ssr_banner_html(
     defer_modes = smart_study_why_not_others_ru(rec)
     hint_attr = _safe(str(rec.hint_kind))
     title_id = "mc_ssr_heading"
+    primary_label = _safe(str(rec.primary_label_ru or "").strip() or "С чего можно продолжить")
 
     pedagogy_line = str(rec.route_pedagogy_ru or "").strip()
 
@@ -400,7 +401,7 @@ def _build_ssr_banner_html(
         # ── Hero: всегда видимая часть ──
         f'<div class="ssr-hero">'
         f'<div class="ssr-kicker">🧭 Подсказка по учебному маршруту</div>'
-        f'<h2 id="{title_id}">С чего можно продолжить</h2>'
+        f'<h2 id="{title_id}">{primary_label}</h2>'
         f'<p class="ssr-why-inline"><span class="ssr-why-label">Почему это подходит:</span> {why_now_inline}</p>'
         f"{due_badge}"
         f"</div>"

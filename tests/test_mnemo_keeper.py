@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import app.mnemo_keeper as keeper
+import app.mnemo_keeper_views as keeper_views
 from app.prompts import mnemo_keeper as prompts
 
 
@@ -222,7 +223,7 @@ def test_build_guide_view_model_w3b():
         "mastery_history": [{"date": "2026-07-18", "mastery": {}}],
     }
     state: dict = {}
-    vm = keeper.build_guide_view_model(payload, session_state=state, allow_llm=False)
+    vm = keeper_views.build_guide_view_model(payload, session_state=state, allow_llm=False)
     assert vm["source"] == "degrade"
     assert vm["used_llm"] is False
     assert "rag" in vm["by_stop"]
@@ -233,7 +234,7 @@ def test_build_guide_view_model_w3b():
     def fake(system: str, user: str) -> str:
         return "1. RAG: рассказ.\n2. Agent: дальше."
 
-    vm2 = keeper.build_guide_view_model(
+    vm2 = keeper_views.build_guide_view_model(
         payload, session_state=state, allow_llm=True, llm_complete=fake
     )
     assert vm2["source"] == "llm"
@@ -250,7 +251,7 @@ def test_guide_html_bakes_keeper_placeholder():
         "stats": {},
         "day_route": ["rag"],
     }
-    guide = keeper.build_guide_view_model(payload, allow_llm=False)
+    guide = keeper_views.build_guide_view_model(payload, allow_llm=False)
     html = build_kg_3d_html(payload, keeper_guide=guide)
     assert "keeperbox" in html
     assert "updateKeeperLine" in html
@@ -271,7 +272,7 @@ def test_build_threats_view_model_w3c():
         "mastery_history": [{"date": "2026-07-18", "mastery": {}}],
     }
     state: dict = {}
-    vm = keeper.build_threats_view_model(payload, session_state=state, allow_llm=False)
+    vm = keeper_views.build_threats_view_model(payload, session_state=state, allow_llm=False)
     assert vm["count"] >= 2
     ids = {t["id"] for t in vm["items"]}
     assert "rag" in ids
@@ -283,7 +284,7 @@ def test_build_threats_view_model_w3c():
     def fake(system: str, user: str) -> str:
         return "Сфокусируйся на RAG — повторение займёт пару минут."
 
-    vm2 = keeper.build_threats_view_model(
+    vm2 = keeper_views.build_threats_view_model(
         payload, session_state=state, allow_llm=True, llm_complete=fake
     )
     assert vm2["source"] == "llm"
@@ -302,7 +303,7 @@ def test_threats_html_bakes_panel():
         "day_route": ["rag"],
         "decay_vector": {"rag": 0.25},
     }
-    threats = keeper.build_threats_view_model(payload, allow_llm=False)
+    threats = keeper_views.build_threats_view_model(payload, allow_llm=False)
     html = build_kg_3d_html(payload, keeper_threats=threats)
     assert "threatsbox" in html
     assert "updateThreatsPanel" in html

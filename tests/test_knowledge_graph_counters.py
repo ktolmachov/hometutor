@@ -581,7 +581,8 @@ class Test3DCoverageAndContracts:
         assert 'id="topbar"' in html3
         assert "#side{" in html3 and "width:314px" in html3
         side_css = html3.split("#side{", 1)[1].split("}", 1)[0]
-        assert "overflow:hidden" in side_css
+        assert "overflow-y:auto" in side_css
+        assert "overflow-x:hidden" in side_css
         assert "min-height:40px" in html3  # CTA height
         assert "12px system-ui" in html3  # canvas labels ≥12px
         assert "function hoverAt" in html3
@@ -824,6 +825,7 @@ class Test3DCoverageAndContracts:
                             document.documentElement.clientWidth + 1;
                           const topbar = document.querySelector('#topbar');
                           const side = document.querySelector('#side');
+                          const sideStyle = side ? getComputedStyle(side) : null;
                           // Visible primary strip only (⋯ keeps Home/Top/Reset collapsed).
                           const primaryIconCount = document.querySelectorAll(
                             '.kgx-route-actions > .kgx-icon-btn, .kgx-route-actions > .kgx-route-more > #morebtn'
@@ -850,12 +852,25 @@ class Test3DCoverageAndContracts:
                               checkPosition: checkStyle?.position || '',
                             };
                           });
+                          if (side) side.scrollTop = side.scrollHeight;
+                          const sideRect = side?.getBoundingClientRect();
+                          const lastStopRect = document
+                            .querySelector('#toplist .stop:last-child')
+                            ?.getBoundingClientRect();
+                          const lastStopVisibleAfterSideScroll = !!(
+                            sideRect && lastStopRect &&
+                            lastStopRect.top >= sideRect.top - 1 &&
+                            lastStopRect.bottom <= sideRect.bottom + 1
+                          );
                           return {
                             nonBg,
                             routeOn: document.querySelector('#modeRoute')?.classList.contains('on'),
                             topbarPresent: !!topbar,
                             topbarMinH: topbar ? topbar.getBoundingClientRect().height : 0,
                             sideWidth: side ? side.getBoundingClientRect().width : 0,
+                            sideOverflowY: sideStyle?.overflowY || '',
+                            sideCanScrollY: side ? side.scrollHeight > side.clientHeight + 1 : false,
+                            lastStopVisibleAfterSideScroll,
                             stopCount: document.querySelectorAll('.stop').length,
                             stops,
                             stopInfo: document.querySelector('#stopinfo')?.textContent || '',
@@ -889,6 +904,8 @@ class Test3DCoverageAndContracts:
                     assert result["collectDisabled"] is True, viewport
                     assert result["startMinH"] >= 40, viewport
                     assert result["bodyOverflowX"] is False, viewport
+                    assert result["sideOverflowY"] == "auto", viewport
+                    assert result["lastStopVisibleAfterSideScroll"] is True, viewport
                     min_h = 400 if viewport["width"] <= 560 else 450
                     assert result["canvasCssH"] >= min_h, viewport
                     # U0/R1 layout tokens (desktop grid); mobile collapses side — skip width there.

@@ -594,7 +594,7 @@ def list_course_candidates_from_index(
             folders.add("/".join(parts[:2]))
         elif len(parts) == 2 and parts[0] == "uploads":
             has_root_upload_files = True
-        elif parts[0] != "uploads":
+        elif len(parts) >= 2 and parts[0] != "uploads":
             folders.add(parts[0])
     if has_root_upload_files and not has_upload_pack:
         folders.add("uploads")
@@ -946,7 +946,7 @@ def _course_options_from_index_stats(index_stats: dict | None) -> list[dict[str,
             inferred_set.add("/".join(parts[:2]))
         elif len(parts) == 2 and parts[0] == "uploads":
             has_root_upload_files = True
-        elif parts and parts[0] and parts[0] != "uploads":
+        elif len(parts) >= 2 and parts[0] and parts[0] != "uploads":
             inferred_set.add(parts[0])
     if has_root_upload_files and not has_upload_pack:
         inferred_set.add("uploads")

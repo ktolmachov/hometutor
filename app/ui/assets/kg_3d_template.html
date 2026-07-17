@@ -222,7 +222,8 @@
   .kgx-route-more.is-open #morebtn{border-color:var(--kgx-accent);color:var(--kgx-accent)}
   #side{
     width:314px;flex:0 0 314px;min-width:0;border-left:1px solid var(--kgx-line);
-    background:var(--kgx-panel);display:flex;flex-direction:column;min-height:0;overflow:hidden;
+    background:var(--kgx-panel);display:flex;flex-direction:column;min-height:0;
+    overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;
     box-sizing:border-box;font-size:12px;
   }
   .kgx-panel-head{
@@ -303,7 +304,7 @@
   }
   .kgx-route-title strong{color:var(--kgx-gold);font-size:0.68rem}
   #toplist.list{
-    display:grid;gap:1px;padding:0 0.55rem 0.55rem;overflow:auto;min-height:108px;flex:1 1 150px;
+    display:grid;gap:1px;padding:0 0.55rem 0.55rem;overflow:visible;min-height:0;flex:0 0 auto;
   }
   .stop{
     width:100%;display:grid;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:0.55rem;

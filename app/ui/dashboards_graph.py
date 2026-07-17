@@ -71,17 +71,8 @@ def build_tutor_prompt_for_concept(
 ) -> str:
     """Build a context-rich tutor prompt for a concept from the knowledge graph.
 
-    Args:
-        concept_id: concept name/ID from graph.
-        info: raw concept dict (description, level, …).
-        mastery_pct: current mastery 0–100.
-        prereqs: list of prerequisite concept IDs.
-        related_docs_count: number of linked documents.
-        is_frontier: True if all prereqs mastered but concept not yet learned.
-        mode: one of "explain" | "practice" | "quiz" | "compare".
-
-    Returns:
-        A prompt string ready for ``tutor_pending_prompt``.
+    ``mode`` ∈ explain|practice|quiz|compare; ``is_frontier`` flags ready-to-learn.
+    Returns a prompt string ready for ``tutor_pending_prompt``.
     """
     level = str(info.get("level") or "—")
     desc = str(info.get("description") or "").strip()
@@ -1512,6 +1503,94 @@ def _render_classic_agraph(knowledge_graph, learned_set: set[str]) -> None:
             st.rerun()
 
 
+def _build_keeper_view_models(payload) -> tuple[dict | None, dict | None]:
+    """W3b/W3c: build Keeper guide + threats (offline degrade; LLM on explicit flag)."""
+    snap_date = ""
+    try:
+        hist = payload.get("mastery_history") or []
+        if hist and isinstance(hist[-1], dict):
+            snap_date = str(hist[-1].get("date") or "")
+    except Exception:  # noqa: BLE001
+        snap_date = ""
+    try:
+        from app.mnemo_keeper_views import (
+            build_guide_view_model,
+            build_threats_view_model,
+        )
+
+        want_guide_llm = bool(st.session_state.pop("kg_3d_keeper_guide_llm_once", False))
+        want_threats_llm = bool(
+            st.session_state.pop("kg_3d_keeper_threats_llm_once", False)
+        )
+        keeper_guide = build_guide_view_model(
+            payload,
+            session_state=st.session_state,
+            allow_llm=want_guide_llm,
+            snapshot_date=snap_date,
+        )
+        keeper_threats = build_threats_view_model(
+            payload,
+            session_state=st.session_state,
+            allow_llm=want_threats_llm,
+            snapshot_date=snap_date,
+        )
+        st.session_state["kg_3d_keeper_guide_source"] = str(
+            (keeper_guide or {}).get("source") or ""
+        )
+        st.session_state["kg_3d_keeper_threats_source"] = str(
+            (keeper_threats or {}).get("source") or ""
+        )
+        st.session_state["kg_3d_keeper_threats_count"] = int(
+            (keeper_threats or {}).get("count") or 0
+        )
+        return keeper_guide, keeper_threats
+    except Exception:  # noqa: BLE001 - keeper is optional; hall must still render
+        return None, None
+
+
+def _render_keeper_control_panel() -> None:
+    """W3b/W3c Хранитель buttons: offline / LLM for guide + threats, plus status."""
+    k_src = str(st.session_state.get("kg_3d_keeper_guide_source") or "")
+    t_src = str(st.session_state.get("kg_3d_keeper_threats_source") or "")
+    t_n = int(st.session_state.get("kg_3d_keeper_threats_count") or 0)
+    k_cols = st.columns([1, 1, 1, 1, 2])
+
+    def _clear_keeper_cache() -> None:
+        try:
+            from app.mnemo_keeper import KEEPER_CACHE_SESSION_KEY
+
+            st.session_state.pop(KEEPER_CACHE_SESSION_KEY, None)
+        except Exception:  # noqa: BLE001
+            pass
+
+    with k_cols[0]:
+        if st.button("📖 Экскурсия", key="kg_3d_keeper_static", help="Офлайн-рассказ из worth_reason (W3b)."):
+            _clear_keeper_cache()
+            st.session_state["kg_3d_keeper_guide_llm_once"] = False
+            st.rerun()
+    with k_cols[1]:
+        if st.button("✨ Экскурсия LLM", key="kg_3d_keeper_llm", help="LLM-экскурсовод (бюджет Keeper). При сбое — офлайн."):
+            st.session_state["kg_3d_keeper_guide_llm_once"] = True
+            st.rerun()
+    with k_cols[2]:
+        if st.button("🌫 Угрозы", key="kg_3d_threats_static", help="Детерминированный список забывания (W3c), без LLM."):
+            _clear_keeper_cache()
+            st.session_state["kg_3d_keeper_threats_llm_once"] = False
+            st.rerun()
+    with k_cols[3]:
+        if st.button("✨ Угрозы LLM", key="kg_3d_threats_llm", help="Проза Хранителя поверх списка угроз (бюджет). Сбой → список без прозы."):
+            st.session_state["kg_3d_keeper_threats_llm_once"] = True
+            st.rerun()
+    with k_cols[4]:
+        bits = []
+        if k_src:
+            bits.append(f"экскурсия: **{k_src}**")
+        if t_src:
+            bits.append(f"угрозы: **{t_src}** ({t_n})")
+        if bits:
+            st.caption(" · ".join(bits))
+
+
 def _render_knowledge_graph_tab() -> None:
     """Beautiful D3 knowledge graph + concept actions + classic fallback."""
     from app.knowledge_service import get_mastery_vector
@@ -1619,7 +1698,10 @@ def _render_knowledge_graph_tab() -> None:
     export_guide = None
     export_threats = None
     try:
-        from app.mnemo_keeper import build_guide_view_model, build_threats_view_model
+        from app.mnemo_keeper_views import (
+            build_guide_view_model,
+            build_threats_view_model,
+        )
 
         export_guide = build_guide_view_model(payload, allow_llm=False)
         export_threats = build_threats_view_model(payload, allow_llm=False)
@@ -1696,47 +1778,7 @@ def _render_knowledge_graph_tab() -> None:
     if show_onboarding:
         st.session_state["kg_3d_onboard_shown"] = True
 
-    # W3b/W3c Keeper: offline degrade every paint; LLM only on explicit buttons.
-    keeper_guide = None
-    keeper_threats = None
-    snap_date = ""
-    try:
-        hist = payload.get("mastery_history") or []
-        if hist and isinstance(hist[-1], dict):
-            snap_date = str(hist[-1].get("date") or "")
-    except Exception:  # noqa: BLE001
-        snap_date = ""
-    try:
-        from app.mnemo_keeper import build_guide_view_model, build_threats_view_model
-
-        want_guide_llm = bool(st.session_state.pop("kg_3d_keeper_guide_llm_once", False))
-        want_threats_llm = bool(
-            st.session_state.pop("kg_3d_keeper_threats_llm_once", False)
-        )
-        keeper_guide = build_guide_view_model(
-            payload,
-            session_state=st.session_state,
-            allow_llm=want_guide_llm,
-            snapshot_date=snap_date,
-        )
-        keeper_threats = build_threats_view_model(
-            payload,
-            session_state=st.session_state,
-            allow_llm=want_threats_llm,
-            snapshot_date=snap_date,
-        )
-        st.session_state["kg_3d_keeper_guide_source"] = str(
-            (keeper_guide or {}).get("source") or ""
-        )
-        st.session_state["kg_3d_keeper_threats_source"] = str(
-            (keeper_threats or {}).get("source") or ""
-        )
-        st.session_state["kg_3d_keeper_threats_count"] = int(
-            (keeper_threats or {}).get("count") or 0
-        )
-    except Exception:  # noqa: BLE001 - keeper is optional; hall must still render
-        keeper_guide = None
-        keeper_threats = None
+    keeper_guide, keeper_threats = _build_keeper_view_models(payload)
 
     # W4a/W4b: deep link / return-from-quiz lands on this hall section.
     try:
@@ -1756,62 +1798,7 @@ def _render_knowledge_graph_tab() -> None:
         "Memory Run · ▶ Начать · 🔁 Повторить · В конспект · "
         "Хранитель (экскурсия + угрозы) · ✓ · ◆ · «?» · ◌ спокойный мир."
     )
-    k_src = str(st.session_state.get("kg_3d_keeper_guide_source") or "")
-    t_src = str(st.session_state.get("kg_3d_keeper_threats_source") or "")
-    t_n = int(st.session_state.get("kg_3d_keeper_threats_count") or 0)
-    k_cols = st.columns([1, 1, 1, 1, 2])
-    with k_cols[0]:
-        if st.button(
-            "📖 Экскурсия",
-            key="kg_3d_keeper_static",
-            help="Офлайн-рассказ из worth_reason (W3b).",
-        ):
-            try:
-                from app.mnemo_keeper import KEEPER_CACHE_SESSION_KEY
-
-                st.session_state.pop(KEEPER_CACHE_SESSION_KEY, None)
-            except Exception:  # noqa: BLE001
-                pass
-            st.session_state["kg_3d_keeper_guide_llm_once"] = False
-            st.rerun()
-    with k_cols[1]:
-        if st.button(
-            "✨ Экскурсия LLM",
-            key="kg_3d_keeper_llm",
-            help="LLM-экскурсовод (бюджет Keeper). При сбое — офлайн.",
-        ):
-            st.session_state["kg_3d_keeper_guide_llm_once"] = True
-            st.rerun()
-    with k_cols[2]:
-        if st.button(
-            "🌫 Угрозы",
-            key="kg_3d_threats_static",
-            help="Детерминированный список забывания (W3c), без LLM.",
-        ):
-            try:
-                from app.mnemo_keeper import KEEPER_CACHE_SESSION_KEY
-
-                st.session_state.pop(KEEPER_CACHE_SESSION_KEY, None)
-            except Exception:  # noqa: BLE001
-                pass
-            st.session_state["kg_3d_keeper_threats_llm_once"] = False
-            st.rerun()
-    with k_cols[3]:
-        if st.button(
-            "✨ Угрозы LLM",
-            key="kg_3d_threats_llm",
-            help="Проза Хранителя поверх списка угроз (бюджет). Сбой → список без прозы.",
-        ):
-            st.session_state["kg_3d_keeper_threats_llm_once"] = True
-            st.rerun()
-    with k_cols[4]:
-        bits = []
-        if k_src:
-            bits.append(f"экскурсия: **{k_src}**")
-        if t_src:
-            bits.append(f"угрозы: **{t_src}** ({t_n})")
-        if bits:
-            st.caption(" · ".join(bits))
+    _render_keeper_control_panel()
 
     hall_value = render_kg_3d_hall(
         payload,

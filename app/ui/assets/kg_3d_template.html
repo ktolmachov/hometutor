@@ -101,6 +101,8 @@
     border-color:rgba(174,181,207,0.55);color:var(--kgx-text);
     background:rgba(174,181,207,0.12);box-shadow:0 0 12px rgba(174,181,207,0.15);
   }
+  .kgx-chip.rift{border-color:rgba(251,113,133,0.55);color:#fda4af}
+  .kgx-chip.ghost{border-color:rgba(233,213,255,0.5);color:#e9d5ff}
   .kgx-chip.fog{
     border-color:rgba(148,163,184,0.55);color:#cbd5e1;
     background:rgba(100,116,139,0.14);
@@ -159,6 +161,20 @@
     color:var(--kgx-muted);font-size:0.66rem;line-height:1.3;display:none;
   }
   .kgx-chronicle.is-on{display:block}
+  /* W6d: architect / construction site (only when graph honestly stale/unready) */
+  .kgx-architect{
+    position:absolute;left:calc(var(--hud-l) + 1rem);top:2.6rem;z-index:3;
+    max-width:min(320px,46vw);padding:0.3rem 0.5rem;border-radius:5px;
+    border:1px solid rgba(251,191,36,0.4);background:rgba(12,16,20,0.9);
+    color:var(--kgx-muted);font-size:0.66rem;line-height:1.3;display:none;
+  }
+  .kgx-architect.is-on{display:block}
+  .kgx-architect strong{color:var(--kgx-gold);font-weight:700}
+  .kgx-photo-btn{
+    min-height:28px;border:1px solid var(--kgx-line);border-radius:5px;padding:0 0.4rem;
+    background:transparent;color:var(--kgx-muted);cursor:not-allowed;flex:none;opacity:0.55;
+    font-size:0.72rem;line-height:1;
+  }
   /* W5c: inline concept brief (graph retrieval; stay in hall) */
   .kgx-brief{
     margin-top:0.55rem;padding:0.5rem 0.6rem;border-radius:6px;
@@ -578,6 +594,9 @@
       <button class="kgx-calm-btn" id="calmbtn" type="button"
         title="Спокойный мир: скрыть туман забывания (доступность / вкус)"
         aria-label="Спокойный мир" aria-pressed="false">◌</button>
+      <button class="kgx-photo-btn" id="photobtn" type="button" disabled
+        title="G4.3 «фото дня» отложено: privacy review (не сохраняет и не отправляет снимок)"
+        aria-label="Фото дня недоступно — privacy review">📷</button>
       <button class="kgx-help-btn" id="helpbtn" type="button" title="Правила зала" aria-label="Открыть правила зала">Правила</button>
     </div>
   </header>
@@ -588,6 +607,9 @@
         <span class="kgx-live-dot" aria-hidden="true"></span>
         <div id="statsline" class="st" role="status" aria-live="polite"></div>
         <button class="kgx-depth-btn" id="depthbtn" type="button" hidden title="Показать полный граф">Вся карта</button>
+      </div>
+      <div id="architectbox" class="kgx-architect" role="status" aria-live="polite" hidden>
+        <strong>Стройка</strong> · <span id="architectline">—</span>
       </div>
       <div id="replaybar" class="kgx-replay" role="group" aria-label="Реплей снимков mastery">
         <button type="button" id="replayprev" title="Предыдущий снимок" aria-label="Предыдущий снимок">◀</button>
@@ -752,6 +774,8 @@
         <li><strong>Цель утра</strong> — строка квестмейстера: «N из M» офлайн; LLM — по кнопке в продукте. Без XP/монет.</li>
         <li><strong>Голоса</strong> — реплики антагонистов (статика/кэш), без стыда. <strong>Летопись</strong> — след quiz-снимков у реплея.</li>
         <li><strong>Призрак</strong> — полупрозрачный ✓ при «знал, но забывает» (local/all; ◌ скрывает).</li>
+        <li><strong>Разлом</strong> — трещина при слабых conceptual prereqs (не lesson-edges). CTA не блокирует.</li>
+        <li><strong>Стройка</strong> — только если карта honestly stale/не готова. <strong>📷</strong> — G4.3 privacy (выкл.).</li>
       </ol>
       <p class="kgx-onboard-diag" id="onboard-diag" hidden></p>
       <button class="kgx-onboard-ok" id="onboard-ok" type="button">Понятно</button>
@@ -779,6 +803,8 @@ const KEEPER_THREATS = __KEEPER_THREATS__;
 const KEEPER_QUEST = __KEEPER_QUEST__;
 const KEEPER_VOICES = __KEEPER_VOICES__;
 const KEEPER_CHRONICLE = __KEEPER_CHRONICLE__;
+/** W6d: {show, tone, message} — construction site only when graph honestly unready/stale. */
+const ARCHITECT_SIGNAL = __ARCHITECT_SIGNAL__;
 const WORKBENCH_COUNT_INIT = __WORKBENCH_COUNT__;
 /** Embedded-only view-model: concept_id → [{heading, in_basket, obsidian_uri}] (U2). */
 const CONCEPT_SECTIONS = __CONCEPT_SECTIONS__ || {};
@@ -1557,6 +1583,57 @@ function drawConfidenceGhost(pr, r, reduced) {
   ctx.restore();
 }
 
+/**
+ * W6b Разлом: conceptual prerequisites only (node.prereqs), NOT lesson-floor edges.
+ * Weak prereq = missing node OR not learned and mastery < 80. Non-blocking.
+ */
+function weakPrereqIds(conceptId) {
+  const n = byId.get(String(conceptId || ''));
+  if (!n || !Array.isArray(n.prereqs) || !n.prereqs.length) return [];
+  const weak = [];
+  for (const raw of n.prereqs) {
+    const pid = String(raw || '').trim();
+    if (!pid) continue;
+    const p = byId.get(pid);
+    if (!p) {
+      weak.push(pid);
+      continue;
+    }
+    let m = (typeof p.mastery === 'number' && Number.isFinite(p.mastery)) ? p.mastery : 0;
+    if (m > 1) m = m / 100;
+    if (!p.learned && m < 0.8) weak.push(pid);
+  }
+  return weak;
+}
+
+function riftActiveFor(conceptId) {
+  if (calmWorld) return false;
+  if (viewMode === 'route') return false; // first-frame orientation kill switch
+  return weakPrereqIds(conceptId).length > 0;
+}
+
+/** Jagged crack under the stop — invitation, never hides the node. */
+function drawPrerequisiteRift(pr, r, reduced) {
+  if (!pr || !ctx) return;
+  const y = pr.sy + r + 5;
+  const left = pr.sx - r * 1.45;
+  const span = r * 2.9;
+  ctx.save();
+  ctx.globalAlpha = reduced ? 0.32 : 0.48;
+  ctx.strokeStyle = 'rgba(251,113,133,0.62)';
+  ctx.lineWidth = 1.15;
+  ctx.beginPath();
+  ctx.moveTo(left, y);
+  const steps = reduced ? 3 : 6;
+  for (let i = 1; i <= steps; i++) {
+    const x = left + (span * i) / steps;
+    const yy = y + ((i % 2) ? 3.2 : -2.4);
+    ctx.lineTo(x, yy);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
 /** Canvas label with optional partial glyphs when heavily forgotten (side panel always full name). */
 function fogCanvasLabel(rawLabel, forget) {
   const raw = String(rawLabel || '');
@@ -1983,6 +2060,10 @@ function draw() {
     // W6a Призрак: learned/high mastery + fog (illusion of knowledge). Never on route first frame.
     if (!calmWorld && !quietRouteAnchor && viewMode !== 'route' && ghostActiveFor(nn.id)) {
       drawConfidenceGhost(pr, r, prefersReducedMotion);
+    }
+    // W6b Разлом: conceptual prereqs only (node.prereqs). Never on route first frame.
+    if (!quietRouteAnchor && riftActiveFor(nn.id)) {
+      drawPrerequisiteRift(pr, r, prefersReducedMotion);
     }
 
     // Depth fade: background/context nodes quieter so route owns attention (U0/R3).
@@ -3066,6 +3147,25 @@ function updateVoicesPanel() {
   }
 }
 
+/** W6d: architect / construction banner (honest publish status only). */
+function updateArchitectBanner() {
+  const box = document.getElementById('architectbox');
+  const lineEl = document.getElementById('architectline');
+  if (!box || !lineEl) return;
+  const data = (ARCHITECT_SIGNAL && typeof ARCHITECT_SIGNAL === 'object') ? ARCHITECT_SIGNAL : null;
+  const show = !!(data && data.show);
+  const msg = data ? String(data.message || '').trim() : '';
+  if (!show || !msg) {
+    box.hidden = true;
+    box.classList.remove('is-on');
+    lineEl.textContent = '—';
+    return;
+  }
+  box.hidden = false;
+  box.classList.add('is-on');
+  lineEl.textContent = msg;
+}
+
 /** W6c: летописец line beside G4.2 replay (quiz-only history). */
 function updateChronicleLine() {
   const box = document.getElementById('chroniclebox');
@@ -3133,6 +3233,7 @@ function updateStopInfo() {
     updateQuestLine();
     updateVoicesPanel();
     updateChronicleLine();
+    updateArchitectBanner();
     return;
   }
   const i = activeStopIndex;
@@ -3165,6 +3266,7 @@ function updateStopInfo() {
   updateQuestLine();
   updateVoicesPanel();
   updateChronicleLine();
+  updateArchitectBanner();
   if (worthBadge) worthBadge.textContent = `W ${(n.worth || 0).toFixed(1)}`;
   if (masteryRing) {
     masteryRing.style.setProperty('--m', (masteryPct != null ? masteryPct : 0) + '%');
@@ -3209,6 +3311,12 @@ function updateStopInfo() {
     if (isEmbedded && collectedConceptIds.has(id)) addChip('collected', '◆ конспект');
     // W2a: invitation chip — never shame; never disables CTA
     if (fogActiveFor(id)) addChip('fog', 'туман · можно войти');
+    // W6a / W6b chips (local/all only for full antagonists; still non-blocking)
+    if (viewMode !== 'route' && ghostActiveFor(id)) addChip('ghost', 'призрак · можно проверить');
+    if (viewMode !== 'route' && riftActiveFor(id)) {
+      const nWeak = weakPrereqIds(id).length;
+      addChip('rift', nWeak > 1 ? `разлом · ${nWeak} опоры` : 'разлом · опора');
+    }
   }
   // Full concept name always in nameEl (a11y / anti-shame) — never fog-glyph the panel.
   if (nameEl) nameEl.textContent = label;

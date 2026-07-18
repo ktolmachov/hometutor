@@ -738,6 +738,12 @@ class Test3DCoverageAndContracts:
         assert 'id="chroniclebox"' in html and "updateChronicleLine" in html
         assert "KEEPER_CHRONICLE" in html
         assert "function ghostActiveFor" in html and "function drawConfidenceGhost" in html
+        # W6b rift + W6d architect + G4.3 privacy stub
+        assert "function riftActiveFor" in html and "function drawPrerequisiteRift" in html
+        assert "weakPrereqIds" in html
+        assert 'id="architectbox"' in html and "updateArchitectBanner" in html
+        assert "ARCHITECT_SIGNAL" in html
+        assert 'id="photobtn"' in html and "privacy" in html.lower()
         # W4c district doors
         assert 'id="districts"' in html
         assert "door_quiz" in html and "door_flashcards" in html

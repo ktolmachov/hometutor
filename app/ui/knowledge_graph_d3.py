@@ -1078,6 +1078,50 @@ def _normalize_keeper_chronicle(
     }
 
 
+def build_architect_signal(
+    publish_status: Mapping[str, Any] | None = None,
+    *,
+    learner_view: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """W6d: construction-site signal only when graph is honestly unready/stale.
+
+    No LLM, no domain write. When the published map is active/fresh → ``show=False``.
+    """
+    view = learner_view if isinstance(learner_view, Mapping) else None
+    if view is None and isinstance(publish_status, Mapping):
+        try:
+            from app.graph_publish_status import build_learner_publish_status_view
+
+            view = build_learner_publish_status_view(dict(publish_status))
+        except Exception:  # noqa: BLE001 - hall must render without publish service
+            view = None
+    if not isinstance(view, Mapping):
+        return {"show": False, "tone": "ok", "message": ""}
+    tone = str(view.get("tone") or "info")
+    primary = str(view.get("primary") or "").strip()
+    badge = str(view.get("badge_label") or "").strip()
+    # Only surface construction when not fully healthy.
+    show = tone in {"warning", "error"} or bool(badge)
+    if not show:
+        return {"show": False, "tone": "ok", "message": ""}
+    msg = primary or badge or "Карта знаний требует внимания"
+    if len(msg) > 160:
+        msg = msg[:159].rstrip() + "…"
+    return {"show": True, "tone": tone, "message": msg}
+
+
+def _normalize_architect_signal(
+    architect_signal: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    if not (isinstance(architect_signal, Mapping) and architect_signal):
+        return {"show": False, "tone": "ok", "message": ""}
+    return {
+        "show": bool(architect_signal.get("show")),
+        "tone": str(architect_signal.get("tone") or "ok"),
+        "message": str(architect_signal.get("message") or ""),
+    }
+
+
 def build_kg_3d_html(
     payload: Mapping[str, Any],
     *,
@@ -1094,6 +1138,7 @@ def build_kg_3d_html(
     keeper_quest: Mapping[str, Any] | None = None,
     keeper_voices: Mapping[str, Any] | None = None,
     keeper_chronicle: Mapping[str, Any] | None = None,
+    architect_signal: Mapping[str, Any] | None = None,
 ) -> str:
     """Self-contained offline 3D Knowledge Graph hall (no CDN).
 
@@ -1114,6 +1159,7 @@ def build_kg_3d_html(
     - ``keeper_quest``: W3d quest line ``{text, stop_count, done_count, ...}``
     - ``keeper_voices``: H antagonist lines
     - ``keeper_chronicle``: W6c летописец over G4.2 history
+    - ``architect_signal``: W6d construction banner when map unready/stale
     """
     mode = "embedded" if str(host_mode or "").strip().lower() == "embedded" else "export"
     snap = str(exported_at or "").strip() or date.today().isoformat()
@@ -1122,6 +1168,8 @@ def build_kg_3d_html(
         # Export never bakes live basket state (honest offline contract).
         collected, wb_count, nonce, result, onboard = [], None, "", None, False
         sections_vm: dict[str, list[dict[str, Any]]] = {}
+        # Export snapshot is self-contained — no live publish construction banner.
+        architect_signal = None
     else:
         wb_count = int(workbench_count) if workbench_count is not None else None
         nonce = str(session_nonce or "").strip()
@@ -1144,6 +1192,7 @@ def build_kg_3d_html(
         keeper_quest=keeper_quest,
         keeper_voices=keeper_voices,
         keeper_chronicle=keeper_chronicle,
+        architect_signal=architect_signal,
     )
     html = _load_3d_template()
     for placeholder, value in replacements.items():
@@ -1167,6 +1216,7 @@ def _kg3d_template_replacements(
     keeper_quest: Mapping[str, Any] | None,
     keeper_voices: Mapping[str, Any] | None,
     keeper_chronicle: Mapping[str, Any] | None,
+    architect_signal: Mapping[str, Any] | None = None,
 ) -> dict[str, str]:
     """Build placeholder → JSON map for the 3D hall template."""
     return {
@@ -1191,6 +1241,9 @@ def _kg3d_template_replacements(
         "__KEEPER_VOICES__": _json_for_script(_normalize_keeper_voices(keeper_voices)),
         "__KEEPER_CHRONICLE__": _json_for_script(
             _normalize_keeper_chronicle(keeper_chronicle)
+        ),
+        "__ARCHITECT_SIGNAL__": _json_for_script(
+            _normalize_architect_signal(architect_signal)
         ),
     }
 
@@ -1249,6 +1302,7 @@ def render_kg_3d_hall(
     keeper_quest: Mapping[str, Any] | None = None,
     keeper_voices: Mapping[str, Any] | None = None,
     keeper_chronicle: Mapping[str, Any] | None = None,
+    architect_signal: Mapping[str, Any] | None = None,
     height: int = 720,
     key: str = "kg_3d_hall_component",
 ) -> Any:
@@ -1276,6 +1330,7 @@ def render_kg_3d_hall(
         keeper_quest=keeper_quest,
         keeper_voices=keeper_voices,
         keeper_chronicle=keeper_chronicle,
+        architect_signal=architect_signal,
     )
     return _kg_3d_component()(
         html=html,

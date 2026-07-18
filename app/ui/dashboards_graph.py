@@ -1799,6 +1799,13 @@ def _render_knowledge_graph_tab() -> None:
         st.session_state["kg_3d_onboard_shown"] = True
 
     keeper_vms = _build_keeper_view_models(payload)
+    architect_signal = None
+    try:
+        from app.ui.knowledge_graph_d3 import build_architect_signal
+
+        architect_signal = build_architect_signal(publish_status)
+    except Exception:  # noqa: BLE001 - optional W6d banner
+        architect_signal = None
 
     # W4a/W4b: deep link / return-from-quiz lands on this hall section.
     try:
@@ -1834,6 +1841,7 @@ def _render_knowledge_graph_tab() -> None:
         keeper_quest=keeper_vms.get("quest"),
         keeper_voices=keeper_vms.get("voices"),
         keeper_chronicle=keeper_vms.get("chronicle"),
+        architect_signal=architect_signal,
         height=720,
         key="kg_3d_hall_component",
     )

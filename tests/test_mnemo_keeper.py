@@ -286,6 +286,27 @@ def test_assemble_keeper_hall_vms_includes_quest():
     assert vms["quest"]["stop_count"] == 1
 
 
+def test_build_architect_signal_only_when_unready():
+    from app.ui.knowledge_graph_d3 import build_architect_signal
+
+    ok = build_architect_signal(
+        None,
+        learner_view={"tone": "success", "primary": "Карта актуальна", "badge_label": None},
+    )
+    assert ok["show"] is False
+
+    warn = build_architect_signal(
+        None,
+        learner_view={
+            "tone": "warning",
+            "primary": "Показана предыдущая версия карты",
+            "badge_label": "⚠ предыдущая карта",
+        },
+    )
+    assert warn["show"] is True
+    assert "предыдущ" in warn["message"].lower() or "⚠" in warn["message"]
+
+
 def test_build_voices_and_chronicle_view_models():
     payload = {
         "nodes": [

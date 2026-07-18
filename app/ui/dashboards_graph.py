@@ -1864,16 +1864,28 @@ def _render_knowledge_graph_tab() -> None:
         render_component=False,
     )
 
+    node_ids = [n["id"] for n in payload.get("nodes", [])]
+    initial_graph_concept = str(
+        st.session_state.get("kg_selected_concept")
+        or st.session_state.get("kg_action_concept")
+        or ""
+    ).strip()
+    if initial_graph_concept not in node_ids:
+        initial_graph_concept = ""
+
     with graph_tab:
         if graph_tab.open:
-            payload = render_kg_d3_component(payload, height=740)
+            payload = render_kg_d3_component(
+                payload,
+                height=740,
+                initial_selected_concept=initial_graph_concept,
+            )
             _render_kg_graph_controls(
                 payload=payload,
                 concepts=concepts,
                 typed_relations=typed_relations,
             )
 
-    node_ids = [n["id"] for n in payload.get("nodes", [])]
     hall_selected = None
     with mnemo_tab:
         if mnemo_tab.open:

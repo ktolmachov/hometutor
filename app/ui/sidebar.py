@@ -255,7 +255,7 @@ def _render_mission_control_sidebar_sections(index_stats: dict | None) -> None:
         from app.ui.cockpit_rotator import render_rotator_panel
         from app.ui.mission_control import MORE_TOOLS, _navigate_to
 
-        render_rotator_panel()
+        render_rotator_panel(key_prefix="sidebar_cockpit_rotator")
         for label, target_view, icon in MORE_TOOLS:
             if not _view_visible(target_view):
                 continue

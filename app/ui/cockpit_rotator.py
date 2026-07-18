@@ -117,7 +117,7 @@ def _session_slot_hint(slot_id: str) -> str:
     )
 
 
-def render_rotator_panel() -> None:
+def render_rotator_panel(*, key_prefix: str = "cockpit_rotator") -> None:
     """Простая панель ротации в центре кабины (stub UI)."""
     slot = current_slot()
     hint = _session_slot_hint(slot)
@@ -126,11 +126,11 @@ def render_rotator_panel() -> None:
         st.caption(hint)
     bc = st.columns(2)
     with bc[0]:
-        if st.button("← Назад", key="cockpit_rotator_prev"):
+        if st.button("← Назад", key=f"{key_prefix}_prev"):
             advance_slot(-1)
             st.rerun()
     with bc[1]:
-        if st.button("Далее →", key="cockpit_rotator_next"):
+        if st.button("Далее →", key=f"{key_prefix}_next"):
             advance_slot(1)
             st.rerun()
 

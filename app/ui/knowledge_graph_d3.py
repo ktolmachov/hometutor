@@ -795,6 +795,7 @@ def build_kg_html(payload: Mapping[str, Any]) -> str:
         .replace("__MASTERY_HISTORY__", _json_for_script(payload.get("mastery_history", [])))
         .replace("__COMPILER_HEALTH__", _json_for_script(payload.get("compiler_health")))
         .replace("__DAY_ROUTE__",       _json_for_script(_day_route_ids(payload)))
+        .replace("__SELECTED_CONCEPT__", _json_for_script(payload.get("initial_selected_concept", "")))
     )
 
 
@@ -1423,11 +1424,17 @@ def render_kg_d3_component(
     *,
     height: int = 720,
     key: str = "kg_d3_component",
+    initial_selected_concept: str | None = None,
 ) -> Dict[str, Any]:
     """Render the D3 graph for an already assembled payload."""
     if payload["nodes"]:
+        html_payload = payload
+        initial = str(initial_selected_concept or "").strip()
+        if initial:
+            html_payload = dict(payload)
+            html_payload["initial_selected_concept"] = initial
         selected = _kg_d3_component()(
-            html=build_kg_html(payload),
+            html=build_kg_html(html_payload),
             height=height,
             default=None,
             key=key,

@@ -362,13 +362,25 @@ def test_w10_demo_screenshots_dir_is_inventory_not_gate() -> None:
 
 
 def test_w10_full_app_e2e_status_is_documented_without_blocking_future_suite() -> None:
-    """Honesty gate: current visual status is documented; future e2e is allowed."""
+    """Honesty gate: live e2e scaffold exists; full pixel regression still open.
+
+    W10.F1 (2026-07-18) landed ``tests/e2e`` with a Mission Control live smoke
+    against a running stack. That closes *one* live gate; it does **not** close
+    pixel baseline/diff, focus-vs-sticky, full-app keyboard, SR smoke, or
+    empty/loading/error/offline visuals. The plan must say so explicitly so W10
+    cannot be silently flipped to “fully done”.
+    """
     plan = _read("docs/ui_ux_design_review_implementation_plan.md")
     e2e_dir = ROOT / "tests" / "e2e"
-    if e2e_dir.is_dir():
-        assert any(e2e_dir.rglob("*.py")), "tests/e2e exists but has no pytest files"
-    else:
-        assert "`tests/e2e`" in plan and "отсутств" in plan.casefold()
+    assert e2e_dir.is_dir(), "tests/e2e must exist after W10.F1"
+    assert (e2e_dir / "test_mission_control_live.py").is_file(), (
+        "Mission Control live smoke missing in tests/e2e"
+    )
+    # Plan must acknowledge both the live scaffold and the still-open pixel work.
+    assert "W10.F1" in plan, "plan must reference W10.F1 live e2e wave"
+    assert "tests/e2e" in plan
+    # Honesty: pixel regression must remain explicitly open in the plan.
+    assert "pixel" in plan.casefold() or "pixel/DOM" in plan
     # KG visual smoke remains part of W10 evidence until full-app e2e lands.
     kg_tests = _read("tests/test_knowledge_graph_counters.py")
     assert "3d_visual_smoke_viewport_matrix" in kg_tests or "viewport" in kg_tests

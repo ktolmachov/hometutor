@@ -378,11 +378,11 @@ def _render_card_grid(
     for row_start in range(0, len(tiles), 3):
         chunk = tiles[row_start : row_start + 3]
         cols = st.columns(len(chunk), gap="medium")
-        for col, tile in zip(cols, chunk):
+        for i, (col, tile) in enumerate(zip(cols, chunk), start=row_start):
             with col:
                 _render_unified_card(
                     tile,
-                    key_prefix=f"{key_prefix}_{row_start}_{tile.meta or tile.concept_id or tile.title}",
+                    key_prefix=f"{key_prefix}_{i}_{tile.meta or tile.concept_id or tile.title}",
                     show_thumb=show_thumb,
                 )
 

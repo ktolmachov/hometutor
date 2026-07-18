@@ -355,7 +355,6 @@ if selected_view == HOME_VIEW:
         pass
     render_mission_control(index_stats)
     render_e2e_demo_scene_for_view(selected_view)
-    _render_hidden_nav_expander()
 elif selected_view == "Быстрый ответ":
     _render_quick_answer_tab(folder, folder_rel, file_name, relative_path, topic_quick, folder_quick)
 elif selected_view == "Чат с тьютором":

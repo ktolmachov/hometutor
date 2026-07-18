@@ -3,6 +3,8 @@
 import base64
 from pathlib import Path
 
+from app.library_schedule_read import ScheduleTile
+from app.ui.library_schedule import _render_card_grid
 from app.ui.library_schedule import course_thumbnail_data_uri
 
 
@@ -48,3 +50,67 @@ def test_library_schedule_w8_unified_card_and_grid_contract() -> None:
     assert "lib-card" in css
     assert "280px" in css
     assert "src-addr" in css
+
+
+def test_library_card_grid_keys_include_absolute_tile_index(monkeypatch) -> None:
+    class _Column:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class _StreamlitStub:
+        session_state = {}
+
+        def __init__(self) -> None:
+            self.button_keys: list[str] = []
+
+        def markdown(self, *args, **kwargs) -> None:
+            return None
+
+        def caption(self, *args, **kwargs) -> None:
+            return None
+
+        def columns(self, count: int, **kwargs):
+            return [_Column() for _ in range(count)]
+
+        def button(self, *args, key: str, **kwargs) -> bool:
+            self.button_keys.append(key)
+            return False
+
+        def expander(self, *args, **kwargs):
+            return _Column()
+
+    tiles = [
+        ScheduleTile(
+            kind="transfer",
+            title="Shared one",
+            address="course · lesson 1",
+            status="в 2 курсах",
+            quant="2 курса",
+            courses=("course-a", "course-b"),
+            concept_id="",
+            cta="ask",
+            meta="transfer",
+        ),
+        ScheduleTile(
+            kind="transfer",
+            title="Shared two",
+            address="course · lesson 2",
+            status="в 2 курсах",
+            quant="2 курса",
+            courses=("course-a", "course-c"),
+            concept_id="",
+            cta="ask",
+            meta="transfer",
+        ),
+    ]
+    st_stub = _StreamlitStub()
+    monkeypatch.setattr("app.ui.library_schedule.st", st_stub)
+
+    _render_card_grid(tiles, key_prefix="lib_tr", show_thumb=True)
+
+    assert "lib_tr_0_transfer_primary" in st_stub.button_keys
+    assert "lib_tr_1_transfer_primary" in st_stub.button_keys
+    assert len(set(st_stub.button_keys)) == len(st_stub.button_keys)

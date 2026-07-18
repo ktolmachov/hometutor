@@ -200,8 +200,10 @@ class TestKnowledgeGraphSelectionBridge:
             "__DECAY_VECTOR__",
             "__MASTERY_HISTORY__",
             "__COMPILER_HEALTH__",
+            "__SELECTED_CONCEPT__",
         ]:
             assert placeholder not in html
+        assert 'const INITIAL_SELECTED_CONCEPT=""' in html
 
     def test_export_uses_server_generated_obsidian_links_for_document_actions(self):
         html = build_kg_html(
@@ -329,3 +331,44 @@ class TestKnowledgeGraphSelectionBridge:
         assert payload["selected_concept"] == "llm-agent"
         assert captured["height"] == 333
         assert captured["key"] == "kg_d3_after_hall"
+
+    def test_renderer_passes_initial_selected_concept_without_component_selection(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        import app.ui.knowledge_graph_d3 as kg_d3
+
+        captured: dict[str, object] = {}
+
+        def fake_component():
+            def _call(**kwargs):
+                captured.update(kwargs)
+                return None
+
+            return _call
+
+        monkeypatch.setattr(kg_d3, "_kg_d3_component", fake_component)
+
+        payload = kg_d3.render_d3_knowledge_graph(
+            {
+                "cognition-layer": {
+                    "label": "Cognition Layer",
+                    "level": "beginner",
+                    "description": "Route concept.",
+                }
+            },
+            due_reviews=[],
+            height=500,
+            render_component=False,
+        )
+
+        payload = kg_d3.render_kg_d3_component(
+            payload,
+            height=333,
+            key="kg_d3_after_hall",
+            initial_selected_concept="cognition-layer",
+        )
+
+        assert "selected_concept" not in payload
+        assert 'const INITIAL_SELECTED_CONCEPT="cognition-layer"' in str(captured["html"])
+        assert "openPanel(n,{silent:!hs.startsWith('#c=')});" in str(captured["html"])

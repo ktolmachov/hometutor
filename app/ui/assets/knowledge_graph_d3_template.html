@@ -266,6 +266,7 @@ const DECAY_VECTOR=__DECAY_VECTOR__;        // KG-06: {concept_id: retention 0..
 const MASTERY_HISTORY=__MASTERY_HISTORY__;  // KG-07: [{date, mastery:{id:pct}}]
 // Server-side A2 route (same select_day_route as 3D hall). Prefer over local recompute.
 const DAY_ROUTE=__DAY_ROUTE__||[];
+const INITIAL_SELECTED_CONCEPT=__SELECTED_CONCEPT__;
 const prefersReducedMotion=(()=>{
   try{return !!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);}
   catch(_){return false;}
@@ -617,7 +618,8 @@ function _kgBridgeConceptToStreamlit(conceptId){
     }
   }catch(_){}
 }
-function openPanel(d){
+function openPanel(d,opts){
+  opts=opts||{};
   current=d;
   const lv=LEVELS[d.level]||LEVELS.unknown;
   const badges=(d.frontier?'<span class="badge bdg-frontier">✦ доступно</span>':'')+
@@ -639,8 +641,10 @@ function openPanel(d){
   pc.querySelectorAll('.chip[data-id]').forEach(el=>el.addEventListener('click',()=>{const t=simNodes.find(n=>n.id===el.dataset.id);if(t){focusNode(t);openPanel(t);}}));
   pc.querySelectorAll('.action-btn.cpy[data-copy]').forEach(el=>el.addEventListener('click',()=>_copyDocPath(el.dataset.copy,el)));
   panel.classList.add('open');highlight(d);
-  _kgBridgeConceptToStreamlit(d.id);
-  _kgPushConceptHash(d.id);
+  if(!opts.silent){
+    _kgBridgeConceptToStreamlit(d.id);
+    _kgPushConceptHash(d.id);
+  }
 }
 function focusNode(d){
   const s=1.6,t=d3.zoomIdentity.translate(W/2-d.x*s,H/2-d.y*s).scale(s);
@@ -1083,7 +1087,9 @@ sim.on('end',()=>{
   const fitTransform=d3.zoomIdentity.translate(W/2,H/2).scale(sc).translate(-cx,-cy);
   if(prefersReducedMotion)svg.call(zoom.transform,fitTransform);
   else svg.transition().duration(750).call(zoom.transform,fitTransform);
-  const hs=location.hash;if(hs.startsWith('#c=')){const n=simNodes.find(x=>x.id===decodeURIComponent(hs.slice(3)));if(n){focusNode(n);openPanel(n);}}
+  const hs=location.hash;
+  const initialId=hs.startsWith('#c=')?decodeURIComponent(hs.slice(3)):String(INITIAL_SELECTED_CONCEPT||'').trim();
+  if(initialId){const n=simNodes.find(x=>x.id===initialId);if(n){focusNode(n);openPanel(n,{silent:!hs.startsWith('#c=')});}}
 });
 
 svg.on('click',()=>{panel.classList.remove('open');closeEdgePanel();qd.classList.remove('show');resetHL();});

@@ -84,12 +84,15 @@ Reference route/constellation/memory уже воспринимается как 
 
 ### 2.2 Критические проблемы
 
-#### Повтор одного и того же управления
+#### Частичный повтор управления сценой
 
 Topbar уже содержит «Маршрут / Созвездие / След памяти»
 (`kg_3d_template.html:603-607`), но внутри сцены снова показаны presentation
-presets (`:635-640`). Две системы меняют одно состояние, увеличивают cognitive
-load и затрудняют объяснение различий между scene mode и overlay.
+presets (`:635-640`). Из пяти preset-действий дублируются только «Маршрут» и
+«Созвездие»; «Слабое», calm и reset имеют отдельные функции. Проблема не в полной
+дупликации группы, а в том, что два одинаковых входа меняют одно scene state, а
+уникальные presentation utilities конкурируют с основным маршрутом на первом
+уровне.
 
 #### Слишком мелкий production UI
 
@@ -143,8 +146,9 @@ chronicle, compass, replay, arrows, more menu, stop dock и route list. Canvas
 3. current stop card;
 4. один primary CTA.
 
-Memory оставить toggle в utility zone. `Вся карта`, photo, replay, camera reset и
-presentation presets перенести в `…` или contextual sheet.
+Memory оставить toggle в utility zone. Дублирующие presets «Маршрут/Созвездие»
+удалить; уникальные «Слабое», calm и reset вместе с `Вся карта`, photo, replay и
+camera tools перенести в `…` или contextual sheet.
 
 ```css
 .kgx-mode {
@@ -281,11 +285,16 @@ presentation presets перенести в `…` или contextual sheet.
 
 - Навигация дублируется: horizontal radio и три кнопки «Колоды / Создать /
   Повторение» (`app/ui/flashcards_ui.py:286-308`).
-- Flip surface — кликабельный `div` без `button`, `tabindex`, `aria-pressed` или
-  доступного состояния стороны (`app/ui/flashcards_interactive_card.py:324`).
+- Прямой flip front→back запускается кликом по несемантичному `div` без
+  `tabindex`, `aria-pressed` и доступного состояния стороны
+  (`app/ui/flashcards_interactive_card.py:324`). Обратный переход back→front уже
+  имеет настоящую кнопку `fc3-flip-back` около строки 349; проблема относится не
+  ко всему flip UI, а к неполному двустороннему interaction contract.
 - Flip 0,5 s и pop animation не имеют reduced-motion (`:171`, `:243`).
-- iframe height оценивается эвристически, а `scrolling=True` допускает ugly inner
-  scrollbar (`app/ui/flashcards_review_view.py:1141-1147`).
+- iframe height оценивается эвристически, а `scrolling=True` осознанно страхует
+  rating controls от клиппинга при недооценке высоты
+  (`app/ui/flashcards_review_view.py:1141-1147`). Недостаток — видимый inner
+  scrollbar в fallback-состоянии, а не сам факт наличия защиты.
 
 ### Рекомендации
 
@@ -294,7 +303,9 @@ presentation presets перенести в `…` или contextual sheet.
   и description.
 - Reduced-motion меняет content без 3D rotation.
 - Четыре rating buttons по 44 px, interval — вторичной строкой.
-- ResizeObserver подтверждает высоту; scrolling только у outer page.
+- ResizeObserver подтверждает высоту и делает outer page scroll основным. При
+  ошибке observer/оценки сохраняется безопасный `scrolling=True` или эквивалентный
+  min-height/overflow fallback, чтобы rating controls не стали недоступными.
 
 ## 7. Quiz и Adaptive Plan
 
@@ -446,7 +457,7 @@ persistent progress. Полный feature tour оставить отдельны
 
 ### Проблемы
 
-- В `app/ui/constants.py:3-19` перечислено 19 views, а primary navigation — один
+- В `app/ui/constants.py:5-24` перечислено 18 views, а primary navigation — один
   selectbox со скрытым label (`app/ui/main.py:315`). Discoverability и sense of
   place недостаточны.
 - Sidebar начинается с «Live метрики» и event log
@@ -492,7 +503,11 @@ Mobile shell: четыре bottom destinations плюс `Ещё`.
 | KG muted `#aeb5cf` / `#0e101b` | 9,30:1 | цвет хороший, размер мал |
 | KG cyan `#42e8e0` / `#080812` | 13,14:1 | высокий контраст |
 
-Нужны semantic modes `light | dark | spatial-dark`.
+Нужны общие semantic tokens для `light` и `spatial-dark`. Полноценный `dark`
+остаётся отдельным decision gate: комментарий `.streamlit/config.toml:1-3`
+фиксирует прежнее решение сохранять `base = "light"`, потому что Base Web portals
+selectbox/multiselect получали некорректный чёрный фон. Full dark нельзя считать
+утверждённым до отдельной проверки portal-поверхностей.
 
 ### 12.2 Типографика
 
@@ -568,7 +583,8 @@ https://www.w3.org/TR/WCAG22/. Для primary controls целевой станд
 - Library не реализует 3→2→1.
 
 Regression matrix: 1366×768, 1440×900, 1920×1080, 768×1024, 390×844;
-light/dark, reduced-motion, 200% zoom и keyboard.
+light/spatial-dark, reduced-motion, 200% zoom и keyboard. Full dark добавляется
+только после прохождения отдельного W3 portal gate.
 
 ## 13. Приоритеты
 
@@ -585,12 +601,14 @@ light/dark, reduced-motion, 200% zoom и keyboard.
 1. Упростить production Mnemo и увеличить controls/type.
 2. Заменить global selectbox устойчивой information architecture.
 3. Переделать Living Konspekt в reading route.
-4. Удалить duplicate Flashcards navigation и iframe scrollbar.
+4. Удалить duplicate Flashcards navigation и сделать inner scrollbar редким
+   fallback-состоянием, не убирая защиту rating controls от клиппинга.
 5. Перенести `interactive_quiz` на interaction model `scoped_quiz`.
 6. Разделить Adaptive hub и daily detail.
 7. Реализовать Library 3→2→1 и общий address component.
 8. Разгрузить sidebar и убрать developer language.
-9. Ввести настоящий dark mode и semantic bridge к `--kgx-*`.
+9. Ввести semantic bridge к `--kgx-*`; full dark разрешать только после
+   отдельного portal compatibility decision gate.
 
 ### P2 — polish
 
@@ -673,7 +691,8 @@ Semantic colors:
 - `ExpertDisclosure`.
 
 Для каждого фиксируются default, hover, focus, pressed, disabled, loading,
-error, light/dark/spatial, desktop/touch и reduced-motion.
+error, light/spatial, desktop/touch и reduced-motion. Full-dark variant
+добавляется только после W3 portal gate.
 
 Figma Variables / Styles:
 

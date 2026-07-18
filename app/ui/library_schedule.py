@@ -6,6 +6,8 @@ Streamlit shell over pure read-models (library_catalog_read + library_schedule_r
 
 from __future__ import annotations
 
+import base64
+import hashlib
 from typing import Any, Mapping
 
 import streamlit as st
@@ -40,6 +42,16 @@ from app.library_catalog_read import list_library_courses
 _SEG_KEY = "library_schedule_segment"
 _SEARCH_KEY = "library_schedule_search"
 _PIN_KEY = "library_schedule_pins"
+_COMPACT_KEY = "library_schedule_compact"
+
+_COURSE_THUMB_PALETTE: tuple[tuple[str, str, str], ...] = (
+    ("#4338ca", "#22c55e", "#f8fafc"),
+    ("#0f766e", "#f59e0b", "#f8fafc"),
+    ("#be123c", "#38bdf8", "#fff7ed"),
+    ("#7c2d12", "#a7f3d0", "#fff7ed"),
+    ("#1d4ed8", "#fb7185", "#f8fafc"),
+    ("#581c87", "#facc15", "#faf5ff"),
+)
 
 
 def _load_graph_bundle() -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -159,7 +171,7 @@ def _render_course_order_panel(available: list[str], *, owner_order: list[str]) 
             st.rerun()
 
 
-def _render_tile_card(tile: ScheduleTile, *, key_prefix: str) -> None:
+def _render_tile_card(tile: ScheduleTile, *, key_prefix: str, compact: bool = False) -> None:
     """Single-column readable tile: quant → address → title → status → chips → CTA."""
     pinned = set(st.session_state.get(_PIN_KEY) or [])
     pin_key = tile.concept_id or tile.meta or tile.title
@@ -167,15 +179,19 @@ def _render_tile_card(tile: ScheduleTile, *, key_prefix: str) -> None:
     pin_mark = "★ " if is_pin else "☆ "
     quant_e, addr_e = _esc(tile.quant), _esc(tile.address)
     title_e, status_e = _esc(tile.title), _esc(tile.status)
+    pad = "0.48rem 0.65rem" if compact else "0.75rem 0.9rem"
+    margin = "0.2rem 0 0.35rem 0" if compact else "0.35rem 0 0.55rem 0"
+    title_size = "0.94rem" if compact else "1.02rem"
+    meta_size = "0.72rem" if compact else "0.78rem"
     st.markdown(
         (
             '<div class="lib-sched-tile" style="'
             "border:1px solid rgba(120,130,150,0.28);border-radius:14px;"
-            "padding:0.75rem 0.9rem;margin:0.35rem 0 0.55rem 0;"
+            f"padding:{pad};margin:{margin};"
             'background:rgba(120,130,150,0.06);">'
             f'<div style="font-size:0.72rem;opacity:0.75;letter-spacing:0.02em">{quant_e}</div>'
-            f'<div style="font-size:0.78rem;margin-top:0.15rem;opacity:0.9">📍 {addr_e}</div>'
-            f'<div style="font-size:1.02rem;font-weight:600;margin-top:0.2rem">{title_e}</div>'
+            f'<div style="font-size:{meta_size};margin-top:0.12rem;opacity:0.9">📍 {addr_e}</div>'
+            f'<div style="font-size:{title_size};font-weight:600;margin-top:0.16rem">{title_e}</div>'
             f'<div style="font-size:0.8rem;margin-top:0.2rem;opacity:0.85">{status_e}</div>'
             "</div>"
         ),
@@ -254,11 +270,98 @@ def _render_empty(segment: str) -> None:
     st.info(messages.get(segment, "Ничего не найдено."))
 
 
-def _render_tile_list(tiles: list[ScheduleTile], *, key_prefix: str) -> None:
+def _course_initials(title: str) -> str:
+    words = [
+        "".join(ch for ch in part if ch.isalnum())
+        for part in str(title or "").replace("_", " ").replace("-", " ").split()
+    ]
+    letters = [word[0].upper() for word in words if word]
+    return "".join(letters[:2]) or "К"
+
+
+def course_thumbnail_data_uri(title: str, folder_rel: str = "") -> str:
+    """Small deterministic SVG cover for a course card (no network / storage)."""
+    seed = f"{title}|{folder_rel}".encode("utf-8", errors="ignore")
+    digest = hashlib.sha256(seed).digest()
+    c1, c2, fg = _COURSE_THUMB_PALETTE[digest[0] % len(_COURSE_THUMB_PALETTE)]
+    angle = 15 + int(digest[1] % 55)
+    initials = _course_initials(title)
+    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="{c1}"/><stop offset="1" stop-color="{c2}"/></linearGradient></defs>
+<rect width="96" height="96" rx="18" fill="url(#g)"/>
+<circle cx="{24 + digest[2] % 18}" cy="{18 + digest[3] % 20}" r="{14 + digest[4] % 12}" fill="rgba(255,255,255,.22)"/>
+<circle cx="{62 + digest[5] % 16}" cy="{58 + digest[6] % 18}" r="{18 + digest[7] % 10}" fill="rgba(255,255,255,.16)"/>
+<path d="M-8 {70 - digest[8] % 20} L104 {28 + digest[9] % 24}" stroke="rgba(255,255,255,.30)" stroke-width="10" transform="rotate({angle} 48 48)"/>
+<text x="48" y="57" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="800" fill="{fg}">{initials}</text>
+</svg>"""
+    data = base64.b64encode(svg.encode("utf-8")).decode("ascii")
+    return f"data:image/svg+xml;base64,{data}"
+
+
+def _render_tile_list(
+    tiles: list[ScheduleTile],
+    *,
+    key_prefix: str,
+    compact: bool = False,
+) -> None:
     if not tiles:
         return
     for i, tile in enumerate(tiles):
-        _render_tile_card(tile, key_prefix=f"{key_prefix}_{i}")
+        _render_tile_card(tile, key_prefix=f"{key_prefix}_{i}", compact=compact)
+
+
+def _render_catalog_course_grid(tiles: list[ScheduleTile], *, key_prefix: str) -> None:
+    if not tiles:
+        return
+    for row_start in range(0, len(tiles), 3):
+        cols = st.columns(min(3, len(tiles) - row_start), gap="medium")
+        for col, tile in zip(cols, tiles[row_start : row_start + 3]):
+            with col:
+                _render_catalog_course_compact_card(
+                    tile,
+                    key_prefix=f"{key_prefix}_{row_start}_{tile.meta}",
+                )
+
+
+def _render_catalog_course_compact_card(tile: ScheduleTile, *, key_prefix: str) -> None:
+    thumb = course_thumbnail_data_uri(tile.title, tile.meta or (tile.courses[0] if tile.courses else ""))
+    title = _esc(tile.title)
+    address = _esc(tile.address)
+    status = _esc(tile.status)
+    quant = _esc(tile.quant)
+    with st.container(border=True):
+        c_img, c_body = st.columns([0.28, 0.72], gap="small")
+        with c_img:
+            st.markdown(
+                (
+                    f'<img src="{thumb}" alt="" aria-hidden="true" '
+                    'style="width:72px;max-width:100%;aspect-ratio:1/1;'
+                    'border-radius:14px;display:block;object-fit:cover;'
+                    'box-shadow:0 8px 18px rgba(30,20,60,0.18);">'
+                ),
+                unsafe_allow_html=True,
+            )
+        with c_body:
+            st.markdown(f"**{title}**", unsafe_allow_html=True)
+            st.caption(f"{address} · {quant}")
+            st.caption(status)
+        b1, b2 = st.columns(2)
+        with b1:
+            if st.button("Активным", key=f"{key_prefix}_act", width="stretch"):
+                from app.library_catalog_read import LibraryCourse
+
+                activate_course_from_library(
+                    LibraryCourse(
+                        folder_rel=tile.meta,
+                        title=tile.title,
+                        source_paths=tuple(tile.source_paths),
+                    )
+                )
+                st.rerun()
+        with b2:
+            if st.button("Спросить", key=f"{key_prefix}_ask", width="stretch"):
+                navigate_to_ask(tile.meta)
+                st.rerun()
 
 
 def _render_schedule_segment(
@@ -267,6 +370,7 @@ def _render_schedule_segment(
     *,
     query: str,
     index_stats: dict,
+    compact: bool,
 ) -> None:
     if segment == "Каталог":
         tiles = filter_tiles(ctx["catalog"], query)
@@ -275,9 +379,15 @@ def _render_schedule_segment(
                 st.warning("По запросу в каталоге ничего не найдено.")
             else:
                 st.caption(f"Найдено курсов: {len(tiles)}")
-                _render_tile_list(tiles, key_prefix="lib_cat_t")
+                if compact:
+                    _render_catalog_course_grid(tiles, key_prefix="lib_cat_search")
+                else:
+                    _render_tile_list(tiles, key_prefix="lib_cat_t")
         elif not ctx["catalog"]:
             _render_empty("Каталог")
+        elif compact:
+            st.caption("Компактная сетка курсов. Подробные конспекты и разделы доступны в обычном режиме.")
+            _render_catalog_course_grid(ctx["catalog"], key_prefix="lib_cat_compact")
         else:
             render_library_catalog_body(index_stats)
         return
@@ -289,7 +399,7 @@ def _render_schedule_segment(
             )
         else:
             st.caption(f"Общих тем: {len(tiles)}")
-            _render_tile_list(tiles, key_prefix="lib_tr")
+            _render_tile_list(tiles, key_prefix="lib_tr", compact=compact)
         return
     tiles = filter_tiles(ctx["route"], query)
     if not tiles:
@@ -298,7 +408,7 @@ def _render_schedule_segment(
         )
     else:
         st.caption(f"Остановок маршрута: {len(tiles)}")
-        _render_tile_list(tiles, key_prefix="lib_rt")
+        _render_tile_list(tiles, key_prefix="lib_rt", compact=compact)
 
 
 def render_library_schedule(index_stats: dict | None = None) -> None:
@@ -329,12 +439,21 @@ def render_library_schedule(index_stats: dict | None = None) -> None:
     ctx = _build_schedule_context(index_stats, owner_order=owner_order)
     _render_tile_card(ctx["summary"], key_prefix="lib_sum")
 
-    query = st.text_input(
-        "Поиск по расписанию",
-        key=_SEARCH_KEY,
-        placeholder="курс, тема, адрес…",
-        help="Скрывает плитки, которые не содержат запрос.",
-    ).strip()
+    c_search, c_compact = st.columns([0.72, 0.28])
+    with c_search:
+        query = st.text_input(
+            "Поиск по расписанию",
+            key=_SEARCH_KEY,
+            placeholder="курс, тема, адрес…",
+            help="Скрывает плитки, которые не содержат запрос.",
+        ).strip()
+    with c_compact:
+        compact = st.toggle(
+            "Компактные плитки",
+            key=_COMPACT_KEY,
+            value=True,
+            help="Показывает каталог плотной сеткой с мини-обложками курсов.",
+        )
     if _SEG_KEY not in st.session_state:
         st.session_state[_SEG_KEY] = SCHEDULE_SEGMENTS[0]
     segment = st.radio(
@@ -344,10 +463,11 @@ def render_library_schedule(index_stats: dict | None = None) -> None:
         horizontal=True,
         label_visibility="collapsed",
     )
-    _render_schedule_segment(segment, ctx, query=query, index_stats=index_stats)
+    _render_schedule_segment(segment, ctx, query=query, index_stats=index_stats, compact=compact)
     st.markdown("</div>", unsafe_allow_html=True)
 
 
 __all__ = [
+    "course_thumbnail_data_uri",
     "render_library_schedule",
 ]

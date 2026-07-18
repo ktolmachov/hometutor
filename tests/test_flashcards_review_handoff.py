@@ -9,6 +9,7 @@ from app.ui.flashcards_review_view import (
     _card_matches_meta_exact,
     apply_concept_handoff_queue_scope,
     apply_pending_review_scope_reset,
+    consume_concept_handoff_one_shot,
     resolve_active_concept_scope_primary,
     resolve_concept_scope_api_tags,
 )
@@ -142,7 +143,7 @@ def test_sticky_primary_drops_when_tags_manually_cleared():
 
 
 def test_handoff_then_clear_tags_load_count_recovery_without_primary():
-    """Audit P2: handoff → user clears tags text → api_tags empty (all due), not [primary].
+    """Audit: handoff → user clears tags text → api_tags empty (all due), not [primary].
 
     Mirrors render_review wiring: resolve primary from state + selected_tags, then
     resolve_concept_scope_api_tags for count / due / recovery / undo payloads.
@@ -174,6 +175,34 @@ def test_handoff_then_clear_tags_load_count_recovery_without_primary():
     # Backend params must not carry a phantom concept tag.
     ser = ", ".join(api_tags) if api_tags else None
     assert ser is None
+
+
+def test_due_api_failure_does_not_leave_handoff_pending_after_one_shot_consume():
+    """Audit P2: one-shot flags must be consumed before /flashcards/due.
+
+    If the due API fails after consume, clearing tags must still exit concept
+    scope (resolver must not see stuck focus_once).
+    """
+    from app.ui.flashcards_review_view import apply_flashcards_concept_due_handoff
+
+    state: dict = {}
+    apply_flashcards_concept_due_handoff(
+        state, concept_id="linear-algebra", label="Линейная алгебра"
+    )
+    # Load path always pops autoload first, then one-shot before API.
+    state.pop("flashcards_review_autoload_pending", None)
+    focus_once, focus = consume_concept_handoff_one_shot(state)
+    assert focus_once is True
+    assert focus == "linear-algebra"
+    assert "flashcards_review_focus_filter_once" not in state
+    assert "flashcards_focus_concept" not in state
+    # Simulate due API failure: primary may still be sticky until tag clear.
+    assert state.get(FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY) == "linear-algebra"
+    # Learner clears tags after error → all due, not stuck concept scope.
+    active = resolve_active_concept_scope_primary(state, selected_tags=[])
+    api_tags = resolve_concept_scope_api_tags([], primary=active or None)
+    assert active == ""
+    assert api_tags == []
 
 
 def test_sticky_primary_drops_when_primary_removed_from_tags():

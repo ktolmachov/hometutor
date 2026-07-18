@@ -268,6 +268,18 @@ def drop_sticky_concept_scope(state: Any) -> None:
     state.pop("flashcards_review_focus_filter_once", None)
 
 
+def consume_concept_handoff_one_shot(state: Any) -> tuple[bool, str]:
+    """Pop one-shot 3D handoff flags **before** ``/flashcards/due``.
+
+    Must run before the due API call so a network/API error cannot leave
+    ``focus_filter_once`` stuck — otherwise resolver keeps concept scope after
+    the learner clears tags (audit P2 edge-case).
+    """
+    focus_once = bool(state.pop("flashcards_review_focus_filter_once", False))
+    focus = str(state.pop("flashcards_focus_concept", "") or "").strip()
+    return focus_once, focus
+
+
 def resolve_active_concept_scope_primary(
     state: Any,
     *,
@@ -1259,7 +1271,7 @@ def render_review(
     if selected_tags:
         scope_bits.append("Теги: " + ", ".join(selected_tags))
     if scope_primary:
-        scope_bits.append(f"Concept scope: {scope_primary}")
+        scope_bits.append(f"Фокус: {scope_primary}")
     st.caption(" · ".join(scope_bits) if scope_bits else "Повторение по всем due-карточкам.")
 
     # Backend tag filter is OR — for concept handoff send primary only.
@@ -1317,6 +1329,9 @@ def render_review(
         )
         if autoload_queue or load_clicked:
             st.session_state["flashcards_review_session_status"] = "loading"
+            # Pop one-shot flags *before* due API (audit P2: failed call must not
+            # leave handoff_pending forever).
+            focus_once, focus = consume_concept_handoff_one_shot(st.session_state)
             try:
                 data = api_call(
                     "GET",
@@ -1324,12 +1339,7 @@ def render_review(
                     params=build_review_due_params(selected_deck_id, api_tags),
                 )
                 queue = list(data.get("cards") or [])
-                # One-shot concept handoff from 3D: never sticky across later loads.
-                # Do not trust tags OR alone (id+label can pull unrelated label-only cards).
-                focus_once = bool(
-                    st.session_state.pop("flashcards_review_focus_filter_once", False)
-                )
-                focus = str(st.session_state.pop("flashcards_focus_concept", "") or "").strip()
+                # Concept handoff scope: never trust tags OR alone.
                 scope_focus = focus or scope_primary
                 if focus_once or scope_primary:
                     if not queue and selected_tags:

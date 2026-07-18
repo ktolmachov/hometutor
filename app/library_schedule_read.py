@@ -36,6 +36,8 @@ class ScheduleTile:
     concept_id: str = ""
     cta: str = ""
     meta: str = ""
+    # Catalog activate must keep index source_paths for scope hash / artifacts.
+    source_paths: tuple[str, ...] = ()
 
 
 def tile_matches_query(tile: ScheduleTile, query: str) -> bool:
@@ -252,6 +254,7 @@ def list_catalog_course_tiles(
                 courses=(c.folder_rel,),
                 cta="activate",
                 meta=c.folder_rel,
+                source_paths=tuple(c.source_paths),
             )
         )
     return tiles

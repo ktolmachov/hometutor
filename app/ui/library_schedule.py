@@ -168,7 +168,7 @@ def _render_tile_card(tile: ScheduleTile, *, key_prefix: str) -> None:
                 LibraryCourse(
                     folder_rel=tile.meta,
                     title=tile.title,
-                    source_paths=(),
+                    source_paths=tuple(tile.source_paths),
                 )
             )
             st.rerun()

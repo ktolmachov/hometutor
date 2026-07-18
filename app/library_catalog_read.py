@@ -12,14 +12,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
-from app.config import DATA_DIR
 from app.course_cache import build_mission_control_course_options
 from app.konspekt_discovery import (
     KonspektMeta,
     konspekt_source_staleness,
     scan_konspekts,
 )
-from app.path_safety import data_relative_from_path, resolve_data_relative_path
+from app.path_safety import (
+    data_relative_from_path,
+    get_data_dir,
+    resolve_data_relative_path,
+)
 
 
 @dataclass(frozen=True)
@@ -129,7 +132,7 @@ def list_library_konspekts(
     data_dir: Path | str | None = None,
 ) -> list[LibraryKonspekt]:
     """Vault konspekts under a course folder (``type: konspekt``), with staleness."""
-    root = Path(data_dir) if data_dir is not None else DATA_DIR
+    root = Path(data_dir) if data_dir is not None else get_data_dir()
     course_dir = _course_dir(folder_rel, data_dir=root)
     if course_dir is None:
         return []
@@ -167,7 +170,7 @@ def list_library_sections(
     if not raw:
         return []
 
-    root = Path(data_dir) if data_dir is not None else DATA_DIR
+    root = Path(data_dir) if data_dir is not None else get_data_dir()
     path: Path | None = None
     try:
         # Prefer data-relative resolution when caller passes a rel path.

@@ -152,3 +152,5 @@ def test_catalog_course_tiles_from_index(monkeypatch):
     assert len(tiles) == 1
     assert tiles[0].title == "Deep Course"
     assert "Deep" in tiles[0].address
+    # Activate from tile must keep source_paths for scope hash / artifacts.
+    assert tiles[0].source_paths == ("Deep/a.md", "Deep/b.md")

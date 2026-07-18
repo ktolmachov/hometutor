@@ -44,12 +44,18 @@ def navigate_to_ask(
     *,
     state: MutableMapping[str, Any] | None = None,
 ) -> None:
-    """Prefill Q&A folder filter and open Quick Answer. Does not activate scope."""
+    """Prefill Q&A folder filter and open Quick Answer. Does not activate scope.
+
+    Empty ``folder_rel`` means whole area: clear any previous course filter so
+    «Спросить по всей области» does not keep a stale ``qa_sidebar_folder_rel``.
+    """
     target = state if state is not None else st.session_state
     folder = library_ask_folder_rel(folder_rel)
-    # Sidebar selectbox key; empty → whole area when options allow "all folders".
+    # Sidebar selectbox key; empty → whole area (must drop prior course filter).
     if folder:
         target[_LIBRARY_QA_FOLDER_KEY] = folder
+    else:
+        target.pop(_LIBRARY_QA_FOLDER_KEY, None)
     target[PENDING_CURRENT_VIEW_KEY] = "Быстрый ответ"
 
 

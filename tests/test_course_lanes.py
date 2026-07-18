@@ -97,10 +97,11 @@ def test_build_payload_includes_course_lanes_and_export_tints():
     assert "function isTransferNode" in html
     assert "function courseLaneColor" in html
     assert "COURSE_LANES" in html
-    # At least two distinct lane colors baked into node JSON
-    assert "#42e8e0" in html or "lane_color" in html
-    # Export should not invent precedes between courses
-    assert "relation_type" not in str(payload.get("typed_relations") or []) or True
+    # At least two distinct lane colors baked into node JSON / legend
+    assert "lane_color" in html
+    assert any(color in html for color in ("#42e8e0", "#b9f75b", "#ffc857", "#9a6cff"))
+    # build_kg_payload does not invent typed precedes edges for courses
+    assert payload.get("typed_relations") in (None, [], ())
 
 
 def test_plan_line_can_append_transfer_hint():

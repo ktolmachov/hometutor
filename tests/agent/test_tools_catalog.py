@@ -24,6 +24,26 @@ def _write(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _patch_library_data(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr("app.path_safety.DATA_DIR", tmp_path)
+    monkeypatch.setattr("app.library_catalog_read.get_data_dir", lambda: tmp_path)
+    monkeypatch.setattr(
+        "app.library_catalog_read.build_mission_control_course_options",
+        lambda _stats: [
+            {
+                "folder_rel": "ИИ Агенты",
+                "title": "ИИ Агенты",
+                "source_paths": ["ИИ Агенты/lesson-1.md"],
+            },
+            {
+                "folder_rel": "ИИ Агенты Deep",
+                "title": "ИИ Агенты Deep",
+                "source_paths": ["ИИ Агенты Deep/module-1.md"],
+            },
+        ],
+    )
+
+
 def test_catalog_list_registered_read_only():
     reg = build_default_registry()
     spec = reg.get_spec("catalog.list")
@@ -70,22 +90,7 @@ source: lesson-1.md
 """,
     )
 
-    monkeypatch.setattr("app.library_catalog_read.DATA_DIR", tmp_path)
-    monkeypatch.setattr(
-        "app.library_catalog_read.build_mission_control_course_options",
-        lambda _stats: [
-            {
-                "folder_rel": "ИИ Агенты",
-                "title": "ИИ Агенты",
-                "source_paths": ["ИИ Агенты/lesson-1.md"],
-            },
-            {
-                "folder_rel": "ИИ Агенты Deep",
-                "title": "ИИ Агенты Deep",
-                "source_paths": ["ИИ Агенты Deep/module-1.md"],
-            },
-        ],
-    )
+    _patch_library_data(monkeypatch, tmp_path)
 
     result = _catalog_list_handler(
         _ctx(),
@@ -103,17 +108,56 @@ source: lesson-1.md
         assert not path.startswith("D:")
         assert "Deep" in path or "Deep" in str(k.get("course") or "")
 
-    # Sections for tools heading when query matches
-    headings = [s.get("heading") for s in data.get("sections") or []]
-    # May be empty if section scan needs absolute path via DATA_DIR — assert honesty
+    headings = [str(s.get("heading") or "") for s in data.get("sections") or []]
+    assert any("Tools" in h for h in headings), headings
     for s in data.get("sections") or []:
         assert s.get("konspekt_path")
         assert s.get("heading")
         assert "address" in s
 
 
+def test_catalog_list_section_only_query_finds_heading(tmp_path: Path, monkeypatch):
+    """Query that matches only a section heading (not title/tags) must still hit."""
+    deep = tmp_path / "ИИ Агенты Deep"
+    deep.mkdir()
+    _write(
+        deep / "module-1-konspekt.md",
+        """---
+type: konspekt
+source: module-1.md
+tags: [agents]
+---
+
+# Module 1
+
+## Tools
+
+Описание tools.
+
+## Guardrails
+
+Описание guardrails.
+""",
+    )
+    _patch_library_data(monkeypatch, tmp_path)
+
+    result = _catalog_list_handler(
+        _ctx(),
+        CatalogListArgs(course="Deep", query="Guardrails", level="auto"),
+    )
+    assert result.ok, result.error
+    data = result.data
+    headings = [str(s.get("heading") or "") for s in data.get("sections") or []]
+    assert any("Guardrails" in h for h in headings), headings
+    # Parent konspekt retained because a section matched
+    paths = [str(k.get("path_rel") or "") for k in data.get("konspekts") or []]
+    assert any("module-1-konspekt" in p for p in paths), paths
+    assert data["counts"]["sections"] >= 1
+
+
 def test_catalog_list_empty_course_filter_no_hallucination(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr("app.library_catalog_read.DATA_DIR", tmp_path)
+    monkeypatch.setattr("app.path_safety.DATA_DIR", tmp_path)
+    monkeypatch.setattr("app.library_catalog_read.get_data_dir", lambda: tmp_path)
     monkeypatch.setattr(
         "app.library_catalog_read.build_mission_control_course_options",
         lambda _stats: [],

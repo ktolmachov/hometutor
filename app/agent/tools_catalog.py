@@ -110,7 +110,13 @@ def _konspekt_rows(
     course_filter: str,
     query: str,
     list_library_konspekts: Any,
+    match_meta_only: bool = True,
 ) -> list[dict[str, Any]]:
+    """List vault konspekts under courses.
+
+    When ``match_meta_only`` is False and ``query`` is set, keep all candidate
+    konspekts so section headings can still match (section-only search).
+    """
     need = level in {"konspekts", "sections", "auto"} and (
         level != "auto" or course_filter or query or len(courses) <= 8
     )
@@ -123,7 +129,7 @@ def _konspekt_rows(
     for c in target[:12]:
         for km in list_library_konspekts(c.folder_rel):
             hay = f"{km.title} {km.path_rel} {km.source} {' '.join(km.tags)} {c.folder_rel}"
-            if query and not _matches_query(hay, query):
+            if query and match_meta_only and not _matches_query(hay, query):
                 continue
             rows.append(
                 {
@@ -178,6 +184,37 @@ def _section_rows(
     return rows
 
 
+def _filter_konspekts_by_meta_or_sections(
+    all_konspekts: list[dict[str, Any]],
+    *,
+    query: str,
+    sections: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Keep konspekts that match query in meta OR contribute a matching section."""
+    if not query:
+        return all_konspekts
+    section_paths = {
+        str(s.get("konspekt_path") or "").strip()
+        for s in sections
+        if str(s.get("konspekt_path") or "").strip()
+    }
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for k in all_konspekts:
+        path = str(k.get("path_rel") or "").strip()
+        hay = (
+            f"{k.get('title') or ''} {path} {k.get('source') or ''} "
+            f"{' '.join(k.get('tags') or [])} {k.get('course') or ''}"
+        )
+        if _matches_query(hay, query) or path in section_paths:
+            if path and path not in seen:
+                seen.add(path)
+                out.append(k)
+            elif not path:
+                out.append(k)
+    return out
+
+
 def _build_catalog_list_data(ctx: ToolContext, args: CatalogListArgs) -> dict[str, Any]:
     from app.library_catalog_read import (
         list_library_courses,
@@ -201,19 +238,32 @@ def _build_catalog_list_data(ctx: ToolContext, args: CatalogListArgs) -> dict[st
     }
     if level in {"courses", "auto"}:
         data["courses"] = _course_rows(courses, query=query, course_filter=course_filter)
-    data["konspekts"] = _konspekt_rows(
+
+    # Section-only queries: scan all candidate konspekts first, then filter by headings.
+    need_section_scan = level in {"sections", "auto"} and (level == "sections" or bool(query))
+    scan_konspekts = _konspekt_rows(
         courses,
         level=level,
         course_filter=course_filter,
         query=query,
         list_library_konspekts=list_library_konspekts,
+        match_meta_only=not need_section_scan,
     )
     data["sections"] = _section_rows(
-        data["konspekts"],
+        scan_konspekts,
         level=level,
         query=query,
         list_library_sections=list_library_sections,
     )
+    if need_section_scan and query:
+        data["konspekts"] = _filter_konspekts_by_meta_or_sections(
+            scan_konspekts,
+            query=query,
+            sections=data["sections"],
+        )
+    else:
+        data["konspekts"] = scan_konspekts
+
     data["counts"] = {
         "courses": len(data["courses"]),
         "konspekts": len(data["konspekts"]),

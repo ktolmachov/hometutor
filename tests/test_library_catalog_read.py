@@ -119,6 +119,11 @@ def test_browse_helpers_do_not_mutate_scope() -> None:
     assert state[PENDING_CURRENT_VIEW_KEY] == "Быстрый ответ"
     assert state["qa_sidebar_folder_rel"] == "course_a"
 
+    # «Вся область» must clear previous folder filter (not leave stale course).
+    navigate_to_ask("", state=state)
+    assert "qa_sidebar_folder_rel" not in state
+    assert state[PENDING_CURRENT_VIEW_KEY] == "Быстрый ответ"
+
 
 def test_activate_only_via_explicit_helper() -> None:
     state: dict = {}

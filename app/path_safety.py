@@ -5,6 +5,11 @@ from pathlib import Path, PureWindowsPath
 from app.config import DATA_DIR
 
 
+def get_data_dir() -> Path:
+    """Canonical ``data/`` root (env-backed via ``app.config``; for app modules)."""
+    return Path(DATA_DIR).resolve()
+
+
 def _looks_absolute_or_drive_path(raw: str) -> bool:
     path = Path(raw)
     windows_path = PureWindowsPath(raw)
@@ -54,6 +59,7 @@ def data_relative_from_path(path: str | Path, *, data_dir: Path | None = None) -
 
 __all__ = [
     "data_relative_from_path",
+    "get_data_dir",
     "resolve_data_relative_path",
     "validate_data_relative_path",
 ]

@@ -27,6 +27,7 @@ from app.ui.library_catalog import (
     activate_course_from_library,
     navigate_to_ask,
 )
+from app.ui.mnemo_nav import open_mnemo_polis
 from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
 from app.ui.source_address import library_card_html, normalize_source_address, status_with_icon
 from app.ui.widgets import render_panel_header
@@ -93,6 +94,52 @@ def _optional_mastery_and_due() -> tuple[dict[str, float], list[str]]:
     return mastery, due_ids
 
 
+def _build_canonical_route_payload(
+    *,
+    owner_order: list[str] | None = None,
+) -> dict[str, Any] | None:
+    """Use the same KG payload builder as Мнемополис for Library route stops."""
+    try:
+        from app.knowledge_graph import get_active_knowledge_graph
+        from app.knowledge_service import get_mastery_vector
+        from app.learner_state_scope import filter_due_reviews_for_kg
+        from app.ui.knowledge_graph_d3 import (
+            collect_kg_learned_set,
+            render_d3_knowledge_graph,
+        )
+
+        kg = get_active_knowledge_graph()
+        concepts = kg.get_concepts() or {}
+        if not concepts:
+            from app.ui.dashboards_graph_publish_status import (
+                get_graph_publish_status,
+                load_staging_preview_graph,
+            )
+
+            preview_graph, _preview_info = load_staging_preview_graph(
+                get_graph_publish_status()
+            )
+            if preview_graph is not None:
+                kg = preview_graph
+                concepts = kg.get_concepts() or {}
+        if not isinstance(concepts, dict) or not concepts:
+            return None
+        typed_relations = kg.get_typed_relations()
+        due_reviews = filter_due_reviews_for_kg(kg, limit=200, scan_limit=5000)
+        return render_d3_knowledge_graph(
+            concepts,
+            mastery_vector=get_mastery_vector(),
+            learned_set=collect_kg_learned_set(concepts),
+            typed_relations=typed_relations,
+            due_reviews=due_reviews,
+            height=1,
+            render_component=False,
+            course_owner_order=owner_order,
+        )
+    except Exception:  # noqa: BLE001 - Library degrades to lightweight schedule route
+        return None
+
+
 def _build_schedule_context(
     index_stats: dict | None,
     *,
@@ -104,15 +151,28 @@ def _build_schedule_context(
     available = [c.folder_rel for c in courses]
     owner = merge_owner_order_with_available(available, owner_order=owner_order)
     concepts, rels = _load_graph_bundle()
-    nodes = build_concept_schedule_nodes(concepts, rels)
-    enrich_nodes_with_course_lanes(nodes, owner_order=owner)
-    mastery, due_ids = _optional_mastery_and_due()
-    nodes, day_route = enrich_nodes_with_day_route(
-        nodes,
-        mastery_vector=mastery,
-        due_concept_ids=due_ids,
-        k=6,
-    )
+    route_payload = _build_canonical_route_payload(owner_order=owner)
+    if route_payload is not None and isinstance(route_payload.get("nodes"), list):
+        nodes = [
+            dict(n)
+            for n in route_payload.get("nodes") or []
+            if isinstance(n, Mapping)
+        ]
+        day_route = [
+            str(x).strip()
+            for x in (route_payload.get("day_route") or [])
+            if str(x).strip()
+        ]
+    else:
+        nodes = build_concept_schedule_nodes(concepts, rels)
+        enrich_nodes_with_course_lanes(nodes, owner_order=owner)
+        mastery, due_ids = _optional_mastery_and_due()
+        nodes, day_route = enrich_nodes_with_day_route(
+            nodes,
+            mastery_vector=mastery,
+            due_concept_ids=due_ids,
+            k=6,
+        )
     transfers = list_transfer_tiles(nodes)
     route = list_route_tiles(nodes, day_route)
     catalog = list_catalog_course_tiles(index_stats, owner_order=owner)
@@ -195,10 +255,14 @@ def _render_primary_cta(tile: ScheduleTile, *, key_prefix: str, primary: str) ->
             st.rerun()
         return
     if primary == "open_kg" and tile.concept_id:
-        if st.button("В граф", key=f"{key_prefix}_primary", type="primary", width="stretch"):
-            st.session_state["kg_selected_concept"] = tile.concept_id
-            st.session_state["kg_action_concept"] = tile.concept_id
-            st.session_state[PENDING_CURRENT_VIEW_KEY] = "Knowledge Graph"
+        label = "В Мнемополис" if tile.kind == "route" else "В граф"
+        if st.button(label, key=f"{key_prefix}_primary", type="primary", width="stretch"):
+            if tile.kind == "route":
+                open_mnemo_polis(return_from="library", focus_concept=tile.concept_id)
+            else:
+                st.session_state["kg_selected_concept"] = tile.concept_id
+                st.session_state["kg_action_concept"] = tile.concept_id
+                st.session_state[PENDING_CURRENT_VIEW_KEY] = "Knowledge Graph"
             st.rerun()
         return
     if primary == "activate" and tile.meta:

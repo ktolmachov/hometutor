@@ -43,11 +43,16 @@ def _view_visible(target_view: str) -> bool:
     return feature_visible(spec, level=get_ui_level(), overrides=get_overrides())
 
 
-def open_mnemo_polis(*, state: Any | None = None, return_from: str | None = None) -> None:
+def open_mnemo_polis(
+    *,
+    state: Any | None = None,
+    return_from: str | None = None,
+    focus_concept: str | None = None,
+) -> None:
     """W4a: deep link «В Мнемополис» → Knowledge Graph (delegates to mnemo_nav)."""
     from app.ui.mnemo_nav import open_mnemo_polis as _open
 
-    _open(state=state, return_from=return_from)
+    _open(state=state, return_from=return_from, focus_concept=focus_concept)
 
 
 def open_library(*, state: Any | None = None) -> None:

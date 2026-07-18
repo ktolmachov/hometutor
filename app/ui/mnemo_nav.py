@@ -35,6 +35,7 @@ def open_mnemo_polis(
     *,
     state: Any | None = None,
     return_from: str | None = None,
+    focus_concept: str | None = None,
 ) -> None:
     """Navigate to Knowledge Graph / 3D hall (ceremonial hub, not home).
 
@@ -42,6 +43,8 @@ def open_mnemo_polis(
     ----------
     return_from:
         Optional channel tag for honest arrival copy (``quiz``, ``flashcards``, …).
+    focus_concept:
+        Optional concept id to focus after the hall opens.
     """
     target = st.session_state if state is None else state
     target[PENDING_CURRENT_VIEW_KEY] = "Knowledge Graph"
@@ -52,6 +55,10 @@ def open_mnemo_polis(
         revision = 1
     target[KG_SURFACE_TAB_REVISION_KEY] = revision
     target[knowledge_surface_tab_key(state=target)] = KG_MNEMO_TAB_LABEL
+    focus = str(focus_concept or "").strip()
+    if focus:
+        target["kg_selected_concept"] = focus
+        target["kg_action_concept"] = focus
     if return_from:
         target[KG_RETURN_FROM_KEY] = str(return_from).strip()
     if "home_breadcrumb_origin" not in target:
@@ -81,6 +88,11 @@ def arrival_banner_message() -> str | None:
         return (
             "🌆 Мир обновился: ◆ в кузнице (workbench / корзина конспекта). "
             "Mission Control остаётся главным экраном."
+        )
+    if channel == "library":
+        return (
+            "🌆 Мнемополис открыт из маршрута библиотеки. "
+            "Остановки берутся из того же маршрута дня."
         )
     return (
         "🌆 Мнемополис · Memory Run (3D-зал). "

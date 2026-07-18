@@ -45,6 +45,17 @@ def test_open_mnemo_polis_return_from_flashcards_and_collect():
     assert state2[KG_RETURN_FROM_KEY] == "collect"
 
 
+def test_open_mnemo_polis_from_library_focuses_concept():
+    state: dict = {}
+    open_mnemo_polis(state=state, return_from="library", focus_concept="RAG")
+
+    assert state[PENDING_CURRENT_VIEW_KEY] == "Knowledge Graph"
+    assert state[KG_RETURN_FROM_KEY] == "library"
+    assert state["kg_selected_concept"] == "RAG"
+    assert state["kg_action_concept"] == "RAG"
+    assert state[knowledge_surface_tab_key(state=state)] == KG_MNEMO_TAB_LABEL
+
+
 def test_arrival_banner_quiz_channel_message():
     import streamlit as st
 

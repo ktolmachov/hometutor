@@ -41,6 +41,9 @@ def test_library_schedule_w8_unified_card_and_grid_contract() -> None:
     assert "_render_unified_card" in src
     assert "_render_card_grid" in src
     assert "library_card_html" in src
+    assert "render_d3_knowledge_graph(" in src
+    assert "open_mnemo_polis(return_from=\"library\"" in src
+    assert "В Мнемополис" in src
     assert "Подтверждаю смену активного курса" in src
     # No split panel wrapper / old dual card models
     assert 'class="panel lib-schedule"' not in src

@@ -5,8 +5,13 @@ from __future__ import annotations
 from streamlit.testing.v1 import AppTest
 
 from app.ui.mnemo_nav import (
+    KG_GRAPH_TAB_LABEL,
+    KG_MNEMO_TAB_LABEL,
     KG_OPEN_3D_HALL_KEY,
     KG_RETURN_FROM_KEY,
+    KG_SURFACE_TAB_REVISION_KEY,
+    KG_SURFACE_TAB_KEY,
+    knowledge_surface_tab_key,
     open_mnemo_polis,
 )
 from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
@@ -17,6 +22,8 @@ def test_open_mnemo_polis_sets_pending_view_not_current_view():
     open_mnemo_polis(state=state)
     assert state[PENDING_CURRENT_VIEW_KEY] == "Knowledge Graph"
     assert state[KG_OPEN_3D_HALL_KEY] is True
+    assert state[KG_SURFACE_TAB_REVISION_KEY] == 1
+    assert state[knowledge_surface_tab_key(state=state)] == KG_MNEMO_TAB_LABEL
     # Must not write current_view (widget key risk).
     assert "current_view" not in state
 
@@ -85,6 +92,28 @@ def _app_sidebar_mnemo_button() -> None:
         st.rerun()
 
 
+def _app_knowledge_surface_tabs() -> None:
+    import streamlit as st
+
+    from app.ui.mnemo_nav import (
+        KG_GRAPH_TAB_LABEL,
+        KG_MNEMO_TAB_LABEL,
+        knowledge_surface_tab_key,
+    )
+
+    surface_tab_key = knowledge_surface_tab_key()
+    graph_tab, mnemo_tab = st.tabs(
+        [KG_GRAPH_TAB_LABEL, KG_MNEMO_TAB_LABEL],
+        default=KG_GRAPH_TAB_LABEL,
+        key=surface_tab_key,
+        on_change="rerun",
+    )
+    if graph_tab.open:
+        st.session_state["rendered_kg_surface"] = "graph"
+    if mnemo_tab.open:
+        st.session_state["rendered_kg_surface"] = "mnemo"
+
+
 class TestSidebarMnemoPolisNavigation:
     def test_button_does_not_raise_and_sets_pending(self):
         at = AppTest.from_function(_app_sidebar_mnemo_button)
@@ -93,6 +122,9 @@ class TestSidebarMnemoPolisNavigation:
         assert not at.exception
         assert at.session_state[PENDING_CURRENT_VIEW_KEY] == "Knowledge Graph"
         assert at.session_state[KG_OPEN_3D_HALL_KEY] is True
+        assert at.session_state[KG_SURFACE_TAB_REVISION_KEY] == 1
+        surface_key = f"{KG_SURFACE_TAB_KEY}:1"
+        assert at.session_state[surface_key] == KG_MNEMO_TAB_LABEL
 
     def test_sidebar_source_contains_button_key(self):
         from pathlib import Path
@@ -111,5 +143,32 @@ class TestSidebarMnemoPolisNavigation:
         assert "flashcards_review_return_mnemo" in fc
         assert "return_from=\"flashcards\"" in fc or "return_from='flashcards'" in fc
         graph = Path("app/ui/dashboards_graph.py").read_text(encoding="utf-8")
-        assert "render_component=not open_3d_first" in graph
+        assert "st.tabs(" in graph
+        assert "KG_GRAPH_TAB_LABEL, KG_MNEMO_TAB_LABEL" in graph
+        assert 'on_change="rerun"' in graph
+        assert "if graph_tab.open" in graph
+        assert "if mnemo_tab.open" in graph
+        assert "render_component=False" in graph
         assert "render_kg_d3_component(payload, height=740)" in graph
+
+    def test_knowledge_graph_is_default_and_mnemo_state_is_lazy(self):
+        at = AppTest.from_function(_app_knowledge_surface_tabs)
+        at.run()
+        assert not at.exception
+        assert [tab.label for tab in at.tabs] == [
+            KG_GRAPH_TAB_LABEL,
+            KG_MNEMO_TAB_LABEL,
+        ]
+        assert at.session_state[f"{KG_SURFACE_TAB_KEY}:0"] == KG_GRAPH_TAB_LABEL
+        assert at.session_state["rendered_kg_surface"] == "graph"
+
+        at.session_state[KG_SURFACE_TAB_REVISION_KEY] = 1
+        at.session_state[f"{KG_SURFACE_TAB_KEY}:1"] = KG_MNEMO_TAB_LABEL
+        at.run()
+        assert not at.exception
+        assert at.session_state["rendered_kg_surface"] == "mnemo"
+
+        at.run()
+        assert not at.exception
+        assert at.session_state[f"{KG_SURFACE_TAB_KEY}:1"] == KG_MNEMO_TAB_LABEL
+        assert at.session_state["rendered_kg_surface"] == "mnemo"

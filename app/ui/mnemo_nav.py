@@ -15,6 +15,20 @@ from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
 # Session UI-state keys (not domain / user_state DB).
 KG_OPEN_3D_HALL_KEY = "kg_open_3d_hall"
 KG_RETURN_FROM_KEY = "kg_return_from"
+KG_SURFACE_TAB_KEY = "kg_surface_tab"
+KG_SURFACE_TAB_REVISION_KEY = "kg_surface_tab_revision"
+KG_GRAPH_TAB_LABEL = "🕸 Граф знаний"
+KG_MNEMO_TAB_LABEL = "🌆 Мнемополис"
+
+
+def knowledge_surface_tab_key(*, state: Any | None = None) -> str:
+    """Return the stable widget key for the current Knowledge Graph visit."""
+    target = st.session_state if state is None else state
+    try:
+        revision = max(0, int(target.get(KG_SURFACE_TAB_REVISION_KEY, 0) or 0))
+    except (TypeError, ValueError):
+        revision = 0
+    return f"{KG_SURFACE_TAB_KEY}:{revision}"
 
 
 def open_mnemo_polis(
@@ -32,6 +46,12 @@ def open_mnemo_polis(
     target = st.session_state if state is None else state
     target[PENDING_CURRENT_VIEW_KEY] = "Knowledge Graph"
     target[KG_OPEN_3D_HALL_KEY] = True
+    try:
+        revision = int(target.get(KG_SURFACE_TAB_REVISION_KEY, 0) or 0) + 1
+    except (TypeError, ValueError):
+        revision = 1
+    target[KG_SURFACE_TAB_REVISION_KEY] = revision
+    target[knowledge_surface_tab_key(state=target)] = KG_MNEMO_TAB_LABEL
     if return_from:
         target[KG_RETURN_FROM_KEY] = str(return_from).strip()
     if "home_breadcrumb_origin" not in target:

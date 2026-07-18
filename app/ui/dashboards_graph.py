@@ -52,6 +52,11 @@ from app.ui.knowledge_graph_d3 import (
     reserve_kg_3d_event_id,
     validate_kg_3d_envelope,
 )
+from app.ui.mnemo_nav import (
+    KG_GRAPH_TAB_LABEL,
+    KG_MNEMO_TAB_LABEL,
+    knowledge_surface_tab_key,
+)
 from app.ui.topics_catalog import load_topics_catalog as _load_topics_catalog
 from app.ui.tutor_mastery_forecast_panel import (
     render_tutor_orchestration_snapshot_expander as _render_tutor_orchestration_snapshot_expander,
@@ -1255,15 +1260,21 @@ def _render_graph_quality_audit(audit: dict[str, object]) -> None:
                     st.rerun()
 
 
-def _render_graph_publish_status() -> dict | None:
+def _get_graph_publish_status() -> dict | None:
     try:
-        from app.graph_publish_status import (
-            build_learner_publish_status_view,
-            get_graph_publish_status,
-        )
+        from app.graph_publish_status import get_graph_publish_status
 
-        status = get_graph_publish_status()
-    except Exception:  # noqa: BLE001 - diagnostics only; graph tab must still render.
+        return get_graph_publish_status()
+    except Exception:  # noqa: BLE001 - status is optional enrichment for both surfaces
+        return None
+
+
+def _render_graph_publish_status(status: dict | None = None) -> dict | None:
+    if status is None:
+        status = _get_graph_publish_status()
+    try:
+        from app.graph_publish_status import build_learner_publish_status_view
+    except Exception:  # noqa: BLE001 - diagnostics only; graph tab must still render
         st.caption("Статус карты временно недоступен.")
         return None
 
@@ -1690,20 +1701,146 @@ def _build_keeper_view_models(payload) -> dict:
         return {}
 
 
+def _render_mnemo_polis_surface(
+    *,
+    payload: dict,
+    node_ids: list[str],
+    knowledge_graph,
+    doc_index: dict,
+    publish_status: dict | None,
+    arrival_message: str | None,
+) -> str | None:
+    """Render the active MnemoPolis tab and return its selected concept."""
+    action_result = _consume_and_apply_kg_3d_query(
+        node_ids=node_ids,
+        knowledge_graph=knowledge_graph,
+        doc_index=doc_index,
+    )
+    if action_result is None:
+        pending_result = st.session_state.pop(KG_3D_ACTION_RESULT_KEY, None)
+        action_result = pending_result if isinstance(pending_result, dict) else None
+
+    try:
+        from app import workbench_service
+
+        if workbench_service.WORKBENCH_SECTIONS_KEY not in st.session_state:
+            st.session_state[workbench_service.WORKBENCH_SECTIONS_KEY] = (
+                workbench_service.load_rows()
+            )
+    except Exception:  # noqa: BLE001 - workbench optional for hall render
+        pass
+    collected_ids = _workbench_collected_concept_ids()
+    try:
+        wb_count = len(_workbench_state_rows())
+    except Exception:  # noqa: BLE001 - optional workbench state must not block the hall
+        wb_count = 0
+    nonce = ensure_kg_3d_session_nonce(st.session_state)
+
+    route_for_vm = list(payload.get("day_route") or [])
+    focus_for_vm = str(
+        st.session_state.get("kg_selected_concept")
+        or st.session_state.get("kg_action_concept")
+        or ""
+    ).strip()
+    vm_ids = [str(x) for x in route_for_vm if str(x or "").strip()]
+    if focus_for_vm and focus_for_vm not in vm_ids:
+        vm_ids.append(focus_for_vm)
+    concept_sections = _concept_sections_view_model(
+        concept_ids=vm_ids,
+        knowledge_graph=knowledge_graph,
+        doc_index=doc_index if isinstance(doc_index, dict) else {},
+    )
+    show_onboarding = not bool(st.session_state.get("kg_3d_onboard_shown"))
+    if show_onboarding:
+        st.session_state["kg_3d_onboard_shown"] = True
+
+    keeper_vms = _build_keeper_view_models(payload)
+    architect_signal = None
+    try:
+        from app.ui.knowledge_graph_d3 import build_architect_signal
+
+        architect_signal = build_architect_signal(publish_status)
+    except Exception:  # noqa: BLE001 - optional architect banner must not block the hall
+        architect_signal = None
+
+    if arrival_message:
+        st.success(arrival_message)
+    st.markdown("##### 🏛 3D-зал · Мнемополис")
+    st.caption(
+        "Memory Run · ▶ · 🔁 · 📜 · 💬 · "
+        "Хранитель (экскурсия/угрозы/цель/голоса/летопись) · Правила · ◌."
+    )
+    from app.ui.dashboards_graph_keeper import render_keeper_control_panel
+
+    render_keeper_control_panel()
+    hall_value = render_kg_3d_hall(
+        payload,
+        session_nonce=nonce,
+        collected_concept_ids=collected_ids,
+        workbench_count=wb_count,
+        action_result=action_result,
+        concept_sections=concept_sections,
+        show_onboarding=show_onboarding,
+        keeper_guide=keeper_vms.get("guide"),
+        keeper_threats=keeper_vms.get("threats"),
+        keeper_quest=keeper_vms.get("quest"),
+        keeper_voices=keeper_vms.get("voices"),
+        keeper_chronicle=keeper_vms.get("chronicle"),
+        architect_signal=architect_signal,
+        height=720,
+        key="kg_3d_hall_component",
+    )
+    hall_selected, component_action = parse_kg_3d_component_value(hall_value)
+    if component_action is not None:
+        component_result = _consume_and_apply_kg_3d_component_value(
+            hall_value,
+            node_ids=node_ids,
+            knowledge_graph=knowledge_graph,
+            doc_index=doc_index,
+        )
+        if (
+            component_result is not None
+            and str(component_result.get("action") or "") == "collect"
+        ):
+            st.rerun()
+    if hall_selected and hall_selected in node_ids:
+        st.session_state["kg_selected_concept"] = hall_selected
+        st.session_state["kg_action_concept"] = hall_selected
+        return hall_selected
+    return None
+
+
 def _render_knowledge_graph_tab() -> None:
-    """Beautiful D3 knowledge graph + concept actions + classic fallback."""
+    """Render the 2D knowledge graph and 3D MnemoPolis as explicit tabs."""
     from app.knowledge_service import get_mastery_vector
     from app.knowledge_service import knowledge_graph as active_knowledge_graph
 
     st.markdown('<div class="panel">', unsafe_allow_html=True)
     _render_panel_header(
-        "Knowledge Graph",
-        "Заливка — уровень • кольцо — mastery % • пульсация — доступно • "
-        "клик по узлу — детали, prerequisites и документы",
+        "Карта знаний",
+        "Структура связей и маршрут по 3D-городу памяти.",
     )
 
-    _render_tutor_orchestration_snapshot_expander(key_prefix="kg", show_focus_concept=True)
-    publish_status = _render_graph_publish_status()
+    open_mnemo, mnemo_arrival_message = _consume_mnemo_arrival()
+    surface_tab_key = knowledge_surface_tab_key()
+    if open_mnemo:
+        st.session_state[surface_tab_key] = KG_MNEMO_TAB_LABEL
+    graph_tab, mnemo_tab = st.tabs(
+        [KG_GRAPH_TAB_LABEL, KG_MNEMO_TAB_LABEL],
+        default=KG_GRAPH_TAB_LABEL,
+        key=surface_tab_key,
+        on_change="rerun",
+    )
+    active_surface_tab = mnemo_tab if mnemo_tab.open else graph_tab
+
+    publish_status = _get_graph_publish_status()
+    with graph_tab:
+        if graph_tab.open:
+            _render_tutor_orchestration_snapshot_expander(
+                key_prefix="kg",
+                show_focus_concept=True,
+            )
+            publish_status = _render_graph_publish_status(publish_status)
 
     if "tutor_learned_concepts" not in st.session_state:
         st.session_state["tutor_learned_concepts"] = []
@@ -1718,15 +1855,18 @@ def _render_knowledge_graph_tab() -> None:
         typed_relations = knowledge_graph.get_typed_relations()
         from app.graph_publish_status import LEARNER_MAP_PREVIEW_WARNING
 
-        st.warning(LEARNER_MAP_PREVIEW_WARNING, icon="⚠️")
+        with active_surface_tab:
+            st.warning(LEARNER_MAP_PREVIEW_WARNING, icon="⚠️")
     learned_set = collect_kg_learned_set(concepts)
 
     if not concepts:
-        st.info(
-            "Нет данных для графа: пустой или отсутствующий `data/concept_graph.json` "
-            "и нет строк в **quiz_mastery**. Создайте граф с полем `concepts` "
-            "(и `prerequisites`) или пройдите квизы — концепты подтянутся из прогресса."
-        )
+        with active_surface_tab:
+            st.info(
+                "Нет данных для графа: пустой или отсутствующий "
+                "`data/concept_graph.json` и нет строк в **quiz_mastery**. "
+                "Создайте граф с полем `concepts` (и `prerequisites`) или "
+                "пройдите квизы — концепты подтянутся из прогресса."
+            )
         st.markdown("</div>", unsafe_allow_html=True)
         return
 
@@ -1763,7 +1903,6 @@ def _render_knowledge_graph_tab() -> None:
     except Exception:  # noqa: BLE001
         pass
 
-    open_3d_first, mnemo_arrival_message = _consume_mnemo_arrival()
     payload = render_d3_knowledge_graph(
         concepts,
         mastery_vector=mastery_vector,
@@ -1773,138 +1912,42 @@ def _render_knowledge_graph_tab() -> None:
         source_paths=source_paths,
         due_reviews=due_reviews,
         height=740,
-        render_component=not open_3d_first,
+        render_component=False,
     )
 
-    if not open_3d_first:
-        _render_kg_graph_controls(
-            payload=payload,
-            concepts=concepts,
-            typed_relations=typed_relations,
-        )
+    with graph_tab:
+        if graph_tab.open:
+            payload = render_kg_d3_component(payload, height=740)
+            _render_kg_graph_controls(
+                payload=payload,
+                concepts=concepts,
+                typed_relations=typed_relations,
+            )
 
     node_ids = [n["id"] for n in payload.get("nodes", [])]
-
-    # ── 3D hall action bridge (G0/G1) ──────────────────────────────────
-    # Fallback channel first: _kg3d query-param (same-run ack when URL works).
-    # Primary channel: component value {kind: kg3d_action} — reliable inside
-    # sandboxed Streamlit component iframes where top.location.replace fails.
-    action_result = _consume_and_apply_kg_3d_query(
-        node_ids=node_ids,
-        knowledge_graph=knowledge_graph,
-        doc_index=doc_index,
-    )
-    if action_result is None:
-        pending_result = st.session_state.pop(KG_3D_ACTION_RESULT_KEY, None)
-        action_result = pending_result if isinstance(pending_result, dict) else None
-
-    # Embedded 3D hall (C1): live payload + action bridge. Export remains download above.
-    try:
-        from app import workbench_service
-
-        if workbench_service.WORKBENCH_SECTIONS_KEY not in st.session_state:
-            st.session_state[workbench_service.WORKBENCH_SECTIONS_KEY] = (
-                workbench_service.load_rows()
+    hall_selected = None
+    with mnemo_tab:
+        if mnemo_tab.open:
+            hall_selected = _render_mnemo_polis_surface(
+                payload=payload,
+                node_ids=node_ids,
+                knowledge_graph=knowledge_graph,
+                doc_index=doc_index,
+                publish_status=publish_status,
+                arrival_message=mnemo_arrival_message,
             )
-    except Exception:  # noqa: BLE001 - workbench optional for hall render
-        pass
-    collected_ids = _workbench_collected_concept_ids()
-    try:
-        wb_count = len(_workbench_state_rows())
-    except Exception:  # noqa: BLE001
-        wb_count = 0
-    nonce = ensure_kg_3d_session_nonce(st.session_state)
-    # U2 doors: sections for day_route (+ focused concept) only — keep index work bounded.
-    route_for_vm = list(payload.get("day_route") or [])
-    focus_for_vm = str(
-        st.session_state.get("kg_selected_concept")
-        or st.session_state.get("kg_action_concept")
-        or ""
-    ).strip()
-    vm_ids = [str(x) for x in route_for_vm if str(x or "").strip()]
-    if focus_for_vm and focus_for_vm not in vm_ids:
-        vm_ids.append(focus_for_vm)
-    concept_sections = _concept_sections_view_model(
-        concept_ids=vm_ids,
-        knowledge_graph=knowledge_graph,
-        doc_index=doc_index if isinstance(doc_index, dict) else {},
-    )
-    show_onboarding = not bool(st.session_state.get("kg_3d_onboard_shown"))
-    if show_onboarding:
-        st.session_state["kg_3d_onboard_shown"] = True
 
-    keeper_vms = _build_keeper_view_models(payload)
-    architect_signal = None
-    try:
-        from app.ui.knowledge_graph_d3 import build_architect_signal
-
-        architect_signal = build_architect_signal(publish_status)
-    except Exception:  # noqa: BLE001 - optional W6d banner
-        architect_signal = None
-
-    # W4a/W4b: deep link / return-from-quiz lands on this hall section.
-    if mnemo_arrival_message:
-        st.success(mnemo_arrival_message)
-    st.markdown("##### 🏛 3D-зал (embedded) · Мнемополис")
-    st.caption(
-        "Memory Run · ▶ · 🔁 · 📜 · 💬 · Хранитель (экскурсия/угрозы/цель/голоса/летопись) · Правила · ◌."
-    )
-    from app.ui.dashboards_graph_keeper import render_keeper_control_panel
-
-    render_keeper_control_panel()
-
-    hall_value = render_kg_3d_hall(
-        payload,
-        session_nonce=nonce,
-        collected_concept_ids=collected_ids,
-        workbench_count=wb_count,
-        action_result=action_result,
-        concept_sections=concept_sections,
-        show_onboarding=show_onboarding,
-        keeper_guide=keeper_vms.get("guide"),
-        keeper_threats=keeper_vms.get("threats"),
-        keeper_quest=keeper_vms.get("quest"),
-        keeper_voices=keeper_vms.get("voices"),
-        keeper_chronicle=keeper_vms.get("chronicle"),
-        architect_signal=architect_signal,
-        height=720,
-        key="kg_3d_hall_component",
-    )
-    hall_selected, component_action = parse_kg_3d_component_value(hall_value)
-    # Primary action channel (component envelope). Dedup skips if _kg3d already ran.
-    if component_action is not None:
-        component_result = _consume_and_apply_kg_3d_component_value(
-            hall_value,
-            node_ids=node_ids,
-            knowledge_graph=knowledge_graph,
-            doc_index=doc_index,
+    component_concept = ""
+    _kgc_param = ""
+    bridged_concept = hall_selected
+    if graph_tab.open:
+        # The D3 component returns the selected concept; `_kgc` is its legacy
+        # URL fallback for older single-iframe rendering.
+        component_concept = str(payload.get("selected_concept") or "").strip()
+        _kgc_param = _query_param_first_str("_kgc")
+        bridged_concept = (
+            component_concept if component_concept in node_ids else _kgc_param
         )
-        # collect: result is in session for next render; force rerun so hall gets Ack.
-        # start: _run_kg_3d_start_action already calls st.rerun() when live.
-        if component_result is not None and str(component_result.get("action") or "") == "collect":
-            st.rerun()
-    if hall_selected and hall_selected in node_ids:
-        st.session_state["kg_selected_concept"] = hall_selected
-        st.session_state["kg_action_concept"] = hall_selected
-
-    if open_3d_first:
-        st.markdown("##### 🕸 Граф знаний")
-        payload = render_kg_d3_component(payload, height=740)
-        _render_kg_graph_controls(
-            payload=payload,
-            concepts=concepts,
-            typed_relations=typed_relations,
-        )
-
-    # ── D3 → Streamlit concept bridge ──────────────────────────────────
-    # The D3 graph is rendered as a Streamlit custom component. On node click,
-    # the component returns the selected concept id to Python; `_kgc` remains as
-    # a legacy URL fallback for older single-iframe rendering.
-    component_concept = str(payload.get("selected_concept") or "").strip()
-    _kgc_param = _query_param_first_str("_kgc")
-    bridged_concept = component_concept if component_concept in node_ids else _kgc_param
-    if hall_selected and hall_selected in node_ids:
-        bridged_concept = hall_selected
 
     # Default to a "frontier" (ready-to-learn) concept when available.
     default_sel = next(
@@ -1925,17 +1968,24 @@ def _render_knowledge_graph_tab() -> None:
         if _kgc_param:
             st.query_params.pop("_kgc", None)
 
-    with st.expander("⚡ Действия с концептом", expanded=True):
-        if node_ids:
-            sel = st.selectbox(
-                "Концепт",
-                node_ids,
-                key="kg_action_concept",
-            )
-            st.session_state["kg_selected_concept"] = sel
-            _render_concept_actions(sel, knowledge_graph, doc_index, topics_catalog)
+    with graph_tab:
+        if graph_tab.open:
+            with st.expander("⚡ Действия с концептом", expanded=True):
+                if node_ids:
+                    sel = st.selectbox(
+                        "Концепт",
+                        node_ids,
+                        key="kg_action_concept",
+                    )
+                    st.session_state["kg_selected_concept"] = sel
+                    _render_concept_actions(
+                        sel,
+                        knowledge_graph,
+                        doc_index,
+                        topics_catalog,
+                    )
 
-    with st.expander("🔀 Классический вид (agraph)", expanded=False):
-        _render_classic_agraph(knowledge_graph, learned_set)
+            with st.expander("🔀 Классический вид (agraph)", expanded=False):
+                _render_classic_agraph(knowledge_graph, learned_set)
 
     st.markdown("</div>", unsafe_allow_html=True)

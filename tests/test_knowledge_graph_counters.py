@@ -718,6 +718,12 @@ class Test3DCoverageAndContracts:
         assert "ht_kg3d_calm_world" in html
         assert "FOG_FORGET_MIN" in html
         assert "туман · можно войти" in html  # non-blocking invitation chip
+        # Kill-switch residual §7: ≤1 full threat scene + 2 min idle hide
+        assert "THREAT_SCENE_TTL_MS" in html
+        assert "function fullThreatSceneAllowed" in html
+        assert "function refreshThreatSceneFocus" in html
+        assert "function noteThreatSceneInteraction" in html
+        assert "2 * 60 * 1000" in html
         # W2b review action door (Flashcards nav)
         assert 'id="reviewbtn"' in html
         assert "beginAction('review')" in html or 'beginAction("review")' in html or "action === 'review'" in html

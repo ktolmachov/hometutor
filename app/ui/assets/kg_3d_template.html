@@ -881,6 +881,16 @@ try { calmWorld = sessionStorage.getItem('ht_kg3d_calm_world') === '1'; } catch 
 let interiorOpen = false;
 /** Forgetting strength to start drawing fog (retention = DECAY_VECTOR 0..1). */
 const FOG_FORGET_MIN = 0.28;
+/**
+ * Kill-switch residual (vision §7 / §14): dosage of antagonist «сценки».
+ * - at most one full threat scene at a time (local/all; route stays quiet);
+ * - without learner action, hide full scenes after 2 minutes.
+ * CTAs and panel data chips remain honest / non-blocking always.
+ */
+const THREAT_SCENE_TTL_MS = 2 * 60 * 1000;
+let threatSceneFocusId = '';
+let threatSceneShownAt = 0;
+let threatSceneSuppressed = false;
 /** @type {null|{event_id:string,action:string,concept_id:string,phase:string,label:string}} */
 let pendingAction = null;
 let toastTimer = 0;
@@ -1705,10 +1715,97 @@ function forgettingFor(conceptId) {
   return Math.max(0, Math.min(1, 1 - r));
 }
 
-/** True when fog should draw for this concept (respects calm world + threshold). */
+/** True when fog data-signal exists (respects calm world + threshold). */
 function fogActiveFor(conceptId) {
   if (calmWorld) return false;
   return forgettingFor(conceptId) >= FOG_FORGET_MIN;
+}
+
+/** Learner action / focus touch — re-opens dosage window (kill-switch §7). */
+function noteThreatSceneInteraction() {
+  threatSceneSuppressed = false;
+  threatSceneShownAt = Date.now();
+}
+
+/** Full antagonist scenes stay live only within TTL after last interaction. */
+function threatSceneStillLive() {
+  if (threatSceneSuppressed) return false;
+  if (!threatSceneShownAt) return true;
+  if ((Date.now() - threatSceneShownAt) > THREAT_SCENE_TTL_MS) {
+    threatSceneSuppressed = true;
+    threatSceneFocusId = '';
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Score for picking the single full threat scene (higher = more urgent).
+ * Data-bound only: forgetting, ghost (seen+fog), weak conceptual prereqs.
+ */
+function conceptThreatScore(conceptId) {
+  const id = String(conceptId || '');
+  if (!id || calmWorld) return 0;
+  let score = 0;
+  const forget = forgettingFor(id);
+  if (forget >= FOG_FORGET_MIN) score += forget * 10;
+  const seen = doneConceptIds.has(id) || learnedConceptIds.has(id);
+  if (seen && forget >= FOG_FORGET_MIN) score += 5;
+  if (viewMode !== 'route') {
+    const weakN = weakPrereqIds(id).length;
+    if (weakN) score += 3 + weakN;
+  }
+  return score;
+}
+
+/**
+ * Pick ≤1 concept for full fog/ghost/rift «сценка» (local/all).
+ * Prefer the active stop when it has a real threat signal.
+ */
+function refreshThreatSceneFocus() {
+  if (calmWorld || viewMode === 'route') {
+    threatSceneFocusId = '';
+    return;
+  }
+  if (!threatSceneStillLive()) {
+    threatSceneFocusId = '';
+    return;
+  }
+  const act = String(activeRouteId() || focusId || '');
+  if (act && conceptThreatScore(act) > 0) {
+    if (threatSceneFocusId !== act) {
+      threatSceneFocusId = act;
+      if (!threatSceneShownAt) threatSceneShownAt = Date.now();
+    }
+    return;
+  }
+  let bestId = '';
+  let best = 0;
+  for (const n of (NODES || [])) {
+    const id = String(n.id || '');
+    if (!id) continue;
+    const s = conceptThreatScore(id);
+    if (s > best) {
+      best = s;
+      bestId = id;
+    }
+  }
+  if (bestId) {
+    if (threatSceneFocusId !== bestId) {
+      threatSceneFocusId = bestId;
+      if (!threatSceneShownAt) threatSceneShownAt = Date.now();
+    }
+  } else {
+    threatSceneFocusId = '';
+  }
+}
+
+/** Full antagonist draw only for the single focus id while TTL is live. */
+function fullThreatSceneAllowed(conceptId) {
+  if (calmWorld || viewMode === 'route') return false;
+  if (!threatSceneStillLive()) return false;
+  const id = String(conceptId || '');
+  return !!(id && id === String(threatSceneFocusId || ''));
 }
 
 /**
@@ -2061,6 +2158,9 @@ function draw() {
   ctx.fillRect(0, 0, W, H);
   drawHallWash();
 
+  // Kill-switch residual: pick ≤1 full threat scene before projecting nodes.
+  refreshThreatSceneFocus();
+
   const vis = visibleIdSet();
   const labels = labelAllowSet(vis);
   const route = dayRouteIds();
@@ -2213,18 +2313,26 @@ function draw() {
     }
 
     // W2a fog: under node so stop remains clickable/visible (never hides content).
+    // Kill-switch residual: full mist only for ≤1 focus; TTL hide → no local/all fog.
     const forget = forgettingFor(nn.id);
     if (fogActiveFor(nn.id) && !quietRouteAnchor) {
-      const fullFog = viewMode === 'local' || viewMode === 'all';
-      // Route = quiet markers only (first-frame orientation kill switch).
-      drawForgettingFog(pr, r, forget, { full: fullFog });
+      if (viewMode === 'route') {
+        // Orientation: quiet markers only (first-frame kill switch).
+        drawForgettingFog(pr, r, forget, { full: false });
+      } else if (fullThreatSceneAllowed(nn.id)) {
+        drawForgettingFog(pr, r, forget, { full: true });
+      } else if (threatSceneStillLive()) {
+        // Other fogged stops while one scene is live: quiet ring only.
+        drawForgettingFog(pr, r, forget, { full: false });
+      }
+      // After TTL suppress: hide local/all fog until learner interaction.
     }
-    // W6a Призрак: learned/high mastery + fog (illusion of knowledge). Never on route first frame.
-    if (!calmWorld && !quietRouteAnchor && viewMode !== 'route' && ghostActiveFor(nn.id)) {
+    // W6a Призрак: only the single full threat scene (never route first frame).
+    if (!quietRouteAnchor && fullThreatSceneAllowed(nn.id) && ghostActiveFor(nn.id)) {
       drawConfidenceGhost(pr, r, prefersReducedMotion);
     }
-    // W6b Разлом: conceptual prereqs only (node.prereqs). Never on route first frame.
-    if (!quietRouteAnchor && riftActiveFor(nn.id)) {
+    // W6b Разлом: conceptual prereqs; dosage = ≤1 full scene (never route first frame).
+    if (!quietRouteAnchor && fullThreatSceneAllowed(nn.id) && riftActiveFor(nn.id)) {
       drawPrerequisiteRift(pr, r, prefersReducedMotion);
     }
 
@@ -2235,8 +2343,8 @@ function draw() {
     else if (!onRoute && viewMode === 'route') alpha = Math.min(alpha, 0.22);
     else if (!onRoute && viewMode !== 'route') alpha = Math.min(alpha, 0.34);
     if (onRoute) alpha = Math.max(alpha, isActive ? 0.98 : 0.88);
-    // Fog does not hide the stop — slight desaturate only when full mist
-    if (fogActiveFor(nn.id) && viewMode !== 'route') {
+    // Fog does not hide the stop — slight desaturate only when full threat scene is live.
+    if (fullThreatSceneAllowed(nn.id) && fogActiveFor(nn.id)) {
       alpha = Math.min(alpha, 0.78 + (1 - forget) * 0.18);
     }
     // W5b.1 presentation filter: dim non-matches (never hide / never block CTA).
@@ -2466,6 +2574,7 @@ function goToStop(index, { animate = true, fromTour = false } = {}) {
   activeStopIndex = Math.max(0, Math.min(index, route.length - 1));
   const id = route[activeStopIndex];
   focusId = id;
+  if (!fromTour) noteThreatSceneInteraction();
   const o = nodes3d.find(x => x.n.id === id);
   updateStopInfo();
   buildTopList();
@@ -2736,6 +2845,8 @@ function beginAction(action) {
   if (action === 'collect' && collectedConceptIds.has(id)) return;
   if (!isDoor && action !== 'start' && action !== 'collect' && action !== 'review' && action !== 'ask' && action !== 'brief') return;
   if (isDoor && !DOOR_ACTIONS[action]) return;
+  // Learner action re-opens threat dosage window (vision §7 TTL).
+  noteThreatSceneInteraction();
   postAction(action, id || '_district');
 }
 
@@ -3543,6 +3654,8 @@ function updateNavButtons() {
 function setViewMode(mode) {
   viewMode = mode;
   if (mode === 'local' && !focusId) focusId = activeRouteId();
+  // Mode change counts as learner attention — re-open dosage window.
+  noteThreatSceneInteraction();
   syncModeButtons();
   const h = document.getElementById('hint');
   if (h) {
@@ -3741,6 +3854,7 @@ function focus(n) {
   }
   if (interiorOpen) closeInterior();
   focusId = n.id;
+  noteThreatSceneInteraction();
   const route = dayRouteIds();
   const ri = route.indexOf(n.id);
   if (ri >= 0) {
@@ -3994,6 +4108,8 @@ if (calmBtnEl) {
   calmBtnEl.onclick = () => {
     calmWorld = !calmWorld;
     try { sessionStorage.setItem('ht_kg3d_calm_world', calmWorld ? '1' : '0'); } catch (_) {}
+    // Turning calm off re-opens dosage; on suppresses scenes via calmWorld.
+    if (!calmWorld) noteThreatSceneInteraction();
     updateActionUI();
     updateStopInfo();
     render();

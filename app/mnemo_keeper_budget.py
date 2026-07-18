@@ -272,11 +272,11 @@ def cloud_path_blocked(settings=None) -> bool:
     return False
 
 
-def local_circuit_open() -> bool:
+def local_circuit_open(settings=None) -> bool:
     try:
         from app.provider import local_primary_chat_circuit_open
 
-        return bool(local_primary_chat_circuit_open())
+        return bool(local_primary_chat_circuit_open(settings))
     except Exception:  # noqa: BLE001 — CB probe must not break degrade path
         return False
 
@@ -298,7 +298,7 @@ def local_circuit_blocks_keeper(settings=None) -> bool:
         ).strip().lower()
         if profile == "cloud_fast":
             return False
-        if not local_circuit_open():
+        if not local_circuit_open(s):
             return False
         if profile == "balanced" and primary_chat_fallback_ready(s):
             return False

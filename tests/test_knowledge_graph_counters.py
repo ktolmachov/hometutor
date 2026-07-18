@@ -743,7 +743,11 @@ class Test3DCoverageAndContracts:
         assert "weakPrereqIds" in html
         assert 'id="architectbox"' in html and "updateArchitectBanner" in html
         assert "ARCHITECT_SIGNAL" in html
-        assert 'id="photobtn"' in html and "privacy" in html.lower()
+        assert 'id="photobtn"' in html
+        assert "downloadHallPhotoLocal" in html
+        assert 'id="scenepresets"' in html and "applyScenePreset" in html
+        assert "scenePresentation" in html
+        assert "domain" in html.lower() or "presentation" in html.lower()
         # W4c district doors
         assert 'id="districts"' in html
         assert "door_quiz" in html and "door_flashcards" in html

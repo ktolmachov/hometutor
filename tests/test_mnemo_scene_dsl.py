@@ -1,10 +1,12 @@
-"""W5b: scene-DSL schema/validator spike (no UI wiring)."""
+"""W5b / W5b.1: scene-DSL schema, validator, presentation apply."""
 
 from __future__ import annotations
 
 from app.mnemo_scene_dsl import (
     SCENE_DSL_VERSION,
     SceneDslError,
+    presentation_from_dsl,
+    preset_presentation,
     try_validate_scene_dsl,
     validate_scene_dsl,
 )
@@ -57,3 +59,27 @@ def test_unknown_node_rejected():
         assert False, "expected SceneDslError"
     except SceneDslError as exc:
         assert "unknown_node" in str(exc)
+
+
+def test_presentation_from_dsl_is_presentation_only():
+    env = validate_scene_dsl(
+        {
+            "version": 1,
+            "command": "route_override",
+            "route_override": ["rag", "tutor"],
+        },
+        node_ids={"rag", "tutor"},
+    )
+    pres = presentation_from_dsl(env)
+    assert pres["domain_day_route_unchanged"] is True
+    assert pres["route_override_presentation_only"] is True
+    assert pres["route_override"] == ["rag", "tutor"]
+
+
+def test_preset_weak_and_clear():
+    weak = preset_presentation("weak")
+    assert weak["filter"] == "weak"
+    assert weak["domain_day_route_unchanged"] is True
+    cleared = preset_presentation("clear")
+    assert cleared["filter"] == ""
+    assert cleared["scene_mode"] is None

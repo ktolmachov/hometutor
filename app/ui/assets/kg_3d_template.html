@@ -172,8 +172,24 @@
   .kgx-architect strong{color:var(--kgx-gold);font-weight:700}
   .kgx-photo-btn{
     min-height:28px;border:1px solid var(--kgx-line);border-radius:5px;padding:0 0.4rem;
-    background:transparent;color:var(--kgx-muted);cursor:not-allowed;flex:none;opacity:0.55;
+    background:transparent;color:var(--kgx-muted);cursor:pointer;flex:none;
     font-size:0.72rem;line-height:1;
+  }
+  .kgx-photo-btn:hover{color:var(--kgx-text);border-color:var(--kgx-accent)}
+  /* W5b.1: presentation presets (domain day_route never rewritten) */
+  .kgx-scene-presets{
+    position:absolute;left:calc(var(--hud-l) + 1rem);bottom:4.6rem;z-index:3;
+    display:flex;flex-wrap:wrap;gap:0.25rem;max-width:min(280px,40vw);
+  }
+  .kgx-scene-presets button{
+    min-height:26px;padding:0 0.4rem;border:1px solid var(--kgx-line);border-radius:5px;
+    background:rgba(12,16,20,0.88);color:var(--kgx-muted);font-size:0.64rem;cursor:pointer;
+  }
+  .kgx-scene-presets button:hover,.kgx-scene-presets button.on{
+    border-color:var(--kgx-accent);color:var(--kgx-accent);
+  }
+  @media (max-width:860px){
+    .kgx-scene-presets{position:static;max-width:none;padding:0.35rem 0.5rem}
   }
   /* W5c: inline concept brief (graph retrieval; stay in hall) */
   .kgx-brief{
@@ -594,9 +610,9 @@
       <button class="kgx-calm-btn" id="calmbtn" type="button"
         title="Спокойный мир: скрыть туман забывания (доступность / вкус)"
         aria-label="Спокойный мир" aria-pressed="false">◌</button>
-      <button class="kgx-photo-btn" id="photobtn" type="button" disabled
-        title="G4.3 «фото дня» отложено: privacy review (не сохраняет и не отправляет снимок)"
-        aria-label="Фото дня недоступно — privacy review">📷</button>
+      <button class="kgx-photo-btn" id="photobtn" type="button"
+        title="G4.3: локальный PNG на ваш диск (без сервера и без облака)"
+        aria-label="Скачать локальное фото зала">📷</button>
       <button class="kgx-help-btn" id="helpbtn" type="button" title="Правила зала" aria-label="Открыть правила зала">Правила</button>
     </div>
   </header>
@@ -610,6 +626,13 @@
       </div>
       <div id="architectbox" class="kgx-architect" role="status" aria-live="polite" hidden>
         <strong>Стройка</strong> · <span id="architectline">—</span>
+      </div>
+      <div class="kgx-scene-presets" id="scenepresets" role="group" aria-label="Пресеты сцены (presentation only)">
+        <button type="button" data-preset="route" title="Режим Маршрут">Маршрут</button>
+        <button type="button" data-preset="local" title="Созвездие">Созвездие</button>
+        <button type="button" data-preset="weak" title="Подсветить слабые (туман/разлом)">Слабое</button>
+        <button type="button" data-preset="calm" title="Спокойный мир (скрыть антагонистов)">◌</button>
+        <button type="button" data-preset="clear" title="Сбросить presentation-фильтр">Сброс</button>
       </div>
       <div id="replaybar" class="kgx-replay" role="group" aria-label="Реплей снимков mastery">
         <button type="button" id="replayprev" title="Предыдущий снимок" aria-label="Предыдущий снимок">◀</button>
@@ -775,7 +798,8 @@
         <li><strong>Голоса</strong> — реплики антагонистов (статика/кэш), без стыда. <strong>Летопись</strong> — след quiz-снимков у реплея.</li>
         <li><strong>Призрак</strong> — полупрозрачный ✓ при «знал, но забывает» (local/all; ◌ скрывает).</li>
         <li><strong>Разлом</strong> — трещина при слабых conceptual prereqs (не lesson-edges). CTA не блокирует.</li>
-        <li><strong>Стройка</strong> — только если карта honestly stale/не готова. <strong>📷</strong> — G4.3 privacy (выкл.).</li>
+        <li><strong>Стройка</strong> — только если карта honestly stale/не готова.</li>
+        <li><strong>📷</strong> — локальный PNG на ваш диск (без сервера). <strong>Пресеты</strong> — presentation-only (маршрут/слабое/◌), day_route не переписывается.</li>
       </ol>
       <p class="kgx-onboard-diag" id="onboard-diag" hidden></p>
       <button class="kgx-onboard-ok" id="onboard-ok" type="button">Понятно</button>
@@ -907,6 +931,91 @@ const prefersReducedMotion = (() => {
 })();
 
 const byId = new Map((NODES || []).map(n => [n.id, n]));
+
+/**
+ * W5b.1 presentation-only state (domain DAY_ROUTE never rewritten).
+ * filter: '' | 'weak' | free text label match
+ */
+let scenePresentation = {
+  filter: '',
+  focus_id: '',
+  overlay: null,
+  scene_mode: null,
+  route_override: [],
+  activePreset: '',
+};
+
+function nodeMatchesPresentationFilter(nn) {
+  const f = String(scenePresentation.filter || '').trim().toLowerCase();
+  if (!f) return true;
+  if (f === 'weak') {
+    // Honest: fog / ghost / rift signals already data-bound
+    return fogActiveFor(nn.id) || ghostActiveFor(nn.id) || riftActiveFor(nn.id);
+  }
+  const label = String(nn.label || nn.id || '').toLowerCase();
+  return label.includes(f) || String(nn.id || '').toLowerCase().includes(f);
+}
+
+/** Apply presentation from a named preset (mirrors Python SCENE_PRESETS). */
+function applyScenePreset(name) {
+  const key = String(name || '').trim().toLowerCase();
+  scenePresentation.activePreset = key;
+  scenePresentation.filter = '';
+  scenePresentation.focus_id = '';
+  scenePresentation.overlay = null;
+  scenePresentation.scene_mode = null;
+  scenePresentation.route_override = [];
+  if (key === 'clear' || !key) {
+    /* keep defaults */
+  } else if (key === 'route' || key === 'local' || key === 'all') {
+    scenePresentation.scene_mode = key;
+    setViewMode(key);
+  } else if (key === 'calm') {
+    scenePresentation.overlay = 'calm';
+    calmWorld = true;
+    try { sessionStorage.setItem('ht_kg3d_calm_world', '1'); } catch (_) {}
+  } else if (key === 'weak') {
+    scenePresentation.filter = 'weak';
+    if (viewMode === 'route') setViewMode('local');
+  }
+  const box = document.getElementById('scenepresets');
+  if (box) {
+    box.querySelectorAll('button[data-preset]').forEach((b) => {
+      b.classList.toggle('on', b.getAttribute('data-preset') === key && key !== 'clear');
+    });
+  }
+  updateActionUI();
+  updateStopInfo();
+  updateDistrictDoors();
+  render();
+}
+
+/**
+ * G4.3: local-only PNG of the hall canvas. Never posts to a server.
+ * User picks the save location via the browser download UI.
+ */
+function downloadHallPhotoLocal() {
+  try {
+    if (!canvas || typeof canvas.toDataURL !== 'function') {
+      showToast('Снимок недоступен в этом браузере', { error: true });
+      return;
+    }
+    // Ensure latest frame is painted before capture.
+    render();
+    const dataUrl = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    const stamp = (SNAPSHOT_DATE || new Date().toISOString().slice(0, 10)).replace(/[^\d-]/g, '');
+    a.href = dataUrl;
+    a.download = `mnemo-polis-${stamp}.png`;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    showToast('📷 Локальный PNG · без сервера');
+  } catch (_) {
+    showToast('Не удалось сохранить снимок', { error: true });
+  }
+}
 
 /** U5 HUD: reserve horizontal stage insets for the floating docks so the route
  *  centers in the visible gap (0 when docks stack in-flow on mobile / are collapsed). */
@@ -2076,6 +2185,10 @@ function draw() {
     // Fog does not hide the stop — slight desaturate only when full mist
     if (fogActiveFor(nn.id) && viewMode !== 'route') {
       alpha = Math.min(alpha, 0.78 + (1 - forget) * 0.18);
+    }
+    // W5b.1 presentation filter: dim non-matches (never hide / never block CTA).
+    if (scenePresentation.filter && !nodeMatchesPresentationFilter(nn) && !isActive) {
+      alpha = Math.min(alpha, 0.18);
     }
     ctx.globalAlpha = alpha;
     ctx.fillStyle = col;
@@ -3821,6 +3934,14 @@ if (calmBtnEl) {
     updateStopInfo();
     render();
   };
+}
+const photoBtn = document.getElementById('photobtn');
+if (photoBtn) photoBtn.onclick = () => downloadHallPhotoLocal();
+const scenePresets = document.getElementById('scenepresets');
+if (scenePresets) {
+  scenePresets.querySelectorAll('button[data-preset]').forEach((btn) => {
+    btn.onclick = () => applyScenePreset(btn.getAttribute('data-preset'));
+  });
 }
 document.getElementById('memorybtn').onclick = () => {
   memoryOverlay = !memoryOverlay;

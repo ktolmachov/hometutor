@@ -1,10 +1,11 @@
-"""W5b design spike: read-only scene-DSL schema + validator (no hall wiring).
+"""W5b/W5b.1: read-only scene-DSL schema, validator, presentation apply.
 
 Vision §6.3 F: commands may only describe presentation
 (``filter/focus/scene_mode/overlay/route_override``). Domain ``day_route`` is
 never mutated. Unknown keys and write-like ops are rejected.
 
-This module is intentionally small: spike may stop without a UI.
+W5b = schema/validator. W5b.1 = map validated envelopes → presentation state
+for the hall (no domain write, no JS eval).
 """
 
 from __future__ import annotations
@@ -166,3 +167,104 @@ def try_validate_scene_dsl(
         return validate_scene_dsl(raw, node_ids=node_ids), None
     except SceneDslError as exc:
         return None, str(exc)
+
+
+def presentation_from_dsl(validated: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Map a *validated* DSL envelope to hall presentation state (W5b.1).
+
+    Never mutates domain day_route. ``route_override`` is highlight-only.
+    """
+    if not isinstance(validated, Mapping):
+        return empty_presentation()
+    command = str(validated.get("command") or "").strip().lower()
+    state = empty_presentation()
+    if command == "clear":
+        return state
+    if command == "set_scene_mode":
+        mode = str(validated.get("scene_mode") or "").strip().lower()
+        if mode in ALLOWED_SCENE_MODES:
+            state["scene_mode"] = mode
+    if command == "set_overlay":
+        overlay = str(validated.get("overlay") or "").strip().lower()
+        if overlay in ALLOWED_OVERLAYS:
+            state["overlay"] = overlay
+    if command == "filter":
+        state["filter"] = str(validated.get("filter") or "").strip()
+    if command == "focus":
+        state["focus_id"] = str(validated.get("node_id") or "").strip()
+        extra = validated.get("node_ids") or []
+        if isinstance(extra, (list, tuple)) and extra and not state["focus_id"]:
+            state["focus_id"] = str(extra[0] or "").strip()
+    if command == "route_override":
+        route = validated.get("route_override") or []
+        if isinstance(route, (list, tuple)):
+            state["route_override"] = [str(x).strip() for x in route if str(x).strip()]
+        state["route_override_presentation_only"] = True
+    # Composite fields allowed on any command when present after validate.
+    if validated.get("scene_mode") and not state.get("scene_mode"):
+        mode = str(validated.get("scene_mode") or "").strip().lower()
+        if mode in ALLOWED_SCENE_MODES:
+            state["scene_mode"] = mode
+    if validated.get("overlay") and not state.get("overlay"):
+        overlay = str(validated.get("overlay") or "").strip().lower()
+        if overlay in ALLOWED_OVERLAYS:
+            state["overlay"] = overlay
+    if validated.get("filter") and not state.get("filter"):
+        state["filter"] = str(validated.get("filter") or "").strip()
+    state["domain_day_route_unchanged"] = True
+    return state
+
+
+def empty_presentation() -> dict[str, Any]:
+    """Neutral presentation (domain route untouched)."""
+    return {
+        "scene_mode": None,
+        "overlay": None,
+        "filter": "",
+        "focus_id": "",
+        "route_override": [],
+        "route_override_presentation_only": True,
+        "domain_day_route_unchanged": True,
+    }
+
+
+# Named presets for hall UI (no free-text NL required).
+SCENE_PRESETS: dict[str, dict[str, Any]] = {
+    "clear": {"version": SCENE_DSL_VERSION, "command": "clear"},
+    "route": {
+        "version": SCENE_DSL_VERSION,
+        "command": "set_scene_mode",
+        "scene_mode": "route",
+    },
+    "local": {
+        "version": SCENE_DSL_VERSION,
+        "command": "set_scene_mode",
+        "scene_mode": "local",
+    },
+    "all": {
+        "version": SCENE_DSL_VERSION,
+        "command": "set_scene_mode",
+        "scene_mode": "all",
+    },
+    "calm": {
+        "version": SCENE_DSL_VERSION,
+        "command": "set_overlay",
+        "overlay": "calm",
+    },
+    "weak": {
+        "version": SCENE_DSL_VERSION,
+        "command": "filter",
+        "filter": "weak",
+    },
+}
+
+
+def preset_presentation(name: str) -> dict[str, Any]:
+    """Validate a named preset and return presentation state."""
+    raw = SCENE_PRESETS.get(str(name or "").strip().lower())
+    if raw is None:
+        return empty_presentation()
+    ok, _err = try_validate_scene_dsl(raw, node_ids=None)
+    if ok is None:
+        return empty_presentation()
+    return presentation_from_dsl(ok)

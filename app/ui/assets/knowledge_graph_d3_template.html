@@ -266,6 +266,10 @@ const DECAY_VECTOR=__DECAY_VECTOR__;        // KG-06: {concept_id: retention 0..
 const MASTERY_HISTORY=__MASTERY_HISTORY__;  // KG-07: [{date, mastery:{id:pct}}]
 // Server-side A2 route (same select_day_route as 3D hall). Prefer over local recompute.
 const DAY_ROUTE=__DAY_ROUTE__||[];
+const prefersReducedMotion=(()=>{
+  try{return !!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);}
+  catch(_){return false;}
+})();
 const RELATION_STYLES={
   prerequisite:{color:'#60a5fa',dash:null,width:2,opacity:0.75,marker:'arr-prereq',label:'prerequisite'},
   precedes:{color:'#fbbf24',dash:'6,4',width:2,opacity:0.8,marker:'arr-precedes',label:'precedes'},
@@ -638,7 +642,11 @@ function openPanel(d){
   _kgBridgeConceptToStreamlit(d.id);
   _kgPushConceptHash(d.id);
 }
-function focusNode(d){const s=1.6;svg.transition().duration(550).call(zoom.transform,d3.zoomIdentity.translate(W/2-d.x*s,H/2-d.y*s).scale(s));}
+function focusNode(d){
+  const s=1.6,t=d3.zoomIdentity.translate(W/2-d.x*s,H/2-d.y*s).scale(s);
+  if(prefersReducedMotion)svg.call(zoom.transform,t);
+  else svg.transition().duration(550).call(zoom.transform,t);
+}
 
 // ── KG-02: diagnostics panel ──
 function renderDiag(){
@@ -756,6 +764,10 @@ function animatePath(path){
     .attr('r',d=>R(d.node)+10).attr('fill','none')
     .attr('stroke',d=>d.color).attr('stroke-width',3.5).attr('stroke-opacity',0)
     .attr('cx',d=>d.node.x).attr('cy',d=>d.node.y);
+  if(prefersReducedMotion){
+    routeG.selectAll('.rt').attr('stroke-opacity',0.92);
+    return;
+  }
   let step=0;
   routeAnimTimer=setInterval(()=>{
     if(step>=routeData.length){clearInterval(routeAnimTimer);routeAnimTimer=null;return;}
@@ -1068,7 +1080,9 @@ sim.on('end',()=>{
   let mnX=Infinity,mxX=-Infinity,mnY=Infinity,mxY=-Infinity;
   simNodes.forEach(n=>{mnX=Math.min(mnX,n.x);mxX=Math.max(mxX,n.x);mnY=Math.min(mnY,n.y);mxY=Math.max(mxY,n.y);});
   const pad=80,dx=mxX-mnX+pad*2,dy=mxY-mnY+pad*2,sc=Math.min(W/dx,H/dy)*0.92,cx=(mnX+mxX)/2,cy=(mnY+mxY)/2;
-  svg.transition().duration(750).call(zoom.transform,d3.zoomIdentity.translate(W/2,H/2).scale(sc).translate(-cx,-cy));
+  const fitTransform=d3.zoomIdentity.translate(W/2,H/2).scale(sc).translate(-cx,-cy);
+  if(prefersReducedMotion)svg.call(zoom.transform,fitTransform);
+  else svg.transition().duration(750).call(zoom.transform,fitTransform);
   const hs=location.hash;if(hs.startsWith('#c=')){const n=simNodes.find(x=>x.id===decodeURIComponent(hs.slice(3)));if(n){focusNode(n);openPanel(n);}}
 });
 

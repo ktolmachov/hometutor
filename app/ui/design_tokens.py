@@ -51,6 +51,8 @@ FOUNDATION_TOKEN_KEYS: Final[frozenset[str]] = frozenset(
         "status-warn",
         "status-error",
         "status-info",
+        "ssr-accent-readable",
+        "ssr-accent-readable-hover",
         "elevation-1",
         "elevation-2",
     }
@@ -91,6 +93,8 @@ FOUNDATION_TOKENS: Final[dict[str, str]] = {
     "status-warn": "#92600a",
     "status-error": "#a93226",
     "status-info": "#1a5276",
+    "ssr-accent-readable": "#1f6a9a",
+    "ssr-accent-readable-hover": "#2e6da4",
     "elevation-1": "0 4px 12px rgba(0, 0, 0, 0.08)",
     "elevation-2": "0 12px 32px rgba(0, 0, 0, 0.12)",
 }

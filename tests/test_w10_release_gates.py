@@ -9,6 +9,7 @@ remain manual / Playwright-on-live-app gates (see implementation plan §W10).
 
 from __future__ import annotations
 
+import importlib
 import re
 from pathlib import Path
 
@@ -108,6 +109,18 @@ def _contrast_ratio(fg: str, bg: str) -> float:
     l2 = _relative_luminance(bg)
     lighter, darker = max(l1, l2), min(l1, l2)
     return (lighter + 0.05) / (darker + 0.05)
+
+
+def _css_color_value(rule_body: str) -> str:
+    color_m = re.search(r"^\s*color:\s*([^;]+);", rule_body, flags=re.M)
+    assert color_m, "missing color declaration"
+    return color_m.group(1).strip()
+
+
+def _fallback_hex(value: str) -> str:
+    hex_m = re.search(r"#[0-9a-fA-F]{6}", value)
+    assert hex_m, f"missing computable hex fallback in {value!r}"
+    return hex_m.group(0)
 
 
 # ── Inventory / matrix constants ─────────────────────────────────────────────
@@ -222,6 +235,18 @@ def test_w10_d3_template_disables_infinite_pulse_under_reduced_motion() -> None:
     assert "decay-ring" in body
 
 
+def test_w10_d3_template_gates_js_transitions_under_reduced_motion() -> None:
+    html = _read("app/ui/assets/knowledge_graph_d3_template.html")
+    compact = re.sub(r"\s+", "", html)
+    assert "constprefersReducedMotion=" in compact
+    assert "if(prefersReducedMotion)svg.call(zoom.transform,t);" in compact
+    assert (
+        "if(prefersReducedMotion){routeG.selectAll('.rt')"
+        ".attr('stroke-opacity',0.92);return;}"
+    ) in compact
+    assert "if(prefersReducedMotion)svg.call(zoom.transform,fitTransform);" in compact
+
+
 def test_w10_kg3d_template_reduced_motion_and_no_external_cdn() -> None:
     html = _read("app/ui/assets/kg_3d_template.html")
     assert "prefers-reduced-motion" in html
@@ -249,9 +274,9 @@ def test_w10_ssr_kicker_and_toggle_meet_aa_on_sky_banner() -> None:
     kicker = re.search(r"\.ssr-kicker\s*\{([^}]+)\}", css, flags=re.S)
     assert kicker, "missing .ssr-kicker rule"
     kicker_body = kicker.group(1)
-    color_m = re.search(r"^\s*color:\s*(#[0-9a-fA-F]{6})", kicker_body, flags=re.M)
-    assert color_m, "ssr-kicker must use explicit hex for gate"
-    fg = color_m.group(1)
+    kicker_color = _css_color_value(kicker_body)
+    assert "var(--ssr-accent-readable" in kicker_color
+    fg = _fallback_hex(kicker_color)
     ratio = _contrast_ratio(fg, sky_bg)
     assert ratio >= 4.5, f"ssr-kicker {fg} on {sky_bg} contrast {ratio:.2f} < 4.5"
     # Meaningful text floor.
@@ -260,13 +285,14 @@ def test_w10_ssr_kicker_and_toggle_meet_aa_on_sky_banner() -> None:
     toggle = re.search(r"\.ssr-details-toggle\s*\{([^}]+)\}", css, flags=re.S)
     assert toggle
     toggle_body = toggle.group(1)
-    toggle_color = re.search(r"^\s*color:\s*(#[0-9a-fA-F]{6})", toggle_body, flags=re.M)
-    assert toggle_color, "ssr-details-toggle must use explicit hex"
-    assert color_m.group(1).lower() != "#4a9fd4"
-    assert toggle_color.group(1).lower() != "#4a9fd4"
-    toggle_ratio = _contrast_ratio(toggle_color.group(1), sky_bg)
+    toggle_color = _css_color_value(toggle_body)
+    assert "var(--ssr-accent-readable" in toggle_color
+    assert fg.lower() != "#4a9fd4"
+    toggle_fg = _fallback_hex(toggle_color)
+    assert toggle_fg.lower() != "#4a9fd4"
+    toggle_ratio = _contrast_ratio(toggle_fg, sky_bg)
     assert toggle_ratio >= 4.5, (
-        f"ssr-details-toggle {toggle_color.group(1)} on {sky_bg} "
+        f"ssr-details-toggle {toggle_fg} on {sky_bg} "
         f"contrast {toggle_ratio:.2f} < 4.5"
     )
 
@@ -294,29 +320,34 @@ def test_w10_focus_visible_foundation_present() -> None:
 
 def test_w10_critical_surface_modules_exist() -> None:
     expected = {
-        "mission_control": "app/ui/mission_control.py",
-        "global_navigation": "app/ui/global_navigation.py",
-        "mnemo_3d_hall": "app/ui/assets/kg_3d_template.html",
-        "flashcards_review": "app/ui/flashcards_review_view.py",
-        "quiz": "app/ui/interactive_quiz.py",
-        "living_konspekt": "app/ui/living_konspekt_view.py",
-        "library": "app/ui/library_schedule.py",
-        "tutor_chat": "app/ui/tutor_chat_session.py",
-        "adaptive_plan": "app/ui/adaptive_plan_hub_layout.py",
-        "onboarding": "app/ui/mission_control_first_session.py",
+        "mission_control": ("app.ui.mission_control", "render_mission_control"),
+        "global_navigation": ("app.ui.global_navigation", "render_primary_destination_rail"),
+        "mnemo_3d_hall": ("app/ui/assets/kg_3d_template.html", None),
+        "flashcards_review": ("app.ui.flashcards_review_view", "render_review"),
+        "quiz": ("app.ui.interactive_quiz", "_render_interactive_quiz_tab"),
+        "living_konspekt": ("app.ui.living_konspekt_view", "render_living_konspekt_view"),
+        "library": ("app.ui.library_schedule", "render_library_schedule"),
+        "tutor_chat": ("app.ui.tutor_chat_session", "render_tutor_chat_tab"),
+        "adaptive_plan": ("app.ui.adaptive_plan_hub_layout", "render_adaptive_plan_hub"),
+        "onboarding": ("app.ui.mission_control_first_session", "render_first_session_block"),
     }
     for name in W10_CRITICAL_SURFACES:
-        rel = expected[name]
-        assert (ROOT / rel).is_file(), f"critical surface {name}: missing {rel}"
+        target, attr = expected[name]
+        if attr is None:
+            assert (ROOT / target).is_file(), f"critical surface {name}: missing {target}"
+            continue
+        mod = importlib.import_module(target)
+        assert callable(getattr(mod, attr, None)), f"{name}: missing callable {target}.{attr}"
 
 
 def test_w10_empty_or_offline_entry_points_present() -> None:
     """Structural empty/offline hooks (visual pass still manual)."""
-    offline = _read("app/ui/offline_banner.py")
-    assert "render_offline_banner" in offline
-    assert "offline" in offline.casefold()
+    offline = importlib.import_module("app.ui.offline_banner")
+    assert callable(getattr(offline, "render_offline_banner", None))
+    library_mod = importlib.import_module("app.ui.library_schedule")
+    assert callable(getattr(library_mod, "_render_empty", None))
     library = _read("app/ui/library_schedule.py")
-    assert "empty" in library.casefold() or "нет" in library.casefold()
+    assert "_render_empty" in library
     flashcards = _read("app/ui/flashcards_ui.py")
     assert "fc-empty-state" in flashcards or "empty" in flashcards.casefold()
 
@@ -330,10 +361,14 @@ def test_w10_demo_screenshots_dir_is_inventory_not_gate() -> None:
     assert scenarios, "expected docs/screenshots/final/scenario_* inventory"
 
 
-def test_w10_no_root_playwright_e2e_suite_yet() -> None:
-    """Honesty gate: full-app e2e suite is not present under tests/e2e."""
-    assert not (ROOT / "tests" / "e2e").is_dir()
-    # KG visual smoke lives inside unit tests instead.
+def test_w10_full_app_e2e_status_is_documented_without_blocking_future_suite() -> None:
+    """Honesty gate: current visual status is documented; future e2e is allowed."""
+    plan = _read("docs/ui_ux_design_review_implementation_plan.md")
+    e2e_dir = ROOT / "tests" / "e2e"
+    if e2e_dir.is_dir():
+        assert any(e2e_dir.rglob("*.py")), "tests/e2e exists but has no pytest files"
+    else:
+        assert "`tests/e2e`" in plan and "отсутств" in plan.casefold()
+    # KG visual smoke remains part of W10 evidence until full-app e2e lands.
     kg_tests = _read("tests/test_knowledge_graph_counters.py")
     assert "3d_visual_smoke_viewport_matrix" in kg_tests or "viewport" in kg_tests
-

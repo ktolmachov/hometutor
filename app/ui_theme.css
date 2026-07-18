@@ -87,6 +87,8 @@
     --status-warn: #92600a;
     --status-error: #a93226;
     --status-info: #1a5276;
+    --ssr-accent-readable: #1f6a9a;
+    --ssr-accent-readable-hover: #2e6da4;
     --elevation-1: 0 4px 12px rgba(0, 0, 0, 0.08);
     --elevation-2: 0 12px 32px rgba(0, 0, 0, 0.12);
 }
@@ -1087,7 +1089,7 @@ div[data-testid="stChatMessage"] .stButton > button[kind="secondary"] {
     font-weight: 800;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: #1f6a9a;
+    color: var(--ssr-accent-readable, #1f6a9a);
     margin-bottom: 0.38rem;
 }
 
@@ -1141,7 +1143,7 @@ div[data-testid="stChatMessage"] .stButton > button[kind="secondary"] {
 
 .ssr-why-label {
     font-weight: 700;
-    color: #2e6da4;
+    color: var(--ssr-accent-readable-hover, #2e6da4);
 }
 
 /* ── Expand toggle (native <details>) ── */
@@ -1158,7 +1160,7 @@ div[data-testid="stChatMessage"] .stButton > button[kind="secondary"] {
     font-size: max(0.78rem, var(--type-meta, 12px));
     font-weight: 700;
     /* W10: normal text on light sky surface — AA via darker teal-blue. */
-    color: #1f6a9a;
+    color: var(--ssr-accent-readable, #1f6a9a);
     cursor: pointer;
     list-style: none;
     user-select: none;
@@ -1181,7 +1183,7 @@ div[data-testid="stChatMessage"] .stButton > button[kind="secondary"] {
     transform: rotate(-180deg);
 }
 
-.ssr-details-toggle:hover { color: #2e6da4; }
+.ssr-details-toggle:hover { color: var(--ssr-accent-readable-hover, #2e6da4); }
 
 /* ── Section list inside details ── */
 .ssr-sections {

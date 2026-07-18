@@ -18,6 +18,7 @@ import pytest
 
 from app.flashcards_memory_signals import compute_card_memory_signals
 from app.ui.flashcards_interactive_card import build_interactive_card_html
+from app.ui.knowledge_graph_d3 import build_kg_html
 from app.ui.source_address import library_card_html
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -190,24 +191,37 @@ def _host_chrome_document() -> str:
 
 
 def _d3_document() -> str:
-    # Minimal standalone page using production template CSS/structure excerpt is
-    # heavy; load the real template and inject a tiny SVG graph shell.
-    raw = (ROOT / "app" / "ui" / "assets" / "knowledge_graph_d3_template.html").read_text(
-        encoding="utf-8"
+    return build_kg_html(
+        {
+            "nodes": [
+                {
+                    "id": "rag",
+                    "label": "RAG",
+                    "level": "beginner",
+                    "frontier": True,
+                    "unlocks": ["bm25"],
+                    "mastery": 42,
+                },
+                {
+                    "id": "bm25",
+                    "label": "BM25",
+                    "level": "intermediate",
+                    "frontier": False,
+                    "unlocks": [],
+                    "mastery": 18,
+                },
+            ],
+            "edges": [{"source": "rag", "target": "bm25", "relation_type": "prereq"}],
+            "levels": {"rag": "beginner", "bm25": "intermediate"},
+            "stats": {"total": 2, "frontier": 1},
+            "health": {},
+            "cluster_labels": {},
+            "decay_vector": {"rag": 0.4},
+            "mastery_history": [{"date": "2026-07-18", "mastery": {"rag": 42}}],
+            "compiler_health": None,
+            "day_route": ["rag", "bm25"],
+        }
     )
-    # Template is full HTML with placeholders; if already a document, use as-is
-    # after stripping obvious template tokens that break parse.
-    cleaned = raw
-    for token in (
-        "__PAYLOAD_JSON__",
-        "{{PAYLOAD}}",
-        "__GRAPH_JSON__",
-        "__EMBEDDED_PAYLOAD__",
-    ):
-        cleaned = cleaned.replace(token, "{}")
-    if "<html" not in cleaned.lower():
-        cleaned = _wrap_document(title="W10 d3", body=cleaned)
-    return cleaned
 
 
 @pytest.fixture(scope="module")
@@ -496,19 +510,11 @@ def test_w10_host_reduced_motion_kills_card_hover_transform(browser_factory, tmp
 
 def test_w10_d3_template_reduced_motion_and_viewport_overflow(browser_factory, tmp_path):
     html = _d3_document()
-    # If template is huge/broken without payload, still assert CSS media works
-    # by injecting a minimal pulse element when graph shell missing.
-    if "frontier-halo" not in html:
-        pytest.skip("D3 template missing frontier-halo class")
+    assert "__NODES__" not in html
+    assert "__D3_TAG__" not in html
+    assert "const prefersReducedMotion" in html
+    assert "frontier-halo" in html
     path = tmp_path / "d3.html"
-    # Inject a probe element that uses production classes.
-    if "</body>" in html:
-        probe = (
-            '<svg width="40" height="40" style="position:absolute;left:0;top:0">'
-            '<circle class="frontier-halo" cx="20" cy="20" r="10" '
-            'stroke="#fff" fill="none"></circle></svg>'
-        )
-        html = html.replace("</body>", probe + "</body>", 1)
     path.write_text(html, encoding="utf-8")
 
     for vp in VIEWPORTS[:3]:  # core matrix
@@ -548,4 +554,3 @@ def test_w10_d3_template_reduced_motion_and_viewport_overflow(browser_factory, t
             ), anim
         finally:
             context.close()
-

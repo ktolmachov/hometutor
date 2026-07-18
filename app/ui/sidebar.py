@@ -50,6 +50,12 @@ def open_mnemo_polis(*, state: Any | None = None, return_from: str | None = None
     _open(state=state, return_from=return_from)
 
 
+def open_library(*, state: Any | None = None) -> None:
+    """Open the Library view via deferred navigation (safe after main selectbox)."""
+    target = state if state is not None else st.session_state
+    target[PENDING_CURRENT_VIEW_KEY] = "Библиотека"
+
+
 def collect_topic_document_selections() -> dict[str, list[str]]:
     out: dict[str, list[str]] = {}
     for k in st.session_state.keys():
@@ -304,6 +310,14 @@ def render_sidebar(index_stats: dict | None):
             from app.ui.mnemo_nav import open_mnemo_polis as _open_mnemo
 
             _open_mnemo()
+            st.rerun()
+        if _view_visible("Библиотека") and st.button(
+            "📚 Библиотека",
+            width="stretch",
+            key="sidebar_nav_library",
+            help="Открыть каталог, пересадки и маршрут области.",
+        ):
+            open_library()
             st.rerun()
         _cw = st.session_state.pop("coach_weak_spot_topic", None)
         if _cw:

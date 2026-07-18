@@ -59,6 +59,7 @@ HINT_TO_TILE: Final[dict[str, str]] = {
 
 
 MORE_TOOLS: Final[tuple[tuple[str, str, str], ...]] = (
+    ("Библиотека", "Библиотека", ":material/local_library:"),
     ("Граф знаний", "Knowledge Graph", ":material/account_tree:"),
     ("История", "История", ":material/history:"),
     ("Поиск материалов", "Найти материалы", ":material/search:"),
@@ -322,6 +323,7 @@ def _tile_definitions(*, due_count: int | None) -> tuple[MissionTile, ...]:
         MissionTile("flashcards", "Flashcards", due_suffix, "закрепить", "style", "Flashcards", "Повторить", "flashcards"),
         MissionTile("quick_question", "Быстрый ответ", "Ответ по базе знаний с источниками", "уточнить", "help", "Быстрый ответ", "Спросить", "qa"),
         MissionTile("topics", "Темы", "Каталог тем, пробелы и маршруты", "сориентироваться", "folder_open", "Темы", "Открыть", "topics"),
+        MissionTile("library", "Библиотека", "Каталог, пересадки и маршрут области", "разложить", "local_library", "Библиотека", "Открыть", "library"),
         MissionTile("course", course_title, course_desc, "курс", "map", "Курс", "Открыть", "course"),
         MissionTile("adaptive_plan", "Адаптивный план", "Дневной маршрут с приоритетами", "спланировать", "route", "Адаптивный план", "Собрать", "adaptive_plan"),
         MissionTile("agent_session", "Агент", "Собрать учебную сессию с ИИ-агентом", "сессия", "smart_toy", "Собрать учебную сессию", "Запустить", "agent"),

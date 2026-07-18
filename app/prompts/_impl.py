@@ -27,6 +27,8 @@ import logging
 from llama_index.core.prompts import ChatPromptTemplate, PromptTemplate
 from llama_index.core.base.llms.types import ChatMessage, MessageRole
 
+from app.prompts.design_review import DESIGN_REVIEW_PROMPT
+
 # ─────────────────────────────────────────────────────────────
 # Общие правила, встраиваемые в каждый промпт.
 # Вынесены отдельно, чтобы:
@@ -197,7 +199,6 @@ SYNTHESIS_PARTIAL_PROMPT = ChatPromptTemplate(
     ]
 )
 
-
 # ─────────────────────────────────────────────────────────────
 # LEARNING_PLAN — план обучения с зависимостями
 # ─────────────────────────────────────────────────────────────
@@ -279,8 +280,8 @@ PROMPTS = {
     "synthesis_partial": SYNTHESIS_PARTIAL_PROMPT,
     "learning_plan": LEARNING_PLAN_PROMPT,
     "keyword": KEYWORD_PROMPT,
+    "design_review": DESIGN_REVIEW_PROMPT,
 }
-
 # ─────────────────────────────────────────────────────────────
 # Метаданные промптов для версионирования и eval (§2.2 tasklist)
 # ─────────────────────────────────────────────────────────────
@@ -291,13 +292,13 @@ PROMPT_VERSIONS = {
     "synthesis_partial": "2.1",
     "learning_plan": "2.2",
     "keyword": "2.1",
+    "design_review": "1.0",
     "agent_system": "1.0",
     "agent_decision": "1.0",
     "agent_study_session": "1.0",
     "agent_graph_gap_finder": "1.0",
     "agent_living_konspekt_coach": "1.0",
 }
-
 HOMEWORK_ASSISTANCE_RULES = {
     "hint": (
         "Режим ДЗ: дай только мягкий намек и направление. "
@@ -370,7 +371,6 @@ def select_prompt_id(
         graph_augmented=graph_augmented,
         learner_state=learner_state,
     )
-
 
 # Режимы шаблона квиза (согласованы с tutor_learning_goal + нейтральный default)
 KNOWN_QUIZ_LEARNING_MODES = frozenset(

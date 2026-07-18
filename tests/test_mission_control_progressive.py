@@ -39,7 +39,16 @@ def test_tile_rows_keep_all_tiles() -> None:
     flattened = tuple(tile for row in rows for tile in row)
 
     assert flattened == tiles
-    assert [len(row) for row in rows] == [4, 4]
+    assert [len(row) for row in rows] == [4, 4, 1]
+
+
+def test_mission_control_includes_library_tile() -> None:
+    tiles = {tile.tile_id: tile for tile in _tile_definitions(due_count=0)}
+
+    assert tiles["library"].target_view == "Библиотека"
+    assert "Каталог" in tiles["library"].description
+    assert "пересадки" in tiles["library"].description
+    assert "маршрут" in tiles["library"].description
 
 
 def test_has_indexed_materials_recognises_each_shape() -> None:

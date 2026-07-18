@@ -25,7 +25,7 @@ def _write(path: Path, text: str) -> None:
 
 
 def _patch_library_data(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setattr("app.path_safety.DATA_DIR", tmp_path)
+    monkeypatch.setattr("app.path_safety.get_data_dir", lambda: tmp_path)
     monkeypatch.setattr("app.library_catalog_read.get_data_dir", lambda: tmp_path)
     monkeypatch.setattr(
         "app.library_catalog_read.build_mission_control_course_options",
@@ -156,7 +156,7 @@ tags: [agents]
 
 
 def test_catalog_list_empty_course_filter_no_hallucination(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr("app.path_safety.DATA_DIR", tmp_path)
+    monkeypatch.setattr("app.path_safety.get_data_dir", lambda: tmp_path)
     monkeypatch.setattr("app.library_catalog_read.get_data_dir", lambda: tmp_path)
     monkeypatch.setattr(
         "app.library_catalog_read.build_mission_control_course_options",

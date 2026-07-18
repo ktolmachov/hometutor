@@ -83,6 +83,13 @@ class Settings(BaseSettings):
     )
 
     openai_api_key: str | None = None
+    # Canonical materials/user-data root. App modules must prefer get_settings().data_dir
+    # or path_safety.get_data_dir() — not a bare ``from app.config import DATA_DIR``.
+    data_dir: Path = Field(
+        default_factory=lambda: DATA_DIR,
+        validation_alias=AliasChoices("HOME_RAG_DATA_DIR"),
+        description="Root of local materials and user data (HOME_RAG_DATA_DIR).",
+    )
     home_rag_api_key: str | None = Field(
         default=None,
         validation_alias=AliasChoices("HOME_RAG_API_KEY", "API_KEY"),
@@ -198,6 +205,7 @@ class Settings(BaseSettings):
     llm_request_cache_persist: bool = Field(default=True)
     llm_request_cache_db_path: Path = Field(
         default_factory=lambda: DATA_DIR / "llm_request_cache.db",
+        description="SQLite LLM request cache; re-rooted under data_dir after load.",
     )
     # Параллельная генерация flashcards по документам курса (API scope=course).
     flashcard_course_parallel_workers: int = Field(default=3, ge=1, le=8)
@@ -406,6 +414,7 @@ class Settings(BaseSettings):
     active_index_state_path: Path = Field(default_factory=lambda: CHROMA_DIR / "active_index.json")
 
     # Локальное состояние обучения: прогресс чтения, закладки, заметки (итерация 17 ч.1)
+    # Default is bootstrap DATA_DIR; model_validator re-roots under Settings.data_dir.
     user_state_db: str = str(DATA_DIR / "user_state.db")
 
     # Квизы (scoped / self-check / micro): режим шаблона по умолчанию, если не задан явно и нет цели тьютора
@@ -674,6 +683,52 @@ class Settings(BaseSettings):
                 raise ValueError("latency SLO thresholds must be > 0")
             out[mode] = ms
         return out or None
+
+    @model_validator(mode="after")
+    def align_user_data_paths_with_data_dir(self) -> "Settings":
+        """Re-root default user-data files under ``Settings.data_dir``.
+
+        Field ``default_factory`` values are bound to import-time module
+        ``DATA_DIR``. When ``HOME_RAG_DATA_DIR`` changes (or Settings is rebuilt
+        after env override), cache / user_state / auth must follow ``data_dir``.
+        Explicit paths outside the bootstrap ``DATA_DIR`` (e.g. custom AUTH_DB)
+        are left unchanged.
+        """
+        root = Path(self.data_dir).resolve()
+        bootstrap = Path(DATA_DIR).resolve()
+
+        def rebased(path_value: Path | str, default_name: str) -> Path:
+            p = Path(path_value)
+            try:
+                rel = p.resolve().relative_to(bootstrap)
+                return (root / rel).resolve()
+            except (ValueError, OSError):
+                pass
+            if p.name == default_name:
+                try:
+                    parent = p.parent.resolve() if p.is_absolute() else None
+                except OSError:
+                    parent = None
+                if parent is None or parent == bootstrap or not p.is_absolute():
+                    return (root / default_name).resolve()
+            return p.resolve() if p.is_absolute() else (root / p).resolve()
+
+        object.__setattr__(
+            self,
+            "llm_request_cache_db_path",
+            rebased(self.llm_request_cache_db_path, "llm_request_cache.db"),
+        )
+        object.__setattr__(
+            self,
+            "user_state_db",
+            str(rebased(self.user_state_db, "user_state.db")),
+        )
+        object.__setattr__(
+            self,
+            "auth_db",
+            str(rebased(self.auth_db, "auth.db")),
+        )
+        return self
 
     @model_validator(mode="after")
     def guard_real_data_fallback(self) -> "Settings":

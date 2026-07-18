@@ -8,6 +8,12 @@
 - В приложении использовать `get_settings()` и `get_retrieval_settings()`.
 - `config.env` содержит tracked defaults; `.env` содержит локальные secrets/overrides.
 - Новый env-параметр добавляется как поле `Settings` или `RetrievalSettings`, затем используется через settings object.
+- Корень материалов: `Settings.data_dir` (`HOME_RAG_DATA_DIR`). После load
+  validator выравнивает default user-data paths (`user_state_db`, `auth_db`,
+  `llm_request_cache_db_path`) под `data_dir`. FS-хелперы
+  `app.path_safety.get_data_dir()` / `resolve_data_relative_path()` — разрешённый
+  path-layer; `path_safety.DATA_DIR` re-export остаётся для test monkeypatch.
+  Новый app-код не импортирует module-level `DATA_DIR` напрямую.
 - Raw `os.getenv` / `os.environ` в `app/*.py` запрещены вне `app/config.py` и diagnostic-only кода; guard:
   `scripts/check_config_access.py` (AR-2026-06-25-001, AR-2026-06-25-002).
 

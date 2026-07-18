@@ -10,6 +10,8 @@
 
 - KISS: маленькие модули, явные зависимости, без лишних слоёв.
 - Конфиг: только `get_settings()` / `get_retrieval_settings()` из `app/config.py`.
+  Путь к `data/`: `get_settings().data_dir` или `app.path_safety.get_data_dir()`
+  (не `from app.config import DATA_DIR` в новом app-коде).
 - LLM и embeddings: только через `app/provider.py`.
 - HTTP: роутеры в `app/routers/*`, сборка приложения в `app/api.py`.
 - UI: Streamlit-модули в `app/ui/*`; бизнес-логику не дублировать во view-коде.

@@ -1,6 +1,6 @@
 # Навигатор документации hometutor
 
-Актуализировано: 2026-07-10.
+Актуализировано: 2026-07-18.
 
 `hometutor` — runtime-репозиторий локального учебного RAG-приложения. Здесь живут приложение, API, UI, запуск, deployment и эксплуатационная документация. Demo screenshots сохранены в `docs/screenshots/final/`; исходные сценарные манифесты, генератор demo-документа, backlog, user stories и процессные материалы вынесены в `hometutor-studio`.
 
@@ -13,6 +13,7 @@
 | Backend/API | [api_reference.md](api_reference.md) -> [technical_specification.md](technical_specification.md) |
 | Архитектор | [architecture.md](architecture.md) -> [conventions_architecture.md](conventions_architecture.md) |
 | Разработчик | [conventions.md](conventions.md) -> [evolutionary_development.md](evolutionary_development.md) -> [conventions_reference.md](conventions_reference.md) |
+| Product / UI/UX | [ui_ux_design_review_2026-07-18.md](ui_ux_design_review_2026-07-18.md) -> [ui_ux_design_review_implementation_plan.md](ui_ux_design_review_implementation_plan.md) |
 | DevOps | [quickstart.md](quickstart.md) -> [../DOCKER_BUILD.md](../DOCKER_BUILD.md) -> [../deploy/hf-spaces/README.md](../deploy/hf-spaces/README.md) |
 
 ## Документы
@@ -28,6 +29,8 @@
 | [technical_specification.md](technical_specification.md) | техническая спецификация runtime-системы |
 | [conventions.md](conventions.md) | короткие инженерные правила |
 | [evolutionary_development.md](evolutionary_development.md) | инженерный стиль маленьких проверяемых волн и критерии завершения |
+| [ui_ux_design_review_2026-07-18.md](ui_ux_design_review_2026-07-18.md) | системный UI/UX-аудит runtime-продукта: Мнемополис, основные учебные разделы, дизайн-система, accessibility и responsive |
+| [ui_ux_design_review_implementation_plan.md](ui_ux_design_review_implementation_plan.md) | зафиксированный план реализации дизайн-ревью: P0/P1/P2, волны W1-W10, write-set, targeted tests и Definition of Done |
 | [conventions_architecture.md](conventions_architecture.md) | архитектурные соглашения по слоям |
 | [conventions_reference.md](conventions_reference.md) | справочник по API, ошибкам, тестам и документации |
 | [AI_DEVELOPMENT.md](AI_DEVELOPMENT.md) | как ИИ использовался на этапах планирования/дизайна/разработки/деплоя, примеры промптов |
@@ -58,6 +61,7 @@
 
 ## Что было исправлено при актуализации
 
+- 2026-07-18: добавлены системное UI/UX-ревью всего runtime-продукта и план его реализации. Зафиксированы baseline-оценки, P0/P1/P2, semantic design tokens, accessibility/responsive gates и независимые волны W1-W10 с write-set и targeted tests. Vision/reference-материалы Мнемополиса и mega-bundle остаются в отдельном репозитории `hometutor-studio`; runtime-выводы и handoff сохранены здесь.
 - 2026-07-03: добавлена модель видимости UI по уровням опыта, панель управления
   интерфейсом, онбординг-выбор режима и sync-перенос настроек через `app_kv`.
 - 2026-07-12: полное закрытие плана "Agent as One Button" (A1: UI-дверь + префилл темы из MC; A2: read-only `/agent/runs` + `/agent/runs/{run_id}`; B1: golden расширен до 8 study_session; B2: кнопки сохранения карточек-кандидатов (user-initiated); C1: история агента в Прогрессе). Обновлены: api_reference.md (новые эндпоинты), architecture.md, user_guide.md, agent_roadmap.md, docs/index.md, quickstart.md. Добавлены/усилены targeted тесты на префилл, save cards, C1, A2 positive cases.

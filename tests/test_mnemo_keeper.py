@@ -56,6 +56,7 @@ def test_build_cache_key_includes_provider_model_prompt_version():
         snapshot_date="2026-07-18",
         route_fp="r1",
         concept_hash="c1",
+        payload_hash="p1",
         locale="ru",
         mode="static",
         provider_id="prov-a",
@@ -67,6 +68,7 @@ def test_build_cache_key_includes_provider_model_prompt_version():
         snapshot_date="2026-07-18",
         route_fp="r1",
         concept_hash="c1",
+        payload_hash="p1",
         locale="ru",
         mode="static",
         provider_id="prov-a",
@@ -78,6 +80,7 @@ def test_build_cache_key_includes_provider_model_prompt_version():
         snapshot_date="2026-07-18",
         route_fp="r1",
         concept_hash="c1",
+        payload_hash="p1",
         locale="ru",
         mode="static",
         provider_id="prov-b",  # provider change
@@ -89,15 +92,29 @@ def test_build_cache_key_includes_provider_model_prompt_version():
         snapshot_date="2026-07-18",
         route_fp="r1",
         concept_hash="c1",
+        payload_hash="p1",
         locale="ru",
         mode="static",
         provider_id="prov-a",
         model_id="model-x",
         prompt_version="2026-07-18.v2",  # prompt change
     )
+    k5 = keeper.build_cache_key(
+        scenario=prompts.SCENARIO_GUIDE,
+        snapshot_date="2026-07-18",
+        route_fp="r1",
+        concept_hash="c1",
+        payload_hash="p2",  # semantic payload change
+        locale="ru",
+        mode="static",
+        provider_id="prov-a",
+        model_id="model-x",
+        prompt_version="2026-07-18.v1",
+    )
     assert k1 != k2
     assert k1 != k3
     assert k1 != k4
+    assert k1 != k5
     assert "prov-a" in k1
     assert "model-x" in k1
     assert "2026-07-18.v1" in k1
@@ -109,6 +126,54 @@ def test_build_cache_key_includes_provider_model_prompt_version():
         model_id="m",
     )
     assert prompts.KEEPER_PROMPT_VERSION in k_default
+
+
+def test_semantic_payload_hash_changes_with_done_and_threats():
+    h0 = keeper.semantic_payload_hash(done_count=0, focus="rag", threats=[])
+    h1 = keeper.semantic_payload_hash(done_count=1, focus="rag", threats=[])
+    assert h0 != h1
+    t_low = [{"id": "rag", "forget_pct": 40, "due": 1, "label": "RAG"}]
+    t_high = [{"id": "rag", "forget_pct": 80, "due": 1, "label": "RAG"}]
+    assert keeper.semantic_payload_hash(threats=t_low) != keeper.semantic_payload_hash(
+        threats=t_high
+    )
+    # Label renames must bust cache (same id/forget/due).
+    t_old = [{"id": "rag", "forget_pct": 40, "due": 1, "label": "Old Name"}]
+    t_new = [{"id": "rag", "forget_pct": 40, "due": 1, "label": "New Name"}]
+    assert keeper.semantic_payload_hash(threats=t_old) != keeper.semantic_payload_hash(
+        threats=t_new
+    )
+
+
+def test_request_keeper_cache_miss_when_done_count_changes():
+    """Same route/ids must not return stale quest prose after progress."""
+    state: dict = {}
+    stops = [{"id": "a", "label": "A", "worth_reason": "due"}]
+    r1 = keeper.request_keeper(
+        prompts.SCENARIO_QUEST,
+        snapshot_date="2026-07-18",
+        day_route=["a", "b", "c"],
+        stops=stops,
+        done_count=0,
+        focus="a",
+        allow_llm=False,
+        session_state=state,
+    )
+    assert r1.source in {"degrade", "cache"}
+    r2 = keeper.request_keeper(
+        prompts.SCENARIO_QUEST,
+        snapshot_date="2026-07-18",
+        day_route=["a", "b", "c"],
+        stops=stops,
+        done_count=1,
+        focus="a",
+        allow_llm=False,
+        session_state=state,
+    )
+    assert r1.cache_key != r2.cache_key
+    # Fresh static text should reflect new done_count, not r1 cache.
+    assert "1" in r2.text or "из" in r2.text
+    assert r2.source == "degrade"
 
 
 def test_module_does_not_import_domain_writers():

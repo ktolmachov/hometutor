@@ -825,13 +825,13 @@ def validate_kg_3d_envelope(
     if len(nonce) != len(expected) or not compare_digest(nonce, expected):
         return None
     allowed = {str(n).strip() for n in node_ids if str(n).strip()}
-    # W4c doors: concept optional (focus best-effort); bind to a real node when possible.
+    # W4c doors: concept optional. Bare district = ``_district`` (nav only).
+    # Never invent first allowed node — that turned Оранжерея into concept handoff.
+    # Explicit real node id is still accepted (concept door / tests).
     if action in _KG3D_DOOR_ACTIONS:
-        if concept_id and concept_id not in allowed:
-            concept_id = ""
-        if not concept_id and allowed:
-            concept_id = next(iter(sorted(allowed)))
-        if not concept_id:
+        if concept_id == "_district" or not concept_id:
+            concept_id = "_district"
+        elif concept_id not in allowed:
             concept_id = "_district"
     else:
         if not concept_id:

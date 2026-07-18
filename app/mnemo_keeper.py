@@ -41,6 +41,7 @@ from app.mnemo_keeper_budget import (
     local_circuit_blocks_keeper,
     local_circuit_open,
     route_fingerprint,
+    semantic_payload_hash,
 )
 from app.prompts import mnemo_keeper as prompts
 
@@ -72,6 +73,7 @@ __all__ = [
     "local_circuit_open",
     "request_keeper",
     "route_fingerprint",
+    "semantic_payload_hash",
 ]
 
 _DOMAIN_WRITE_MARKERS = (
@@ -210,12 +212,19 @@ def request_keeper(
         c_hash = concept_set_hash([str(t.get("id") or "") for t in threats])
     else:
         c_hash = concept_set_hash([str(s.get("id") or "") for s in stops] or (day_route or []))
+    payload_fp = semantic_payload_hash(
+        done_count=int(done_count or 0),
+        focus=focus,
+        stops=stops,
+        threats=threats,
+    )
 
     key = build_cache_key(
         scenario=scenario,
         snapshot_date=snapshot_date,
         route_fp=route_fp,
         concept_hash=c_hash,
+        payload_hash=payload_fp,
         locale=locale,
         mode="llm" if allow_llm else "static",
     )

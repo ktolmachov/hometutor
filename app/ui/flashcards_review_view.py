@@ -87,6 +87,12 @@ _FC_INLINE_TUTOR_SESSION_ID_KEY = "fc_inline_tutor_session_id"
 _FC_INLINE_TUTOR_CARD_ID_KEY = "fc_inline_tutor_card_id"
 
 
+# Sticky primary concept for due/count/recovery while Review scope is concept-handoff.
+FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY = "flashcards_review_scope_primary_tag"
+# Avoid short substring hits in front/back (e.g. "ai", "ml").
+_MIN_BODY_NEEDLE_LEN = 4
+
+
 def _collapse_match_text(value: str) -> str:
     """Normalize for soft concept/tag match: alnum runs, collapse separators."""
     chars: list[str] = []
@@ -95,27 +101,151 @@ def _collapse_match_text(value: str) -> str:
     return " ".join("".join(chars).split())
 
 
-def _card_matches_focus_needles(card: dict, needles: list[str]) -> bool:
-    """Soft match any needle against tags/front/back (hyphen vs space tolerant)."""
-    blob = " ".join(
-        str(card.get(k) or "") for k in ("tags", "front", "back", "concept", "topic")
-    )
-    blob_l = blob.lower()
-    blob_soft = _collapse_match_text(blob)
-    blob_alnum = "".join(ch for ch in blob_l if ch.isalnum())
+def _iter_card_meta_tokens(card: dict) -> list[str]:
+    """Tag / concept / topic tokens only (not front/back body)."""
+    parts: list[str] = []
+    for key in ("tags", "concept", "topic"):
+        raw = str(card.get(key) or "").strip()
+        if not raw:
+            continue
+        parts.append(raw)
+        for piece in raw.replace(";", ",").replace("|", ",").split(","):
+            p = piece.strip()
+            if p:
+                parts.append(p)
+    return parts
+
+
+def _needle_variants(raw: str) -> tuple[str, str, str]:
+    n = str(raw or "").strip().lower()
+    soft = _collapse_match_text(n)
+    alnum = "".join(ch for ch in n if ch.isalnum())
+    return n, soft, alnum
+
+
+def _card_matches_meta_exact(card: dict, needles: list[str]) -> bool:
+    """Exact normalized equality on tags/concept/topic tokens."""
+    tokens = _iter_card_meta_tokens(card)
+    token_soft = {_collapse_match_text(t) for t in tokens if t}
+    token_alnum = {
+        "".join(ch for ch in s if ch.isalnum()) for s in token_soft if s
+    }
+    token_cf = {t.casefold() for t in tokens if t}
     for raw in needles:
-        n = str(raw or "").strip().lower()
+        n, soft, alnum = _needle_variants(raw)
         if not n:
             continue
-        if n in blob_l:
+        if n in token_cf or soft in token_soft:
             return True
-        soft = _collapse_match_text(n)
-        if soft and soft in blob_soft:
-            return True
-        alnum = "".join(ch for ch in n if ch.isalnum())
-        if alnum and alnum in blob_alnum:
+        if alnum and alnum in token_alnum:
             return True
     return False
+
+
+def _card_matches_meta_soft(card: dict, needles: list[str]) -> bool:
+    """Substring soft match on tags/concept/topic only."""
+    blob = " ".join(_iter_card_meta_tokens(card)).lower()
+    if not blob:
+        return False
+    blob_soft = _collapse_match_text(blob)
+    blob_alnum = "".join(ch for ch in blob if ch.isalnum())
+    for raw in needles:
+        n, soft, alnum = _needle_variants(raw)
+        if not n:
+            continue
+        if n in blob:
+            return True
+        if soft and soft in blob_soft:
+            return True
+        if alnum and len(alnum) >= _MIN_BODY_NEEDLE_LEN and alnum in blob_alnum:
+            return True
+    return False
+
+
+def _card_matches_body_soft(card: dict, needles: list[str]) -> bool:
+    """Last-resort soft match on front/back; requires min needle length."""
+    blob = " ".join(str(card.get(k) or "") for k in ("front", "back")).lower()
+    if not blob:
+        return False
+    blob_soft = _collapse_match_text(blob)
+    blob_alnum = "".join(ch for ch in blob if ch.isalnum())
+    for raw in needles:
+        n, soft, alnum = _needle_variants(raw)
+        if not n or len(alnum) < _MIN_BODY_NEEDLE_LEN:
+            continue
+        if n in blob or (soft and soft in blob_soft) or (alnum in blob_alnum):
+            return True
+    return False
+
+
+def _card_matches_focus_needles(card: dict, needles: list[str]) -> bool:
+    """Match concept/tag needles: exact meta → soft meta → body fallback."""
+    if _card_matches_meta_exact(card, needles):
+        return True
+    if _card_matches_meta_soft(card, needles):
+        return True
+    return _card_matches_body_soft(card, needles)
+
+
+def _filter_cards_by_needles(cards: list[dict], needles: list[str]) -> list[dict]:
+    """Staged filter: prefer exact meta, then soft meta, then body."""
+    if not needles:
+        return []
+    for pred in (
+        _card_matches_meta_exact,
+        _card_matches_meta_soft,
+        _card_matches_body_soft,
+    ):
+        hit = [c for c in cards if pred(c, needles)]
+        if hit:
+            return hit
+    return []
+
+
+def resolve_concept_scope_api_tags(
+    selected_tags: list[str] | None,
+    *,
+    primary: str | None = None,
+) -> list[str]:
+    """Tags for due/count/recovery/undo when concept handoff is active.
+
+    Primary concept_id only — never id+label OR (avoids label-only strangers).
+    """
+    focus = str(primary or "").strip()
+    if focus:
+        return [focus]
+    return [str(t).strip() for t in (selected_tags or []) if str(t).strip()]
+
+
+def apply_concept_handoff_queue_scope(
+    queue: list,
+    *,
+    focus: str,
+    selected_tags: list[str] | None = None,
+) -> list:
+    """Scope due queue after 3D concept handoff (never trust tags OR alone).
+
+    Preference:
+    1) cards matching *concept_id* (exact meta → soft meta → body);
+    2) if empty — fallback to human label tags;
+    3) never keep the full OR-union of id+label when primary matches exist.
+    """
+    cards = [c for c in (queue or []) if isinstance(c, dict)]
+    focus_s = str(focus or "").strip()
+    tags = [str(t).strip() for t in (selected_tags or []) if str(t).strip()]
+    label_needles = [
+        t for t in tags if not focus_s or t.casefold() != focus_s.casefold()
+    ]
+    if focus_s:
+        primary = _filter_cards_by_needles(cards, [focus_s])
+        if primary:
+            return primary
+        if label_needles:
+            return _filter_cards_by_needles(cards, label_needles)
+        return []
+    if label_needles:
+        return _filter_cards_by_needles(cards, label_needles)
+    return cards
 
 
 def _clear_inline_explanation_state() -> None:
@@ -173,9 +303,10 @@ def apply_pending_review_scope_reset(
     state["flashcards_review_session_tags_text"] = ""
     state["flashcards_review_session_tag_ids"] = []
     state["flashcards_review_session_scope_signature"] = review_scope_signature(None, None)
-    # Explicit scope reset must drop sticky 3D concept focus.
+    # Explicit scope reset must drop sticky 3D concept focus + primary API tag.
     state.pop("flashcards_focus_concept", None)
     state.pop("flashcards_review_focus_filter_once", None)
+    state.pop(FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY, None)
     reset_review_session_state(state)
     return True
 
@@ -1016,6 +1147,20 @@ def render_review(
     st.session_state["flashcards_review_session_deck_id"] = selected_deck_id
     st.session_state["flashcards_review_session_tag_ids"] = selected_tags
 
+    # Concept-handoff primary: count/recovery/undo/due must not use id+label OR.
+    scope_primary = str(
+        st.session_state.get(FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY) or ""
+    ).strip()
+    if not scope_primary:
+        scope_primary = str(st.session_state.get("flashcards_focus_concept") or "").strip()
+    if scope_primary:
+        tag_cf = {t.casefold() for t in selected_tags}
+        if selected_tags and scope_primary.casefold() not in tag_cf:
+            # Learner removed primary from the tag filter — drop sticky scope.
+            st.session_state.pop(FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY, None)
+            scope_primary = ""
+    api_tags = resolve_concept_scope_api_tags(selected_tags, primary=scope_primary or None)
+
     scope_signature = review_scope_signature(selected_deck_id, selected_tags)
     if st.session_state.get("flashcards_review_session_scope_signature") != scope_signature:
         # Queue/status reset only; one-shot focus survives while autoload pending
@@ -1028,9 +1173,12 @@ def render_review(
         scope_bits.append(f"Колода: {deck_label}")
     if selected_tags:
         scope_bits.append("Теги: " + ", ".join(selected_tags))
+    if scope_primary:
+        scope_bits.append(f"Concept scope: {scope_primary}")
     st.caption(" · ".join(scope_bits) if scope_bits else "Повторение по всем due-карточкам.")
 
-    ser_tags_str = serialize_review_tags(selected_tags)
+    # Backend tag filter is OR — for concept handoff send primary only.
+    ser_tags_str = serialize_review_tags(api_tags)
     recovery_count = 0
     schedule_info: dict[str, Any] = {}
     cnt_p: dict[str, Any] = {}
@@ -1085,32 +1233,34 @@ def render_review(
         if autoload_queue or load_clicked:
             st.session_state["flashcards_review_session_status"] = "loading"
             try:
-                data = api_call("GET", "/flashcards/due", params=build_review_due_params(selected_deck_id, selected_tags))
+                data = api_call(
+                    "GET",
+                    "/flashcards/due",
+                    params=build_review_due_params(selected_deck_id, api_tags),
+                )
                 queue = list(data.get("cards") or [])
                 # One-shot concept handoff from 3D: never sticky across later loads.
+                # Do not trust tags OR alone (id+label can pull unrelated label-only cards).
                 focus_once = bool(
                     st.session_state.pop("flashcards_review_focus_filter_once", False)
                 )
                 focus = str(st.session_state.pop("flashcards_focus_concept", "") or "").strip()
-                if focus_once:
-                    needles = [t for t in (list(selected_tags or []) + [focus]) if str(t).strip()]
-                    if selected_tags and queue:
-                        # Tag API already OR-matched; trust it (label tags may not
-                        # contain raw concept_id substrings like linear-algebra).
-                        pass
-                    elif needles:
-                        if not queue and selected_tags:
-                            data_all = api_call(
-                                "GET",
-                                "/flashcards/due",
-                                params=build_review_due_params(selected_deck_id, None),
-                            )
-                            queue = list(data_all.get("cards") or [])
-                        queue = [
-                            c
-                            for c in queue
-                            if isinstance(c, dict) and _card_matches_focus_needles(c, needles)
-                        ]
+                scope_focus = focus or scope_primary
+                if focus_once or scope_primary:
+                    if not queue and selected_tags:
+                        # Broad net only to recover label-only concept cards; then scope.
+                        data_all = api_call(
+                            "GET",
+                            "/flashcards/due",
+                            params=build_review_due_params(selected_deck_id, None),
+                        )
+                        queue = list(data_all.get("cards") or [])
+                    if scope_focus:
+                        queue = apply_concept_handoff_queue_scope(
+                            queue,
+                            focus=scope_focus,
+                            selected_tags=list(selected_tags or []),
+                        )
                 st.session_state["flashcards_review_queue_raw"] = list(queue)
                 st.session_state["flashcards_review_session_audit"] = []
                 _fc_ensure_expert_filter_defaults()

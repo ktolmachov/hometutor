@@ -2828,7 +2828,11 @@ const DOOR_ACTIONS = {
 
 function beginAction(action) {
   const isDoor = !!DOOR_ACTIONS[action];
-  const id = activeRouteId() || focusId || ((NODES || [])[0] && (NODES || [])[0].id) || '_district';
+  // District doors (Оранжерея / Арена / …) are bare nav — never inherit
+  // activeRouteId/focusId/firstNode. Concept-scoped flashcards use action «review».
+  const id = isDoor
+    ? '_district'
+    : (activeRouteId() || focusId || ((NODES || [])[0] && (NODES || [])[0].id) || '_district');
   if (!isDoor && !id) return;
   if (pendingAction) return;
   if (!isEmbedded) {

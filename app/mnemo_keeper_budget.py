@@ -7,6 +7,7 @@ architecture size budget. Read-only: never writes domain state.
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import dataclass, field
 from typing import Any, MutableMapping
 
@@ -107,6 +108,65 @@ def concept_set_hash(concept_ids: list[str] | tuple[str, ...] | None) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
+def semantic_payload_hash(
+    *,
+    done_count: int = 0,
+    focus: str = "",
+    stops: list | tuple | None = None,
+    threats: list | tuple | None = None,
+) -> str:
+    """Fingerprint of values that shape Keeper prose (not only concept ids).
+
+    Without this, cache can return «0 из 3» after progress becomes «1 из 3»
+    or stale forget_pct/label while the view-model shows fresh numbers.
+
+    Canonical JSON (sorted keys) — stable across Python versions / field order.
+    """
+    threat_rows: list[dict[str, object]] = []
+    for raw in threats or []:
+        if not isinstance(raw, dict):
+            continue
+        tid = str(raw.get("id") or "").strip()
+        if not tid:
+            continue
+        threat_rows.append(
+            {
+                "id": tid,
+                "label": str(raw.get("label") or "").strip(),
+                "forget_pct": raw.get("forget_pct", ""),
+                "due": raw.get("due", ""),
+            }
+        )
+    threat_rows.sort(key=lambda r: str(r.get("id") or ""))
+
+    stop_rows: list[dict[str, object]] = []
+    for raw in stops or []:
+        if not isinstance(raw, dict):
+            continue
+        sid = str(raw.get("id") or "").strip()
+        if not sid:
+            continue
+        stop_rows.append(
+            {
+                "id": sid,
+                "label": str(raw.get("label") or "").strip(),
+                "worth_reason": str(
+                    raw.get("worth_reason") or raw.get("reason") or ""
+                ).strip(),
+            }
+        )
+    stop_rows.sort(key=lambda r: str(r.get("id") or ""))
+
+    payload = {
+        "done_count": int(done_count or 0),
+        "focus": str(focus or "").strip(),
+        "stops": stop_rows,
+        "threats": threat_rows,
+    }
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
 def _provider_model_ids() -> tuple[str, str]:
     """Best-effort provider/model identity for cache isolation (vision §6.1).
 
@@ -171,6 +231,7 @@ def build_cache_key(
     snapshot_date: str = "",
     route_fp: str = "",
     concept_hash: str = "",
+    payload_hash: str = "",
     locale: str = "ru",
     mode: str = "static",
     provider_id: str = "",
@@ -180,7 +241,8 @@ def build_cache_key(
     """Cache key (vision §6.1).
 
     Minimum: provider_id, model_id, prompt_version, scenario, snapshot_date|day,
-    locale, route_fingerprint|concept_set_hash, plus mode (static vs llm).
+    locale, route_fingerprint|concept_set_hash, semantic payload_hash,
+    plus mode (static vs llm).
     """
     mode_s = "llm" if str(mode or "").strip().lower() == "llm" else "static"
     if not provider_id or not model_id:
@@ -197,6 +259,7 @@ def build_cache_key(
         str(snapshot_date or "").strip() or "no-date",
         str(route_fp or "").strip() or "no-route",
         str(concept_hash or "").strip() or "no-concepts",
+        str(payload_hash or "").strip() or "no-payload",
         str(locale or "ru").strip() or "ru",
         mode_s,
     ]

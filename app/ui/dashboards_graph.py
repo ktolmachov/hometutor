@@ -267,6 +267,9 @@ def _run_kg_3d_door_action(
             target.pop("flashcards_focus_concept", None)
             target.pop("flashcards_review_focus_filter_once", None)
             target.pop("flashcards_review_autoload_pending", None)
+            from app.ui.flashcards_review_view import FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY
+
+            target.pop(FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY, None)
 
     target[PENDING_CURRENT_VIEW_KEY] = view
     mark_kg_3d_event(target, event_id, "succeeded")
@@ -292,14 +295,18 @@ def _apply_flashcards_concept_due_handoff(
     """Shared W2b / Оранжерея handoff: tags + one-shot focus + due autoload (UI-state only)."""
     from app.ui.flashcards_sections import FC_MAIN_SECTION_REVIEW, pending_section_key
 
+    from app.ui.flashcards_review_view import FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY
+
     focus = str(concept_id or "").strip()
     pretty = str(label or focus).strip() or focus
     # One-shot keys: review view pops them on the first load (not sticky).
     target["flashcards_focus_concept"] = focus
     target["flashcards_review_focus_filter_once"] = True
+    # Sticky primary for due/count/recovery/undo (never id+label OR on backend).
+    target[FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY] = focus
     target["flashcards_subview"] = "review"
     target[pending_section_key()] = FC_MAIN_SECTION_REVIEW
-    # Tag bits: concept id + human label (backend tags filter is OR).
+    # Tag bits: concept id + human label (UI display / label fallback only).
     tag_bits = [focus]
     if pretty and pretty.lower() != focus.lower():
         tag_bits.append(pretty)

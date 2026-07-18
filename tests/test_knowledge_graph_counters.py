@@ -766,6 +766,9 @@ class Test3DCoverageAndContracts:
         assert "door_quiz" in html and "door_flashcards" in html
         assert "updateDistrictDoors" in html
         assert "door_plan" in html and "door_konspekt" in html
+        # Audit F1: bare district doors always post ``_district`` (not route/focus)
+        assert "isDoor" in html and "? '_district'" in html
+        assert "never inherit" in html or "bare nav" in html
         # W5a tutor ask handoff
         assert 'id="askbtn"' in html
         assert 'id="interior-ask"' in html
@@ -1154,6 +1157,18 @@ class Test3DCoverageAndContracts:
                       threatSceneShownAt = Date.now() - (THREAT_SCENE_TTL_MS + 1000);
                       threatSceneSuppressed = false; // force recompute via StillLive
                       refreshThreatSceneFocus();
+                      // Spy draw path: quiet rings = full:false while fog active
+                      window.__fogDraws = [];
+                      const orig = drawForgettingFog;
+                      drawForgettingFog = function(pr, r, forget, opts) {
+                        window.__fogDraws.push({
+                          full: !!(opts && opts.full),
+                          forget: forget,
+                        });
+                        return orig(pr, r, forget, opts);
+                      };
+                      draw();
+                      drawForgettingFog = orig;
                     }"""
                 )
                 after_ttl = page.evaluate(
@@ -1167,6 +1182,7 @@ class Test3DCoverageAndContracts:
                       fogOff: fogActiveFor('off-route'),
                       wantFullOff: (viewMode === 'local' || viewMode === 'all')
                         && fullThreatSceneAllowed('off-route'),
+                      fogDraws: window.__fogDraws || [],
                     })"""
                 )
                 assert after_ttl["live"] is False, after_ttl
@@ -1175,6 +1191,10 @@ class Test3DCoverageAndContracts:
                 # Honest projection: fog data still active → quiet ring path, not full
                 assert after_ttl["fogA"] is True and after_ttl["fogOff"] is True, after_ttl
                 assert after_ttl["wantFullOff"] is False, after_ttl
+                quiet_draws = [d for d in after_ttl["fogDraws"] if d.get("full") is False]
+                full_draws = [d for d in after_ttl["fogDraws"] if d.get("full") is True]
+                assert quiet_draws, after_ttl["fogDraws"]
+                assert not full_draws, after_ttl["fogDraws"]
 
                 # Interaction re-opens dosage; off-route focus restored
                 page.evaluate(
@@ -1723,6 +1743,31 @@ class TestKg3dActionBridge:
             assert ok is not None, action
             assert ok["action"] == action
 
+    def test_door_empty_concept_stays_district_not_first_node(self):
+        """Audit F1: bare door must not invent first allowed concept id."""
+        env = self._env(action="door_flashcards", concept_id="")
+        ok = validate_kg_3d_envelope(
+            env, session_nonce="a" * 32, node_ids=["zebra", "alpha", "rag"]
+        )
+        assert ok is not None
+        assert ok["concept_id"] == "_district"
+
+    def test_door_invalid_concept_becomes_district(self):
+        env = self._env(action="door_flashcards", concept_id="not-in-graph")
+        ok = validate_kg_3d_envelope(
+            env, session_nonce="a" * 32, node_ids=["rag", "tutor"]
+        )
+        assert ok is not None
+        assert ok["concept_id"] == "_district"
+
+    def test_door_explicit_district_token(self):
+        env = self._env(action="door_flashcards", concept_id="_district")
+        ok = validate_kg_3d_envelope(
+            env, session_nonce="a" * 32, node_ids=["rag"]
+        )
+        assert ok is not None
+        assert ok["concept_id"] == "_district"
+
     def test_accepts_ask_action(self):
         """W5a: ask = tutor handoff."""
         env = self._env(action="ask")
@@ -1922,6 +1967,7 @@ class TestKg3dProductActions:
         assert state["flashcards_focus_concept"] == "rag"
         assert state["flashcards_review_focus_filter_once"] is True
         assert state["flashcards_review_autoload_pending"] is True
+        assert state.get("flashcards_review_scope_primary_tag") == "rag"
         tags_text = str(state.get("flashcards_review_session_tags_text") or "")
         assert "rag" in tags_text.lower()
         assert state["flashcards_review_queue"] == []
@@ -1964,9 +2010,49 @@ class TestKg3dProductActions:
         assert state["flashcards_focus_concept"] == "linear-algebra"
         assert state["flashcards_review_focus_filter_once"] is True
         assert state["flashcards_review_autoload_pending"] is True
+        assert state.get("flashcards_review_scope_primary_tag") == "linear-algebra"
         tags = str(state.get("flashcards_review_session_tags_text") or "").lower()
         assert "linear-algebra" in tags
         assert "линейная" in tags or "алгебра" in tags
+
+    def test_door_flashcards_district_is_nav_only(self, monkeypatch):
+        """Audit F1: bare district Оранжерея → Review nav without concept handoff."""
+        from app.ui import dashboards_graph as dg
+        from app.ui.flashcards_sections import FC_MAIN_SECTION_REVIEW, pending_section_key
+        from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
+
+        state: dict = {
+            "flashcards_focus_concept": "stale",
+            "flashcards_review_focus_filter_once": True,
+            "flashcards_review_autoload_pending": True,
+        }
+
+        class _FakeSt:
+            @staticmethod
+            def toast(*a, **k):
+                pass
+
+            @staticmethod
+            def rerun():
+                pass
+
+            @staticmethod
+            def error(*a, **k):
+                pass
+
+        monkeypatch.setattr(dg, "st", _FakeSt)
+        env = {
+            "action": "door_flashcards",
+            "concept_id": "_district",
+            "event_id": "12345678-1234-1234-1234-1234567890cc",
+        }
+        dg._execute_kg_3d_action(env, knowledge_graph=None, doc_index={}, state=state)
+        assert state[PENDING_CURRENT_VIEW_KEY] == "Flashcards"
+        assert state[pending_section_key()] == FC_MAIN_SECTION_REVIEW
+        assert "flashcards_focus_concept" not in state
+        assert "flashcards_review_focus_filter_once" not in state
+        assert "flashcards_review_autoload_pending" not in state
+        assert "flashcards_review_scope_primary_tag" not in state
 
     def test_door_quiz_navigates_without_workbench(self, monkeypatch):
         """W4c: district door → product view; nav only."""

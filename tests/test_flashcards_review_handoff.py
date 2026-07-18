@@ -9,6 +9,7 @@ from app.ui.flashcards_review_view import (
     _card_matches_meta_exact,
     apply_concept_handoff_queue_scope,
     apply_pending_review_scope_reset,
+    resolve_active_concept_scope_primary,
     resolve_concept_scope_api_tags,
 )
 from app.ui.flashcards_ui import _reset_review_session_state
@@ -123,6 +124,92 @@ def test_resolve_concept_scope_api_tags_primary_only():
     )
     assert tags == ["linear-algebra"]
     assert resolve_concept_scope_api_tags(["a", "b"], primary=None) == ["a", "b"]
+
+
+def test_sticky_primary_drops_when_tags_manually_cleared():
+    """P1: empty tag field after handoff must leave concept scope (not keep primary)."""
+    state = {
+        FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY: "linear-algebra",
+        "flashcards_focus_concept": "linear-algebra",
+        # handoff finished — autoload already consumed
+        "flashcards_review_autoload_pending": False,
+        "flashcards_review_focus_filter_once": False,
+    }
+    active = resolve_active_concept_scope_primary(state, selected_tags=[])
+    assert active == ""
+    assert FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY not in state
+    assert "flashcards_focus_concept" not in state
+
+
+def test_handoff_then_clear_tags_load_count_recovery_without_primary():
+    """Audit P2: handoff → user clears tags text → api_tags empty (all due), not [primary].
+
+    Mirrors render_review wiring: resolve primary from state + selected_tags, then
+    resolve_concept_scope_api_tags for count / due / recovery / undo payloads.
+    """
+    from app.ui.flashcards_review_view import apply_flashcards_concept_due_handoff
+
+    state: dict = {}
+    apply_flashcards_concept_due_handoff(
+        state, concept_id="linear-algebra", label="Линейная алгебра"
+    )
+    assert state[FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY] == "linear-algebra"
+    # First load consumed one-shot flags (as after autoload).
+    state["flashcards_review_autoload_pending"] = False
+    state.pop("flashcards_review_focus_filter_once", None)
+    state.pop("flashcards_focus_concept", None)
+
+    # User clears the tags text field → selected_tags == [].
+    selected_tags: list[str] = []
+    scope_primary = resolve_active_concept_scope_primary(
+        state, selected_tags=selected_tags
+    )
+    api_tags = resolve_concept_scope_api_tags(
+        selected_tags, primary=scope_primary or None
+    )
+
+    assert scope_primary == ""
+    assert api_tags == []
+    assert FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY not in state
+    # Backend params must not carry a phantom concept tag.
+    ser = ", ".join(api_tags) if api_tags else None
+    assert ser is None
+
+
+def test_sticky_primary_drops_when_primary_removed_from_tags():
+    state = {
+        FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY: "linear-algebra",
+        "flashcards_review_autoload_pending": False,
+        "flashcards_review_focus_filter_once": False,
+    }
+    active = resolve_active_concept_scope_primary(
+        state, selected_tags=["other-topic"]
+    )
+    assert active == ""
+    assert FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY not in state
+
+
+def test_sticky_primary_kept_while_handoff_pending_even_if_tags_empty():
+    """First handoff paint may briefly see empty widget before seed — keep primary."""
+    state = {
+        FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY: "linear-algebra",
+        "flashcards_review_autoload_pending": True,
+        "flashcards_review_focus_filter_once": True,
+    }
+    active = resolve_active_concept_scope_primary(state, selected_tags=[])
+    assert active == "linear-algebra"
+    assert state[FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY] == "linear-algebra"
+
+
+def test_sticky_primary_kept_when_tags_still_include_concept():
+    state = {
+        FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY: "linear-algebra",
+        "flashcards_review_autoload_pending": False,
+    }
+    active = resolve_active_concept_scope_primary(
+        state, selected_tags=["linear-algebra", "линейная алгебра"]
+    )
+    assert active == "linear-algebra"
 
 
 def test_scope_reset_clears_primary_api_tag():

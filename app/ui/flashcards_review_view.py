@@ -258,6 +258,51 @@ def clear_flashcards_concept_handoff(target: Any) -> None:
     target.pop(FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY, None)
 
 
+def drop_sticky_concept_scope(state: Any) -> None:
+    """Learner left concept scope (cleared/edited tags) — drop sticky primary.
+
+    Does not clear ``flashcards_review_autoload_pending`` (in-flight handoff load).
+    """
+    state.pop(FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY, None)
+    state.pop("flashcards_focus_concept", None)
+    state.pop("flashcards_review_focus_filter_once", None)
+
+
+def resolve_active_concept_scope_primary(
+    state: Any,
+    *,
+    selected_tags: list[str] | None,
+) -> str:
+    """Active concept primary for API scope, or ``\"\"`` if learner left scope.
+
+    Sticky primary survives queue resets, but **not** manual tag clear/edit:
+    * empty tags → drop (user cleared the filter field);
+    * tags without primary id → drop;
+    * handoff still pending (autoload / focus_once) → keep for first load.
+    """
+    primary = str(state.get(FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY) or "").strip()
+    if not primary:
+        primary = str(state.get("flashcards_focus_concept") or "").strip()
+    if not primary:
+        return ""
+
+    handoff_pending = bool(state.get("flashcards_review_autoload_pending")) or bool(
+        state.get("flashcards_review_focus_filter_once")
+    )
+    if handoff_pending:
+        return primary
+
+    tags = [str(t).strip() for t in (selected_tags or []) if str(t).strip()]
+    if not tags:
+        drop_sticky_concept_scope(state)
+        return ""
+    tag_cf = {t.casefold() for t in tags}
+    if primary.casefold() not in tag_cf:
+        drop_sticky_concept_scope(state)
+        return ""
+    return primary
+
+
 def apply_concept_handoff_queue_scope(
     queue: list,
     *,
@@ -1161,11 +1206,17 @@ def render_review(
     if _deck_sel_key not in st.session_state or st.session_state[_deck_sel_key] not in deck_labels:
         st.session_state[_deck_sel_key] = sync_label
 
-    # W2b / 3D: seed tags from concept focus *before* the tags widget + scope
-    # signature so the first render after handoff does not reset away one-shot
-    # keys with an empty-tag scope, then autoload with no soft-match needles.
+    # W2b / 3D: seed tags from concept focus only while handoff is still pending.
+    # Do not re-fill after the learner manually clears the tags field.
     _focus_seed = str(st.session_state.get("flashcards_focus_concept") or "").strip()
-    if _focus_seed and not str(st.session_state.get("flashcards_review_session_tags_text") or "").strip():
+    _handoff_seed_ok = bool(st.session_state.get("flashcards_review_autoload_pending")) or bool(
+        st.session_state.get("flashcards_review_focus_filter_once")
+    )
+    if (
+        _focus_seed
+        and _handoff_seed_ok
+        and not str(st.session_state.get("flashcards_review_session_tags_text") or "").strip()
+    ):
         st.session_state["flashcards_review_session_tags_text"] = _focus_seed
 
     st.markdown("#### Фильтр повторения")
@@ -1189,17 +1240,10 @@ def render_review(
     st.session_state["flashcards_review_session_tag_ids"] = selected_tags
 
     # Concept-handoff primary: count/recovery/undo/due must not use id+label OR.
-    scope_primary = str(
-        st.session_state.get(FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY) or ""
-    ).strip()
-    if not scope_primary:
-        scope_primary = str(st.session_state.get("flashcards_focus_concept") or "").strip()
-    if scope_primary:
-        tag_cf = {t.casefold() for t in selected_tags}
-        if selected_tags and scope_primary.casefold() not in tag_cf:
-            # Learner removed primary from the tag filter — drop sticky scope.
-            st.session_state.pop(FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY, None)
-            scope_primary = ""
+    # Empty / diverged tags drop sticky scope (manual clear must leave concept mode).
+    scope_primary = resolve_active_concept_scope_primary(
+        st.session_state, selected_tags=selected_tags
+    )
     api_tags = resolve_concept_scope_api_tags(selected_tags, primary=scope_primary or None)
 
     scope_signature = review_scope_signature(selected_deck_id, selected_tags)

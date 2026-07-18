@@ -117,7 +117,10 @@ def _ssr_semantic_cache_warmup_background() -> None:
         if model is not None:
             log.info("SSR semantic cache model warmed up at startup.")
         else:
-            log.debug("SSR semantic cache model unavailable at startup (sentence_transformers not installed).")
+            log.debug(
+                "SSR semantic cache model unavailable at startup "
+                "(package or local model snapshot missing)."
+            )
     except Exception as e:  # noqa: BLE001 - background warmup failure is non-fatal for startup
         log.warning("SSR semantic cache warmup skipped: %s", e)
 

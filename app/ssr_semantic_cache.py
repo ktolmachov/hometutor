@@ -27,22 +27,28 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _EMBEDDINGS_MODEL = None
+_MODEL_LOAD_ATTEMPTED = False
 _MODEL_LOCK = threading.Lock()
 _CACHED_EMBEDDINGS: dict[str, tuple[Any, "np.ndarray"]] = {}  # key -> (text, embedding)
 
 
 def _load_embeddings_model():
-    """Lazy load sentence-transformers model on first use (thread-safe)."""
-    global _EMBEDDINGS_MODEL
-    if _EMBEDDINGS_MODEL is not None:  # fast path — no lock needed after init
+    """Load the optional model once, using only an existing local snapshot."""
+    global _EMBEDDINGS_MODEL, _MODEL_LOAD_ATTEMPTED
+    if _MODEL_LOAD_ATTEMPTED:
         return _EMBEDDINGS_MODEL
     with _MODEL_LOCK:
-        if _EMBEDDINGS_MODEL is not None:  # another thread may have loaded while we waited
+        if _MODEL_LOAD_ATTEMPTED:
             return _EMBEDDINGS_MODEL
+        _MODEL_LOAD_ATTEMPTED = True
         try:
             from sentence_transformers import SentenceTransformer
 
-            model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
+            model = SentenceTransformer(
+                "all-MiniLM-L6-v2",
+                device="cpu",
+                local_files_only=True,
+            )
             _EMBEDDINGS_MODEL = model
             logger.debug("ssr_semantic_cache_model_loaded")
             return model
@@ -50,7 +56,10 @@ def _load_embeddings_model():
             logger.debug("ssr_semantic_cache_model_unavailable: sentence_transformers not installed")
             return None
         except Exception as exc:
-            logger.debug("ssr_semantic_cache_model_load_failed", extra={"error": str(exc)[:100]})
+            logger.debug(
+                "ssr_semantic_cache_local_model_unavailable",
+                extra={"error": str(exc)[:100]},
+            )
             return None
 
 

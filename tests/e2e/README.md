@@ -1,7 +1,8 @@
-# W10.F1 — live Streamlit e2e harness
+# W10.F1/W10.F2/W10.F3 — live Streamlit e2e harness
 
-External-stack smoke against a running local stack. First wave of live
-Streamlit gates closing W10 release-open items incrementally.
+Spawned-stack smoke against real FastAPI + Streamlit by default, with an
+external URL override for local debugging. These live gates close W10 release
+open items incrementally.
 
 ## What this is
 
@@ -30,30 +31,54 @@ The live suite is excluded from default `pytest` collection by
   - artifact screenshot under `_artifacts/` for human review (inventory,
     not a pixel gate).
 
+### W10.F2 (2026-07-18) — closed
+
+- Self-contained spawned stack mode:
+  - starts `uvicorn app.api:app` + `streamlit run app/ui/main.py` on free ports,
+  - uses a temporary seeded `HOME_RAG_HOME` / Chroma collection / registry,
+  - sets `HOME_RAG_E2E_OFFLINE=1` so the visual smoke does not depend on LM Studio
+    or cloud keys,
+  - writes process logs to `_artifacts/spawned_fastapi.log` and
+    `_artifacts/spawned_streamlit.log`.
+- Mission Control returning/warm-state live smoke on the release viewport matrix:
+  - same matrix (`1366×768`, `1920×1080`, `390×844`),
+  - same hard guards as W10.F1: no `stException`, no page/console errors,
+    no horizontal overflow,
+  - returning/non-cold proof: mission tiles >3, `Ещё режимы` inventory present,
+    empty-index first-run hero absent,
+  - SSR actionable body present (`e2e-ssr-why-not-others`,
+    `e2e-ssr-contrast`),
+  - visible singular primary learning CTA in the main Mission Control flow,
+  - artifact screenshots under `_artifacts/mission_control_returning_*.png`.
+
+### W10.F3 (2026-07-19) — closed
+
+- Mission Control live focus-vs-sticky smoke on the release viewport matrix:
+  - tabs through visible focus stops,
+  - checks focused control boxes stay in viewport,
+  - checks `elementFromPoint` does not reveal fixed/sticky chrome covering the
+    focused control,
+  - keeps screenshots under `_artifacts/mission_control_focus_*.png`.
+- Mission Control primary learning/onboarding CTA keyboard activation smoke:
+  - reaches the CTA via Tab,
+  - activates it with Enter,
+  - asserts no `stException`, no page/console errors, and no horizontal overflow,
+  - keeps `_artifacts/mission_control_keyboard_cta_1366x768.png`.
+
 ### Still open (do **not** flip W10 to “fully done”)
 
 - Pixel/DOM baseline + diff on the live app (current artifacts are
   inventory-only; no committed baseline).
-- Mission Control **returning** state (warm session), SSR actionable body.
-- Live focus-vs-sticky in Streamlit chrome.
+- Live focus-vs-sticky beyond Mission Control / remaining critical surfaces.
 - Full-app keyboard-only smoke across all critical destinations.
 - Screen-reader smoke audit.
 - Empty / loading / error / offline **visual** pass on the live app.
 - 200% zoom + reduced-motion on the **live** Streamlit chrome
   (already covered on pure-HTML fixtures in `test_w10_visual_matrix.py`).
-- Spawned/self-contained stack mode (this harness relies on an external
-  stack; a future wave can add subprocess spawning for CI autonomy).
 
 ## How to run
 
-The harness connects to an already-running local stack. Start it once:
-
-```powershell
-.\scripts\run_local_stack.ps1 -SkipPip
-# backend → http://127.0.0.1:8000 ; streamlit → http://127.0.0.1:8501
-```
-
-Then in another terminal:
+Default spawned-stack mode:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests/e2e -q
@@ -70,19 +95,18 @@ Then in another terminal:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `HT_E2E_STREAMLIT_URL` | `http://127.0.0.1:8501` | Override the Streamlit base URL. |
-| `HT_SKIP_E2E_LIVE` | unset | `1` skips the whole live suite (CI without a stack). |
+| `HT_E2E_STREAMLIT_URL` | unset | Use an already-running Streamlit URL instead of spawned-stack mode. |
+| `HT_SKIP_E2E_LIVE` | unset | `1` skips the whole live suite. |
 
-If the stack is unreachable the suite **skips** (not fails) with a hint.
+If `HT_E2E_STREAMLIT_URL` is set and unreachable, the suite **skips** with a
+hint. In default spawned-stack mode, startup failures fail the explicit e2e run
+and point to the spawned process logs under `_artifacts/`.
 
 ## Extending
 
 - Add a new surface: create `tests/e2e/test_<surface>_live.py`, reuse
   `e2e_browser` / `e2e_streamlit_url` / `e2e_artifacts_dir` fixtures and
   `open_streamlit_page(...)` helper from `conftest.py`.
-- Spawned mode: add a session-scoped fixture in `conftest.py` that launches
-  `uvicorn app.api:app` + `streamlit run app/ui/main.py` on free ports and
-  sets `HT_E2E_STREAMLIT_URL`; gate behind `HT_E2E_SPAWN_STACK=1`.
 - Pixel baseline: when ready, introduce `_baselines/` (tracked) + a diff
   threshold; only then can W10 move from “partially done” to “done” for the
   live-app regression axis.

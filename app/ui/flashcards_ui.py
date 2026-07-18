@@ -21,16 +21,11 @@ from app.ui.flashcards_sections import (
     apply_pending_flashcards_section as _apply_pending_flashcards_section_impl,
     pending_section_key as _pending_section_key,
     section_order_and_labels as _section_order_and_labels,
-    set_flashcards_section as _set_flashcards_section_impl,
 )
 from app.ui_client import fetch_json
 
 def _apply_pending_flashcards_section() -> None:
     _apply_pending_flashcards_section_impl()
-
-
-def _set_flashcards_section(section: str) -> None:
-    _set_flashcards_section_impl(section)
 
 
 def _apply_e2e_section_override() -> None:
@@ -297,16 +292,8 @@ def _render_flashcards_tab() -> None:
         'style="min-height:1px" aria-hidden="true">&nbsp;</div>',
         unsafe_allow_html=True,
     )
-    nav_decks, nav_create, nav_review = st.columns(3)
-    with nav_decks:
-        if st.button("🗂 Колоды", key="fc_nav_decks", width='stretch'):
-            _set_flashcards_section(FC_MAIN_SECTION_DECKS)
-    with nav_create:
-        if st.button("✨ Создать", key="fc_nav_create", width='stretch'):
-            _set_flashcards_section(FC_MAIN_SECTION_CREATE)
-    with nav_review:
-        if st.button("🔁 Повторение", key="fc_nav_review", width='stretch'):
-            _set_flashcards_section(FC_MAIN_SECTION_REVIEW)
+    # Single segmented control (horizontal radio). Duplicate Колоды/Создать/Повторение
+    # button row removed — W4 UI/UX: no parallel navigation surfaces.
 
     if active_section == FC_MAIN_SECTION_DECKS:
         if subview == "deck_detail" and deck_id:

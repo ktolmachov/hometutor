@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from html import escape
 
 import streamlit as st
 from streamlit.errors import StreamlitAPIException
@@ -123,6 +124,8 @@ def _render_theme_card(theme_id: str, *, current_theme: str) -> None:
     tokens = THEME_TOKENS.get(theme_id, {})
     preview_bg = tokens.get("bg-app-3", "#f4ede0")
     preview_accent = tokens.get("accent", "#b95631")
+    preview_icon = escape(title[:1])
+    title_html = escape(title)
     with st.container(border=True):
         st.markdown(
             f'<div style="height:2.5rem;border-radius:8px;'
@@ -130,8 +133,8 @@ def _render_theme_card(theme_id: str, *, current_theme: str) -> None:
             f'margin-bottom:0.5rem;'
             f'border-left:4px solid {preview_accent};'
             f'padding:0.2rem 0.5rem;'
-            f'font-size:1.2rem;">{title[0]}</div>'
-            f"**{title}**",
+            f'font-size:1.2rem;">{preview_icon}</div>'
+            f"<strong>{title_html}</strong>",
             unsafe_allow_html=True,
         )
         st.caption(desc)

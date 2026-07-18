@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>3D Knowledge Graph — HomeTutor</title>
 <style>
-  /* Memory Run production skin (UI reference v2 / wave U0) — scoped night hall tokens */
+  /* Memory Run production skin — spatial-dark semantic layer (W3) maps to --kgx-*.
+     Hall stays independent of Streamlit light shell; full Streamlit dark is deferred. */
   :root {
     --kgx-night: #080812;
     --kgx-panel: #0e101b;
@@ -21,6 +22,24 @@
     --kgx-blue: #4ca4ff;
     --kgx-lime: #b9f75b;
     --kgx-accent: var(--kgx-cyan);
+    /* Semantic aliases (spatial-dark mode) */
+    --surface-spatial: var(--kgx-panel);
+    --surface-spatial-2: var(--kgx-panel-2);
+    --text-spatial: var(--kgx-text);
+    --text-spatial-muted: var(--kgx-muted);
+    --border-spatial: var(--kgx-line);
+    --status-ok-spatial: var(--kgx-green);
+    --status-warn-spatial: var(--kgx-gold);
+    --status-error-spatial: var(--kgx-coral);
+    --motion-fast: 120ms;
+    --motion-default: 180ms;
+    --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #wrap, #wrap * {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
   }
   html,body{margin:0;height:100%;background:var(--kgx-night);color:var(--kgx-text);
     font-family:"Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;overflow:hidden}

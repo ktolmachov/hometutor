@@ -23,6 +23,8 @@ from typing import Any
 from app.flashcards_rating_labels import RATING_BUTTONS, RATING_MEANINGS
 from app.flashcards_scheduling import format_interval_ru
 from app.flashcards_tag_display import escape_multiline, source_display, split_card_tags
+from app.ui.flashcards_interactive_card_style import STYLE_TEMPLATE
+from app.ui.flashcards_interactive_card_script import build_interactive_card_script
 
 _INK = "#132019"
 _MUTED = "#59685f"
@@ -140,123 +142,83 @@ def _details_html(*, memory: dict[str, Any], card: dict[str, Any]) -> str:
 
 
 def _rating_chips_html(interval_preview: dict[str, int]) -> str:
+    """Rating chips: mnemonic meaning primary, interval secondary (W4)."""
     chips = []
     for label, q_label, _quality, color in RATING_BUTTONS:
         eta_days = int(interval_preview.get(q_label, 1))
         eta_ru = html.escape(format_interval_ru(eta_days))
         meaning = html.escape(RATING_MEANINGS.get(q_label, ""))
+        label_esc = html.escape(label)
+        # Accessible name: mnemonic judgement first, then grade label + interval.
+        aria = html.escape(f"{meaning}. {label}. Интервал: {format_interval_ru(eta_days)}")
         chips.append(
             f'<button type="button" class="fc3-rate-chip" data-q="{q_label}" '
-            f'style="--fc3-rate-color:{color}">'
-            f'<span class="fc3-rate-label">{html.escape(label)}</span>'
-            f'<span class="fc3-rate-meaning">{meaning}</span>'
-            f'<span class="fc3-rate-eta">→ {eta_ru}</span>'
+            f'style="--fc3-rate-color:{color}" aria-label="{aria}">'
+            f'<span class="fc3-rate-meaning" aria-hidden="true">{meaning}</span>'
+            f'<span class="fc3-rate-label" aria-hidden="true">{label_esc}</span>'
+            f'<span class="fc3-rate-eta" aria-hidden="true">→ {eta_ru}</span>'
             f"</button>"
         )
     return "".join(chips)
 
 
-_STYLE = """<style>
-  * {{ box-sizing: border-box; }}
-  html, body {{
-    margin: 0; padding: 0; background: transparent; font-family: {MONO};
-    height: 100%; width: 100%;
-  }}
-  .fc3-scene {{
-    width: 100%; height: 100%; perspective: 1600px; cursor: pointer;
-    padding: 6px;
-  }}
-  .fc3-card {{
-    position: relative; width: 100%; height: 100%;
-    transition: transform 0.5s cubic-bezier(0.4, 0.2, 0.2, 1);
-    transform-style: preserve-3d;
-  }}
-  .fc3-card.is-flipped {{ transform: rotateY(180deg); }}
-  .fc3-face {{
-    position: absolute; inset: 0; backface-visibility: hidden;
-    border-radius: 20px; border: 1px solid {INK_SOFT};
-    box-shadow: 0 18px 40px {INK_SOFT};
-    padding: 1.6rem 1.6rem 1.2rem; display: flex; flex-direction: column;
-    overflow-y: auto; color: {INK};
-  }}
-  .fc3-face.fc3-front {{
-    background: {FRONT_BG};
-  }}
-  .fc3-face.fc3-back {{
-    background: {BACK_BG};
-    border-left: 4px solid {ACCENT};
-    transform: rotateY(180deg);
-  }}
-  .fc3-top-row {{ display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }}
-  .fc3-deck-badge {{
-    font-size: 0.72rem; color: {MUTED}; text-transform: uppercase; letter-spacing: 0.05em;
-  }}
-  .fc3-counter {{ font-size: 0.72rem; color: {MUTED}; }}
-  .fc3-label {{
-    font-size: 0.72rem; color: {MUTED}; text-transform: uppercase; letter-spacing: 0.08em;
-    margin: 0.9rem 0 0.6rem; font-weight: 600;
-  }}
-  .fc3-text {{ font-size: 1.15rem; font-weight: 600; line-height: 1.55; flex: 0 0 auto; }}
-  .fc3-tags {{ margin-top: 0.9rem; }}
-  .fc3-tag-chips {{ display: flex; flex-wrap: wrap; gap: 0.35rem; }}
-  .fc3-tag-chip {{
-    font-size: 0.7rem; color: {ACCENT}; background: transparent;
-    border: 1px solid {ACCENT}; border-radius: 999px; padding: 2px 9px;
-  }}
-  .fc3-source {{ font-size: 0.68rem; color: {MUTED}; margin-top: 0.4rem; }}
-  .fc3-memory-row {{ display: flex; align-items: center; gap: 0.8rem; margin-top: 1rem; }}
-  .fc3-ring {{ position: relative; width: 64px; height: 64px; flex: 0 0 auto; }}
-  .fc3-ring svg {{ transform: rotate(-90deg); }}
-  .fc3-ring-track {{ fill: none; stroke: {INK}; stroke-width: 6; opacity: 0.12; }}
-  .fc3-ring-fill {{
-    fill: none; stroke: {ACCENT}; stroke-width: 6; stroke-linecap: round;
-    transition: stroke-dashoffset 0.9s ease;
-  }}
-  .fc3-ring-label {{
-    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-    font-size: 0.78rem; font-weight: 700; transform: none;
-  }}
-  .fc3-memory-meta {{ flex: 1 1 auto; min-width: 0; }}
-  .fc3-status-chip {{
-    display: inline-block; font-size: 0.68rem; font-weight: 700; padding: 2px 9px;
-    border-radius: 999px; color: #fff;
-  }}
-  .fc3-forecast {{ font-size: 0.72rem; color: {MUTED}; margin-top: 0.3rem; }}
-  .fc3-details {{ margin-top: 0.9rem; font-size: 0.75rem; color: {MUTED}; }}
-  .fc3-details summary {{ cursor: pointer; color: {ACCENT}; font-weight: 600; }}
-  .fc3-details-grid {{
-    display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem 0.8rem; margin-top: 0.5rem;
-  }}
-  .fc3-details-grid > div {{ display: flex; flex-direction: column; }}
-  .fc3-details-k {{ font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.04em; }}
-  .fc3-details-v {{ font-size: 0.85rem; color: {INK}; font-weight: 600; }}
-  .fc3-hint {{ margin-top: auto; padding-top: 0.8rem; font-size: 0.68rem; color: {MUTED}; text-align: center; }}
-  .fc3-rate-row {{ display: flex; gap: 0.5rem; margin-top: 0.9rem; flex-wrap: wrap; }}
-  .fc3-rate-chip {{
-    flex: 1 1 0; min-width: 90px; display: flex; flex-direction: column; align-items: center;
-    gap: 0.15rem; padding: 0.55rem 0.4rem; border-radius: 14px; border: none; cursor: pointer;
-    background: var(--fc3-rate-color, {ACCENT}); color: #fff; font-family: {MONO};
-    transition: transform 0.12s ease, box-shadow 0.12s ease;
-  }}
-  .fc3-rate-chip:hover {{ transform: translateY(-2px); box-shadow: 0 8px 18px {INK}; }}
-  .fc3-rate-chip:active {{ transform: scale(0.94); }}
-  .fc3-rate-chip.fc3-pop {{ animation: fc3-pop 0.22s ease; }}
-  @keyframes fc3-pop {{ 0% {{ transform: scale(1); }} 50% {{ transform: scale(0.88); }} 100% {{ transform: scale(1); }} }}
-  .fc3-rate-label {{ font-size: 0.85rem; font-weight: 700; }}
-  .fc3-rate-meaning {{ font-size: 0.65rem; opacity: 0.9; }}
-  .fc3-rate-eta {{ font-size: 0.68rem; font-weight: 700; opacity: 0.95; }}
-  .fc3-explain-chip {{
-    margin-top: 0.6rem; width: 100%; padding: 0.5rem; border-radius: 12px; border: 1px solid {INK};
-    background: transparent; color: {MUTED}; font-family: {MONO}; font-size: 0.78rem; cursor: pointer;
-  }}
-  .fc3-explain-chip:hover {{ color: {ACCENT}; border-color: {ACCENT}; }}
-  .fc3-flip-back {{
-    margin-top: 0.5rem; align-self: flex-start; background: none; border: none; cursor: pointer;
-    color: {MUTED}; font-family: {MONO}; font-size: 0.72rem; padding: 0;
-  }}
-  .fc3-flip-back:hover {{ color: {ACCENT}; }}
-</style>"""
-
+def _scene_markup(
+    *,
+    style: str,
+    card: dict,
+    counter: str,
+    front_html: str,
+    back_html: str,
+    strength_pct: int,
+    status_label: str,
+    status_color: str,
+    forecast_ru: str,
+    memory: dict,
+    interval_preview: dict,
+) -> str:
+    """Front/back DOM for the flip card (style + faces, no script)."""
+    return f"""{style}
+<div class="fc3-scene" id="fc3-scene" data-fc3-scroll-fallback="host-scrolling">
+  <div class="fc3-sr-only" id="fc3-flip-status" aria-live="polite" aria-atomic="true"></div>
+  <div class="fc3-card" id="fc3-card" data-side="front">
+    <div class="fc3-face fc3-front" id="fc3-front">
+      <div class="fc3-top-row">
+        {_deck_badge_html(card)}
+        <div class="fc3-counter">{html.escape(counter)}</div>
+      </div>
+      <div class="fc3-label" id="fc3-front-label">Вопрос</div>
+      <div class="fc3-text">{front_html}</div>
+      {_tags_html(card)}
+      <div class="fc3-memory-row">
+        {_strength_ring_html(strength_pct)}
+        <div class="fc3-memory-meta">
+          <span class="fc3-status-chip" style="background:{status_color}">{status_label}</span>
+          <div class="fc3-forecast">{forecast_ru}</div>
+        </div>
+      </div>
+      {_details_html(memory=memory, card=card)}
+      <button type="button" class="fc3-flip-surface" id="fc3-flip-surface"
+        aria-pressed="false"
+        aria-controls="fc3-card"
+        aria-describedby="fc3-flip-status"
+        aria-label="Показать ответ. Сейчас: вопрос.">
+        Показать ответ
+      </button>
+      <div class="fc3-hint">Space / Enter — перевернуть · 1–4 — оценка после ответа</div>
+    </div>
+    <div class="fc3-face fc3-back" id="fc3-back">
+      <div class="fc3-label" id="fc3-back-label">Ответ</div>
+      <div class="fc3-text">{back_html}</div>
+      <div class="fc3-rate-row" role="group" aria-label="Оценка припоминания">{_rating_chips_html(interval_preview)}</div>
+      <button type="button" class="fc3-explain-chip" id="fc3-explain">🤔 Не знаю — объясни</button>
+      <button type="button" class="fc3-flip-back" id="fc3-flip-back"
+        aria-pressed="true"
+        aria-controls="fc3-card"
+        aria-label="Вернуться к вопросу. Сейчас: ответ.">↩ к вопросу</button>
+    </div>
+  </div>
+</div>
+"""
 
 def build_interactive_card_html(
     *,
@@ -274,25 +236,24 @@ def build_interactive_card_html(
     front_bg: str = "linear-gradient(160deg, rgba(36,59,44,0.04) 0%, rgba(185,86,49,0.04) 100%)",
     back_bg: str = "linear-gradient(160deg, rgba(185,86,49,0.07) 0%, rgba(36,59,44,0.05) 100%)",
 ) -> str:
-    """Self-contained iframe markup for the review card's flip scene.
+    """Self-contained iframe markup: style + faces + client script.
 
-    ``session_nonce`` namespaces the client-side flip flag in
-    ``sessionStorage`` so a stale flip from a previous queue load never
-    leaks onto a card that reappears after a filter change / "Начать снова"
-    (see the review view's ``flashcards_review_queue_nonce``).
-
-    ``ink``/``muted``/``accent``/``mono``/``front_bg``/``back_bg`` — theme colours
-    passed from the caller (see :func:`app.ui_preferences.get_ui_theme` and
-    :data:`app.ui.theme_presets.THEME_TOKENS`); default to forest palette.
+    ``session_nonce`` namespaces the client-side flip flag in sessionStorage.
+    Theme colours come from the caller (theme presets); defaults are forest.
     """
-    # Shadow module-level constants with per-call parameters for theme support.
-    # pylint: disable=redefined-outer-name
-    _INK = ink  # noqa: N806
-    _MUTED = muted  # noqa: N806
-    _ACCENT = accent  # noqa: N806
-    _MONO = mono  # noqa: N806
-
-    style = _STYLE.format(
+    card_id = int(card.get("id") or 0)
+    front_html = escape_multiline(card.get("front"))
+    back_html = escape_multiline(card.get("back"))
+    counter = f"{idx + 1} / {max(total, idx + 1)}"
+    strength_pct = int(memory.get("strength_pct", 0))
+    status_label = html.escape(str(memory.get("status_label_ru") or ""))
+    status_color = html.escape(str(memory.get("status_color") or muted))
+    forecast_ru = html.escape(str(memory.get("forecast_ru") or ""))
+    # Literal st-key-fc_rate_<q> bridge selectors from RATING_BUTTONS.
+    rate_class_map_json = json.dumps(
+        {q_label: f"st-key-fc_rate_{q_label}" for _label, q_label, _quality, _color in RATING_BUTTONS}
+    )
+    style = STYLE_TEMPLATE.format(
         MONO=mono,
         INK=ink,
         INK_SOFT=_with_hex_alpha(ink, "22"),
@@ -301,271 +262,26 @@ def build_interactive_card_html(
         FRONT_BG=front_bg,
         BACK_BG=back_bg,
     )
-
-    card_id = int(card.get("id") or 0)
-    front_html = escape_multiline(card.get("front"))
-    back_html = escape_multiline(card.get("back"))
-    counter = f"{idx + 1} / {max(total, idx + 1)}"
-
-    strength_pct = int(memory.get("strength_pct", 0))
-    status_label = html.escape(str(memory.get("status_label_ru") or ""))
-    status_color = html.escape(str(memory.get("status_color") or _MUTED))
-    forecast_ru = html.escape(str(memory.get("forecast_ru") or ""))
-
-    # Full literal `st-key-fc_rate_<q>` class names, derived from the single
-    # source of truth (RATING_BUTTONS) rather than string-concatenated in JS
-    # at click time — keeps the bridge selectors visible/greppable in the
-    # rendered markup.
-    rate_class_map_json = json.dumps(
-        {q_label: f"st-key-fc_rate_{q_label}" for _label, q_label, _quality, _color in RATING_BUTTONS}
+    scene = _scene_markup(
+        style=style,
+        card=card,
+        counter=counter,
+        front_html=front_html,
+        back_html=back_html,
+        strength_pct=strength_pct,
+        status_label=status_label,
+        status_color=status_color,
+        forecast_ru=forecast_ru,
+        memory=memory,
+        interval_preview=interval_preview,
     )
+    script = build_interactive_card_script(
+        card_id=card_id,
+        session_nonce=int(session_nonce),
+        initial_flipped=bool(initial_flipped),
+        rate_class_map_json=rate_class_map_json,
+        min_height=_MIN_HEIGHT,
+        max_height=_MAX_HEIGHT,
+    )
+    return f"{scene}<script>\n{script}</script>"
 
-    body = f"""{style}
-<div class="fc3-scene" id="fc3-scene">
-  <div class="fc3-card" id="fc3-card">
-    <div class="fc3-face fc3-front">
-      <div class="fc3-top-row">
-        {_deck_badge_html(card)}
-        <div class="fc3-counter">{html.escape(counter)}</div>
-      </div>
-      <div class="fc3-label">Вопрос</div>
-      <div class="fc3-text">{front_html}</div>
-      {_tags_html(card)}
-      <div class="fc3-memory-row">
-        {_strength_ring_html(strength_pct)}
-        <div class="fc3-memory-meta">
-          <span class="fc3-status-chip" style="background:{status_color}">{status_label}</span>
-          <div class="fc3-forecast">{forecast_ru}</div>
-        </div>
-      </div>
-      {_details_html(memory=memory, card=card)}
-      <div class="fc3-hint">нажми карточку или Space, чтобы перевернуть</div>
-    </div>
-    <div class="fc3-face fc3-back">
-      <div class="fc3-label">Ответ</div>
-      <div class="fc3-text">{back_html}</div>
-      <div class="fc3-rate-row">{_rating_chips_html(interval_preview)}</div>
-      <button type="button" class="fc3-explain-chip" id="fc3-explain">🤔 Не знаю — объясни</button>
-      <button type="button" class="fc3-flip-back" id="fc3-flip-back">↩ к вопросу</button>
-    </div>
-  </div>
-</div>
-<script>
-(function() {{
-  var cardId = {json.dumps(card_id)};
-  var queueNonce = {json.dumps(int(session_nonce))};
-  var initialFlipped = {json.dumps(bool(initial_flipped))};
-  var storageKey = 'fc_flip_' + queueNonce + '_' + cardId;
-  var card3d = document.getElementById('fc3-card');
-  var scene = document.getElementById('fc3-scene');
-  var frontFace = document.querySelector('.fc3-front');
-  var backFace = document.querySelector('.fc3-back');
-  var locked = false;
-
-  function readSessionFlip() {{
-    try {{ return window.parent.sessionStorage.getItem(storageKey) === '1'; }}
-    catch (e) {{ return false; }}
-  }}
-  function writeSessionFlip(v) {{
-    try {{
-      if (v) {{ window.parent.sessionStorage.setItem(storageKey, '1'); }}
-      else {{ window.parent.sessionStorage.removeItem(storageKey); }}
-    }} catch (e) {{}}
-  }}
-
-  var flipped = initialFlipped || readSessionFlip();
-  function applyFlipClass() {{
-    if (flipped) {{ card3d.classList.add('is-flipped'); }}
-    else {{ card3d.classList.remove('is-flipped'); }}
-    // The face turned away from the viewer is still in normal document flow
-    // (only `backface-visibility` hides it), so its buttons/summary stay
-    // Tab-reachable — a keyboard user would land on invisible rating chips
-    // while the question face is showing. `inert` removes the hidden face
-    // from both focus and hit-testing; unsupported browsers just keep the
-    // pre-existing (imperfect) tab order, so this is a safe no-op fallback.
-    if (frontFace) {{ frontFace.inert = flipped; }}
-    if (backFace) {{ backFace.inert = !flipped; }}
-  }}
-  applyFlipClass();
-
-  function setFlipped(v) {{
-    flipped = v;
-    applyFlipClass();
-    writeSessionFlip(v);
-  }}
-
-  function clickParent(cls) {{
-    try {{
-      var doc = window.parent.document;
-      var el = doc.querySelector('.' + cls + ' button');
-      if (el) {{ el.click(); return true; }}
-    }} catch (e) {{}}
-    return false;
-  }}
-
-  var rateClassMap = {rate_class_map_json};
-
-  function rate(q) {{
-    if (locked) {{ return; }}
-    locked = true;
-    writeSessionFlip(false);
-    clickParent(rateClassMap[q] || ('st-key-fc_rate_' + q));
-  }}
-
-  function explain() {{
-    if (locked) {{ return; }}
-    locked = true;
-    clickParent('st-key-fc_gap_to_tutor');
-  }}
-
-  scene.addEventListener('click', function(e) {{
-    if (e.target.closest('.fc3-rate-chip') || e.target.closest('#fc3-explain') ||
-        e.target.closest('#fc3-flip-back') || e.target.closest('.fc3-details')) {{
-      return;
-    }}
-    setFlipped(!flipped);
-  }});
-
-  var rateButtons = document.querySelectorAll('.fc3-rate-chip');
-  for (var i = 0; i < rateButtons.length; i++) {{
-    (function(btn) {{
-      btn.addEventListener('click', function(e) {{
-        e.stopPropagation();
-        btn.classList.add('fc3-pop');
-        rate(btn.getAttribute('data-q'));
-      }});
-    }})(rateButtons[i]);
-  }}
-  var explainBtn = document.getElementById('fc3-explain');
-  if (explainBtn) {{
-    explainBtn.addEventListener('click', function(e) {{ e.stopPropagation(); explain(); }});
-  }}
-  var flipBackBtn = document.getElementById('fc3-flip-back');
-  if (flipBackBtn) {{
-    flipBackBtn.addEventListener('click', function(e) {{ e.stopPropagation(); setFlipped(false); }});
-  }}
-
-  var ring = document.getElementById('fc3-ring-fill');
-  if (ring) {{
-    var targetOffset = ring.getAttribute('data-offset');
-    window.setTimeout(function() {{ ring.style.strokeDashoffset = targetOffset; }}, 40);
-  }}
-
-  // Shrink the *inner* card to the face's actual content height instead of
-  // the fixed Python-side estimate — otherwise short cards leave a large
-  // empty box below the content. Measured off-DOM (hidden clone) so faces
-  // keep their normal `position:absolute` sizing (needed for the flip
-  // transform) undisturbed. (frontFace/backFace declared above, reused
-  // here.)
-  //
-  // This only resizes `.fc3-card` *within* the iframe's own document — it
-  // cannot shrink the outer iframe box itself. `sendFrameHeight()` below
-  // best-effort-posts the standard custom-component resize message on the
-  // chance a future Streamlit version honours it for `components.html()`
-  // iframes too, but as of the installed frontend it does not: only a
-  // `declare_component()` instance's ComponentInstance listens for
-  // `streamlit:setFrameHeight`, and `components.html()` renders a plain
-  // `st.iframe`-style element that never wires that listener up. The outer
-  // box size is controlled purely by `estimate_interactive_card_height()`
-  // (Python side) plus `scrolling=True` at the `components.html(...)` call
-  // as a fallback for whatever that estimate undershoots.
-
-  function measureNaturalHeight(faceEl) {{
-    if (!faceEl) {{ return 0; }}
-    var clone = faceEl.cloneNode(true);
-    clone.removeAttribute('id');
-    var idEls = clone.querySelectorAll('[id]');
-    for (var i = 0; i < idEls.length; i++) {{ idEls[i].removeAttribute('id'); }}
-    clone.style.position = 'absolute';
-    clone.style.visibility = 'hidden';
-    clone.style.pointerEvents = 'none';
-    clone.style.left = '-99999px';
-    clone.style.top = '0';
-    clone.style.height = 'auto';
-    clone.style.maxHeight = 'none';
-    clone.style.transform = 'none';
-    clone.style.width = card3d.clientWidth + 'px';
-    document.body.appendChild(clone);
-    var h = clone.scrollHeight;
-    document.body.removeChild(clone);
-    return h;
-  }}
-
-  function sendFrameHeight(px) {{
-    try {{
-      window.parent.postMessage({{isStreamlitMessage: true, type: 'streamlit:setFrameHeight', height: px}}, '*');
-    }} catch (e) {{}}
-  }}
-
-  function resizeToContent() {{
-    var contentH = Math.max(measureNaturalHeight(frontFace), measureNaturalHeight(backFace));
-    contentH = Math.max({_MIN_HEIGHT}, Math.min(contentH, {_MAX_HEIGHT}));
-    card3d.style.height = contentH + 'px';
-    sendFrameHeight(contentH + 16);
-  }}
-  resizeToContent();
-
-  var rateMap = {{
-    'Digit1': 'again', 'Numpad1': 'again',
-    'Digit2': 'hard', 'Numpad2': 'hard',
-    'Digit3': 'good', 'Numpad3': 'good',
-    'Digit4': 'easy', 'Numpad4': 'easy'
-  }};
-
-  function handleKey(e) {{
-    var t = e.target || {{}};
-    var tag = (t.tagName || '').toLowerCase();
-    if (tag === 'input' || tag === 'textarea' || t.isContentEditable) {{ return; }}
-    // This listener is also attached to `window.parent.document` (see below),
-    // so `e.target` may be a native Streamlit button/expander/link, not just
-    // something inside this iframe. Space/Enter there must reach the
-    // element's own activation (or toggle a <summary> disclosure) instead of
-    // being hijacked into a card flip/rating.
-    if (typeof t.closest === 'function' &&
-        t.closest('button, summary, a, select, [role="button"], [contenteditable="true"]')) {{
-      return;
-    }}
-    if (e.metaKey || e.ctrlKey || e.altKey) {{ return; }}
-    var code = e.code;
-    if (!flipped) {{
-      if (code === 'Space' || code === 'Enter' || code === 'NumpadEnter') {{
-        e.preventDefault(); setFlipped(true);
-      }}
-      return;
-    }}
-    if (rateMap[code]) {{ e.preventDefault(); rate(rateMap[code]); return; }}
-    if (code === 'Space' || code === 'Enter' || code === 'NumpadEnter') {{
-      e.preventDefault(); rate('good'); return;
-    }}
-    if (code === 'KeyE') {{ e.preventDefault(); explain(); }}
-  }}
-
-  // Focus lives in *this* iframe once the learner clicks the card (it's
-  // visible/clickable, unlike the old height=0 keyboard iframe), so keydown
-  // fires on this document, not window.parent.document — keyboard events
-  // don't cross the iframe boundary. Attach to both so shortcuts keep
-  // working right after a rerun (focus still in parent) and after a click
-  // into the card (focus moved here).
-  if (window.__fcCardKeyHandler) {{
-    document.removeEventListener('keydown', window.__fcCardKeyHandler);
-  }}
-  window.__fcCardKeyHandler = handleKey;
-  document.addEventListener('keydown', window.__fcCardKeyHandler);
-
-  try {{
-    var pwin = window.parent;
-    if (pwin && pwin.document) {{
-      if (pwin.__fcKeyHandler) {{
-        pwin.document.removeEventListener('keydown', pwin.__fcKeyHandler);
-        pwin.__fcKeyHandler = null;
-      }}
-      if (pwin.__fcCardKeyHandler) {{
-        pwin.document.removeEventListener('keydown', pwin.__fcCardKeyHandler);
-      }}
-      pwin.__fcCardKeyHandler = handleKey;
-      pwin.document.addEventListener('keydown', pwin.__fcCardKeyHandler);
-    }}
-  }} catch (e) {{}}
-}})();
-</script>"""
-    return body

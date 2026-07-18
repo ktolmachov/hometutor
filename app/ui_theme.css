@@ -52,6 +52,43 @@
     --skeleton-bg: linear-gradient(90deg, rgba(185, 86, 49, 0.16), rgba(255, 211, 158, 0.44), rgba(185, 86, 49, 0.16));
     --flashcard-chip-border: rgba(185, 86, 49, 0.22);
     --flashcard-summary-bg: linear-gradient(135deg, rgba(30,132,73,0.08) 0%, rgba(185,86,49,0.06) 100%);
+
+    /* ── W3 foundation (shared; not per-world brand tokens) ── */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-12: 48px;
+    --radius-control: 8px;
+    --radius-card: 12px;
+    --radius-panel: 16px;
+    --radius-overlay: 20px;
+    --type-meta: 12px;
+    --type-label: 13px;
+    --type-body: 16px;
+    --type-section: 18px;
+    --type-title: 24px;
+    --control-default: 40px;
+    --control-touch: 44px;
+    --motion-fast: 120ms;
+    --motion-default: 180ms;
+    --motion-panel: 240ms;
+    --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+    /* Semantic aliases → brand tokens (light shell) */
+    --surface: var(--bg-panel);
+    --surface-card: var(--bg-card);
+    --text: var(--ink);
+    --text-muted: var(--muted);
+    --border: var(--line);
+    --focus-ring-color: var(--accent-outline);
+    --status-ok: #1e8449;
+    --status-warn: #b9770e;
+    --status-error: #a93226;
+    --status-info: #1a5276;
+    --elevation-1: 0 4px 12px rgba(0, 0, 0, 0.08);
+    --elevation-2: 0 12px 32px rgba(0, 0, 0, 0.12);
 }
 
 /* Ligatures for Mission Control tiles (unsafe_allow_html blocks skip Streamlit :material_* markdown). */
@@ -1315,19 +1352,88 @@ div[data-testid="stChatMessage"] .stButton > button[kind="secondary"] {
     margin: 0.25rem 0 0.75rem;
 }
 
-div[data-testid="stButton"] > button:focus-visible {
-    outline: 2px solid var(--accent) !important;
+/* ── W3 accessibility foundation ── */
+div[data-testid="stButton"] > button:focus-visible,
+div[data-testid="stTextInput"] input:focus-visible,
+div[data-testid="stTextArea"] textarea:focus-visible,
+div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:focus-within,
+a:focus-visible {
+    outline: 2px solid var(--focus-ring-color, var(--accent)) !important;
     outline-offset: 2px !important;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring-color, var(--accent)) 35%, transparent) !important;
+}
+
+/* Primary controls: 40px desktop default */
+div[data-testid="stButton"] > button {
+    min-height: var(--control-default, 40px);
+    border-radius: var(--radius-control, 8px);
+    transition:
+        background var(--motion-fast, 120ms) var(--ease-standard, ease),
+        box-shadow var(--motion-fast, 120ms) var(--ease-standard, ease),
+        transform var(--motion-fast, 120ms) var(--ease-standard, ease);
+}
+
+/* Coarse pointer (touch): 44px primary controls */
+@media (pointer: coarse) {
+    div[data-testid="stButton"] > button,
+    div[data-testid="stDownloadButton"] > button {
+        min-height: var(--control-touch, 44px) !important;
+    }
+}
+
+/* Meaningful metadata ≥ 12px */
+[data-testid="stCaptionContainer"],
+.stCaption,
+.tutorial-kicker,
+.source-meta {
+    font-size: max(12px, var(--type-meta, 12px)) !important;
+    line-height: 1.4;
+}
+
+/* Base Web portals (light shell contract; full dark deferred) */
+div[data-baseweb="popover"],
+div[data-baseweb="modal"],
+div[data-baseweb="tooltip"],
+ul[role="listbox"] {
+    background-color: var(--select-bg, var(--surface-card, #fff)) !important;
+    color: var(--text, var(--ink)) !important;
+    border-color: var(--border, var(--line)) !important;
+}
+div[data-baseweb="select"] > div {
+    background-color: var(--select-bg, var(--surface-card, #fff)) !important;
+    color: var(--text, var(--ink)) !important;
+    border-color: var(--input-border, var(--border)) !important;
+}
+div[data-baseweb="select"] [aria-disabled="true"] {
+    opacity: 0.55;
+}
+div[data-baseweb="popover"] *:focus-visible,
+ul[role="listbox"] *:focus-visible {
+    outline: 2px solid var(--focus-ring-color, var(--accent)) !important;
+    outline-offset: 1px !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
     .mode-card.smart-recommended::before,
-    .skeleton {
+    .skeleton,
+    .skeleton-shimmer {
         animation: none !important;
     }
     .hero-grid--4-3 .mission-tile,
-    .hero-grid--4-3 .mission-tile:hover {
-        transform: none;
+    .hero-grid--4-3 .mission-tile:hover,
+    .st-key-fc_rate_again button:hover,
+    .st-key-fc_rate_hard button:hover,
+    .st-key-fc_rate_good button:hover,
+    .st-key-fc_rate_easy button:hover {
+        transform: none !important;
+    }
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
     }
 }
 

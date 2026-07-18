@@ -2,6 +2,7 @@
 import re
 from pathlib import Path
 
+from app.ui.design_tokens import FOUNDATION_TOKEN_KEYS, is_world_theme_token
 from app.ui.theme_presets import THEME_TOKENS, VALID_UI_THEMES, css_vars_for_theme
 
 
@@ -9,7 +10,7 @@ _ROOT_RE = re.compile(r":root\s*\{(?P<body>.*?)\}", re.DOTALL)
 _VAR_RE = re.compile(r"^\s*--(?P<key>[\w-]+):\s*(?P<value>.*?);\s*$")
 
 
-def _root_css_vars() -> dict[str, str]:
+def _root_css_vars(*, world_only: bool = False) -> dict[str, str]:
     css_path = Path(__file__).resolve().parents[1] / "app" / "ui_theme.css"
     css = css_path.read_text(encoding="utf-8")
     match = _ROOT_RE.search(css)
@@ -20,8 +21,13 @@ def _root_css_vars() -> dict[str, str]:
         var_match = _VAR_RE.match(line)
         if var_match:
             key = var_match.group("key")
-            if not key.startswith("font-"):  # base fonts are global, not per-world theme tokens
-                vars_[key] = var_match.group("value")
+            if key.startswith("font-"):
+                continue  # base fonts are global
+            if world_only and not is_world_theme_token(key):
+                continue
+            if world_only and key in FOUNDATION_TOKEN_KEYS:
+                continue
+            vars_[key] = var_match.group("value")
     return vars_
 
 
@@ -53,7 +59,14 @@ def test_valid_ui_themes_match_presets() -> None:
 def test_forest_values_match_current_css() -> None:
     forest = THEME_TOKENS.get("forest")
     assert forest is not None, "forest preset must exist"
-    assert forest == _root_css_vars()
+    # W3 foundation tokens are global; compare only brand/world tokens.
+    assert forest == _root_css_vars(world_only=True)
+
+
+def test_foundation_tokens_present_in_css() -> None:
+    root = _root_css_vars(world_only=False)
+    for key in FOUNDATION_TOKEN_KEYS:
+        assert key in root, f"missing foundation token --{key}"
 
 
 def test_css_vars_for_theme_produces_valid_block() -> None:

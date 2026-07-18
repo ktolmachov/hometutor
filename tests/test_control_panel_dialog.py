@@ -3,6 +3,33 @@ from streamlit.errors import StreamlitAPIException
 from app.ui import control_panel
 
 
+def test_theme_card_uses_html_title_instead_of_raw_markdown(monkeypatch) -> None:
+    class _Container:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    markdown_calls: list[tuple[str, bool]] = []
+
+    def _capture_markdown(body: str, *, unsafe_allow_html: bool = False) -> None:
+        markdown_calls.append((body, unsafe_allow_html))
+
+    monkeypatch.setattr(control_panel.st, "container", lambda **_kwargs: _Container())
+    monkeypatch.setattr(control_panel.st, "markdown", _capture_markdown)
+    monkeypatch.setattr(control_panel.st, "caption", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(control_panel.st, "button", lambda *_args, **_kwargs: False)
+
+    control_panel._render_theme_card("berry", current_theme="forest")
+
+    assert markdown_calls
+    body, unsafe = markdown_calls[0]
+    assert unsafe is True
+    assert "**" not in body
+    assert "<strong>🍇 Ягода</strong>" in body
+
+
 def test_open_control_panel_dialog_suppresses_duplicate_dialog_error(monkeypatch) -> None:
     warnings: list[str] = []
 

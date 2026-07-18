@@ -1138,13 +1138,14 @@ def _render_active_review_card(
             "linear-gradient(160deg, rgba(185,86,49,0.07) 0%, rgba(36,59,44,0.05) 100%)",
         ),
     )
-    # scrolling=True is a safety net, not the primary sizing mechanism: JS resize
-    # inside the card can only resize its inner div, not this outer iframe box.
-    # If estimate_interactive_card_height() ever undershoots the real
-    # rendered content, scrolling=True means an ugly in-iframe scrollbar
-    # instead of the bottom of the card (rating chips, tutor-handoff button)
-    # being silently clipped and unreachable by mouse/tap.
-    components.html(card_html, height=estimate_interactive_card_height(card), scrolling=True)
+    # Primary sizing: Python estimate + iframe JS (ResizeObserver + frameElement
+    # height when same-origin). scrolling=True is the degraded safety net when
+    # observer/outer resize fails so rating chips stay reachable (W4 DoD).
+    components.html(
+        card_html,
+        height=estimate_interactive_card_height(card),
+        scrolling=True,  # degraded fallback: data-fc3-scroll-fallback in card HTML
+    )
 
     _render_card_section_links(card, idx)
     _render_review_rating_bridge(

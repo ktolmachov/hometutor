@@ -237,6 +237,13 @@ runtime-план остаётся SSoT для scope boundary, DoD и release-val
 
 **Приоритет:** P0/P1 foundation.
 
+**Статус runtime:** implemented 2026-07-18 —
+`app/ui/design_tokens.py`, foundation + semantic aliases + a11y rules in
+`app/ui_theme.css`, spatial aliases in `kg_3d_template.html`, tests
+`test_ui_design_tokens.py` / `test_theme_portals_contract.py`.
+**Full dark decision: `deferred`** (Streamlit `base = light` unchanged; portal
+spike required before `approved`).
+
 **Цель:** создать одну систему для 2D, spatial и embedded UI до дальнейшего
 polish. W3 не является автоматическим разрешением полноценной тёмной темы.
 
@@ -330,12 +337,21 @@ polish. W3 не является автоматическим разрешени
 
 **Приоритет:** P0 accessibility / P1 UX.
 
+**Статус runtime:** implemented 2026-07-18 —
+single hub radio nav (duplicate button row removed), semantic flip surface +
+aria-live side announce, reduced-motion content swap, ResizeObserver +
+`frameElement` height with host `scrolling=True` fallback, rating chips 44 px
+with mnemonic-primary / interval-secondary, tests in
+`tests/test_flashcards_interactive_card.py` (W4 contract).
+
 **Зависимость:** W3.
 
 **Write-set:**
 
 - `app/ui/flashcards_ui.py`;
 - `app/ui/flashcards_interactive_card.py`;
+- `app/ui/flashcards_interactive_card_style.py` (CSS template extract for size budget);
+- `app/ui/flashcards_interactive_card_script.py` (client JS extract for size budget);
 - `app/ui/flashcards_review_view.py`;
 - `tests/test_flashcards_interactive_card.py`;
 - `tests/test_flashcards_review_keyboard.py`;

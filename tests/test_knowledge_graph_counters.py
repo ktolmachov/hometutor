@@ -583,9 +583,15 @@ class Test3DCoverageAndContracts:
         side_css = html3.split("#side{", 1)[1].split("}", 1)[0]
         assert "overflow-y:auto" in side_css
         assert "overflow-x:hidden" in side_css
-        panel_head_css = html3.split(".kgx-panel-head{", 1)[1].split("}", 1)[0]
-        assert "max-height:min(38vh, 292px)" in panel_head_css
-        assert "overflow-y:auto" in panel_head_css
+        # U5 split-rail HUD: two floating docks over a full-bleed stage.
+        # Stop details = left dock (#stopdock), day route = right dock (#side).
+        assert 'id="stopdock"' in html3
+        hud_css = html3.split(".kgx-hud{", 1)[1].split("}", 1)[0]
+        assert "position:absolute" in hud_css
+        assert "overflow-y:auto" in hud_css  # the dock owns its scroll (no nested cap)
+        assert "--hud-l" in html3 and "--hud-r" in html3  # stage insets for the docks
+        assert "function syncHudInsets" in html3
+        assert "function hudInsets" in html3
         assert "kgx-route-panel" in html3
         assert "min-height:40px" in html3  # CTA height
         assert "12px system-ui" in html3  # canvas labels ≥12px
@@ -845,7 +851,10 @@ class Test3DCoverageAndContracts:
                           const topbar = document.querySelector('#topbar');
                           const side = document.querySelector('#side');
                           const sideStyle = side ? getComputedStyle(side) : null;
-                          const panelHead = document.querySelector('.kgx-panel-head');
+                          const stopdock = document.querySelector('#stopdock');
+                          const stopdockStyle = stopdock ? getComputedStyle(stopdock) : null;
+                          const stage = document.querySelector('#stage');
+                          const stageWidth = stage ? stage.getBoundingClientRect().width : 0;
                           const routePanel = document.querySelector('#routepanel');
                           // Visible primary strip only (⋯ keeps Home/Top/Reset collapsed).
                           const primaryIconCount = document.querySelectorAll(
@@ -907,7 +916,10 @@ class Test3DCoverageAndContracts:
                             topbarMinH: topbar ? topbar.getBoundingClientRect().height : 0,
                             sideWidth: side ? side.getBoundingClientRect().width : 0,
                             sideOverflowY: sideStyle?.overflowY || '',
-                            panelHeadOverflowY: panelHead ? getComputedStyle(panelHead).overflowY : '',
+                            stopdockPresent: !!stopdock,
+                            stopdockOverflowY: stopdockStyle?.overflowY || '',
+                            stopdockPosition: stopdockStyle?.position || '',
+                            stageWidth,
                             routePanelPresent: !!routePanel,
                             routeTitleVisibleInitial,
                             firstStopVisibleInitial,
@@ -947,18 +959,24 @@ class Test3DCoverageAndContracts:
                     assert result["startMinH"] >= 40, viewport
                     assert result["bodyOverflowX"] is False, viewport
                     assert result["sideOverflowY"] == "auto", viewport
-                    assert result["panelHeadOverflowY"] == "auto", viewport
+                    # U5 split-rail HUD: stop details live in the left dock, which owns
+                    # its own scroll (no nested panel-head cap). Route stays in #side.
+                    assert result["stopdockPresent"] is True, viewport
+                    assert result["stopdockOverflowY"] == "auto", viewport
                     assert result["routePanelPresent"] is True, viewport
                     assert result["routeTitleVisibleInitial"] is True, viewport
                     assert result["firstStopVisibleInitial"] is True, viewport
                     assert result["lastStopVisibleAfterSideScroll"] is True, viewport
                     min_h = 400 if viewport["width"] <= 560 else 450
                     assert result["canvasCssH"] >= min_h, viewport
-                    # U0/R1 layout tokens (desktop grid); mobile collapses side — skip width there.
+                    # U0/R1 layout tokens; mobile stacks docks in-flow — skip float checks there.
                     if viewport["width"] >= 1024:
                         assert result["topbarMinH"] >= 64, viewport
                         assert result["topbarMinH"] <= 72, viewport
                         assert 300 <= result["sideWidth"] <= 330, viewport
+                        # U5: docks float over a full-bleed stage (Мнемополис на всю ширину).
+                        assert result["stopdockPosition"] == "absolute", viewport
+                        assert result["stageWidth"] >= viewport["width"] - 4, viewport
                         # Primary strip: ← tour → + ⋯ (camera tools collapsed)
                         assert result.get("primaryIconCount", 0) >= 3, viewport
                         assert result.get("primaryIconCount", 99) <= 4, viewport

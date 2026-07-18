@@ -27,6 +27,9 @@
   button{font:inherit}
   #wrap{
     --kgx-accent: var(--kgx-cyan);
+    /* U5 HUD: horizontal stage insets claimed by floating panels (0 on mobile/collapsed) */
+    --hud-l:0px;
+    --hud-r:0px;
     display:flex;flex-direction:column;height:100%;position:relative;overflow:hidden;
     color:var(--kgx-text);background:var(--kgx-night);
   }
@@ -179,12 +182,13 @@
   .kgx-door:disabled{opacity:.45;cursor:default}
   .kgx-door .sub{display:block;font-size:0.58rem;font-weight:500;color:var(--kgx-muted);margin-top:0.1rem}
   .kgx-door strong{color:inherit;font-weight:700}
-  #body{display:grid;grid-template-columns:minmax(0,1fr) 314px;flex:1 1 auto;min-height:0}
-  #stage{position:relative;min-width:0;min-height:0;overflow:hidden;background:var(--kgx-night)}
+  /* U5 HUD: stage is full-bleed; panels float over it on desktop, stack below on mobile */
+  #body{position:relative;display:flex;flex-direction:column;flex:1 1 auto;min-height:0;overflow:hidden}
+  #stage{position:relative;flex:1 1 auto;min-width:0;min-height:0;overflow:hidden;background:var(--kgx-night)}
   #cv{display:block;width:100%;height:100%;background:#050508;cursor:grab}
   #cv:active{cursor:grabbing}
   .kgx-stage-status{
-    position:absolute;left:1rem;top:1rem;display:flex;align-items:center;gap:0.55rem;
+    position:absolute;left:calc(var(--hud-l) + 1rem);top:1rem;display:flex;align-items:center;gap:0.55rem;
     color:var(--kgx-muted);font-size:0.72rem;z-index:2;pointer-events:none;
   }
   .kgx-stage-status .st{margin:0;font-size:0.72rem;color:var(--kgx-muted)}
@@ -198,7 +202,7 @@
   .kgx-depth-btn[hidden]{display:none}
   /* G4.2: mastery_history scrubber (render-only; route geometry unchanged) */
   .kgx-replay{
-    position:absolute;right:0.75rem;bottom:4.6rem;z-index:3;
+    position:absolute;right:calc(var(--hud-r) + 0.75rem);bottom:4.6rem;z-index:3;
     display:none;align-items:center;gap:0.3rem;padding:0.28rem 0.4rem;
     border:1px solid var(--kgx-line);border-radius:6px;
     background:rgba(12,16,20,0.88);color:var(--kgx-muted);font-size:0.68rem;
@@ -213,7 +217,7 @@
   .kgx-replay strong{color:var(--kgx-gold);font-weight:700;min-width:5.5rem;text-align:center}
   .kgx-compass{
     /* W0′ R2: arrow-only course cue; floor axis owns ВХОД/СЕГОДНЯ/ДАЛЬШЕ */
-    position:absolute;left:0.75rem;bottom:4.6rem;width:56px;height:56px;border-radius:50%;
+    position:absolute;left:calc(var(--hud-l) + 0.75rem);bottom:4.6rem;width:56px;height:56px;border-radius:50%;
     border:1px solid var(--kgx-line);color:var(--kgx-muted);pointer-events:none;z-index:2;
     background:rgba(8,8,18,0.55);
   }
@@ -228,7 +232,7 @@
   }
   .kgx-route-actions{
     /* W0′: nav below floor-axis labels (labels drawn at ~H-108 on canvas) */
-    position:absolute;left:50%;bottom:0.85rem;transform:translateX(-50%);
+    position:absolute;left:calc(50% + (var(--hud-l) - var(--hud-r)) / 2);bottom:0.85rem;transform:translateX(-50%);
     display:flex;align-items:center;gap:0.4rem;z-index:3;
     padding:0.28rem 0.4rem;border-radius:8px;
     background:rgba(8,8,18,0.72);border:1px solid rgba(223,229,255,0.10);
@@ -250,15 +254,33 @@
   }
   .kgx-route-more.is-open .kgx-route-more-panel{display:flex}
   .kgx-route-more.is-open #morebtn{border-color:var(--kgx-accent);color:var(--kgx-accent)}
+  /* U5 HUD rails: two floating docks over a full-bleed stage.
+     Left = current stop, right = day route. Frees Мнемополис to full width
+     and removes the nested right-column scroll (route was buried below the card). */
+  .kgx-hud{
+    position:absolute;top:0.75rem;z-index:4;width:314px;
+    max-height:calc(100% - 1.5rem);min-width:0;
+    display:flex;flex-direction:column;min-height:0;box-sizing:border-box;font-size:12px;
+    border:1px solid var(--kgx-line);border-radius:10px;
+    background:color-mix(in srgb, var(--kgx-panel) 90%, transparent);
+    box-shadow:0 20px 52px rgba(0,0,0,0.42);
+    overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;
+  }
+  @supports (backdrop-filter: blur(8px)) {
+    .kgx-hud{ background:color-mix(in srgb, var(--kgx-panel) 78%, transparent); backdrop-filter:blur(9px); }
+  }
+  #stopdock{ left:0.75rem; }
   #side{
-    width:314px;flex:0 0 314px;min-width:0;border-left:1px solid var(--kgx-line);
-    background:var(--kgx-panel);display:flex;flex-direction:column;min-height:0;
+    right:0.75rem;
+    width:314px;flex:0 0 314px;min-width:0;
+    background:color-mix(in srgb, var(--kgx-panel) 90%, transparent);
+    display:flex;flex-direction:column;min-height:0;
     overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;
     box-sizing:border-box;font-size:12px;
   }
   .kgx-panel-head{
-    padding:1rem 1rem 0.9rem;border-bottom:1px solid var(--kgx-line);flex:0 1 auto;
-    max-height:min(38vh, 292px);overflow-y:auto;overscroll-behavior:contain;
+    padding:1rem 1rem 0.9rem;flex:0 0 auto;
+    border-radius:9px 9px 0 0;
     background:linear-gradient(135deg,color-mix(in srgb,var(--kgx-accent) 12%,transparent),transparent 62%);
   }
   .kgx-route-panel{
@@ -393,6 +415,8 @@
     padding:0;overflow:auto;box-sizing:border-box;
   }
   #wrap.interior-open #interior{display:block}
+  /* U5 HUD: interior is modal — lift the stage above the floating docks while open */
+  #wrap.interior-open #stage{z-index:7}
   #wrap.interior-open #stage canvas{filter:brightness(0.35) saturate(0.7)}
   .kgx-interior-head{
     display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;
@@ -461,10 +485,17 @@
     #topbar{grid-template-columns:1fr auto}
     .kgx-modes{grid-column:1 / -1;grid-row:2;justify-self:stretch}
     .kgx-mode{flex:1}
-    #body{grid-template-columns:1fr}
-    #stage{min-height:480px;height:55vh}
-    #side{width:100%;flex:0 0 auto;max-height:42vh;border-left:0;border-top:1px solid var(--kgx-line)}
-    .kgx-panel-head{max-height:38%;padding-top:0.8rem;padding-bottom:0.7rem}
+    /* U5: docks drop out of the HUD and stack in-flow below the stage */
+    #body{overflow-y:auto;overflow-x:hidden}
+    #stage{flex:0 0 auto;min-height:480px;height:55vh}
+    .kgx-hud, #stopdock, #side{
+      position:static;left:auto;right:auto;top:auto;
+      width:100%;flex:0 0 auto;max-height:none;
+      border-radius:0;box-shadow:none;backdrop-filter:none;
+      border:0;border-top:1px solid var(--kgx-line);
+      background:var(--kgx-panel);
+    }
+    .kgx-panel-head{padding-top:0.8rem;padding-bottom:0.7rem}
     #toplist.list{grid-template-columns:repeat(2,minmax(0,1fr))}
     #sidetoggle{
       display:block;position:absolute;top:72px;right:8px;z-index:4;
@@ -472,7 +503,8 @@
       background:rgba(10,10,15,0.72);border:1px solid var(--kgx-line);border-radius:6px;
       color:var(--kgx-text);font-size:16px;cursor:pointer;
     }
-    #wrap.side-collapsed #side{display:none}
+    #wrap.side-collapsed #side,
+    #wrap.side-collapsed #stopdock{display:none}
   }
   @media (max-width: 560px){
     #topbar{padding:0.65rem;gap:0.55rem}
@@ -587,21 +619,7 @@
         </div>
       </div>
     </div>
-    <aside id="side" class="kgx-panel" aria-label="Текущая остановка">
-      <div class="kgx-districts" id="districts" aria-label="Районы Мнемополиса (Созвездие / Вся карта)">
-        <button type="button" class="kgx-door" data-door="door_quiz" id="door_quiz" title="Интерактивный Quiz">
-          <strong>⚔ Арена</strong><span class="sub" id="door_quiz_sub">Quiz</span>
-        </button>
-        <button type="button" class="kgx-door" data-door="door_flashcards" id="door_flashcards" title="Flashcards / SR">
-          <strong>🌿 Оранжерея</strong><span class="sub" id="door_fc_sub">Повторения</span>
-        </button>
-        <button type="button" class="kgx-door" data-door="door_plan" id="door_plan" title="Адаптивный план">
-          <strong>🛤 Магистраль</strong><span class="sub">План дня</span>
-        </button>
-        <button type="button" class="kgx-door" data-door="door_konspekt" id="door_konspekt" title="Живой конспект">
-          <strong>🔨 Кузница</strong><span class="sub" id="door_kb_sub">Конспект</span>
-        </button>
-      </div>
+    <aside id="stopdock" class="kgx-panel kgx-hud" aria-label="Текущая остановка">
       <div class="kgx-panel-head">
         <div class="kgx-eyebrow" id="stopeyebrow">Остановка —</div>
         <h3 id="stopname">Выберите остановку</h3>
@@ -645,6 +663,22 @@
         <div id="actionstatus" class="status-line" role="status" aria-live="polite"></div>
         <!-- keep stopinfo for tests / a11y live region mirror -->
         <div id="stopinfo" class="status-line" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">Стоп — · выберите остановку</div>
+      </div>
+    </aside>
+    <aside id="side" class="kgx-panel kgx-hud" aria-label="Маршрут дня">
+      <div class="kgx-districts" id="districts" aria-label="Районы Мнемополиса (Созвездие / Вся карта)">
+        <button type="button" class="kgx-door" data-door="door_quiz" id="door_quiz" title="Интерактивный Quiz">
+          <strong>⚔ Арена</strong><span class="sub" id="door_quiz_sub">Quiz</span>
+        </button>
+        <button type="button" class="kgx-door" data-door="door_flashcards" id="door_flashcards" title="Flashcards / SR">
+          <strong>🌿 Оранжерея</strong><span class="sub" id="door_fc_sub">Повторения</span>
+        </button>
+        <button type="button" class="kgx-door" data-door="door_plan" id="door_plan" title="Адаптивный план">
+          <strong>🛤 Магистраль</strong><span class="sub">План дня</span>
+        </button>
+        <button type="button" class="kgx-door" data-door="door_konspekt" id="door_konspekt" title="Живой конспект">
+          <strong>🔨 Кузница</strong><span class="sub" id="door_kb_sub">Конспект</span>
+        </button>
       </div>
       <div class="kgx-route-panel" id="routepanel">
         <div class="kgx-route-title">
@@ -800,6 +834,34 @@ const prefersReducedMotion = (() => {
 
 const byId = new Map((NODES || []).map(n => [n.id, n]));
 
+/** U5 HUD: reserve horizontal stage insets for the floating docks so the route
+ *  centers in the visible gap (0 when docks stack in-flow on mobile / are collapsed). */
+function syncHudInsets() {
+  const wrap = document.getElementById('wrap');
+  if (!wrap) return;
+  const left = document.getElementById('stopdock');
+  const right = document.getElementById('side');
+  const floating = left && getComputedStyle(left).position === 'absolute';
+  const collapsed = wrap.classList.contains('side-collapsed');
+  const widthOf = (el) => (el && !el.hidden && getComputedStyle(el).display !== 'none')
+    ? el.getBoundingClientRect().width : 0;
+  const lw = (floating && !collapsed) ? widthOf(left) : 0;
+  const rw = (floating && !collapsed) ? widthOf(right) : 0;
+  // dock width + edge offset (~0.75rem) + breathing gap
+  wrap.style.setProperty('--hud-l', lw ? Math.round(lw + 24) + 'px' : '0px');
+  wrap.style.setProperty('--hud-r', rw ? Math.round(rw + 24) + 'px' : '0px');
+}
+
+/** Visible stage gap between the floating docks, in CSS px. */
+function hudInsets() {
+  const wrap = document.getElementById('wrap');
+  const read = (name) => {
+    const v = wrap ? parseFloat(getComputedStyle(wrap).getPropertyValue(name)) : 0;
+    return Number.isFinite(v) ? v : 0;
+  };
+  return { left: read('--hud-l'), right: read('--hud-r') };
+}
+
 function resize() {
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   cssW = canvas.clientWidth || 900;
@@ -809,6 +871,7 @@ function resize() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   W = cssW;
   H = cssH;
+  syncHudInsets();
 }
 window.addEventListener('resize', () => {
   resize();
@@ -1569,20 +1632,29 @@ function drawHallWash() {
   const narrow = W < 560;
   // nav sits ~2.35–2.65rem from bottom (~38–42px) with ~47px height → top ≈ H-90.
   const axisY = H - (narrow ? 118 : 108);
+  // U5 HUD: keep the axis legend inside the visible gap, not under the floating docks.
+  // When docks float, ВХОД clears the bottom-left compass (~68px) and ДАЛЬШЕ hugs the
+  // right rail; with no insets (mobile/stacked) this reduces to the original 7%/93%.
+  const hud = hudInsets();
+  const floating = hud.left > 0 || hud.right > 0;
+  const vL = hud.left, vR = W - hud.right, vW = Math.max(120, vR - vL);
+  const entryX = floating ? vL + 84 : W * 0.07;
+  const todayX = vL + vW * 0.5;
+  const furtherX = floating ? vR - 20 : W * 0.93;
   ctx.fillStyle = 'rgba(174,181,207,0.90)';
   ctx.font = (narrow ? '600 11px ' : '600 12px ') + 'system-ui';
   // Soft halo so labels stay readable over path/floor
   ctx.lineWidth = 3;
   ctx.strokeStyle = 'rgba(8,8,18,0.85)';
   ctx.textAlign = 'left';
-  ctx.strokeText('ВХОД', W * 0.07, axisY);
-  ctx.fillText('ВХОД', W * 0.07, axisY);
+  ctx.strokeText('ВХОД', entryX, axisY);
+  ctx.fillText('ВХОД', entryX, axisY);
   ctx.textAlign = 'center';
-  ctx.strokeText('СЕГОДНЯ', W * 0.5, axisY);
-  ctx.fillText('СЕГОДНЯ', W * 0.5, axisY);
+  ctx.strokeText('СЕГОДНЯ', todayX, axisY);
+  ctx.fillText('СЕГОДНЯ', todayX, axisY);
   ctx.textAlign = 'right';
-  ctx.strokeText('ДАЛЬШЕ', W * 0.93, axisY);
-  ctx.fillText('ДАЛЬШЕ', W * 0.93, axisY);
+  ctx.strokeText('ДАЛЬШЕ', furtherX, axisY);
+  ctx.fillText('ДАЛЬШЕ', furtherX, axisY);
   ctx.textAlign = 'start';
 }
 
@@ -1972,10 +2044,15 @@ function fitRouteCamera() {
   if (routePoints.length < 2) {
     for (const p of routePlatformWorldPoints()) routePoints.push(p);
   }
-  const targetW = Math.max(180, W * (narrow ? 0.88 : 0.82));
+  // U5 HUD: fit + center within the visible gap between floating docks.
+  const hud = hudInsets();
+  const visLeft = hud.left;
+  const visRight = W - hud.right;
+  const availW = Math.max(180, visRight - visLeft);
+  const targetW = Math.max(180, availW * (narrow ? 0.90 : 0.86));
   // W0′ R1: claim more of the vertical frame on desktop.
   const targetH = Math.max(150, H * (narrow ? 0.52 : 0.70));
-  const centerX = W * 0.5;
+  const centerX = (visLeft + visRight) / 2;
   const centerY = H * (narrow ? 0.48 : 0.56);
   const iters = narrow ? 5 : 4;
   for (let i = 0; i < iters; i++) {
@@ -2002,8 +2079,8 @@ function fitRouteCamera() {
   const padX = narrow ? 16 : 36;
   const padTop = 28;
   const padBottom = narrow ? 108 : 96; // axis labels + nav strip (+ mobile chrome)
-  if (sx0 < padX) cx += padX - sx0;
-  if (sx1 > W - padX) cx -= sx1 - (W - padX);
+  if (sx0 < visLeft + padX) cx += (visLeft + padX) - sx0;
+  if (sx1 > visRight - padX) cx -= sx1 - (visRight - padX);
   if (sy0 < padTop) cy += padTop - sy0;
   if (sy1 > H - padBottom) cy -= sy1 - (H - padBottom);
 }

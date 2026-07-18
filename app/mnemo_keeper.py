@@ -245,6 +245,25 @@ def _static_for_scenario(
         )
     if scenario == prompts.SCENARIO_VOICES:
         return prompts.static_voices_text()
+    if scenario == prompts.SCENARIO_CHRONICLE:
+        # focus may encode "snap_count|date|concept_count" for degrade (compact).
+        parts = str(focus or "").split("|")
+        snap_n = 0
+        latest = ""
+        concepts_n = 0
+        try:
+            snap_n = int(parts[0]) if parts and parts[0].strip() else 0
+        except ValueError:
+            snap_n = 0
+        if len(parts) > 1:
+            latest = parts[1].strip()
+        try:
+            concepts_n = int(parts[2]) if len(parts) > 2 and parts[2].strip() else 0
+        except ValueError:
+            concepts_n = 0
+        return prompts.static_chronicle_text(
+            snapshot_count=snap_n, latest_date=latest, concept_count=concepts_n
+        )
     return KEEPER_SILENT_COPY
 
 
@@ -490,6 +509,12 @@ def _prompts_for_scenario(
         return prompts.QUEST_SYSTEM, user
     if scenario == prompts.SCENARIO_VOICES:
         return prompts.VOICES_SYSTEM, "Сгенерируй 3 реплики: Туман, Призрак, Разлом."
+    if scenario == prompts.SCENARIO_CHRONICLE:
+        user = (
+            f"Снимки mastery_history (quiz-only): focus={focus or '—'}. "
+            "1–2 фразы летописи, без стыда, без XP."
+        )
+        return prompts.CHRONICLE_SYSTEM, user
     return "You are silent.", ""
 
 

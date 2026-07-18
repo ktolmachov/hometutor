@@ -282,8 +282,34 @@ def test_assemble_keeper_hall_vms_includes_quest():
         "day_route": ["rag"],
     }
     vms = keeper_views.assemble_keeper_hall_vms(payload, allow_guide_llm=False)
-    assert set(vms) >= {"guide", "threats", "quest"}
+    assert set(vms) >= {"guide", "threats", "quest", "voices", "chronicle"}
     assert vms["quest"]["stop_count"] == 1
+
+
+def test_build_voices_and_chronicle_view_models():
+    payload = {
+        "nodes": [
+            {"id": "rag", "label": "RAG", "due": 2},
+            {"id": "weak", "label": "Weak", "due": 1},
+        ],
+        "day_route": ["rag"],
+        "decay_vector": {"rag": 0.2, "weak": 0.3},
+        "mastery_history": [
+            {"date": "2026-07-10", "mastery": {"rag": 40}},
+            {"date": "2026-07-18", "mastery": {"rag": 80, "weak": 20}},
+        ],
+    }
+    voices = keeper_views.build_voices_view_model(payload, allow_llm=False)
+    assert voices["source"] == "degrade"
+    assert voices["lines"]
+    assert any("Туман" in ln or "Призрак" in ln for ln in voices["lines"])
+    assert not any("слаб" in ln.lower() for ln in voices["lines"])
+
+    ch = keeper_views.build_chronicle_view_model(payload, allow_llm=False)
+    assert ch["source"] == "degrade"
+    assert ch["snapshot_count"] == 2
+    assert "Летопись" in ch["text"] or "снимк" in ch["text"].lower()
+    assert "2026-07-18" in ch["text"] or ch["latest_date"] == "2026-07-18"
 
 
 def test_guide_html_bakes_keeper_placeholder():

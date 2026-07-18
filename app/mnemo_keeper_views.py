@@ -293,6 +293,89 @@ def build_quest_view_model(
     }
 
 
+def build_voices_view_model(
+    payload: Mapping[str, Any] | None,
+    *,
+    session_state: MutableMapping[str, Any] | None = None,
+    allow_llm: bool = False,
+    snapshot_date: str = "",
+    llm_complete: Callable[[str, str], str] | None = None,
+) -> dict[str, Any]:
+    """Keeper H: antagonist voice lines (static bank or optional LLM pack)."""
+    payload = payload or {}
+    threats = threats_from_kg_payload(payload)
+    snap = str(snapshot_date or "").strip()
+    if not snap:
+        hist = payload.get("mastery_history") or []
+        if hist and isinstance(hist[-1], Mapping):
+            snap = str(hist[-1].get("date") or "").strip()
+    result = request_keeper(
+        prompts.SCENARIO_VOICES,
+        snapshot_date=snap,
+        threats=threats,
+        allow_llm=allow_llm,
+        session_state=session_state,
+        llm_complete=llm_complete,
+    )
+    lines = [ln.strip() for ln in str(result.text or "").splitlines() if ln.strip()]
+    return {
+        "text": result.text,
+        "lines": lines[:6],
+        "source": result.source,
+        "reason": result.reason,
+        "used_llm": result.used_llm,
+        "silent": not lines or result.text.strip() == KEEPER_SILENT_COPY,
+        "budget": result.budget_snapshot,
+    }
+
+
+def build_chronicle_view_model(
+    payload: Mapping[str, Any] | None,
+    *,
+    session_state: MutableMapping[str, Any] | None = None,
+    allow_llm: bool = False,
+    snapshot_date: str = "",
+    llm_complete: Callable[[str, str], str] | None = None,
+) -> dict[str, Any]:
+    """W6c / Keeper G: short chronicle over quiz-only mastery_history (G4.2)."""
+    payload = payload or {}
+    hist = payload.get("mastery_history") or []
+    if not isinstance(hist, (list, tuple)):
+        hist = []
+    snap_count = len(hist)
+    latest = ""
+    concept_count = 0
+    if hist and isinstance(hist[-1], Mapping):
+        latest = str(hist[-1].get("date") or "").strip()
+        mastery = hist[-1].get("mastery") or {}
+        if isinstance(mastery, Mapping):
+            concept_count = len([k for k in mastery if str(k).strip()])
+    focus = f"{snap_count}|{latest}|{concept_count}"
+    snap = str(snapshot_date or latest or "").strip()
+    result = request_keeper(
+        prompts.SCENARIO_CHRONICLE,
+        snapshot_date=snap,
+        focus=focus,
+        allow_llm=allow_llm,
+        session_state=session_state,
+        llm_complete=llm_complete,
+    )
+    text = str(result.text or "").strip()
+    if len(text) > 220:
+        text = text[:219].rstrip() + "…"
+    return {
+        "text": text,
+        "source": result.source,
+        "reason": result.reason,
+        "snapshot_count": snap_count,
+        "latest_date": latest,
+        "concept_count": concept_count,
+        "used_llm": result.used_llm,
+        "silent": not text or text == KEEPER_SILENT_COPY,
+        "budget": result.budget_snapshot,
+    }
+
+
 def assemble_keeper_hall_vms(
     payload: Mapping[str, Any] | None,
     *,
@@ -300,10 +383,12 @@ def assemble_keeper_hall_vms(
     allow_guide_llm: bool = False,
     allow_threats_llm: bool = False,
     allow_quest_llm: bool = False,
+    allow_voices_llm: bool = False,
+    allow_chronicle_llm: bool = False,
     snapshot_date: str = "",
     llm_complete: Callable[[str, str], str] | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """W3b/c/d: build guide + threats + quest for the 3D hall in one place."""
+    """W3b/c/d + H/G: hall Keeper view-models in one place."""
     return {
         "guide": build_guide_view_model(
             payload,
@@ -323,6 +408,20 @@ def assemble_keeper_hall_vms(
             payload,
             session_state=session_state,
             allow_llm=allow_quest_llm,
+            snapshot_date=snapshot_date,
+            llm_complete=llm_complete,
+        ),
+        "voices": build_voices_view_model(
+            payload,
+            session_state=session_state,
+            allow_llm=allow_voices_llm,
+            snapshot_date=snapshot_date,
+            llm_complete=llm_complete,
+        ),
+        "chronicle": build_chronicle_view_model(
+            payload,
+            session_state=session_state,
+            allow_llm=allow_chronicle_llm,
             snapshot_date=snapshot_date,
             llm_complete=llm_complete,
         ),

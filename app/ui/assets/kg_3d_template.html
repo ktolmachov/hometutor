@@ -143,6 +143,22 @@
     min-height:1.2em;
   }
   .kgx-quest .kgx-keeper-meta{margin-top:0.25rem}
+  /* Keeper H: antagonist voices (static bank; never shaming) */
+  .kgx-voices{
+    margin-top:0.45rem;padding:0.4rem 0.55rem;border-radius:6px;
+    border:1px solid rgba(167,139,250,0.28);background:rgba(167,139,250,0.07);
+  }
+  .kgx-voices .kgx-eyebrow{margin:0 0 0.2rem;color:#c4b5fd}
+  .kgx-voices ul{margin:0;padding:0;list-style:none}
+  .kgx-voices li{font-size:0.7rem;color:var(--kgx-muted);padding:0.15rem 0;line-height:1.35}
+  /* W6c: летописец under G4.2 replay bar */
+  .kgx-chronicle{
+    position:absolute;right:calc(var(--hud-r) + 0.75rem);bottom:7.1rem;z-index:3;
+    max-width:min(280px,42vw);padding:0.28rem 0.45rem;border-radius:5px;
+    border:1px solid rgba(255,201,74,0.28);background:rgba(12,16,20,0.88);
+    color:var(--kgx-muted);font-size:0.66rem;line-height:1.3;display:none;
+  }
+  .kgx-chronicle.is-on{display:block}
   /* W5c: inline concept brief (graph retrieval; stay in hall) */
   .kgx-brief{
     margin-top:0.55rem;padding:0.5rem 0.6rem;border-radius:6px;
@@ -580,6 +596,9 @@
         <button type="button" id="replayplay" title="Проиграть историю" aria-label="Проиграть историю">▷</button>
         <button type="button" id="replaylive" title="Вернуться к live" aria-label="Live">Live</button>
       </div>
+      <div id="chroniclebox" class="kgx-chronicle" role="status" aria-live="polite" hidden>
+        <span id="chronicleline">—</span>
+      </div>
       <div class="kgx-compass" aria-hidden="true" title="Курс маршрута (стрелка)">
         <span class="n">КУРС</span><span class="e">ДАЛ</span><span class="s">ВХОД</span><span class="w">СЕГ</span><i></i>
       </div>
@@ -648,6 +667,10 @@
           <p class="kgx-threats-prose" id="threatsprose" hidden></p>
           <p class="kgx-threats-empty" id="threatsempty" hidden>Явных угроз в снимке нет.</p>
           <div class="kgx-threats-meta" id="threatsmeta"></div>
+        </div>
+        <div class="kgx-voices" id="voicesbox" hidden>
+          <div class="kgx-eyebrow">Голоса · антагонисты</div>
+          <ul id="voiceslist"></ul>
         </div>
         <div class="kgx-chips" id="stopchips"></div>
         <div class="kgx-memory-row">
@@ -727,6 +750,8 @@
         <li><strong>Районы</strong> — в Созвездии / Всей карте: Арена, Оранжерея, Магистраль, Кузница (двери в разделы). Не в первом кадре Маршрута.</li>
         <li><strong>Кратко</strong> — справка из данных графа в зале (read-only, без LLM). <strong>Спросить</strong> — handoff в «Чат с тьютором».</li>
         <li><strong>Цель утра</strong> — строка квестмейстера: «N из M» офлайн; LLM — по кнопке в продукте. Без XP/монет.</li>
+        <li><strong>Голоса</strong> — реплики антагонистов (статика/кэш), без стыда. <strong>Летопись</strong> — след quiz-снимков у реплея.</li>
+        <li><strong>Призрак</strong> — полупрозрачный ✓ при «знал, но забывает» (local/all; ◌ скрывает).</li>
       </ol>
       <p class="kgx-onboard-diag" id="onboard-diag" hidden></p>
       <button class="kgx-onboard-ok" id="onboard-ok" type="button">Понятно</button>
@@ -752,6 +777,8 @@ const KEEPER_GUIDE = __KEEPER_GUIDE__;
 /** W3c: {text, source, items, count, used_llm} — deterministic threats + prose. */
 const KEEPER_THREATS = __KEEPER_THREATS__;
 const KEEPER_QUEST = __KEEPER_QUEST__;
+const KEEPER_VOICES = __KEEPER_VOICES__;
+const KEEPER_CHRONICLE = __KEEPER_CHRONICLE__;
 const WORKBENCH_COUNT_INIT = __WORKBENCH_COUNT__;
 /** Embedded-only view-model: concept_id → [{heading, in_basket, obsidian_uri}] (U2). */
 const CONCEPT_SECTIONS = __CONCEPT_SECTIONS__ || {};
@@ -1496,6 +1523,40 @@ function fogActiveFor(conceptId) {
   return forgettingFor(conceptId) >= FOG_FORGET_MIN;
 }
 
+/**
+ * W6a Призрак Уверенности: quiz-seen / high mastery still has strong forgetting.
+ * Honest data: doneConceptIds or learnedConceptIds + fogActiveFor. Never shaming.
+ */
+function ghostActiveFor(conceptId) {
+  if (calmWorld) return false;
+  const id = String(conceptId || '');
+  if (!id) return false;
+  const seen = doneConceptIds.has(id) || learnedConceptIds.has(id);
+  if (!seen) return false;
+  return forgettingFor(id) >= FOG_FORGET_MIN;
+}
+
+/** Semi-transparent ✓ double (static under reduced-motion). */
+function drawConfidenceGhost(pr, r, reduced) {
+  if (!pr || !ctx) return;
+  const rr = Math.max(6, r * 1.15);
+  ctx.save();
+  ctx.globalAlpha = reduced ? 0.28 : 0.38;
+  ctx.strokeStyle = 'rgba(233,213,255,0.55)';
+  ctx.fillStyle = 'rgba(233,213,255,0.12)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(pr.sx + 3, pr.sy - 3, rr, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(233,213,255,0.70)';
+  ctx.font = `${Math.max(9, Math.round(rr * 0.9))}px system-ui`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('✓', pr.sx + 3, pr.sy - 3);
+  ctx.restore();
+}
+
 /** Canvas label with optional partial glyphs when heavily forgotten (side panel always full name). */
 function fogCanvasLabel(rawLabel, forget) {
   const raw = String(rawLabel || '');
@@ -1918,6 +1979,10 @@ function draw() {
       const fullFog = viewMode === 'local' || viewMode === 'all';
       // Route = quiet markers only (first-frame orientation kill switch).
       drawForgettingFog(pr, r, forget, { full: fullFog });
+    }
+    // W6a Призрак: learned/high mastery + fog (illusion of knowledge). Never on route first frame.
+    if (!calmWorld && !quietRouteAnchor && viewMode !== 'route' && ghostActiveFor(nn.id)) {
+      drawConfidenceGhost(pr, r, prefersReducedMotion);
     }
 
     // Depth fade: background/context nodes quieter so route owns attention (U0/R3).
@@ -2981,6 +3046,45 @@ function updateThreatsPanel(conceptId) {
   }
 }
 
+/** Keeper H: static/LLM antagonist voice lines (never shaming). */
+function updateVoicesPanel() {
+  const box = document.getElementById('voicesbox');
+  const listEl = document.getElementById('voiceslist');
+  if (!box || !listEl) return;
+  const data = (KEEPER_VOICES && typeof KEEPER_VOICES === 'object') ? KEEPER_VOICES : null;
+  const lines = data && Array.isArray(data.lines) ? data.lines : [];
+  while (listEl.firstChild) listEl.removeChild(listEl.firstChild);
+  if (!lines.length) {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  for (const line of lines.slice(0, 4)) {
+    const li = document.createElement('li');
+    li.textContent = String(line);
+    listEl.appendChild(li);
+  }
+}
+
+/** W6c: летописец line beside G4.2 replay (quiz-only history). */
+function updateChronicleLine() {
+  const box = document.getElementById('chroniclebox');
+  const lineEl = document.getElementById('chronicleline');
+  if (!box || !lineEl) return;
+  const data = (KEEPER_CHRONICLE && typeof KEEPER_CHRONICLE === 'object') ? KEEPER_CHRONICLE : null;
+  const text = data ? String(data.text || '').trim() : '';
+  const hist = MASTERY_HISTORY || [];
+  if (!text || hist.length < 1) {
+    box.hidden = true;
+    box.classList.remove('is-on');
+    lineEl.textContent = '—';
+    return;
+  }
+  box.hidden = false;
+  box.classList.add('is-on');
+  lineEl.textContent = text;
+}
+
 /** W3d: one-line morning goal (quest); degrade «N из M». */
 function updateQuestLine() {
   const box = document.getElementById('questbox');
@@ -3027,6 +3131,8 @@ function updateStopInfo() {
     updateKeeperLine('');
     updateThreatsPanel('');
     updateQuestLine();
+    updateVoicesPanel();
+    updateChronicleLine();
     return;
   }
   const i = activeStopIndex;
@@ -3057,6 +3163,8 @@ function updateStopInfo() {
   updateKeeperLine(id);
   updateThreatsPanel(id);
   updateQuestLine();
+  updateVoicesPanel();
+  updateChronicleLine();
   if (worthBadge) worthBadge.textContent = `W ${(n.worth || 0).toFixed(1)}`;
   if (masteryRing) {
     masteryRing.style.setProperty('--m', (masteryPct != null ? masteryPct : 0) + '%');

@@ -16,6 +16,7 @@ SCENARIO_GUIDE = "guide"  # A — экскурсовод
 SCENARIO_THREATS = "threats"  # B — сводка угроз
 SCENARIO_QUEST = "quest"  # D — квестмейстер
 SCENARIO_VOICES = "voices"  # H — голоса антагонистов
+SCENARIO_CHRONICLE = "chronicle"  # G — летописец поверх G4.2
 
 KEEPER_SCENARIOS = frozenset(
     {
@@ -23,6 +24,7 @@ KEEPER_SCENARIOS = frozenset(
         SCENARIO_THREATS,
         SCENARIO_QUEST,
         SCENARIO_VOICES,
+        SCENARIO_CHRONICLE,
     }
 )
 
@@ -45,6 +47,10 @@ QUEST_SYSTEM = """Ты — квестмейстер Memory Run. Дано: N ос
 VOICES_SYSTEM = """Ты пишешь короткие реплики антагонистов Мнемополиса (Туман/Призрак/Разлом).
 По 1 строке на угрозу. Уважительный юмор. Никогда не стыди («ты забыл/слабый» — запрещено).
 Пример тона Тумана: «Я подожду. Я всегда жду.»"""
+
+CHRONICLE_SYSTEM = """Ты — летописец Memory Run. Дан quiz-only mastery_history (даты + ids).
+Одна-две фразы на русском о следе квизов: что уже отмечалось, без стыда, без XP/магазина.
+Не выдумывай даты вне списка. Не утверждай «всё выучено»."""
 
 # Static degrade banks (no LLM) — honest placeholders until W3b/W3c polish.
 
@@ -133,3 +139,19 @@ def static_quest_text(
 
 def static_voices_text() -> str:
     return "\n".join(STATIC_VOICES)
+
+
+def static_chronicle_text(
+    *,
+    snapshot_count: int = 0,
+    latest_date: str = "",
+    concept_count: int = 0,
+) -> str:
+    """Degrade for G: honest quiz-trail summary over mastery_history only."""
+    n = max(0, int(snapshot_count or 0))
+    if n <= 0:
+        return "Летопись пуста — пройдите квиз, чтобы оставить след."
+    date_bit = f" · {latest_date}" if str(latest_date or "").strip() else ""
+    c = max(0, int(concept_count or 0))
+    concepts_bit = f", {c} концептов в последнем снимке" if c else ""
+    return f"Летопись: {n} quiz-снимков{date_bit}{concepts_bit}."

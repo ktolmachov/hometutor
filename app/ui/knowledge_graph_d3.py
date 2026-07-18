@@ -1036,6 +1036,48 @@ def _normalize_keeper_quest(
     }
 
 
+def _normalize_keeper_voices(
+    keeper_voices: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Keeper H: coerce antagonist voice lines."""
+    if not (isinstance(keeper_voices, Mapping) and keeper_voices):
+        return {"text": "", "lines": [], "source": "none", "used_llm": False}
+    lines_raw = keeper_voices.get("lines") or []
+    lines: list[str] = []
+    if isinstance(lines_raw, (list, tuple)):
+        lines = [str(x).strip() for x in lines_raw if str(x).strip()][:6]
+    if not lines:
+        text = str(keeper_voices.get("text") or "")
+        lines = [ln.strip() for ln in text.splitlines() if ln.strip()][:6]
+    return {
+        "text": str(keeper_voices.get("text") or ""),
+        "lines": lines,
+        "source": str(keeper_voices.get("source") or "degrade"),
+        "used_llm": bool(keeper_voices.get("used_llm")),
+    }
+
+
+def _normalize_keeper_chronicle(
+    keeper_chronicle: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """W6c: coerce летописец line for G4.2 replay chrome."""
+    if not (isinstance(keeper_chronicle, Mapping) and keeper_chronicle):
+        return {
+            "text": "",
+            "source": "none",
+            "snapshot_count": 0,
+            "latest_date": "",
+            "used_llm": False,
+        }
+    return {
+        "text": str(keeper_chronicle.get("text") or ""),
+        "source": str(keeper_chronicle.get("source") or "degrade"),
+        "snapshot_count": int(keeper_chronicle.get("snapshot_count") or 0),
+        "latest_date": str(keeper_chronicle.get("latest_date") or ""),
+        "used_llm": bool(keeper_chronicle.get("used_llm")),
+    }
+
+
 def build_kg_3d_html(
     payload: Mapping[str, Any],
     *,
@@ -1050,6 +1092,8 @@ def build_kg_3d_html(
     keeper_guide: Mapping[str, Any] | None = None,
     keeper_threats: Mapping[str, Any] | None = None,
     keeper_quest: Mapping[str, Any] | None = None,
+    keeper_voices: Mapping[str, Any] | None = None,
+    keeper_chronicle: Mapping[str, Any] | None = None,
 ) -> str:
     """Self-contained offline 3D Knowledge Graph hall (no CDN).
 
@@ -1068,6 +1112,8 @@ def build_kg_3d_html(
     - ``keeper_guide``: W3b Хранитель view-model ``{text, source, by_stop, ...}``
     - ``keeper_threats``: W3c threats view-model ``{text, items, source, ...}``
     - ``keeper_quest``: W3d quest line ``{text, stop_count, done_count, ...}``
+    - ``keeper_voices``: H antagonist lines
+    - ``keeper_chronicle``: W6c летописец over G4.2 history
     """
     mode = "embedded" if str(host_mode or "").strip().lower() == "embedded" else "export"
     snap = str(exported_at or "").strip() or date.today().isoformat()
@@ -1083,11 +1129,47 @@ def build_kg_3d_html(
         sections_vm = _normalize_concept_sections(concept_sections)
         onboard = bool(show_onboarding)
 
-    guide_vm = _normalize_keeper_guide(keeper_guide)
-    threats_vm = _normalize_keeper_threats(keeper_threats)
-    quest_vm = _normalize_keeper_quest(keeper_quest)
+    replacements = _kg3d_template_replacements(
+        payload,
+        mode=mode,
+        snap=snap,
+        collected=collected,
+        wb_count=wb_count,
+        nonce=nonce,
+        result=result,
+        sections_vm=sections_vm,
+        onboard=onboard,
+        keeper_guide=keeper_guide,
+        keeper_threats=keeper_threats,
+        keeper_quest=keeper_quest,
+        keeper_voices=keeper_voices,
+        keeper_chronicle=keeper_chronicle,
+    )
+    html = _load_3d_template()
+    for placeholder, value in replacements.items():
+        html = html.replace(placeholder, value)
+    return html
 
-    replacements = {
+
+def _kg3d_template_replacements(
+    payload: Mapping[str, Any],
+    *,
+    mode: str,
+    snap: str,
+    collected: list[str],
+    wb_count: int | None,
+    nonce: str,
+    result: Mapping[str, Any] | None,
+    sections_vm: dict[str, list[dict[str, Any]]],
+    onboard: bool,
+    keeper_guide: Mapping[str, Any] | None,
+    keeper_threats: Mapping[str, Any] | None,
+    keeper_quest: Mapping[str, Any] | None,
+    keeper_voices: Mapping[str, Any] | None,
+    keeper_chronicle: Mapping[str, Any] | None,
+) -> dict[str, str]:
+    """Build placeholder → JSON map for the 3D hall template."""
+    return {
         "__NODES__": _json_for_script(payload.get("nodes", [])),
         "__EDGES__": _json_for_script(payload.get("edges", [])),
         "__STATS__": _json_for_script(payload.get("stats", {})),
@@ -1103,14 +1185,14 @@ def build_kg_3d_html(
         "__WORKBENCH_COUNT__": _json_for_script(wb_count),
         "__CONCEPT_SECTIONS__": _json_for_script(sections_vm),
         "__SHOW_ONBOARDING__": "true" if onboard else "false",
-        "__KEEPER_GUIDE__": _json_for_script(guide_vm),
-        "__KEEPER_THREATS__": _json_for_script(threats_vm),
-        "__KEEPER_QUEST__": _json_for_script(quest_vm),
+        "__KEEPER_GUIDE__": _json_for_script(_normalize_keeper_guide(keeper_guide)),
+        "__KEEPER_THREATS__": _json_for_script(_normalize_keeper_threats(keeper_threats)),
+        "__KEEPER_QUEST__": _json_for_script(_normalize_keeper_quest(keeper_quest)),
+        "__KEEPER_VOICES__": _json_for_script(_normalize_keeper_voices(keeper_voices)),
+        "__KEEPER_CHRONICLE__": _json_for_script(
+            _normalize_keeper_chronicle(keeper_chronicle)
+        ),
     }
-    html = _load_3d_template()
-    for placeholder, value in replacements.items():
-        html = html.replace(placeholder, value)
-    return html
 
 
 @lru_cache(maxsize=1)
@@ -1165,6 +1247,8 @@ def render_kg_3d_hall(
     keeper_guide: Mapping[str, Any] | None = None,
     keeper_threats: Mapping[str, Any] | None = None,
     keeper_quest: Mapping[str, Any] | None = None,
+    keeper_voices: Mapping[str, Any] | None = None,
+    keeper_chronicle: Mapping[str, Any] | None = None,
     height: int = 720,
     key: str = "kg_3d_hall_component",
 ) -> Any:
@@ -1190,6 +1274,8 @@ def render_kg_3d_hall(
         keeper_guide=keeper_guide,
         keeper_threats=keeper_threats,
         keeper_quest=keeper_quest,
+        keeper_voices=keeper_voices,
+        keeper_chronicle=keeper_chronicle,
     )
     return _kg_3d_component()(
         html=html,

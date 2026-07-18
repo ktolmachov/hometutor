@@ -732,6 +732,12 @@ class Test3DCoverageAndContracts:
         assert 'id="questbox"' in html
         assert "updateQuestLine" in html
         assert "KEEPER_QUEST" in html
+        # H voices + W6c chronicle + W6a ghost
+        assert 'id="voicesbox"' in html and "updateVoicesPanel" in html
+        assert "KEEPER_VOICES" in html
+        assert 'id="chroniclebox"' in html and "updateChronicleLine" in html
+        assert "KEEPER_CHRONICLE" in html
+        assert "function ghostActiveFor" in html and "function drawConfidenceGhost" in html
         # W4c district doors
         assert 'id="districts"' in html
         assert "door_quiz" in html and "door_flashcards" in html

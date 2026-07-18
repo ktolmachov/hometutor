@@ -724,6 +724,9 @@ class Test3DCoverageAndContracts:
         assert "function refreshThreatSceneFocus" in html
         assert "function noteThreatSceneInteraction" in html
         assert "2 * 60 * 1000" in html
+        # Quiet rings survive TTL; full-only hide (audit P1 contract in source)
+        assert "quiet rings remain" in html or "quiet ring" in html
+        assert "focusId" in html and "Off-route click" in html
         # W2b review action door (Flashcards nav)
         assert 'id="reviewbtn"' in html
         assert "beginAction('review')" in html or 'beginAction("review")' in html or "action === 'review'" in html
@@ -1031,6 +1034,167 @@ class Test3DCoverageAndContracts:
                         assert s["checkPosition"] == "absolute", (viewport, s)
                     for s in open_stops:
                         assert s["hasCheck"] is False, (viewport, s)
+            finally:
+                browser.close()
+
+    def test_3d_threat_scene_dosage_behavior(self, tmp_path):
+        """Kill-switch residual: ≤1 full scene, focus preference, quiet fog after TTL.
+
+        Behavioral (Playwright) — not string-only. Opt-out: ``HT_SKIP_KG_3D_VISUAL=1``.
+        """
+        if os.environ.get("HT_SKIP_KG_3D_VISUAL") == "1":
+            pytest.skip("HT_SKIP_KG_3D_VISUAL=1")
+
+        sync_api = pytest.importorskip("playwright.sync_api")
+        payload = {
+            "nodes": [
+                {
+                    "id": "route-a",
+                    "label": "Route A",
+                    "worth": 5.0,
+                    "worth_reason": "к повторению",
+                    "due": 1,
+                    "mastery": 0.4,
+                },
+                {
+                    "id": "route-b",
+                    "label": "Route B",
+                    "worth": 4.0,
+                    "worth_reason": "дальше",
+                    "mastery": 0.2,
+                },
+                {
+                    "id": "off-route",
+                    "label": "Off Route Fog",
+                    "worth": 3.0,
+                    "worth_reason": "контекст",
+                    "mastery": 0.1,
+                },
+            ],
+            "edges": [],
+            "stats": {"total_concepts": 3},
+            "day_route": ["route-a", "route-b"],
+            "mastery_history": [
+                {"date": "2026-07-16", "mastery": {"route-a": 70.0, "off-route": 85.0}},
+            ],
+            # retention: low → strong forgetting (≥ FOG_FORGET_MIN 0.28)
+            "decay_vector": {
+                "route-a": 0.55,  # forget 0.45
+                "route-b": 0.90,  # forget 0.10 — below threshold
+                "off-route": 0.20,  # forget 0.80 — strongest
+            },
+            "snapshot_date": "2026-07-18",
+        }
+        html = build_kg_3d_html(payload, exported_at="2026-07-18", host_mode="export")
+        out = tmp_path / "kg3d_threat_dosage.html"
+        out.write_text(html, encoding="utf-8")
+
+        with sync_api.sync_playwright() as p:
+            browser = p.chromium.launch()
+            try:
+                page = browser.new_page(viewport={"width": 1366, "height": 768})
+                page.goto(out.as_uri())
+                page.wait_for_function(
+                    "() => typeof fullThreatSceneAllowed === 'function' "
+                    "&& typeof refreshThreatSceneFocus === 'function'"
+                )
+
+                # local mode + open dosage window
+                page.evaluate(
+                    """() => {
+                      calmWorld = false;
+                      noteThreatSceneInteraction();
+                      setViewMode('local');
+                      // ensure route cursor is route-a (has fog)
+                      activeStopIndex = 0;
+                      focusId = 'route-a';
+                      refreshThreatSceneFocus();
+                    }"""
+                )
+                state = page.evaluate(
+                    """() => ({
+                      focus: threatSceneFocusId,
+                      fullA: fullThreatSceneAllowed('route-a'),
+                      fullB: fullThreatSceneAllowed('route-b'),
+                      fullOff: fullThreatSceneAllowed('off-route'),
+                      fogA: fogActiveFor('route-a'),
+                      fogOff: fogActiveFor('off-route'),
+                      live: threatSceneStillLive(),
+                    })"""
+                )
+                # focusId=route-a wins over stronger off-route score
+                assert state["focus"] == "route-a", state
+                assert state["fullA"] is True, state
+                assert state["fullB"] is False, state
+                assert state["fullOff"] is False, state
+                assert state["fogA"] is True and state["fogOff"] is True, state
+
+                # Off-route selection must move the single full scene
+                page.evaluate(
+                    """() => {
+                      focusId = 'off-route';
+                      noteThreatSceneInteraction();
+                      refreshThreatSceneFocus();
+                    }"""
+                )
+                after_focus = page.evaluate(
+                    """() => ({
+                      focus: threatSceneFocusId,
+                      fullA: fullThreatSceneAllowed('route-a'),
+                      fullOff: fullThreatSceneAllowed('off-route'),
+                    })"""
+                )
+                assert after_focus["focus"] == "off-route", after_focus
+                assert after_focus["fullOff"] is True, after_focus
+                assert after_focus["fullA"] is False, after_focus
+
+                # TTL expiry: full scenes hide; data fog signal remains (quiet rings)
+                page.evaluate(
+                    """() => {
+                      threatSceneShownAt = Date.now() - (THREAT_SCENE_TTL_MS + 1000);
+                      threatSceneSuppressed = false; // force recompute via StillLive
+                      refreshThreatSceneFocus();
+                    }"""
+                )
+                after_ttl = page.evaluate(
+                    """() => ({
+                      live: threatSceneStillLive(),
+                      suppressed: threatSceneSuppressed,
+                      focus: threatSceneFocusId,
+                      fullOff: fullThreatSceneAllowed('off-route'),
+                      fullA: fullThreatSceneAllowed('route-a'),
+                      fogA: fogActiveFor('route-a'),
+                      fogOff: fogActiveFor('off-route'),
+                      wantFullOff: (viewMode === 'local' || viewMode === 'all')
+                        && fullThreatSceneAllowed('off-route'),
+                    })"""
+                )
+                assert after_ttl["live"] is False, after_ttl
+                assert after_ttl["suppressed"] is True, after_ttl
+                assert after_ttl["fullOff"] is False and after_ttl["fullA"] is False, after_ttl
+                # Honest projection: fog data still active → quiet ring path, not full
+                assert after_ttl["fogA"] is True and after_ttl["fogOff"] is True, after_ttl
+                assert after_ttl["wantFullOff"] is False, after_ttl
+
+                # Interaction re-opens dosage; off-route focus restored
+                page.evaluate(
+                    """() => {
+                      noteThreatSceneInteraction();
+                      focusId = 'off-route';
+                      refreshThreatSceneFocus();
+                    }"""
+                )
+                reopened = page.evaluate(
+                    """() => ({
+                      live: threatSceneStillLive(),
+                      focus: threatSceneFocusId,
+                      fullOff: fullThreatSceneAllowed('off-route'),
+                    })"""
+                )
+                assert reopened["live"] is True, reopened
+                assert reopened["focus"] == "off-route", reopened
+                assert reopened["fullOff"] is True, reopened
+                page.close()
             finally:
                 browser.close()
 

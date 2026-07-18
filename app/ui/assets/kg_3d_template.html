@@ -1760,7 +1760,10 @@ function conceptThreatScore(conceptId) {
 
 /**
  * Pick ≤1 concept for full fog/ghost/rift «сценка» (local/all).
- * Prefer the active stop when it has a real threat signal.
+ * Preference order (honest UX):
+ * 1) focusId — what the learner just selected (may be off-route);
+ * 2) activeRouteId — route cursor fallback;
+ * 3) highest conceptThreatScore among all nodes.
  */
 function refreshThreatSceneFocus() {
   if (calmWorld || viewMode === 'route') {
@@ -1771,14 +1774,18 @@ function refreshThreatSceneFocus() {
     threatSceneFocusId = '';
     return;
   }
-  const act = String(activeRouteId() || focusId || '');
-  if (act && conceptThreatScore(act) > 0) {
-    if (threatSceneFocusId !== act) {
-      threatSceneFocusId = act;
+  const applyFocus = (id) => {
+    const cid = String(id || '');
+    if (!cid || conceptThreatScore(cid) <= 0) return false;
+    if (threatSceneFocusId !== cid) {
+      threatSceneFocusId = cid;
       if (!threatSceneShownAt) threatSceneShownAt = Date.now();
     }
-    return;
-  }
+    return true;
+  };
+  // Off-route click in local/all must move the full scene to the selected node.
+  if (applyFocus(focusId)) return;
+  if (applyFocus(activeRouteId())) return;
   let bestId = '';
   let best = 0;
   for (const n of (NODES || [])) {
@@ -1791,10 +1798,7 @@ function refreshThreatSceneFocus() {
     }
   }
   if (bestId) {
-    if (threatSceneFocusId !== bestId) {
-      threatSceneFocusId = bestId;
-      if (!threatSceneShownAt) threatSceneShownAt = Date.now();
-    }
+    applyFocus(bestId);
   } else {
     threatSceneFocusId = '';
   }
@@ -2313,19 +2317,14 @@ function draw() {
     }
 
     // W2a fog: under node so stop remains clickable/visible (never hides content).
-    // Kill-switch residual: full mist only for ≤1 focus; TTL hide → no local/all fog.
+    // Kill-switch residual: full mist only for ≤1 focus while TTL live.
+    // After TTL: full scenes hide, but quiet rings remain (honest data projection).
+    // Side panel chip «туман · можно войти» stays data-bound via fogActiveFor.
     const forget = forgettingFor(nn.id);
     if (fogActiveFor(nn.id) && !quietRouteAnchor) {
-      if (viewMode === 'route') {
-        // Orientation: quiet markers only (first-frame kill switch).
-        drawForgettingFog(pr, r, forget, { full: false });
-      } else if (fullThreatSceneAllowed(nn.id)) {
-        drawForgettingFog(pr, r, forget, { full: true });
-      } else if (threatSceneStillLive()) {
-        // Other fogged stops while one scene is live: quiet ring only.
-        drawForgettingFog(pr, r, forget, { full: false });
-      }
-      // After TTL suppress: hide local/all fog until learner interaction.
+      const wantFull = (viewMode === 'local' || viewMode === 'all')
+        && fullThreatSceneAllowed(nn.id);
+      drawForgettingFog(pr, r, forget, { full: wantFull });
     }
     // W6a Призрак: only the single full threat scene (never route first frame).
     if (!quietRouteAnchor && fullThreatSceneAllowed(nn.id) && ghostActiveFor(nn.id)) {

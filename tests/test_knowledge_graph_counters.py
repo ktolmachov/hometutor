@@ -671,6 +671,9 @@ class Test3DCoverageAndContracts:
         assert "function openInterior" in html
         assert "function openOnboarding" in html
         assert "Правила зала" in html
+        assert 'id="helpbtn"' in html and ">Правила</button>" in html
+        assert "localStorage.getItem(ONBOARD_SEEN_KEY)" in html
+        assert "localStorage.setItem(ONBOARD_SEEN_KEY, '1')" in html
         assert ".stop-check{" in html  # U0/G2 rank stays; ✓ overlay
         assert 'id="morebtn"' in html  # R1 camera tools collapsed
         assert 'id="homebtn"' in html and 'id="topbtn"' in html and 'id="resetbtn"' in html

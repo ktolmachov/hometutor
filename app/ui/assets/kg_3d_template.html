@@ -463,11 +463,12 @@
     color:#080812;background:linear-gradient(100deg,var(--kgx-cyan),var(--kgx-lime));
   }
   .kgx-help-btn{
-    width:28px;height:28px;border:1px solid var(--kgx-line);border-radius:50%;
+    min-height:28px;border:0;border-radius:0;padding:0 0.15rem;
     background:transparent;color:var(--kgx-muted);cursor:pointer;font-weight:700;flex:none;
-    font-size:0.78rem;line-height:1;
+    font-size:0.72rem;line-height:1;text-decoration:underline;text-decoration-style:dotted;
+    text-underline-offset:3px;
   }
-  .kgx-help-btn:hover{color:var(--kgx-text);border-color:var(--kgx-accent)}
+  .kgx-help-btn:hover{color:var(--kgx-text)}
   /* R2: action ack toast (reference Memory Run surface) */
   .kgx-toast{
     position:absolute;z-index:9;left:50%;top:78px;transform:translate(-50%,-8px);
@@ -549,7 +550,7 @@
       <button class="kgx-calm-btn" id="calmbtn" type="button"
         title="Спокойный мир: скрыть туман забывания (доступность / вкус)"
         aria-label="Спокойный мир" aria-pressed="false">◌</button>
-      <button class="kgx-help-btn" id="helpbtn" type="button" title="Правила зала" aria-label="Правила зала">?</button>
+      <button class="kgx-help-btn" id="helpbtn" type="button" title="Правила зала" aria-label="Открыть правила зала">Правила</button>
     </div>
   </header>
   <div id="body" class="kgx-body">
@@ -735,8 +736,9 @@ const KEEPER_THREATS = __KEEPER_THREATS__;
 const WORKBENCH_COUNT_INIT = __WORKBENCH_COUNT__;
 /** Embedded-only view-model: concept_id → [{heading, in_basket, obsidian_uri}] (U2). */
 const CONCEPT_SECTIONS = __CONCEPT_SECTIONS__ || {};
-/** Host may ask to show onboarding once per Streamlit session (U4). */
+/** Host may ask to show onboarding; browser storage keeps it from reopening after restart (U4). */
 const SHOW_ONBOARDING = __SHOW_ONBOARDING__ === true || __SHOW_ONBOARDING__ === 'true';
+const ONBOARD_SEEN_KEY = 'ht_kg3d_onboard_seen';
 
 const canvas = document.getElementById('cv');
 const ctx = canvas.getContext('2d');
@@ -3252,6 +3254,22 @@ function closeInterior() {
   render();
 }
 
+function hasSeenOnboarding() {
+  try {
+    if (localStorage.getItem(ONBOARD_SEEN_KEY) === '1') return true;
+  } catch (_) {}
+  try {
+    return sessionStorage.getItem(ONBOARD_SEEN_KEY) === '1';
+  } catch (_) {
+    return false;
+  }
+}
+
+function rememberOnboardingSeen() {
+  try { localStorage.setItem(ONBOARD_SEEN_KEY, '1'); } catch (_) {}
+  try { sessionStorage.setItem(ONBOARD_SEEN_KEY, '1'); } catch (_) {}
+}
+
 function openOnboarding() {
   const el = document.getElementById('onboard');
   if (el) el.classList.add('is-open');
@@ -3271,7 +3289,7 @@ function openOnboarding() {
 function closeOnboarding() {
   const el = document.getElementById('onboard');
   if (el) el.classList.remove('is-open');
-  try { sessionStorage.setItem('ht_kg3d_onboard_seen', '1'); } catch (_) {}
+  rememberOnboardingSeen();
 }
 
 function focus(n) {
@@ -3715,10 +3733,8 @@ function init() {
   if (h) {
     h.textContent = `${(NODES || []).length} узлов · маршрут ${route.length}/${route.length} · режим route · ${HOST_MODE}`;
   }
-  // U4: onboarding once per browser tab for embedded, or when host requests it.
-  let seen = false;
-  try { seen = sessionStorage.getItem('ht_kg3d_onboard_seen') === '1'; } catch (_) {}
-  if ((SHOW_ONBOARDING || isEmbedded) && !seen) {
+  // U4: onboarding once per browser profile for embedded, or when host requests it.
+  if ((SHOW_ONBOARDING || isEmbedded) && !hasSeenOnboarding()) {
     openOnboarding();
   }
 }

@@ -19,6 +19,7 @@ def test_default_registry_has_expected_read_only_tools():
         "cards.propose",
         "graph.inspect",
         "konspekt.inspect",
+        "catalog.list",
     }
     assert set(reg.tool_names) == expected
 

@@ -16,6 +16,7 @@ from app.ui.flashcards_ui import _render_flashcards_tab
 from app.ui.interactive_quiz import _render_interactive_quiz_tab
 from app.ui.living_konspekt_view import render_living_konspekt_view as _render_living_konspekt_view
 from app.ui.print_view import render_print_view as _render_print_view
+from app.ui.library_catalog import render_library_catalog as _render_library_catalog
 from app.ui.topics_tab import render_topics_tab as _render_topics_tab
 from app.ui.tutor_chat import _render_tutor_chat_tab
 
@@ -62,6 +63,12 @@ def _fragment_history_tab() -> None:
 def _fragment_topics_tab() -> None:
     stats = st.session_state.get("_ui_index_stats_tab")
     _render_topics_tab(stats)
+
+
+@st.fragment
+def _fragment_library_tab() -> None:
+    stats = st.session_state.get("_ui_index_stats_tab")
+    _render_library_catalog(stats if isinstance(stats, dict) else None)
 
 
 @st.fragment

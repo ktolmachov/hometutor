@@ -1286,6 +1286,40 @@ def _render_concept_actions(
     topic_hit = _find_topic_for_concept(sel, topics_catalog)
 
     st.markdown(f"**{sel}**")
+    # P1: address «курс · урок» + multi-course badge (shared themes)
+    try:
+        from app.concept_address import (
+            courses_from_documents,
+            multi_course_badge_label,
+            multi_course_source_list,
+            resolve_concept_address,
+        )
+
+        _course_list = courses_from_documents(related_docs)
+        _address = resolve_concept_address(
+            sel,
+            concept=info,
+            courses=_course_list,
+        )
+        _badge = multi_course_badge_label(_course_list)
+        if _address:
+            st.caption(f"📍 {_address}")
+        if _badge:
+            st.markdown(f"**{_badge}**")
+            for course_name in multi_course_source_list(_course_list):
+                if st.button(
+                    f"📂 {course_name}",
+                    key=f"kg_course_chip_{sel}_{course_name}",
+                    help="Открыть Быстрый ответ с фильтром этого курса",
+                ):
+                    from app.ui.library_catalog import navigate_to_ask
+                    from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
+
+                    navigate_to_ask(course_name)
+                    st.session_state[PENDING_CURRENT_VIEW_KEY] = "Быстрый ответ"
+                    st.rerun()
+    except Exception:  # noqa: BLE001 - address/badge is additive; never block concept actions
+        pass
     meta_cols = st.columns(2)
     with meta_cols[0]:
         st.caption(f"Level: {lvl}")

@@ -671,6 +671,15 @@ def build_kg_payload(
         nd["worth"] = node_worth(nd)
         nd["worth_reason"] = top_worth_factor(nd)
 
+    # P1: course · lesson address + multi-course badge (0 LLM; north star labels)
+    from app.concept_address import attach_addresses_to_nodes
+
+    attach_addresses_to_nodes(
+        nodes,
+        concepts=valid,
+        typed_relations=typed_relations,
+    )
+
     day_route = select_day_route(nodes, k=6)
 
     stats = _kg_counters_from_skeleton(skel, mastery_vector, learned)

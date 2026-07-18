@@ -127,6 +127,7 @@ def openai_tool_name(name: str) -> str:
 
 def build_default_registry() -> ToolRegistry:
     """Build the Wave 1 read-only tool registry from all tool modules."""
+    from app.agent.tools_catalog import get_catalog_tool_specs
     from app.agent.tools_flashcards import get_flashcards_tool_specs
     from app.agent.tools_learner import get_learner_tool_specs
     from app.agent.tools_quiz import get_quiz_tool_specs
@@ -138,6 +139,7 @@ def build_default_registry() -> ToolRegistry:
         *get_learner_tool_specs(),
         *get_quiz_tool_specs(),
         *get_flashcards_tool_specs(),
+        *get_catalog_tool_specs(),
     ):
         registry.register(spec, handler)
     return registry

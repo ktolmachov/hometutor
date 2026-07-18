@@ -25,6 +25,11 @@ SEMANTIC_RELATION_TYPES = frozenset(
 )
 PREREQUISITE_ROUTING_TYPES = frozenset({"prerequisite"})
 
+# Explicit non-curriculum roots excluded from the lesson ladder.
+# Do NOT use is_user_course_folder_rel — it returns True for living-konspekt.
+NON_CURRICULUM_TOP_FOLDERS = frozenset({"living-konspekt"})
+_CURRICULUM_FILE_EXTENSIONS = frozenset({".md", ".txt", ".markdown"})
+
 _CYRILLIC = str.maketrans(
     {
         "а": "a",
@@ -110,27 +115,119 @@ def slugify_concept_id(label: str) -> str:
     return text or "concept"
 
 
+def _normalize_rel_path(path: str) -> str:
+    return str(path or "").replace("\\", "/").strip().strip("/")
+
+
+def _course_top_folder(relative_path: str) -> str:
+    """Top-level course folder for a relative document path.
+
+    ``ИИ Агенты/урок_1.md`` → ``ИИ Агенты``;
+    ``course_a/lesson-1.txt`` → ``course_a``;
+    lone file without a folder → ``""`` (stable singleton group, no cross-course).
+    """
+    path = _normalize_rel_path(relative_path)
+    if not path:
+        return ""
+    parts = [part for part in path.split("/") if part]
+    if len(parts) <= 1:
+        return ""
+    return parts[0]
+
+
+def _is_non_curriculum_path(relative_path: str) -> bool:
+    """True for personal/non-course roots that must not enter the lesson ladder."""
+    top = _course_top_folder(relative_path)
+    if not top:
+        return False
+    return top.casefold() in {name.casefold() for name in NON_CURRICULUM_TOP_FOLDERS}
+
+
+def _lesson_stem_without_extension(relative_path: str) -> str:
+    """Basename stem without file extension (md/txt/markdown collapse to one lesson)."""
+    path = _normalize_rel_path(relative_path)
+    base = os.path.basename(path) if path else ""
+    stem, ext = os.path.splitext(base)
+    if not stem:
+        return base
+    # Strip curriculum dual-format extensions (and any other ext) so ids stay extension-free.
+    if ext.lower() in _CURRICULUM_FILE_EXTENSIONS or ext:
+        return stem
+    return stem
+
+
+def _lesson_group_key(relative_path: str) -> tuple[str, str]:
+    """Group key: (top_folder, stem without extension)."""
+    return (_course_top_folder(relative_path), _lesson_stem_without_extension(relative_path))
+
+
+def _lesson_canonical_path_key(relative_path: str) -> str:
+    """Extension-free path key including top-folder so same stems in different courses do not collide."""
+    top, stem = _lesson_group_key(relative_path)
+    if top and stem:
+        return f"{top}/{stem}"
+    return stem or top or relative_path
+
+
 def _lesson_anchor_id(relative_path: str) -> str:
-    """Stable curriculum anchor id — not counted as filename-fallback semantic node."""
-    slug = slugify_concept_id(relative_path) or slugify_concept_id(os.path.basename(relative_path))
+    """Stable curriculum anchor id — extension-agnostic (no ``-md`` / ``-txt`` tail)."""
+    key = _lesson_canonical_path_key(relative_path)
+    slug = slugify_concept_id(key) or slugify_concept_id(os.path.basename(relative_path))
     return f"lesson:{slug}"
 
 
+def _lesson_numeric_sort_key(stem: str, tie_break: str) -> tuple[int, str]:
+    nums = re.findall(r"\d+", stem)
+    return (int(nums[0]) if nums else 9999, tie_break.casefold())
+
+
 def _lesson_sort_key(item: tuple[str, list[dict[str, Any]]]) -> tuple[int, str]:
+    """Per-document sort key (legacy helpers / diagnostics). Lesson anchors sort groups instead."""
     doc_id, rows = item
     base = rows[0] if rows else {}
     path = str(base.get("relative_path") or doc_id).strip()
-    stem = os.path.splitext(os.path.basename(path))[0]
-    nums = re.findall(r"\d+", stem)
-    return (int(nums[0]) if nums else 9999, path.casefold())
+    stem = _lesson_stem_without_extension(path)
+    return _lesson_numeric_sort_key(stem, path)
+
+
+def _lesson_member_rank(item: tuple[str, list[dict[str, Any]]]) -> tuple[int, str]:
+    """Prefer .md over .markdown over .txt when choosing primary document of a lesson group."""
+    doc_id, rows = item
+    base = rows[0] if rows else {}
+    path = str(base.get("relative_path") or doc_id).strip()
+    ext = os.path.splitext(_normalize_rel_path(path))[1].lower()
+    order = {".md": 0, ".markdown": 1, ".txt": 2}.get(ext, 3)
+    return (order, path.casefold())
 
 
 def _lesson_display_label(relative_path: str, title: str) -> str:
     clean_title = str(title or "").strip()
     if clean_title and clean_title.casefold() not in {relative_path.casefold(), os.path.basename(relative_path).casefold()}:
         return clean_title
-    stem = os.path.splitext(os.path.basename(relative_path))[0]
+    stem = _lesson_stem_without_extension(relative_path)
     return stem.replace("_", " ").strip() or relative_path
+
+
+def _pick_lesson_label(members: list[tuple[str, list[dict[str, Any]]]]) -> str:
+    """Best human label from grouped lesson files (prefer real title over path stem)."""
+    labels: list[str] = []
+    for doc_id, rows in members:
+        base = rows[0] if rows else {}
+        relative_path = str(base.get("relative_path") or doc_id).strip()
+        title = str(base.get("title") or base.get("file_name") or relative_path).strip()
+        labels.append(_lesson_display_label(relative_path, title))
+    if not labels:
+        return "lesson"
+    # Prefer a title that is not the underscored stem derived from the filename.
+    for doc_id, rows in members:
+        base = rows[0] if rows else {}
+        relative_path = str(base.get("relative_path") or doc_id).strip()
+        title = str(base.get("title") or base.get("file_name") or relative_path).strip()
+        label = _lesson_display_label(relative_path, title)
+        stem_label = _lesson_stem_without_extension(relative_path).replace("_", " ").strip()
+        if label and label.casefold() != stem_label.casefold():
+            return label
+    return labels[0]
 
 
 def _append_lesson_anchor_nodes(
@@ -143,7 +240,13 @@ def _append_lesson_anchor_nodes(
     generation_id: str,
     iso_now: str,
 ) -> None:
-    """Add one visible lesson node per course document + part_of / precedes links."""
+    """Add one lesson node per curriculum lesson (md+txt merged) + per-course precedes.
+
+    - Groups files by ``(top_folder, stem without extension)`` so ``.md`` + ``.txt``
+      of the same lesson share one anchor id (no ``-md`` / ``-txt`` suffix).
+    - Excludes non-curriculum roots (at least ``living-konspekt/``).
+    - Emits ``precedes`` only inside a single top-folder; never cross-course.
+    """
     if not documents_grouped:
         return
 
@@ -152,50 +255,108 @@ def _append_lesson_anchor_nodes(
         for doc_id in draft.source_doc_ids:
             concepts_by_doc.setdefault(doc_id, []).append(cid)
 
-    lesson_ids: list[str] = []
-    lesson_meta: list[tuple[str, str, str]] = []
-    for doc_id, rows in sorted(documents_grouped.items(), key=_lesson_sort_key):
+    groups: dict[tuple[str, str], list[tuple[str, list[dict[str, Any]]]]] = {}
+    for doc_id, rows in documents_grouped.items():
         base = rows[0] if rows else {}
         relative_path = str(base.get("relative_path") or doc_id).strip()
-        title = str(base.get("title") or base.get("file_name") or relative_path).strip()
-        label = _lesson_display_label(relative_path, title)
-        anchor_id = _lesson_anchor_id(relative_path or doc_id)
-        chunk_id = _chunk_id_from_metadata(base, doc_id) if rows else doc_id
-        lesson_ids.append(anchor_id)
-        lesson_meta.append((anchor_id, doc_id, chunk_id))
+        if _is_non_curriculum_path(relative_path):
+            continue
+        groups.setdefault(_lesson_group_key(relative_path), []).append((doc_id, rows))
 
-        concepts_bucket[anchor_id] = {
+    # Per top-folder list of (sort_key, anchor_id, evidence_doc_id, evidence_chunk_id)
+    lessons_by_folder: dict[str, list[tuple[tuple[int, str], str, str, str]]] = {}
+
+    for (top_folder, stem), members in groups.items():
+        members_sorted = sorted(members, key=_lesson_member_rank)
+        primary_doc_id, primary_rows = members_sorted[0]
+        primary_base = primary_rows[0] if primary_rows else {}
+        primary_path = str(primary_base.get("relative_path") or primary_doc_id).strip()
+        anchor_id = _lesson_anchor_id(primary_path)
+        label = _pick_lesson_label(members_sorted)
+
+        rel_paths: list[str] = []
+        aliases: list[str] = []
+        for doc_id, rows in members_sorted:
+            base = rows[0] if rows else {}
+            relative_path = str(base.get("relative_path") or doc_id).strip()
+            if relative_path and relative_path not in rel_paths:
+                rel_paths.append(relative_path)
+            basename = os.path.basename(relative_path) if relative_path else ""
+            if basename and basename not in aliases:
+                aliases.append(basename)
+
+        primary_chunk_id = (
+            _chunk_id_from_metadata(primary_base, primary_doc_id) if primary_rows else primary_doc_id
+        )
+
+        lesson_node: dict[str, Any] = {
             "label": label,
             "concept_id": anchor_id,
-            "aliases": [os.path.basename(relative_path)] if relative_path else [],
+            "aliases": aliases,
             "description": f"Лекция курса: {label}",
             "prerequisites": [],
             "related_concepts": [],
-            "documents": [relative_path],
-            "related_documents": [relative_path],
+            "documents": rel_paths,
+            "related_documents": list(rel_paths),
             "learned": False,
             "level": "lesson",
             "provenance": {
-                "source_doc_id": doc_id,
+                "source_doc_id": primary_doc_id,
                 "extraction_method": "curriculum_anchor",
                 "confidence": 1.0,
                 "generation_id": generation_id,
                 "updated_at": iso_now,
             },
         }
+        if top_folder:
+            lesson_node["course"] = top_folder
+        concepts_bucket[anchor_id] = lesson_node
 
-        doc_entry = documents_bucket.get(doc_id)
-        if isinstance(doc_entry, dict):
-            doc_entry["lesson_anchor_id"] = anchor_id
+        for doc_id, rows in members_sorted:
+            doc_entry = documents_bucket.get(doc_id)
+            if isinstance(doc_entry, dict):
+                doc_entry["lesson_anchor_id"] = anchor_id
+            base = rows[0] if rows else {}
+            chunk_id = _chunk_id_from_metadata(base, doc_id) if rows else doc_id
+            for cid in concepts_by_doc.get(doc_id, []):
+                typed_relations.append(
+                    {
+                        "source_concept_id": cid,
+                        "target_concept_id": anchor_id,
+                        "relation_type": "part_of",
+                        "evidence_doc_id": doc_id,
+                        "evidence_chunk_id": chunk_id,
+                        "confidence": 1.0,
+                        "extraction_method": "curriculum_anchor",
+                        "generation_id": generation_id,
+                        "weak_evidence": False,
+                        "inferred_relation": False,
+                    }
+                )
 
-        for cid in concepts_by_doc.get(doc_id, []):
+        sort_key = _lesson_numeric_sort_key(
+            stem,
+            _lesson_canonical_path_key(primary_path),
+        )
+        lessons_by_folder.setdefault(top_folder, []).append(
+            (sort_key, anchor_id, primary_doc_id, primary_chunk_id)
+        )
+
+    for _folder, lesson_meta in lessons_by_folder.items():
+        ordered = sorted(lesson_meta, key=lambda item: item[0])
+        for (_prev_key, prev_id, _prev_doc, _prev_chunk), (
+            _next_key,
+            next_id,
+            next_doc,
+            next_chunk,
+        ) in zip(ordered, ordered[1:]):
             typed_relations.append(
                 {
-                    "source_concept_id": cid,
-                    "target_concept_id": anchor_id,
-                    "relation_type": "part_of",
-                    "evidence_doc_id": doc_id,
-                    "evidence_chunk_id": chunk_id,
+                    "source_concept_id": prev_id,
+                    "target_concept_id": next_id,
+                    "relation_type": "precedes",
+                    "evidence_doc_id": next_doc,
+                    "evidence_chunk_id": next_chunk,
                     "confidence": 1.0,
                     "extraction_method": "curriculum_anchor",
                     "generation_id": generation_id,
@@ -203,24 +364,6 @@ def _append_lesson_anchor_nodes(
                     "inferred_relation": False,
                 }
             )
-
-    for (_prev_id, _prev_doc, _prev_chunk), (next_id, next_doc, next_chunk) in zip(
-        lesson_meta, lesson_meta[1:]
-    ):
-        typed_relations.append(
-            {
-                "source_concept_id": _prev_id,
-                "target_concept_id": next_id,
-                "relation_type": "precedes",
-                "evidence_doc_id": next_doc,
-                "evidence_chunk_id": next_chunk,
-                "confidence": 1.0,
-                "extraction_method": "curriculum_anchor",
-                "generation_id": generation_id,
-                "weak_evidence": False,
-                "inferred_relation": False,
-            }
-        )
 
 
 def _doc_id_from_metadata(metadata: dict[str, Any]) -> str:

@@ -12,6 +12,7 @@ def test_study_level_shows_learning_loop_nav_by_default() -> None:
         "Flashcards",
         "Прогресс обучения",
         "Темы",
+        "Библиотека",
         "Найти материалы",
         "Объяснить файл",
     ]

@@ -3549,7 +3549,13 @@ function updateStopInfo() {
     : null;
   const quizDate = lastQuizDateFor(id);
 
-  if (eyebrow) eyebrow.textContent = `Остановка ${i + 1} · ${role}`;
+  // P1: north star address «курс · урок» on the stop dock eyebrow when present
+  const address = String(n.address || '').trim();
+  if (eyebrow) {
+    eyebrow.textContent = address
+      ? `Остановка ${i + 1} · ${address}`
+      : `Остановка ${i + 1} · ${role}`;
+  }
   if (nameEl) nameEl.textContent = label;
   if (reasonEl) reasonEl.textContent = reason ? `потому что: ${reason}` : 'в маршруте дня';
   updateKeeperLine(id);
@@ -3598,6 +3604,14 @@ function updateStopInfo() {
       addChip('due', dueN > 1 && Number.isFinite(dueN) ? `пора повторить · ${dueN}` : 'пора повторить');
     }
     if (n.novel) addChip('novel', 'новое');
+    // P1: multi-course transfer badge + course chips (from payload courses[])
+    const coursesBadge = String(n.courses_badge || '').trim();
+    if (coursesBadge) addChip('courses', coursesBadge);
+    const courseList = Array.isArray(n.courses) ? n.courses : [];
+    courseList.slice(0, 4).forEach((c) => {
+      const name = String(c || '').trim();
+      if (name) addChip('course', name);
+    });
     if (doneConceptIds.has(id)) addChip('done', learnedConceptIds.has(id) ? '✓ ≥80%' : '✓ квиз');
     if (isEmbedded && collectedConceptIds.has(id)) addChip('collected', '◆ конспект');
     // W2a: invitation chip — never shame; never disables CTA

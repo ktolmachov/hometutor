@@ -217,5 +217,27 @@
       "## Следующие шаги"
     ],
     "requires_read_only": true
+  },
+  {
+    "id": "agent_catalog_find_section_deep",
+    "scenario_id": "study_session",
+    "question": "Найди раздел про tools в курсе Deep и собери короткую учебную сессию",
+    "required_tools_any_order": [
+      "learner.get_profile",
+      "catalog.list"
+    ],
+    "optional_tools": [
+      "rag.search",
+      "progress.get_mastery",
+      "quiz.generate"
+    ],
+    "required_sections": [
+      "## Диагностика",
+      "## Что изучать сейчас",
+      "## План на 10–20 минут",
+      "## Проверочные вопросы",
+      "## Следующие шаги"
+    ],
+    "requires_read_only": true
   }
 ]

@@ -35,6 +35,10 @@ def is_placeholder_plan_concept(raw: str | None) -> bool:
 
 
 def plan_block_concept_line(block: dict[str, Any]) -> str:
+    # P1: prefer precomputed address «курс · урок» when present on the block.
+    address = str(block.get("address") or "").strip()
+    if address:
+        return address
     c = str(block.get("concept") or "").strip()
     if is_placeholder_plan_concept(c):
         return FALLBACK_CONCEPT_LINE_RU

@@ -30,6 +30,13 @@ FEATURES: Final[tuple[FeatureSpec, ...]] = (
     FeatureSpec("view:progress", "Прогресс обучения", 2, "nav", "Прогресс обучения"),
     FeatureSpec("view:topics", "Темы и каталог", 2, "nav", "Темы"),
     FeatureSpec(
+        "view:library",
+        "Библиотека области",
+        2,
+        "nav",
+        "Библиотека",
+    ),
+    FeatureSpec(
         "view:course",
         "Курс и Course Cockpit",
         3,
@@ -106,6 +113,7 @@ TILE_FEATURE_IDS: Final[dict[str, str]] = {
     "flashcards": "view:flashcards",
     "quick_question": "view:quick_answer",
     "topics": "view:topics",
+    "library": "view:library",
     "course": "view:course",
     "adaptive_plan": "view:adaptive_plan",
     "agent_session": "view:agent_session",

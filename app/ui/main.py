@@ -60,6 +60,7 @@ from app.ui.fragments import (
     _fragment_interactive_quiz_tab,
     _fragment_knowledge_graph_tab,
     _fragment_learning_progress_tab,
+    _fragment_library_tab,
     _fragment_living_konspekt_tab,
     _fragment_metrics_tab,
     _fragment_print_view,
@@ -195,6 +196,7 @@ _e2e_view_map = {
     "progress": "Прогресс обучения",
     "history": "История",
     "topics": "Темы",
+    "library": "Библиотека",
     "metrics": "Метрики",
     "search": "Найти материалы",
     "explain": "Объяснить файл",
@@ -262,6 +264,7 @@ _view_nav_labels = {
     "Адаптивный план": "Обучение — Адаптивный план",
     "Прогресс обучения": "Обучение — Прогресс обучения",
     "Темы": "База знаний — Темы",
+    "Библиотека": "База знаний — Библиотека",
     "Найти материалы": "База знаний — Поиск по материалам",
     "Объяснить файл": "База знаний — Объяснить файл",
     "Knowledge Graph": "Ещё — Knowledge Graph",
@@ -403,6 +406,8 @@ elif selected_view == "История":
     _fragment_history_tab()
 elif selected_view == "Темы":
     _fragment_topics_tab()
+elif selected_view == "Библиотека":
+    _fragment_library_tab()
 elif selected_view == "Метрики":
     _fragment_metrics_tab()
 elif selected_view == "Найти материалы":

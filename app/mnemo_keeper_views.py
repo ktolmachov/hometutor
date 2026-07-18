@@ -23,6 +23,8 @@ from app.prompts import mnemo_keeper as prompts
 
 def stops_from_kg_payload(payload: Mapping[str, Any] | None) -> list[dict[str, str]]:
     """Build compact stop rows from KG payload day_route + nodes."""
+    from app.concept_address import resolve_concept_address
+
     payload = payload or {}
     nodes = payload.get("nodes") or []
     by_id: dict[str, Mapping[str, Any]] = {}
@@ -39,11 +41,21 @@ def stops_from_kg_payload(payload: Mapping[str, Any] | None) -> list[dict[str, s
         if not cid:
             continue
         n = by_id.get(cid) or {}
+        address = str(n.get("address") or "").strip()
+        if not address:
+            address = resolve_concept_address(
+                cid,
+                concept={"label": n.get("label"), "level": n.get("level")},
+                courses=list(n.get("courses") or []),
+                is_lesson=bool(n.get("is_lesson")),
+            )
         stops.append(
             {
                 "id": cid,
                 "label": str(n.get("label") or cid),
                 "worth_reason": str(n.get("worth_reason") or ""),
+                "address": address,
+                "courses_badge": str(n.get("courses_badge") or ""),
             }
         )
     return stops

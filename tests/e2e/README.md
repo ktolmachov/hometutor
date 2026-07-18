@@ -59,6 +59,13 @@ Then in another terminal:
 .\.venv\Scripts\python.exe -m pytest tests/e2e -q
 ```
 
+> **Note on the `e2e` marker:** every live test carries `pytestmark = pytest.mark.e2e`
+> (registered in `pyproject.toml`), but the marker is a **label**, not a run selector.
+> Opt-in is path-based: `pytest tests/e2e`. `tests/conftest.py::pytest_ignore_collect`
+> keeps the live suite out of default `pytest` collection, so `pytest -m e2e`
+> collects `0` tests by design (the files are not collected in the default run).
+> Use `pytest tests/e2e` explicitly.
+
 ### Environment
 
 | Variable | Default | Purpose |

@@ -889,7 +889,10 @@ def _linkify_inline_source_line(answer: str, source: dict[str, Any] | None) -> s
     return answer.replace(source_line, linked_line)
 
 
-def _render_inline_tutor_tab(sid: str) -> None:
+def _render_inline_tutor_tab(sid: str | None) -> None:
+    if not sid:
+        st.info("Если ответ не складывается, нажмите «Не знаю — объясни» на карточке.")
+        return
     history = session_store.get(sid)
     answer_items = []
     for message in history:
@@ -926,10 +929,21 @@ def _render_inline_deep_prompt_tab(card: dict[str, Any]) -> None:
                 st.link_button(label, url, width="stretch")
 
 
+def _render_inline_source_tab(card: dict[str, Any], idx: int) -> None:
+    """Card source actions belong to the explanation tabs, not a floating row."""
+    source_path = source_path_from_card(card)
+    if source_path:
+        st.caption(f"Источник карточки: `{source_path}`")
+    _render_card_section_links(card, idx)
+
+
 def _render_inline_explanation_panel(card: dict[str, Any], idx: int) -> None:
-    sid = _ensure_inline_tutor_session(card, idx)
+    explanation_active = st.session_state.get(_FC_INLINE_EXPLANATION_IDX_KEY) == idx
+    sid = _ensure_inline_tutor_session(card, idx) if explanation_active else None
     st.markdown("### Разбор карточки")
-    tutor_tab, prompt_tab = st.tabs(["Тьютор", "Промпт"])
+    source_tab, tutor_tab, prompt_tab = st.tabs(["Источник", "Тьютор", "Промпт"])
+    with source_tab:
+        _render_inline_source_tab(card, idx)
     with tutor_tab:
         _render_inline_tutor_tab(sid)
     with prompt_tab:
@@ -1147,7 +1161,6 @@ def _render_active_review_card(
         scrolling=True,  # degraded fallback: data-fc3-scroll-fallback in card HTML
     )
 
-    _render_card_section_links(card, idx)
     _render_review_rating_bridge(
         api_call=api_call,
         card=card,
@@ -1156,8 +1169,8 @@ def _render_active_review_card(
         merge_session_min_next_review=merge_session_min_next_review,
     )
 
+    _render_inline_explanation_panel(card, idx)
     if st.session_state.get(_FC_INLINE_EXPLANATION_IDX_KEY) == idx:
-        _render_inline_explanation_panel(card, idx)
         if st.button("Далее ➡️", key=f"fc_next_card_{idx}", width='stretch', type="primary"):
             st.session_state["flashcards_review_index"] = idx + 1
             st.session_state["flashcards_card_flipped"] = False

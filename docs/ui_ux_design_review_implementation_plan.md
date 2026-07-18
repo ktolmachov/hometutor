@@ -871,9 +871,12 @@ harness в `tests/e2e/` (external-stack mode; см. `tests/e2e/README.md`).
       `scripts/run_local_stack.ps1` (backend :8000 + Streamlit :8501);
       env `HT_E2E_STREAMLIT_URL`, opt-out `HT_SKIP_E2E_LIVE=1`.
 - [x] Mission Control cold-state smoke на матрице `1366×768`, `1920×1080`,
-      `390×844`: HTTP 200 + `stMain` present, no `stException`, DOM markers
-      (`mode-card`, `mission-tile`, `ssr-banner`), no horizontal overflow,
-      no Playwright `pageerror`, artifact screenshot в `_artifacts/` (inventory).
+      `390×844`: HTTP 200 + `stMain` present, no `stException`, реальные DOM-
+      селекторы Mission Control через `querySelectorAll`
+      (`[data-testid="mission-control-ssr-banner"]` ≥1,
+      `[data-testid^="mission-tile-"]` ≥3 — не CSS-подстроки в `body_html`),
+      no horizontal overflow, no Playwright `pageerror`,
+      artifact screenshot в `_artifacts/` (inventory).
 - [x] Blocker-fix в этой же волне: leftover-вызов `_render_hidden_nav_expander()`
       в `app/ui/main.py` (regression из коммита 322) — app падал на главной;
       теперь Mission Control рендерится чисто на всех 3 viewports.
@@ -903,8 +906,10 @@ harness в `tests/e2e/` (external-stack mode; см. `tests/e2e/README.md`).
 
 **Visual DoD (W10.F1):** live Playwright открывает Mission Control на
 `1366×768` / `1920×1080` / `390×844`; для каждого viewport — нет `stException`,
-нет горизонтального overflow, присутствуют `mode-card` / `mission-tile` /
-`ssr-banner`; screenshot сохранён в `tests/e2e/_artifacts/` (inventory, не baseline).
+нет горизонтального overflow, `querySelectorAll` находит
+`[data-testid="mission-control-ssr-banner"]` (≥1) и
+`[data-testid^="mission-tile-"]` (≥3); screenshot сохранён в
+`tests/e2e/_artifacts/` (inventory, не baseline).
 
 **Что осталось open после W10.F1 (не помечать W10 fully done):**
 - pixel/DOM baseline + diff на live app (артефакты — inventory-only);

@@ -38,6 +38,7 @@ from app.mnemo_keeper_budget import (
     concept_set_hash,
     estimate_tokens,
     keeper_timeout_sec,
+    local_circuit_blocks_keeper,
     local_circuit_open,
     route_fingerprint,
 )
@@ -67,6 +68,7 @@ __all__ = [
     "cloud_path_blocked",
     "concept_set_hash",
     "estimate_tokens",
+    "local_circuit_blocks_keeper",
     "local_circuit_open",
     "request_keeper",
     "route_fingerprint",
@@ -267,8 +269,9 @@ def request_keeper(
             budget_snapshot=budget.as_dict(),
         )
 
-    if local_circuit_open():
-        # Prefer degrade over hanging on open circuit (W3a fail-closed).
+    if local_circuit_blocks_keeper():
+        # local_strict / balanced-without-fallback: fail closed.
+        # balanced+fallback ready proceeds (get_llm routes to cloud).
         cache.set(key, static_text)
         return KeeperResult(
             text=static_text,
@@ -320,6 +323,8 @@ def request_keeper(
                 "limit_s": timeout_sec,
             },
         )
+        # Count attempts (≤4/session), not only successful prose.
+        budget.record(input_tokens=est_in, output_tokens=0)
         cache.set(key, static_text)
         return KeeperResult(
             text=static_text,
@@ -332,6 +337,7 @@ def request_keeper(
         )
     except Exception as exc:  # noqa: BLE001 — always degrade on LLM failure
         logger.info("mnemo_keeper_llm_failed", extra={"scenario": scenario, "error": str(exc)[:200]})
+        budget.record(input_tokens=est_in, output_tokens=0)
         cache.set(key, static_text)
         return KeeperResult(
             text=static_text,
@@ -350,6 +356,7 @@ def request_keeper(
             "mnemo_keeper_llm_timeout",
             extra={"scenario": scenario, "elapsed_ms": int(elapsed * 1000), "limit_s": timeout_sec},
         )
+        budget.record(input_tokens=est_in, output_tokens=0)
         cache.set(key, static_text)
         return KeeperResult(
             text=static_text,

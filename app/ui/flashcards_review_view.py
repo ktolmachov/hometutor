@@ -989,6 +989,13 @@ def render_review(
     if _deck_sel_key not in st.session_state or st.session_state[_deck_sel_key] not in deck_labels:
         st.session_state[_deck_sel_key] = sync_label
 
+    # W2b / 3D: seed tags from concept focus *before* the tags widget + scope
+    # signature so the first render after handoff does not reset away one-shot
+    # keys with an empty-tag scope, then autoload with no soft-match needles.
+    _focus_seed = str(st.session_state.get("flashcards_focus_concept") or "").strip()
+    if _focus_seed and not str(st.session_state.get("flashcards_review_session_tags_text") or "").strip():
+        st.session_state["flashcards_review_session_tags_text"] = _focus_seed
+
     st.markdown("#### Фильтр повторения")
     c_scope, c_tags = st.columns([1, 2])
     with c_scope:
@@ -1011,6 +1018,8 @@ def render_review(
 
     scope_signature = review_scope_signature(selected_deck_id, selected_tags)
     if st.session_state.get("flashcards_review_session_scope_signature") != scope_signature:
+        # Queue/status reset only; one-shot focus survives while autoload pending
+        # (see _reset_review_session_state).
         reset_review_session_state(st.session_state)
         st.session_state["flashcards_review_session_scope_signature"] = scope_signature
 
@@ -1063,11 +1072,6 @@ def render_review(
                 st.rerun()
             except Exception as ex:  # noqa: BLE001 - UI displays API failure.
                 st.error(str(ex))
-
-    # W2b / 3D hall: seed tag UI from concept focus if host only set the focus key.
-    _focus_seed = str(st.session_state.get("flashcards_focus_concept") or "").strip()
-    if _focus_seed and not str(st.session_state.get("flashcards_review_session_tags_text") or "").strip():
-        st.session_state["flashcards_review_session_tags_text"] = _focus_seed
 
     autoload_queue = bool(st.session_state.pop(_FC_REVIEW_AUTOLOAD_PENDING_KEY, False))
     c_load, c_clear = st.columns([2, 1])

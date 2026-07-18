@@ -281,6 +281,32 @@ def local_circuit_open() -> bool:
         return False
 
 
+def local_circuit_blocks_keeper(settings=None) -> bool:
+    """True when Keeper should degrade instead of calling provider ``get_llm()``.
+
+    Mirrors primary chat routing: open local CB blocks ``local_strict`` and
+    ``balanced`` *without* fallback. ``balanced`` + ready fallback must proceed
+    (``get_llm`` switches to cloud fallback) so cache-key fallback isolation
+    matches the executed path.
+    """
+    try:
+        from app.provider import primary_chat_fallback_ready
+
+        s = settings or get_settings()
+        profile = str(
+            getattr(s, "home_rag_local_profile", "balanced") or "balanced"
+        ).strip().lower()
+        if profile == "cloud_fast":
+            return False
+        if not local_circuit_open():
+            return False
+        if profile == "balanced" and primary_chat_fallback_ready(s):
+            return False
+        return True
+    except Exception:  # noqa: BLE001 — fail closed to static degrade
+        return True
+
+
 def keeper_timeout_sec() -> float:
     """Wall timeout for Keeper LLM (vision §6.2 local 8s / cloud 5s)."""
     try:

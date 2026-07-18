@@ -278,6 +278,7 @@ def test_llm_error_degrades_fail_closed():
     assert r.source == "degrade"
     assert "llm_error" in r.reason
     assert "RAG" in r.text
+    assert r.budget_snapshot["calls"] == 1
 
 
 def test_llm_timeout_degrades_to_static():
@@ -311,11 +312,114 @@ def test_llm_timeout_degrades_to_static():
     assert r.reason == "timeout"
     assert "LATE-LLM" not in r.text
     assert "RAG" in r.text
+    # Attempts count toward session budget (≤4), not only successes.
+    assert r.budget_snapshot["calls"] == 1
     # Cache holds static degrade, not late LLM prose.
     cached = keeper.cache_from_session(state).get(r.cache_key)
     assert cached is not None
     assert "LATE-LLM" not in cached
     _ = slow_ms  # silence unused if timeout constants change
+
+
+def test_llm_error_counts_toward_budget():
+    state: dict = {}
+
+    def boom(system: str, user: str) -> str:
+        raise RuntimeError("offline")
+
+    r = keeper.request_keeper(
+        prompts.SCENARIO_GUIDE,
+        snapshot_date="2026-07-18",
+        stops=[{"id": "rag", "label": "RAG", "worth_reason": "x"}],
+        day_route=["rag"],
+        allow_llm=True,
+        session_state=state,
+        llm_complete=boom,
+    )
+    assert r.source == "degrade"
+    assert "llm_error" in r.reason
+    assert r.budget_snapshot["calls"] == 1
+
+
+def test_balanced_open_cb_with_fallback_does_not_preempt_llm(monkeypatch):
+    """Cache key fallback path must match execution: allow get_llm/fallback attempt."""
+
+    class _S:
+        home_rag_local_profile = "balanced"
+        home_rag_llm_cloud_consent = True
+        openai_api_key = "x"
+        openai_api_base = "https://openrouter.ai/api/v1"
+        lmstudio_api_base = "http://127.0.0.1:1234/v1"
+        llm_model = "local"
+        home_rag_llm_fallback_enabled = True
+
+    monkeypatch.setattr("app.mnemo_keeper_budget.get_settings", lambda: _S())
+    monkeypatch.setattr(
+        "app.provider.primary_chat_fallback_ready",
+        lambda settings=None: True,
+    )
+    monkeypatch.setattr(
+        "app.provider.local_primary_chat_circuit_open",
+        lambda settings=None: True,
+    )
+
+    calls = {"n": 0}
+
+    def fake(system: str, user: str) -> str:
+        calls["n"] += 1
+        return "fallback-ok"
+
+    r = keeper.request_keeper(
+        prompts.SCENARIO_GUIDE,
+        snapshot_date="2026-07-18",
+        stops=[{"id": "rag", "label": "RAG", "worth_reason": "x"}],
+        day_route=["rag"],
+        allow_llm=True,
+        session_state={},
+        llm_complete=fake,
+    )
+    assert calls["n"] == 1
+    assert r.source == "llm"
+    assert "fallback-ok" in r.text
+
+
+def test_local_strict_open_cb_still_degrades(monkeypatch):
+    class _S:
+        home_rag_local_profile = "local_strict"
+        home_rag_llm_cloud_consent = False
+        openai_api_key = "x"
+        openai_api_base = "https://openrouter.ai/api/v1"
+        lmstudio_api_base = "http://127.0.0.1:1234/v1"
+        llm_model = "local"
+        home_rag_llm_fallback_enabled = True
+
+    monkeypatch.setattr("app.mnemo_keeper_budget.get_settings", lambda: _S())
+    monkeypatch.setattr(
+        "app.provider.local_primary_chat_circuit_open",
+        lambda settings=None: True,
+    )
+    monkeypatch.setattr(
+        "app.provider.primary_chat_fallback_ready",
+        lambda settings=None: True,  # ignored for local_strict
+    )
+    calls = {"n": 0}
+
+    def boom(system: str, user: str) -> str:
+        calls["n"] += 1
+        return "nope"
+
+    r = keeper.request_keeper(
+        prompts.SCENARIO_GUIDE,
+        snapshot_date="2026-07-18",
+        stops=[{"id": "rag", "label": "RAG", "worth_reason": "x"}],
+        day_route=["rag"],
+        allow_llm=True,
+        session_state={},
+        llm_complete=boom,
+    )
+    assert calls["n"] == 0
+    assert r.source == "degrade"
+    assert r.reason == "circuit_open"
 
 
 def test_llm_output_cap_truncates_long_response():

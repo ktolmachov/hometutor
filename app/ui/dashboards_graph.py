@@ -252,24 +252,22 @@ def _run_kg_3d_door_action(
             target["interactive_quiz_focus_concept"] = concept_id
 
     if action == "door_flashcards":
-        # Concept door → same due handoff as W2b review; bare district → Review nav only.
+        # Concept door → W2b due handoff; bare district → Review nav only.
+        from app.ui.flashcards_review_view import (
+            apply_flashcards_concept_due_handoff,
+            clear_flashcards_concept_handoff,
+        )
+
         if concept_id and concept_id != "_district":
-            _apply_flashcards_concept_due_handoff(
-                target,
-                concept_id=concept_id,
-                label=label,
+            apply_flashcards_concept_due_handoff(
+                target, concept_id=concept_id, label=label
             )
         else:
             target["flashcards_subview"] = "review"
             target[pending_section_key()] = FC_MAIN_SECTION_REVIEW
             target["flashcards_review_queue"] = []
             target["flashcards_review_index"] = 0
-            target.pop("flashcards_focus_concept", None)
-            target.pop("flashcards_review_focus_filter_once", None)
-            target.pop("flashcards_review_autoload_pending", None)
-            from app.ui.flashcards_review_view import FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY
-
-            target.pop(FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY, None)
+            clear_flashcards_concept_handoff(target)
 
     target[PENDING_CURRENT_VIEW_KEY] = view
     mark_kg_3d_event(target, event_id, "succeeded")
@@ -286,45 +284,6 @@ def _run_kg_3d_door_action(
         st.rerun()
 
 
-def _apply_flashcards_concept_due_handoff(
-    target,
-    *,
-    concept_id: str,
-    label: str = "",
-) -> None:
-    """Shared W2b / Оранжерея handoff: tags + one-shot focus + due autoload (UI-state only)."""
-    from app.ui.flashcards_sections import FC_MAIN_SECTION_REVIEW, pending_section_key
-
-    from app.ui.flashcards_review_view import FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY
-
-    focus = str(concept_id or "").strip()
-    pretty = str(label or focus).strip() or focus
-    # One-shot keys: review view pops them on the first load (not sticky).
-    target["flashcards_focus_concept"] = focus
-    target["flashcards_review_focus_filter_once"] = True
-    # Sticky primary for due/count/recovery/undo (never id+label OR on backend).
-    target[FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY] = focus
-    target["flashcards_subview"] = "review"
-    target[pending_section_key()] = FC_MAIN_SECTION_REVIEW
-    # Tag bits: concept id + human label (UI display / label fallback only).
-    tag_bits = [focus]
-    if pretty and pretty.lower() != focus.lower():
-        tag_bits.append(pretty)
-    target["flashcards_review_session_tags_text"] = ", ".join(tag_bits)
-    target["flashcards_review_session_tag_ids"] = list(tag_bits)
-    # Clear any prior in-progress queue so review opens cleanly on the concept context.
-    target["flashcards_review_queue"] = []
-    target["flashcards_review_queue_raw"] = []
-    target["flashcards_review_index"] = 0
-    target["flashcards_card_flipped"] = False
-    target["flashcards_review_stats"] = {"again": 0, "hard": 0, "good": 0, "easy": 0}
-    target["flashcards_review_session_status"] = "idle"
-    target["flashcards_review_session_error"] = None
-    target["flashcards_review_session_deck_id"] = None
-    target["flashcards_review_deck_sync_pending"] = None
-    target["flashcards_review_autoload_pending"] = True
-
-
 def _run_kg_3d_review_action(
     *,
     target,
@@ -339,11 +298,12 @@ def _run_kg_3d_review_action(
     Sets tags + one-shot focus + ``flashcards_review_autoload_pending``.
     Does not invent flashcard rows or write domain DB state.
     """
+    from app.ui.flashcards_review_view import apply_flashcards_concept_due_handoff
     from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
 
     focus = str(concept_id or "").strip()
     pretty = str(label or focus).strip() or focus
-    _apply_flashcards_concept_due_handoff(target, concept_id=focus, label=pretty)
+    apply_flashcards_concept_due_handoff(target, concept_id=focus, label=pretty)
     target[PENDING_CURRENT_VIEW_KEY] = "Flashcards"
     mark_kg_3d_event(target, event_id, "succeeded")
     # Same as start: navigate away — no sticky hall action_result.

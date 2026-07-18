@@ -217,6 +217,47 @@ def resolve_concept_scope_api_tags(
     return [str(t).strip() for t in (selected_tags or []) if str(t).strip()]
 
 
+def apply_flashcards_concept_due_handoff(
+    target: Any,
+    *,
+    concept_id: str,
+    label: str = "",
+) -> None:
+    """W2b / Оранжерея handoff: tags + one-shot focus + due autoload (UI-state only)."""
+    from app.ui.flashcards_sections import FC_MAIN_SECTION_REVIEW, pending_section_key
+
+    focus = str(concept_id or "").strip()
+    pretty = str(label or focus).strip() or focus
+    target["flashcards_focus_concept"] = focus
+    target["flashcards_review_focus_filter_once"] = True
+    target[FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY] = focus
+    target["flashcards_subview"] = "review"
+    target[pending_section_key()] = FC_MAIN_SECTION_REVIEW
+    tag_bits = [focus]
+    if pretty and pretty.lower() != focus.lower():
+        tag_bits.append(pretty)
+    target["flashcards_review_session_tags_text"] = ", ".join(tag_bits)
+    target["flashcards_review_session_tag_ids"] = list(tag_bits)
+    target["flashcards_review_queue"] = []
+    target["flashcards_review_queue_raw"] = []
+    target["flashcards_review_index"] = 0
+    target["flashcards_card_flipped"] = False
+    target["flashcards_review_stats"] = {"again": 0, "hard": 0, "good": 0, "easy": 0}
+    target["flashcards_review_session_status"] = "idle"
+    target["flashcards_review_session_error"] = None
+    target["flashcards_review_session_deck_id"] = None
+    target["flashcards_review_deck_sync_pending"] = None
+    target["flashcards_review_autoload_pending"] = True
+
+
+def clear_flashcards_concept_handoff(target: Any) -> None:
+    """Bare district door / nav-only: drop concept handoff keys."""
+    target.pop("flashcards_focus_concept", None)
+    target.pop("flashcards_review_focus_filter_once", None)
+    target.pop("flashcards_review_autoload_pending", None)
+    target.pop(FLASHCARDS_REVIEW_SCOPE_PRIMARY_TAG_KEY, None)
+
+
 def apply_concept_handoff_queue_scope(
     queue: list,
     *,

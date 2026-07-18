@@ -353,6 +353,12 @@ if selected_view == HOME_VIEW:
     from app.ui.e2e_demo_scenes import render_e2e_demo_scene_for_view
 
     # Mission Control SSR: см. app/ui/mission_control.py — баннер primary + текст «почему не тьютор/quiz/карточки/прогресс»
+    try:
+        from app.ui.tutorial_guide import note_activation_checkpoint
+
+        note_activation_checkpoint("mission_control_returned")
+    except Exception:  # noqa: BLE001 - coach must not break home
+        pass
     render_mission_control(index_stats)
     render_e2e_demo_scene_for_view(selected_view)
     _render_hidden_nav_expander()
@@ -363,6 +369,12 @@ elif selected_view == "Чат с тьютором":
 elif selected_view == "Интерактивный Quiz":
     _fragment_interactive_quiz_tab()
 elif selected_view == "Flashcards":
+    try:
+        from app.ui.tutorial_guide import note_activation_checkpoint
+
+        note_activation_checkpoint("memory_change_seen")
+    except Exception:  # noqa: BLE001
+        pass
     _fragment_flashcards_tab()
 elif selected_view == "Курс":
     from app.ui.e2e_demo_scenes import render_e2e_demo_scene_for_view
@@ -381,6 +393,13 @@ elif selected_view == "Адаптивный план":
     render_adaptive_daily_plan(key_prefix="adaptive_plan_view_daily")
 elif selected_view == "Knowledge Graph":
     from app.ui.e2e_demo_scenes import render_e2e_demo_scene_for_view
+
+    try:
+        from app.ui.tutorial_guide import note_activation_checkpoint
+
+        note_activation_checkpoint("memory_change_seen")
+    except Exception:  # noqa: BLE001
+        pass
 
     render_e2e_demo_scene_for_view(selected_view)
     _fragment_knowledge_graph_tab()

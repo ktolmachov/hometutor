@@ -33,7 +33,6 @@ from app.ui.helpers import (
 )
 from app.ui.tutorial_guide import (
     render_tutorial_entry as _render_tutorial_entry,
-    start_tutorial as _start_tutorial,
     tutorial_progress_payload as _tutorial_progress_payload,
 )
 from app.ui.session_state import (
@@ -89,12 +88,18 @@ def _render_onboarding() -> None:
         ["Учёба", "Полный (курсы и план)", "Диагностика (метрики и trace)"],
         index=0,
     )
-    launch_tour = st.checkbox("Запустить интерактивный тур", value=True)
+    launch_activation = st.checkbox(
+        "Показать подсказки «первые 10 минут»",
+        value=True,
+        help="Короткий путь по реальным действиям рядом с экраном. Полный справочный тур — отдельно на главной.",
+    )
     st.caption(
-        "Маршрут по умолчанию: объяснение → две мини-проверки → повторение (ориентир 15–30 мин). "
-        "Активация курса сама открывает режим «Полный», если сейчас выбрана «Учёба»."
+        "Сначала курс и первый ответ с источниками (ориентир 7–10 мин). "
+        "Активация курса сама открывает режим «Полный», если сейчас «Учёба»."
     )
     if st.button("Начать", type="primary", width='stretch', key="onboarding_start"):
+        from app.ui.tutorial_guide import start_activation_flow
+
         ui_level_map = {
             "Учёба": LEVEL_STUDY,
             "Полный (курсы и план)": LEVEL_FULL,
@@ -103,10 +108,18 @@ def _render_onboarding() -> None:
         set_ui_level(ui_level_map[ui_mode_label])
         set_kv("onboarding_v1_done", "1")
         st.session_state["current_view"] = HOME_VIEW
-        if launch_tour:
-            _start_tutorial(0)
+        # Full chaptered tour is NOT auto-started (W2). Optional activation coach is.
+        if launch_activation:
+            start_activation_flow()
         try:
-            track_event("onboarding_completed", {"goal": None, "ui_level": ui_level_map[ui_mode_label]})
+            track_event(
+                "onboarding_completed",
+                {
+                    "goal": None,
+                    "ui_level": ui_level_map[ui_mode_label],
+                    "activation": bool(launch_activation),
+                },
+            )
         except Exception as _exc:  # noqa: BLE001
             import logging  # noqa: BLE001
             logging.getLogger(__name__).debug("! caught exception: %s", _exc)

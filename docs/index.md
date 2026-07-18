@@ -13,7 +13,7 @@
 | Backend/API | [api_reference.md](api_reference.md) -> [technical_specification.md](technical_specification.md) |
 | Архитектор | [architecture.md](architecture.md) -> [conventions_architecture.md](conventions_architecture.md) |
 | Разработчик | [conventions.md](conventions.md) -> [evolutionary_development.md](evolutionary_development.md) -> [conventions_reference.md](conventions_reference.md) |
-| Product / UI/UX | [ui_ux_design_review_2026-07-18.md](ui_ux_design_review_2026-07-18.md) -> [ui_ux_design_review_implementation_plan.md](ui_ux_design_review_implementation_plan.md) |
+| Product / UI/UX | [ui_ux_design_review_2026-07-18.md](ui_ux_design_review_2026-07-18.md) -> [ui_ux_design_review_2026-07-18_addendum.md](ui_ux_design_review_2026-07-18_addendum.md) -> [ui_ux_design_review_implementation_plan.md](ui_ux_design_review_implementation_plan.md) |
 | DevOps | [quickstart.md](quickstart.md) -> [../DOCKER_BUILD.md](../DOCKER_BUILD.md) -> [../deploy/hf-spaces/README.md](../deploy/hf-spaces/README.md) |
 
 ## Документы
@@ -30,6 +30,7 @@
 | [conventions.md](conventions.md) | короткие инженерные правила |
 | [evolutionary_development.md](evolutionary_development.md) | инженерный стиль маленьких проверяемых волн и критерии завершения |
 | [ui_ux_design_review_2026-07-18.md](ui_ux_design_review_2026-07-18.md) | системный UI/UX-аудит runtime-продукта: Мнемополис, основные учебные разделы, дизайн-система, accessibility и responsive |
+| [ui_ux_design_review_2026-07-18_addendum.md](ui_ux_design_review_2026-07-18_addendum.md) | дельта-ревью по обратной связи новых пользователей: линейка тем («Космос» refined + «Хроника»), двухголосая типографика из notebook-разборов, вес и состав главной страницы; кандидаты к промоуту, волны W1-W10 не редактирует |
 | [ui_ux_design_review_implementation_plan.md](ui_ux_design_review_implementation_plan.md) | зафиксированный план реализации дизайн-ревью: P0/P1/P2, волны W1-W10, write-set, targeted tests и Definition of Done |
 | [conventions_architecture.md](conventions_architecture.md) | архитектурные соглашения по слоям |
 | [conventions_reference.md](conventions_reference.md) | справочник по API, ошибкам, тестам и документации |

@@ -201,6 +201,12 @@ def render_query_ask_panel(
                     "confidence": data.get("confidence") or {},
                     "request_id": (data.get("debug") or {}).get("request_id"),
                 }
+                try:
+                    from app.ui.tutorial_guide import note_activation_checkpoint
+
+                    note_activation_checkpoint("first_question_sent")
+                except Exception:  # noqa: BLE001 - activation coach must not break Q&A
+                    pass
                 src_paths = source_paths_from_answer(st.session_state["last_answer"])
                 if src_paths:
                     set_last_studied_document(src_paths[0])

@@ -199,6 +199,12 @@ def render_source_cards(
                     st.session_state.pop(err_key, None)
                     st.session_state[open_key] = True
                     set_last_studied_document(rel)
+                    try:
+                        from app.ui.tutorial_guide import note_activation_checkpoint
+
+                        note_activation_checkpoint("source_opened")
+                    except Exception:  # noqa: BLE001 - coach must not break preview
+                        pass
                 except Exception as e:
                     st.session_state[err_key] = format_request_error(e)
                     st.session_state[open_key] = True

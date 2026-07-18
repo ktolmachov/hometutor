@@ -170,6 +170,12 @@ def activate_scope(
     if state is None:
         _persist_active_scope(scope)
         _promote_ui_level_for_course()
+        try:
+            from app.ui.tutorial_guide import note_activation_checkpoint
+
+            note_activation_checkpoint("course_confirmed")
+        except Exception:  # noqa: BLE001 - activation coach must not break scope
+            pass
     return scope
 
 

@@ -236,15 +236,39 @@ def _parse_tutor_quiz_llm_json(text: str, *, n_questions: int | None = None) -> 
     return {"quiz_title": title, "questions": norm}, None
 
 
+_TYPE_LABELS_RU = {
+    "multiple_choice": "Выбор варианта",
+    "true_false": "Верно / Неверно",
+    "fill_blank": "Пропуск",
+    "ordering": "Порядок",
+}
+_TF_LABELS = ("Верно", "Неверно")
+_CELEBRATE_MIN_PCT = 80.0
+
+
+def quiz_type_label_ru(qtype: str | None) -> str:
+    return _TYPE_LABELS_RU.get(str(qtype or "").strip(), str(qtype or "вопрос"))
+
+
+def normalize_true_false_answer(answer: Any) -> str:
+    """Map UI/LLM variants to canonical True/False strings."""
+    a = str(answer or "").strip()
+    if a in ("Верно", "True", "true", "1", "yes", "да", "Да"):
+        return "True"
+    if a in ("Неверно", "False", "false", "0", "no", "нет", "Нет"):
+        return "False"
+    return a
+
+
 def _quiz_answer_correct(q: dict, answer: Any) -> bool:
     qt = q.get("type")
     corr = q.get("correct")
     if qt == "multiple_choice":
         return str(answer or "").strip().upper() == str(corr or "").strip().upper()
     if qt == "true_false":
-        return str(answer or "").strip() == str(corr or "").strip()
+        return normalize_true_false_answer(answer) == normalize_true_false_answer(corr)
     if qt == "fill_blank":
-        return (str(answer or "").strip().lower() == str(corr or "").strip().lower())
+        return str(answer or "").strip().lower() == str(corr or "").strip().lower()
     if qt == "ordering":
         if not isinstance(corr, list):
             return False
@@ -267,6 +291,39 @@ def _quiz_widget_key(i: int, gen_id: str, qtype: str) -> str:
     if qtype == "ordering":
         return f"interactive_quiz_ord_{i}_{gen_id}"
     return f"interactive_quiz_q_{i}_{gen_id}"
+
+
+def _quiz_result_key(i: int, gen_id: str) -> str:
+    return f"interactive_quiz_result_{i}_{gen_id}"
+
+
+def _answer_is_ready(qtype: str, answer: Any) -> bool:
+    if answer is None:
+        return False
+    if qtype == "multiple_choice":
+        return str(answer).strip() != ""
+    if qtype == "true_false":
+        return str(answer).strip() in _TF_LABELS or normalize_true_false_answer(answer) in {
+            "True",
+            "False",
+        }
+    if qtype == "fill_blank":
+        return bool(str(answer).strip())
+    if qtype == "ordering":
+        return bool(_parse_ordering_user(str(answer or "")))
+    return bool(str(answer).strip())
+
+
+def presentation_leaks_answer_before_submit(html_or_text: str) -> bool:
+    """Regression helper: pre-submit UI must not reveal correctness copy."""
+    blob = str(html_or_text or "").casefold()
+    leak_markers = (
+        "правильно:",
+        "верный ответ",
+        "correct answer",
+        "неверно. правильно",
+    )
+    return any(m in blob for m in leak_markers)
 
 
 def _save_quiz_as_flashcards(quiz: dict, questions: list[dict]) -> None:
@@ -374,8 +431,116 @@ def _render_quiz_expert_layer(
     )
 
 
+def _render_ordering_controls(wkey: str, options: list[str]) -> None:
+    """Reorder via up/down (no drag required). Syncs comma-joined value into ``wkey``."""
+    list_key = f"{wkey}_list"
+    opts = [str(o).strip() for o in options if str(o).strip()]
+    if list_key not in st.session_state or not isinstance(st.session_state.get(list_key), list):
+        st.session_state[list_key] = list(opts)
+    items: list[str] = list(st.session_state[list_key])
+    # Repair if option set changed after regen
+    if set(items) != set(opts) or len(items) != len(opts):
+        items = list(opts)
+        st.session_state[list_key] = items
+    st.caption("Расставьте пункты кнопками ↑/↓ (без перетаскивания).")
+    for j, line in enumerate(items):
+        c0, c1, c2, c3 = st.columns([0.12, 0.64, 0.12, 0.12])
+        with c0:
+            st.caption(str(j + 1))
+        with c1:
+            st.text(line)
+        with c2:
+            if st.button("↑", key=f"{wkey}_up_{j}", disabled=j == 0, help="Выше"):
+                items[j - 1], items[j] = items[j], items[j - 1]
+                st.session_state[list_key] = items
+                st.rerun()
+        with c3:
+            if st.button(
+                "↓",
+                key=f"{wkey}_dn_{j}",
+                disabled=j >= len(items) - 1,
+                help="Ниже",
+            ):
+                items[j + 1], items[j] = items[j], items[j + 1]
+                st.session_state[list_key] = items
+                st.rerun()
+    st.session_state[wkey] = ", ".join(items)
+
+
+def _render_question_input(i: int, q: dict, gen_id: str, letters: list[str]) -> str:
+    """Render input widgets; return widget key. Does not reveal correct answer."""
+    qt = q.get("type")
+    wkey = _quiz_widget_key(i, gen_id, str(qt or ""))
+    if qt == "multiple_choice":
+        opts = q.get("options") or []
+
+        def _fmt_letter(L: str, o=opts) -> str:
+            idx = ord(L) - ord("A")
+            if 0 <= idx < len(o):
+                return f"{L}. {o[idx]}"
+            return L
+
+        st.radio(
+            "Выберите ответ",
+            letters[: max(1, min(4, len(opts)))],
+            index=None,
+            format_func=_fmt_letter,
+            key=wkey,
+            horizontal=True,
+        )
+    elif qt == "true_false":
+        st.radio(
+            "Верно или неверно",
+            list(_TF_LABELS),
+            index=None,
+            key=wkey,
+            horizontal=True,
+        )
+    elif qt == "fill_blank":
+        st.text_input("Введите ответ (пропуск):", key=wkey)
+    elif qt == "ordering":
+        _render_ordering_controls(wkey, list(q.get("options") or []))
+    else:
+        st.warning("Неизвестный тип вопроса.")
+    return wkey
+
+
+def _render_question_feedback(q: dict, result: dict) -> None:
+    """Show correctness only after submit (no pre-submit leak)."""
+    if result.get("is_correct"):
+        st.success("Верно.")
+    else:
+        st.error(
+            "Неверно. Правильно: "
+            f"{format_interactive_quiz_correct_for_export(q)}"
+        )
+    expl = str(q.get("explanation") or "").strip()
+    if expl:
+        st.info(f"**Объяснение:** {expl}")
+
+
+def _score_submitted_questions(questions: list, gen_id: str) -> tuple[int, int, list[str]]:
+    """Return (correct, submitted, concept_ids_correct) for submitted items only."""
+    correct_n = 0
+    submitted_n = 0
+    concepts: list[str] = []
+    for i, q in enumerate(questions):
+        if not isinstance(q, dict):
+            continue
+        result = st.session_state.get(_quiz_result_key(i, gen_id))
+        if not isinstance(result, dict):
+            continue
+        submitted_n += 1
+        if result.get("is_correct"):
+            correct_n += 1
+            c = str(q.get("concept") or "").strip()
+            if c:
+                concepts.append(c)
+    return correct_n, submitted_n, concepts
+
+
 def _render_interactive_quiz_tab() -> None:
-    """Персонализированный квиз v2.3 (3 вопроса, 3 типа), Anki CSV/apkg, граф, статистика."""
+    """Персонализированный квиз: submit-gated feedback, Anki, граф."""
     from app.knowledge_service import knowledge_graph
     from app.models import Message
     from app.quiz_service import generate_interactive_quiz
@@ -385,7 +550,8 @@ def _render_interactive_quiz_tab() -> None:
     st.markdown('<div class="panel">', unsafe_allow_html=True)
     _render_panel_header(
         "Интерактивный Quiz",
-        "Типы: multiple_choice, true_false, fill_blank, ordering · граф и Anki как раньше",
+        "Ответьте на вопросы, затем «Ответить» — разбор только после фиксации. "
+        "Типы: выбор, верно/неверно, пропуск, порядок.",
     )
 
     if "tutor_session_id" not in st.session_state:
@@ -443,7 +609,10 @@ def _render_interactive_quiz_tab() -> None:
     if "interactive_quiz_error" not in st.session_state:
         st.session_state["interactive_quiz_error"] = None
 
-    st.caption(f"Сессия: {sid[:8]}… · концептов в графе: {len(concepts)} · изучено (сессия+файл): {n_learned}")
+    st.caption(
+        f"Концептов в графе: {len(concepts)} · отмечено изученными: {n_learned}. "
+        "Разбор ответа — только после «Ответить»."
+    )
 
     _iq_labels = {
         "auto": "Как цель обучения (авто)",
@@ -504,7 +673,7 @@ def _render_interactive_quiz_tab() -> None:
     st.subheader(quiz.get("quiz_title", "Quiz"))
     letters = ["A", "B", "C", "D"]
     questions = quiz.get("questions", [])
-    gen_id = st.session_state["interactive_quiz_gen_id"]
+    gen_id = str(st.session_state["interactive_quiz_gen_id"] or "")
     _render_quiz_expert_layer(
         quiz=quiz,
         questions=questions,
@@ -516,61 +685,48 @@ def _render_interactive_quiz_tab() -> None:
         topic_guess=topic_guess,
         recent_history_chars=len(recent_history),
     )
-    correct_n = 0
+
     for i, q in enumerate(questions):
-        qt = q.get("type")
-        st.markdown(f"**Вопрос {i + 1}** (`{qt}`) · {q['q']}")
+        if not isinstance(q, dict):
+            continue
+        qt = str(q.get("type") or "")
+        st.markdown(f"**Вопрос {i + 1}** ({quiz_type_label_ru(qt)}) · {q.get('q', '')}")
         if q.get("concept"):
             st.caption(f"Концепт: {q['concept']}")
-        wkey = _quiz_widget_key(i, gen_id, qt)
+        wkey = _render_question_input(i, q, gen_id, letters)
+        result_key = _quiz_result_key(i, gen_id)
+        result = st.session_state.get(result_key)
+        submitted = isinstance(result, dict)
 
-        if qt == "multiple_choice":
-            opts = q["options"]
+        if not submitted:
+            if st.button("Ответить", key=f"interactive_quiz_submit_{i}_{gen_id}", type="secondary"):
+                ans = st.session_state.get(wkey)
+                if not _answer_is_ready(qt, ans):
+                    st.warning("Сначала выберите или введите ответ.")
+                else:
+                    st.session_state[result_key] = {
+                        "status": "submitted",
+                        "is_correct": _quiz_answer_correct(q, ans),
+                        "answer": ans,
+                    }
+                    try:
+                        from app.ui.tutorial_guide import note_activation_checkpoint
 
-            def _fmt_letter(L: str) -> str:
-                idx = ord(L) - ord("A")
-                return f"{L}. {opts[idx]}"
-
-            st.radio(
-                "Выберите ответ",
-                letters,
-                index=None,
-                format_func=_fmt_letter,
-                key=wkey,
-                horizontal=True,
-            )
-        elif qt == "true_false":
-            st.radio(
-                "Верно или неверно",
-                ["True", "False"],
-                index=None,
-                key=wkey,
-                horizontal=True,
-            )
-        elif qt == "fill_blank":
-            st.text_input("Введите ответ (пропуск):", key=wkey)
-        elif qt == "ordering":
-            st.caption("Перечислите пункты **в правильном порядке** через запятую (как в списке ниже).")
-            for j, line in enumerate(q.get("options") or []):
-                st.text(f"{j + 1}. {line}")
-            st.text_input("Порядок через запятую:", key=wkey, placeholder="например: пункт1, пункт2, пункт3")
+                        note_activation_checkpoint("micro_quiz_submitted")
+                    except Exception:  # noqa: BLE001 - coach must not break quiz
+                        pass
+                    st.rerun()
         else:
-            st.warning("Неизвестный тип вопроса.")
+            _render_question_feedback(q, result)
 
-        ans = st.session_state.get(wkey)
-        if _quiz_answer_correct(q, ans):
-            correct_n += 1
-        with st.expander(f"Проверка вопроса {i + 1}", expanded=False):
-            if _quiz_answer_correct(q, ans):
-                st.success("Верно.")
-            else:
-                st.error(f"Неверно. Правильно: {format_interactive_quiz_correct_for_export(q)}")
-            if q.get("explanation"):
-                st.info(f"**Объяснение:** {q['explanation']}")
-
-    total = len(questions)
-    pct = (correct_n / total * 100.0) if total else 0.0
+    total = len([x for x in questions if isinstance(x, dict)])
+    correct_n, submitted_n, _ = _score_submitted_questions(questions, gen_id)
+    pct = (correct_n / submitted_n * 100.0) if submitted_n else 0.0
     st.session_state["interactive_quiz_score_pct"] = pct
+    if submitted_n:
+        st.caption(f"Зафиксировано ответов: {submitted_n}/{total} · текущий score: {pct:.0f}%")
+    else:
+        st.caption("Ответьте на вопросы кнопкой «Ответить» — разбор откроется только после фиксации.")
 
     ex1, ex2 = st.columns(2)
     safe_title = re.sub(r"[^\w\-]+", "_", quiz.get("quiz_title", "quiz")[:40])
@@ -581,7 +737,7 @@ def _render_interactive_quiz_tab() -> None:
             file_name=f"quiz_{safe_title}.csv",
             mime="text/csv",
             key="interactive_quiz_csv_dl",
-            width='stretch',
+            width="stretch",
         )
     with ex2:
         apkg, apkg_err = interactive_quiz_apkg_bytes(quiz)
@@ -592,22 +748,19 @@ def _render_interactive_quiz_tab() -> None:
                 file_name=f"quiz_{safe_title}.apkg",
                 mime="application/apkg",
                 key="interactive_quiz_apkg_dl",
-                width='stretch',
+                width="stretch",
             )
         else:
             st.caption(apkg_err or "Не удалось собрать .apkg")
 
-    if st.button("Завершить quiz, обновить граф и сохранить в историю", key="interactive_quiz_finish"):
-        gen_id = st.session_state.get("interactive_quiz_gen_id")
-        concepts_to_mark: list[str] = []
-        ok = 0
-        for i, q in enumerate(questions):
-            wkey = _quiz_widget_key(i, gen_id or "", q.get("type"))
-            ans = st.session_state.get(wkey)
-            if _quiz_answer_correct(q, ans):
-                ok += 1
-                if q.get("concept"):
-                    concepts_to_mark.append(q["concept"])
+    finish_disabled = submitted_n <= 0
+    if st.button(
+        "Завершить quiz, обновить граф и сохранить в историю",
+        key="interactive_quiz_finish",
+        disabled=finish_disabled,
+        help="Доступно после хотя бы одного зафиксированного ответа.",
+    ):
+        ok, done_n, concepts_to_mark = _score_submitted_questions(questions, gen_id)
         seen: set[str] = set()
         concepts_dedup = []
         for c in concepts_to_mark:
@@ -622,11 +775,11 @@ def _render_interactive_quiz_tab() -> None:
                 tl.append(c)
         st.session_state["tutor_learned_concepts"] = tl
 
-        pct_done = (ok / total * 100.0) if total else 0.0
+        pct_done = (ok / done_n * 100.0) if done_n else 0.0
         if gen_id and st.session_state.get("interactive_quiz_saved_for_gen_id") != gen_id:
             lines = [
                 f"**Интерактивный quiz:** {quiz.get('quiz_title', 'Quiz')}",
-                f"**Результат:** {pct_done:.0f}% ({ok}/{total})",
+                f"**Результат:** {pct_done:.0f}% ({ok}/{done_n} зафиксированных)",
                 f"**Обновление графа:** помечено концептов: {n_marked}",
                 f"**Контекст графа (кратко):** {graph_summary}",
             ]
@@ -643,37 +796,57 @@ def _render_interactive_quiz_tab() -> None:
             cur.append(msg)
             session_store.save(sid, cur)
             st.session_state["interactive_quiz_saved_for_gen_id"] = gen_id
-            record_quiz_session_completed(total_questions=total, correct=ok)
-        st.balloons()
-        st.success(
-            f"Результат: **{pct_done:.0f}%** ({ok}/{total}). "
-            f"Граф: обновлено **{n_marked}** концепт(ов). История сессии {sid[:8]}…"
-        )
-        # W4b: return to ceremonial hub — quiz channel updates ✓ / dawn honestly.
-        try:
-            from app.ui.mnemo_nav import render_return_to_mnemo_cta
+            record_quiz_session_completed(total_questions=done_n, correct=ok)
 
-            if render_return_to_mnemo_cta(
-                key="interactive_quiz_return_mnemo",
-                return_from="quiz",
-                caption=(
-                    "Мир покажет quiz-след: ✓ на остановках и небо/фонари "
-                    "(не SR/туман и не ◆ — у них свои каналы)."
-                ),
+        if pct_done >= _CELEBRATE_MIN_PCT:
+            st.balloons()
+            st.success(
+                f"Результат: **{pct_done:.0f}%** ({ok}/{done_n}). "
+                f"Граф: обновлено **{n_marked}** концепт(ов)."
+            )
+            next_cta = "mnemo"
+        elif pct_done >= 50:
+            st.warning(
+                f"Результат: **{pct_done:.0f}%** ({ok}/{done_n}). "
+                f"Есть прогресс; граф: **{n_marked}** концепт(ов)."
+            )
+            next_cta = "retry"
+        else:
+            st.info(
+                f"Результат: **{pct_done:.0f}%** ({ok}/{done_n}). "
+                "Спокойный шаг: повторите слабые места или вернитесь к материалам."
+            )
+            next_cta = "retry"
+
+        # One dominant next action after finish.
+        if next_cta == "mnemo":
+            try:
+                from app.ui.mnemo_nav import render_return_to_mnemo_cta
+
+                if render_return_to_mnemo_cta(
+                    key="interactive_quiz_return_mnemo",
+                    return_from="quiz",
+                    caption=(
+                        "Мир покажет quiz-след: ✓ на остановках и небо/фонари "
+                        "(не SR/туман и не ◆ — у них свои каналы)."
+                    ),
+                ):
+                    st.rerun()
+            except Exception:  # noqa: BLE001 - return CTA must not break finish path
+                if st.button("→ К прогрессу", key="interactive_quiz_goto_progress"):
+                    st.session_state[PENDING_CURRENT_VIEW_KEY] = "Прогресс обучения"
+                    st.rerun()
+        else:
+            if st.button(
+                "🃏 Создать flashcards из этих вопросов",
+                key="quiz_to_flashcards_after_finish",
+                type="primary",
+                width="stretch",
+                help="Единый следующий шаг после слабого/среднего результата.",
             ):
-                st.rerun()
-        except Exception:  # noqa: BLE001 - return CTA must not break finish path
-            pass
+                _save_quiz_as_flashcards(quiz, questions)
 
-    # ── CTA: convert quiz to flashcards (E12) ──
-    if st.session_state.get("interactive_quiz_data") and questions:
-        st.divider()
-        if st.button(
-            "🃏 Создать flashcards из этих вопросов",
-            key="quiz_to_flashcards_btn",
-            width='stretch',
-            help="Вопросы станут front, ответы + объяснения — back. Карточки сохраняются для интервального повторения.",
-        ):
-            _save_quiz_as_flashcards(quiz, questions)
+    if st.session_state.get("interactive_quiz_data") and questions and submitted_n <= 0:
+        st.caption("После ответов можно завершить quiz и обновить граф.")
 
     st.markdown("</div>", unsafe_allow_html=True)

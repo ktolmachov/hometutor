@@ -61,6 +61,17 @@ EMBED_MODEL=perplexity/pplx-embed-v1-0.6b
 .\.venv\Scripts\python.exe scripts\local_readiness.py --allow-running --check-running
 ```
 
+## 2.1 Первые 10 минут в UI
+
+1. Запустите UI и API (`local_start` / `streamlit` + uvicorn).
+2. На welcome выберите уровень интерфейса; оставьте «Показать подсказки
+   первые 10 минут».
+3. Активируйте курс → «Быстрый ответ» → вопрос → откройте источник →
+   handoff в тьютора → quiz «Ответить» → Knowledge Graph/Flashcards →
+   вернитесь на главную.
+4. Справочный multi-chapter tour **не** стартует сам — только кнопка
+   «Справочный тур» на главной.
+
 ## 3. Данные и индекс
 
 Положите материалы в `data/` или задайте внешний корень через `HOME_RAG_HOME`.

@@ -142,6 +142,12 @@ def render_query_answer_section() -> None:
             st.session_state["tutor_e11_loop_active"] = True
             persist_tutor_goal_snapshot_from_session()
             st.session_state[PENDING_CURRENT_VIEW_KEY] = "Чат с тьютором"
+            try:
+                from app.ui.tutorial_guide import note_activation_checkpoint
+
+                note_activation_checkpoint("tutor_handoff_completed")
+            except Exception:  # noqa: BLE001 - coach must not break handoff
+                pass
             st.rerun()
         st.caption(qa_five_min_tutor_bridge_caption_ru())
         st.caption(qa_to_tutor_bridge_caption_ru())

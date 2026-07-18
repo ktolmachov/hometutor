@@ -927,15 +927,15 @@ After block."""
         assert "__esbuild_esm_mermaid_nm" in html_calls[0]
 
     def test_mermaid_renderer_keeps_cdn_as_missing_asset_fallback(self, monkeypatch, tmp_path):
-        import app.ui.living_konspekt_reader as reader
+        import app.ui.living_konspekt_reader_markdown as reader_md
 
-        reader._load_mermaid_source.cache_clear()
-        monkeypatch.setattr(reader, "_MERMAID_PATH", tmp_path / "missing-mermaid.min.js")
+        reader_md._load_mermaid_source.cache_clear()
+        monkeypatch.setattr(reader_md, "_MERMAID_PATH", tmp_path / "missing-mermaid.min.js")
 
-        script_tag = reader._mermaid_script_tag()
+        script_tag = reader_md._mermaid_script_tag()
 
         assert 'src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"' in script_tag
-        reader._load_mermaid_source.cache_clear()
+        reader_md._load_mermaid_source.cache_clear()
 
     def test_rewrite_image_paths_for_artifact(self):
         from app.konspekt_artifact import _rewrite_image_paths_for_artifact

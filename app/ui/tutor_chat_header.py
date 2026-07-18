@@ -9,7 +9,7 @@ from app.ui.continuity_bridge import e24_active_goal_line_ru as _e24_active_goal
 
 
 def render_tutor_chat_styles() -> None:
-    """Render CSS styles for tutor chat."""
+    """Render CSS styles for tutor chat (W9: motion respects reduced-motion)."""
     st.markdown(
         """
         <style>
@@ -17,7 +17,15 @@ def render_tutor_chat_styles() -> None:
             from { opacity: 0; transform: translateY(4px); }
             to { opacity: 1; transform: translateY(0); }
         }
-        div[data-testid="stChatMessage"] { animation: tutorFadeIn 0.35s ease; }
+        div[data-testid="stChatMessage"] {
+            animation: tutorFadeIn var(--motion-default, 180ms) var(--ease-standard, ease);
+        }
+        @media (prefers-reduced-motion: reduce) {
+            div[data-testid="stChatMessage"] {
+                animation: none !important;
+                transform: none !important;
+            }
+        }
         .tutor-nba-card {
             border: 1px solid rgba(36, 59, 44, 0.15);
             border-radius: 16px;
@@ -31,11 +39,11 @@ def render_tutor_chat_styles() -> None:
     )
 
 
-def render_tutor_chat_intro() -> None:
-    """Render the intro panel and information boxes."""
+def render_tutor_chat_intro(*, has_assistant_reply: bool = False) -> None:
+    """Intro panel; collapses after first successful assistant reply (W9)."""
     _render_panel_header(
         "Чат с тьютором",
-        "Главный режим для обучения: объяснение, пример, мини-проверка и следующий шаг в одном потоке.",
+        "Объяснение, пример, мини-проверка и следующий шаг в одном потоке.",
     )
 
     from app.knowledge_service import get_active_knowledge_graph
@@ -58,11 +66,17 @@ def render_tutor_chat_intro() -> None:
             elif _sr.get("hint"):
                 st.caption(str(_sr["hint"]))
 
-    st.info(
+    # W9: after first reply, onboarding chrome is not a permanent banner.
+    intro_body = (
         "Если разбираете домашнее задание, оставайтесь в этом же чате: попросите «подсказку», "
-        "«дай план», «разбери ошибку» или «полное решение». Для обычного движения по теме удобнее "
-        "использовать действия под ответом: «Объясни проще», «Дай пример», «Проверь меня», «Следующий шаг»."
+        "«дай план», «разбери ошибку» или «полное решение». Под ответом: "
+        "«Объясни проще», «Дай пример», «Проверь меня», «Следующий шаг»."
     )
+    if has_assistant_reply:
+        with st.expander("Как пользоваться чатом", expanded=False):
+            st.caption(intro_body)
+    else:
+        st.info(intro_body)
 
 
 def render_tutor_active_goal() -> None:

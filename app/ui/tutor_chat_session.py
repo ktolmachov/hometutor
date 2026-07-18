@@ -462,16 +462,32 @@ def _render_e11_loop_fallback(session_id: str) -> None:
                 st.success("Сессию можно завершить: следующий шаг сохранён в контексте.")
 
 
+def _session_has_assistant_reply(session_id: str) -> bool:
+    try:
+        from app.session_store import session_store
+
+        if session_store is None:
+            return False
+        for msg in session_store.get(session_id) or []:
+            if getattr(msg, "role", None) == "assistant":
+                return True
+    except Exception:  # noqa: BLE001
+        return False
+    return False
+
+
 def _render_tutor_intro() -> str:
     tutor_chat_header.render_tutor_chat_styles()
     _render_qa_tutor_handoff_transition_styles()
     st.markdown('<div class="panel">', unsafe_allow_html=True)
-    tutor_chat_header.render_tutor_chat_intro()
-    tutor_chat_header.render_tutor_active_goal()
-    _render_tutor_depth_switcher()
 
     sid = st.session_state.get("tutor_session_id") or str(uuid.uuid4())
     st.session_state["tutor_session_id"] = sid
+    has_reply = _session_has_assistant_reply(sid)
+    tutor_chat_header.render_tutor_chat_intro(has_assistant_reply=has_reply)
+    tutor_chat_header.render_tutor_active_goal()
+    _render_tutor_depth_switcher()
+
     if st.session_state.get("flashcard_review_return") and handoff_active(st.session_state):
         record_handoff_tutor_mount(st.session_state)
     _render_qa_handoff_incomplete_from_qa_flow()
@@ -756,8 +772,8 @@ def render_tutor_chat_tab() -> None:
     _handle_pending_tutor_prompt(sid, graph_summary)
     _maybe_start_tutor_micro_quiz(sid)
 
+    # W9 order: history + followups + input first; exports/expert after the learning loop.
     history = session_store.get(sid)
-    tutor_chat_footer.render_tutor_chat_exports(sid, history)
     _render_tutor_history(sid, history)
     _render_tutor_followups(sid)
     _render_nba_card(st.session_state.get("tutor_last_nba"))
@@ -772,9 +788,11 @@ def render_tutor_chat_tab() -> None:
     if prompt:
         _process_tutor_reply(prompt, sid, graph_summary)
 
-    tutor_chat_footer.render_tutor_chat_footer(
-        sid,
-        len(sessions),
-        len(knowledge_service.knowledge_graph.get_concepts()),
-    )
+    with st.expander("Экспорт и эксперт", expanded=False):
+        tutor_chat_footer.render_tutor_chat_exports(sid, history)
+        tutor_chat_footer.render_tutor_chat_footer(
+            sid,
+            len(sessions),
+            len(knowledge_service.knowledge_graph.get_concepts()),
+        )
     st.markdown("</div>", unsafe_allow_html=True)

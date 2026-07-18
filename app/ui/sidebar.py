@@ -121,7 +121,7 @@ def apply_research_payload(payload: dict) -> None:
 
 def render_reading_mode_toggle(*, key: str, help_text: str | None = None) -> None:
     st.toggle(
-        "Reading mode",
+        "Режим чтения",
         key=key,
         help=help_text or "Сужает длину строки и делает длинные ответы удобнее для спокойного чтения.",
     )
@@ -129,7 +129,7 @@ def render_reading_mode_toggle(*, key: str, help_text: str | None = None) -> Non
 
 def render_focus_view_toggle(*, key: str, help_text: str | None = None) -> None:
     st.toggle(
-        "Focus view",
+        "Режим фокуса",
         key=key,
         help=help_text or "Скрывает второстепенные панели рядом с длинным материалом, чтобы сосредоточиться на чтении.",
     )
@@ -282,14 +282,15 @@ def render_sidebar(index_stats: dict | None):
         if get_settings().auth_enabled:
             render_account_status_sidebar()
             st.markdown("---")
-        st.subheader("📊 Live метрики")
-        evlog = st.session_state.get("ui_event_log") or []
-        if evlog:
-            for ev in evlog[-5:]:
-                st.caption(f"{ev.get('time', '')} — {ev.get('event', '')}")
-        else:
-            st.caption("События появятся после действий в сессии.")
-        st.markdown("---")
+        # W6: context of current section first — not an operational diagnostics console.
+        from app.ui.global_navigation import (
+            destination_for_view as _dest_for_view,
+            page_title_for_view as _sidebar_page_title,
+        )
+
+        _cv = str(st.session_state.get("current_view") or "").strip()
+        _dest = _dest_for_view(_cv)
+        st.caption(f"**{_sidebar_page_title(_cv)}**")
         if st.button("Мой прогресс", width='stretch', key="sidebar_nav_mastery"):
             st.switch_page("pages/3_Мой_прогресс.py")
         if st.button("Продолжить обучение", width='stretch', key="sidebar_smart_resume"):
@@ -300,8 +301,8 @@ def render_sidebar(index_stats: dict | None):
             st.toast(f"Следующий шаг: {nxt}")
         if feature_visible_by_id("page:analytics") and st.button("Аналитика", width='stretch', key="sidebar_nav_analytics"):
             st.switch_page("pages/4_Аналитика.py")
-        # W4a: ceremonial deep link to Memory Run / 3D hall (not Mission Control home).
-        if _view_visible("Knowledge Graph") and st.button(
+        # Contextual deep links: Memory → Мнемополис; Library → каталог.
+        if _dest == "memory" and _view_visible("Knowledge Graph") and st.button(
             "🌆 В Мнемополис",
             width="stretch",
             key="sidebar_nav_mnemo_polis",
@@ -311,13 +312,21 @@ def render_sidebar(index_stats: dict | None):
 
             _open_mnemo()
             st.rerun()
-        if _view_visible("Библиотека") and st.button(
+        if _dest in {"library", "home"} and _view_visible("Библиотека") and st.button(
             "📚 Библиотека",
             width="stretch",
             key="sidebar_nav_library",
             help="Открыть каталог, пересадки и маршрут области.",
         ):
             open_library()
+            st.rerun()
+        if _dest == "learn" and _view_visible("Чат с тьютором") and st.button(
+            "💬 К тьютору",
+            width="stretch",
+            key="sidebar_nav_tutor_context",
+            help="Открыть чат с тьютором.",
+        ):
+            st.session_state[PENDING_CURRENT_VIEW_KEY] = "Чат с тьютором"
             st.rerun()
         _cw = st.session_state.pop("coach_weak_spot_topic", None)
         if _cw:
@@ -386,32 +395,43 @@ def render_sidebar(index_stats: dict | None):
                 st.caption(sync_transfer_sidebar_intro_caption_ru())
                 _render_sidebar_backup_restore_panel()
         _render_mission_control_sidebar_sections(index_stats)
+        # W6: compact index context for learners; full diagnostics only in diagnostic/expert.
+        _is_diagnostic_ui = get_ui_level() == "diagnostic" or feature_visible_by_id("panel:debug_summary")
+        if _is_diagnostic_ui:
+            st.markdown("---")
+            with st.expander("📊 Live-метрики (диагностика)", expanded=False):
+                evlog = st.session_state.get("ui_event_log") or []
+                if evlog:
+                    for ev in evlog[-5:]:
+                        st.caption(f"{ev.get('time', '')} — {ev.get('event', '')}")
+                else:
+                    st.caption("События появятся после действий в сессии.")
         st.markdown("---")
-        render_panel_header("Индекс", "Быстрый статус базы знаний")
         if index_stats and index_stats.get("status") == "ok":
-            st.metric("Документы", index_stats.get("documents_count", 0))
-            st.metric("Ноды", index_stats.get("nodes_count", 0))
+            _docs_n = index_stats.get("documents_count", 0)
+            st.caption(f"Индекс: **{_docs_n}** док.")
             if index_stats.get("last_indexed_at"):
-                st.caption(f"Последняя индексация: {index_stats['last_indexed_at'][:19].replace('T', ' ')} UTC")
-            _iv = index_stats.get("index_version")
-            _gid = index_stats.get("generation_id")
-            _ract = index_stats.get("registry_activated_at")
-            if (_iv is not None or _gid or _ract) and feature_visible_by_id("panel:index_freshness"):
-                with st.expander("Актуальность индекса (freshness)", expanded=False):
-                    if _iv is not None:
-                        st.markdown(f"**Версия реестра:** `v{int(_iv)}`")
-                    if _gid:
-                        st.markdown(f"**Поколение:** `{_gid}`")
-                    if _ract:
-                        st.caption(f"Активация в реестре: {str(_ract)[:19].replace('T', ' ')} UTC")
-                    st.caption(
-                        "Сохранённые сессии исследований помечают версию индекса; при её смене перепроверьте synthesis и программы."
-                    )
+                st.caption(
+                    f"Обновлён: {index_stats['last_indexed_at'][:19].replace('T', ' ')} UTC"
+                )
+            if _is_diagnostic_ui:
+                with st.expander("Индекс · детали", expanded=False):
+                    st.metric("Документы", index_stats.get("documents_count", 0))
+                    st.metric("Ноды", index_stats.get("nodes_count", 0))
+                    _iv = index_stats.get("index_version")
+                    _gid = index_stats.get("generation_id")
+                    _ract = index_stats.get("registry_activated_at")
+                    if (_iv is not None or _gid or _ract) and feature_visible_by_id("panel:index_freshness"):
+                        if _iv is not None:
+                            st.markdown(f"**Версия реестра:** `v{int(_iv)}`")
+                        if _gid:
+                            st.markdown(f"**Поколение:** `{_gid}`")
+                        if _ract:
+                            st.caption(f"Активация в реестре: {str(_ract)[:19].replace('T', ' ')} UTC")
         else:
-            st.info("Индекс пока недоступен. Проверьте, что база уже проиндексирована, или запустите переиндексацию.")
+            st.caption("Индекс пока недоступен.")
             if st.button("Добавить материалы", key="sidebar_add_materials", width="stretch", type="primary"):
                 from app.ui.breadcrumb import HOME_VIEW
-                from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
 
                 st.session_state[PENDING_CURRENT_VIEW_KEY] = HOME_VIEW
                 st.rerun()

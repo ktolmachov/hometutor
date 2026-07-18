@@ -246,11 +246,12 @@ def render_adaptive_daily_plan(
         )
 
     st.markdown('<div class="home-dash-body">', unsafe_allow_html=True)
+    # W9b: learner-facing progress without XP scoring chrome.
     cap_lead = "" if compact else f"Дата: **{plan.get('date', '—')}** · "
     st.caption(
         f"{cap_lead}"
         f"Рекомендуемая сессия: **{plan.get('recommended_session_length_min', '—')}** мин · "
-        f"цель XP: **{plan.get('total_xp_goal', '—')}**"
+        f"шагов: **{len(blocks)}**"
     )
     mot = plan.get("motivation_message")
     if mot:
@@ -296,13 +297,25 @@ def render_adaptive_daily_plan(
         exp_label = f"**{i + 1}. {title.upper()}** — {subtitle}" if subtitle else f"**{i + 1}. {title.upper()}**"
         expanded = (i == 0) and (not compact)
         with st.expander(exp_label, expanded=expanded):
-            xpb = raw.get("xp_base")
-            xpd = raw.get("xp_multiplier_description")
-            if xpb is not None:
-                st.caption(f"База XP блока: **{xpb}** · {xpd or 'множители: velocity, streak, gap, fast'}")
+            # Route grammar: current / next / because (W9b).
+            try:
+                from app.ui.source_address import address_from_mapping
+
+                addr = address_from_mapping(raw)
+                if addr and addr != "—":
+                    st.caption(f"📍 {addr}")
+            except Exception:  # noqa: BLE001
+                pass
+            reason = str(
+                raw.get("worth_reason") or raw.get("reason") or raw.get("why") or ""
+            ).strip()
+            if reason:
+                st.caption(f"потому что: {reason}")
+            next_hint = str(raw.get("next_hint") or raw.get("next_step") or "").strip()
+            if next_hint:
+                st.caption(f"дальше: {next_hint[:120]}")
             c0, c1, c2 = st.columns([3, 1, 1])
             with c0:
-                st.caption(f"Агент: **{_card._block_agent(raw)}**")
                 st.caption(f"⏱ ~{raw.get('duration_min', 5)} мин")
                 cm = raw.get("current_mastery")
                 if cm is not None:
@@ -336,6 +349,20 @@ def render_adaptive_daily_plan(
                             st.rerun()
                     except Exception as ex:  # noqa: BLE001 - XP award fallback must keep the plan card usable.
                         st.error(str(ex))
+            # W9b: XP multipliers / base only in Expert disclosure.
+            xpb = raw.get("xp_base")
+            xpd = raw.get("xp_multiplier_description")
+            if xpb is not None or xpd:
+                with st.expander("Эксперт: XP блока", expanded=False):
+                    if xpb is not None:
+                        st.caption(f"База XP: **{xpb}**")
+                    if xpd:
+                        st.caption(str(xpd))
+                    else:
+                        st.caption("множители: velocity, streak, gap, fast")
+                    agent = _card._block_agent(raw)
+                    if agent:
+                        st.caption(f"Агент: **{agent}**")
 
     if show_buttons and not compact:
         st.divider()

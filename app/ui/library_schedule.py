@@ -26,9 +26,9 @@ from app.library_schedule_read import (
 from app.ui.library_catalog import (
     activate_course_from_library,
     navigate_to_ask,
-    render_library_catalog_body,
 )
 from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
+from app.ui.source_address import library_card_html, normalize_source_address, status_with_icon
 from app.ui.widgets import render_panel_header
 from app.ui_client import load_index_stats
 from app.course_owner_order import (
@@ -171,63 +171,49 @@ def _render_course_order_panel(available: list[str], *, owner_order: list[str]) 
             st.rerun()
 
 
-def _render_tile_card(tile: ScheduleTile, *, key_prefix: str, compact: bool = False) -> None:
-    """Single-column readable tile: quant → address → title → status → chips → CTA."""
-    pinned = set(st.session_state.get(_PIN_KEY) or [])
-    pin_key = tile.concept_id or tile.meta or tile.title
-    is_pin = pin_key in pinned
-    pin_mark = "★ " if is_pin else "☆ "
-    quant_e, addr_e = _esc(tile.quant), _esc(tile.address)
-    title_e, status_e = _esc(tile.title), _esc(tile.status)
-    pad = "0.48rem 0.65rem" if compact else "0.75rem 0.9rem"
-    margin = "0.2rem 0 0.35rem 0" if compact else "0.35rem 0 0.55rem 0"
-    title_size = "0.94rem" if compact else "1.02rem"
-    meta_size = "0.72rem" if compact else "0.78rem"
-    st.markdown(
-        (
-            '<div class="lib-sched-tile" style="'
-            "border:1px solid rgba(120,130,150,0.28);border-radius:14px;"
-            f"padding:{pad};margin:{margin};"
-            'background:rgba(120,130,150,0.06);">'
-            f'<div style="font-size:0.72rem;opacity:0.75;letter-spacing:0.02em">{quant_e}</div>'
-            f'<div style="font-size:{meta_size};margin-top:0.12rem;opacity:0.9">📍 {addr_e}</div>'
-            f'<div style="font-size:{title_size};font-weight:600;margin-top:0.16rem">{title_e}</div>'
-            f'<div style="font-size:0.8rem;margin-top:0.2rem;opacity:0.85">{status_e}</div>'
-            "</div>"
-        ),
-        unsafe_allow_html=True,
-    )
-    # Course chips (text + ask CTA) — status also as text above (not color-only).
-    if tile.courses:
-        chip_cols = st.columns(min(len(tile.courses), 4))
-        for i, course in enumerate(tile.courses[:4]):
-            with chip_cols[i]:
-                st.caption(f"📂 {course}")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        if tile.cta in {"ask", "ask_all"} and st.button(
-            "Спросить",
-            key=f"{key_prefix}_ask",
-            width="stretch",
-        ):
-            folder = "" if tile.cta == "ask_all" else (tile.courses[0] if tile.courses else "")
+def _primary_cta_for_tile(tile: ScheduleTile) -> str:
+    """Single primary action id for the card (W8)."""
+    cta = str(tile.cta or "").strip()
+    if cta in {"ask", "ask_all", "open_kg", "activate"}:
+        return cta
+    if tile.kind == "course" or tile.meta:
+        return "activate"
+    if tile.concept_id:
+        return "open_kg"
+    return "ask"
+
+
+def _render_primary_cta(tile: ScheduleTile, *, key_prefix: str, primary: str) -> None:
+    """One primary button (activate requires confirm checkbox)."""
+    if primary in {"ask", "ask_all"}:
+        label = "Спросить по области" if primary == "ask_all" else "Спросить"
+        if st.button(label, key=f"{key_prefix}_primary", type="primary", width="stretch"):
+            folder = "" if primary == "ask_all" else (
+                tile.meta or (tile.courses[0] if tile.courses else "")
+            )
             navigate_to_ask(folder)
             st.rerun()
-    with c2:
-        if tile.cta == "open_kg" and tile.concept_id and st.button(
-            "В граф",
-            key=f"{key_prefix}_kg",
-            width="stretch",
-        ):
+        return
+    if primary == "open_kg" and tile.concept_id:
+        if st.button("В граф", key=f"{key_prefix}_primary", type="primary", width="stretch"):
             st.session_state["kg_selected_concept"] = tile.concept_id
             st.session_state["kg_action_concept"] = tile.concept_id
             st.session_state[PENDING_CURRENT_VIEW_KEY] = "Knowledge Graph"
             st.rerun()
-        elif tile.cta == "activate" and tile.meta and st.button(
-            "Активным",
-            key=f"{key_prefix}_act",
+        return
+    if primary == "activate" and tile.meta:
+        confirmed = st.checkbox(
+            "Подтверждаю смену активного курса",
+            key=f"{key_prefix}_confirm_act",
+            help="Browse сам по себе scope не меняет — только после подтверждения.",
+        )
+        if st.button(
+            "Сделать активным",
+            key=f"{key_prefix}_primary",
+            type="primary",
             width="stretch",
-            help="Сделать курс активным (явное действие).",
+            disabled=not confirmed,
+            help="Явное действие: активирует study scope.",
         ):
             from app.library_catalog_read import LibraryCourse
 
@@ -238,10 +224,38 @@ def _render_tile_card(tile: ScheduleTile, *, key_prefix: str, compact: bool = Fa
                     source_paths=tuple(tile.source_paths),
                 )
             )
+            st.success(f"Активный курс: {tile.title}")
             st.rerun()
-    with c3:
-        label = f"{pin_mark}Снять" if is_pin else f"{pin_mark}Закрепить"
-        if st.button(label, key=f"{key_prefix}_pin", width="stretch"):
+
+
+def _render_secondary_menu(
+    tile: ScheduleTile,
+    *,
+    key_prefix: str,
+    primary: str,
+    pin_key: str,
+    is_pin: bool,
+) -> None:
+    """Secondary actions under «Ещё» (not competing with primary)."""
+    pin_mark = "★ " if is_pin else "☆ "
+    with st.expander("Ещё", expanded=False):
+        st.caption(status_with_icon(tile.status, kind=tile.kind))
+        if primary != "ask" and tile.courses:
+            if st.button("Спросить по курсу", key=f"{key_prefix}_sec_ask", width="stretch"):
+                navigate_to_ask(tile.courses[0] if tile.courses else tile.meta)
+                st.rerun()
+        if primary != "ask_all":
+            if st.button("Спросить по всей области", key=f"{key_prefix}_sec_ask_all", width="stretch"):
+                navigate_to_ask("")
+                st.rerun()
+        if primary != "open_kg" and tile.concept_id:
+            if st.button("Открыть в графе", key=f"{key_prefix}_sec_kg", width="stretch"):
+                st.session_state["kg_selected_concept"] = tile.concept_id
+                st.session_state["kg_action_concept"] = tile.concept_id
+                st.session_state[PENDING_CURRENT_VIEW_KEY] = "Knowledge Graph"
+                st.rerun()
+        pin_label = f"{pin_mark}Снять закрепление" if is_pin else f"{pin_mark}Закрепить"
+        if st.button(pin_label, key=f"{key_prefix}_pin", width="stretch"):
             pins = set(st.session_state.get(_PIN_KEY) or [])
             if pin_key in pins:
                 pins.discard(pin_key)
@@ -249,16 +263,66 @@ def _render_tile_card(tile: ScheduleTile, *, key_prefix: str, compact: bool = Fa
                 pins.add(pin_key)
             st.session_state[_PIN_KEY] = sorted(pins)
             st.rerun()
+        if tile.kind in {"course", "catalog"} and tile.meta:
+            _render_course_detail_disclosure(tile.meta, key_prefix=key_prefix)
 
 
-def _esc(value: str) -> str:
-    return (
-        str(value or "")
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
+def _render_unified_card(tile: ScheduleTile, *, key_prefix: str, show_thumb: bool = False) -> None:
+    """Unified anatomy: address → title → status → one primary CTA; secondary in menu."""
+    pin_key = tile.concept_id or tile.meta or tile.title
+    is_pin = pin_key in set(st.session_state.get(_PIN_KEY) or [])
+    thumb = None
+    if show_thumb and (tile.kind in {"course", "catalog"} or tile.cta == "activate"):
+        thumb = course_thumbnail_data_uri(
+            tile.title,
+            tile.meta or (tile.courses[0] if tile.courses else ""),
+        )
+    st.markdown(
+        library_card_html(
+            title=tile.title,
+            address=normalize_source_address(tile.address),
+            status=tile.status,
+            kind=tile.kind or "course",
+            quant=tile.quant,
+            thumb_uri=thumb,
+        ),
+        unsafe_allow_html=True,
     )
+    if tile.courses:
+        st.caption("📂 " + " · ".join(tile.courses[:6]))
+    primary = _primary_cta_for_tile(tile)
+    _render_primary_cta(tile, key_prefix=key_prefix, primary=primary)
+    _render_secondary_menu(
+        tile,
+        key_prefix=key_prefix,
+        primary=primary,
+        pin_key=pin_key,
+        is_pin=is_pin,
+    )
+
+
+def _render_course_detail_disclosure(folder_rel: str, *, key_prefix: str) -> None:
+    """Optional hierarchy (konspekts/sections) without changing card model."""
+    from app.library_catalog_read import list_library_konspekts, list_library_sections
+
+    konspekts = list_library_konspekts(folder_rel)
+    if not konspekts:
+        st.caption("Конспектов type:konspekt в папке нет.")
+        return
+    st.markdown(f"**Конспекты** ({len(konspekts)})")
+    for km in konspekts[:12]:
+        badge = f" · {km.badge}" if km.badge else ""
+        with st.expander(f"📄 {km.title}{badge}", expanded=False):
+            st.caption(km.path_rel)
+            sections = list_library_sections(km.path_abs)
+            for sec in sections[:20]:
+                st.caption(
+                    f"L{sec.level} {sec.heading_text} · стр. {sec.line_start}–{sec.line_end}"
+                )
+            if len(sections) > 20:
+                st.caption(f"… и ещё {len(sections) - 20}")
+    if len(konspekts) > 12:
+        st.caption(f"… и ещё {len(konspekts) - 12} конспектов")
 
 
 def _render_empty(segment: str) -> None:
@@ -298,70 +362,49 @@ def course_thumbnail_data_uri(title: str, folder_rel: str = "") -> str:
     return f"data:image/svg+xml;base64,{data}"
 
 
+def _render_card_grid(
+    tiles: list[ScheduleTile],
+    *,
+    key_prefix: str,
+    show_thumb: bool = False,
+) -> None:
+    """Responsive 3→2→1 grid (CSS flex-wrap on horizontal blocks + 280px min)."""
+    if not tiles:
+        return
+    st.markdown(
+        '<div data-testid="e2e-lib-card-grid" data-lib-grid="3-2-1"></div>',
+        unsafe_allow_html=True,
+    )
+    for row_start in range(0, len(tiles), 3):
+        chunk = tiles[row_start : row_start + 3]
+        cols = st.columns(len(chunk), gap="medium")
+        for col, tile in zip(cols, chunk):
+            with col:
+                _render_unified_card(
+                    tile,
+                    key_prefix=f"{key_prefix}_{row_start}_{tile.meta or tile.concept_id or tile.title}",
+                    show_thumb=show_thumb,
+                )
+
+
 def _render_tile_list(
     tiles: list[ScheduleTile],
     *,
     key_prefix: str,
     compact: bool = False,
 ) -> None:
+    """List or grid of the same card model (search does not change anatomy)."""
     if not tiles:
+        return
+    if compact:
+        _render_card_grid(tiles, key_prefix=key_prefix, show_thumb=True)
         return
     for i, tile in enumerate(tiles):
-        _render_tile_card(tile, key_prefix=f"{key_prefix}_{i}", compact=compact)
-
-
-def _render_catalog_course_grid(tiles: list[ScheduleTile], *, key_prefix: str) -> None:
-    if not tiles:
-        return
-    for row_start in range(0, len(tiles), 3):
-        cols = st.columns(min(3, len(tiles) - row_start), gap="medium")
-        for col, tile in zip(cols, tiles[row_start : row_start + 3]):
-            with col:
-                _render_catalog_course_compact_card(
-                    tile,
-                    key_prefix=f"{key_prefix}_{row_start}_{tile.meta}",
-                )
-
-
-def _render_catalog_course_compact_card(tile: ScheduleTile, *, key_prefix: str) -> None:
-    thumb = course_thumbnail_data_uri(tile.title, tile.meta or (tile.courses[0] if tile.courses else ""))
-    title = _esc(tile.title)
-    address = _esc(tile.address)
-    status = _esc(tile.status)
-    quant = _esc(tile.quant)
-    with st.container(border=True):
-        c_img, c_body = st.columns([0.28, 0.72], gap="small")
-        with c_img:
-            st.markdown(
-                (
-                    f'<img src="{thumb}" alt="" aria-hidden="true" '
-                    'style="width:72px;max-width:100%;aspect-ratio:1/1;'
-                    'border-radius:14px;display:block;object-fit:cover;'
-                    'box-shadow:0 8px 18px rgba(30,20,60,0.18);">'
-                ),
-                unsafe_allow_html=True,
-            )
-        with c_body:
-            st.markdown(f"**{title}**", unsafe_allow_html=True)
-            st.caption(f"{address} · {quant}")
-            st.caption(status)
-        b1, b2 = st.columns(2)
-        with b1:
-            if st.button("Активным", key=f"{key_prefix}_act", width="stretch"):
-                from app.library_catalog_read import LibraryCourse
-
-                activate_course_from_library(
-                    LibraryCourse(
-                        folder_rel=tile.meta,
-                        title=tile.title,
-                        source_paths=tuple(tile.source_paths),
-                    )
-                )
-                st.rerun()
-        with b2:
-            if st.button("Спросить", key=f"{key_prefix}_ask", width="stretch"):
-                navigate_to_ask(tile.meta)
-                st.rerun()
+        _render_unified_card(
+            tile,
+            key_prefix=f"{key_prefix}_{i}",
+            show_thumb=False,
+        )
 
 
 def _render_schedule_segment(
@@ -372,24 +415,22 @@ def _render_schedule_segment(
     index_stats: dict,
     compact: bool,
 ) -> None:
+    del index_stats  # catalog tiles already built in ctx; browse never mutates scope here
     if segment == "Каталог":
         tiles = filter_tiles(ctx["catalog"], query)
-        if query:
-            if not tiles:
+        if not tiles:
+            if query:
                 st.warning("По запросу в каталоге ничего не найдено.")
             else:
-                st.caption(f"Найдено курсов: {len(tiles)}")
-                if compact:
-                    _render_catalog_course_grid(tiles, key_prefix="lib_cat_search")
-                else:
-                    _render_tile_list(tiles, key_prefix="lib_cat_t")
-        elif not ctx["catalog"]:
-            _render_empty("Каталог")
-        elif compact:
-            st.caption("Компактная сетка курсов. Подробные конспекты и разделы доступны в обычном режиме.")
-            _render_catalog_course_grid(ctx["catalog"], key_prefix="lib_cat_compact")
-        else:
-            render_library_catalog_body(index_stats)
+                _render_empty("Каталог")
+            return
+        st.caption(
+            f"{'Найдено курсов' if query else 'Курсов'}: {len(tiles)}. "
+            "Одна модель карточки; поиск только фильтрует. "
+            "Активация — только с подтверждением."
+        )
+        # Same card model for filtered and full catalog (W8).
+        _render_card_grid(tiles, key_prefix="lib_cat", show_thumb=True)
         return
     if segment == "Пересадки":
         tiles = filter_tiles(ctx["transfers"], query)
@@ -412,20 +453,20 @@ def _render_schedule_segment(
 
 
 def render_library_schedule(index_stats: dict | None = None) -> None:
-    """Full schedule surface: summary + search + 3 segments."""
+    """Full schedule surface: summary + search + 3 segments (no split panel wrapper)."""
     if index_stats is None:
         index_stats = load_index_stats()
     if not isinstance(index_stats, dict):
         index_stats = {}
 
-    st.markdown('<div class="panel lib-schedule">', unsafe_allow_html=True)
     render_panel_header(
         "Расписание области",
         "Каталог · пересадки · маршрут — одна поверхность без смены scope",
     )
     st.caption(
-        "Поиск фильтрует плитки. Адрес «курс · урок» — тот же, что в Memory Run. "
-        "Просмотр не активирует курс."
+        "Поиск фильтрует ту же модель карточек. Адрес «курс · урок» — SourceAddress "
+        "(как Memory Run). Просмотр не активирует курс; «Сделать активным» — только "
+        "с подтверждением."
     )
 
     raw_owner = read_course_owner_order(st.session_state)
@@ -437,7 +478,7 @@ def render_library_schedule(index_stats: dict | None = None) -> None:
 
     _render_course_order_panel(available, owner_order=owner_order)
     ctx = _build_schedule_context(index_stats, owner_order=owner_order)
-    _render_tile_card(ctx["summary"], key_prefix="lib_sum")
+    _render_unified_card(ctx["summary"], key_prefix="lib_sum", show_thumb=False)
 
     c_search, c_compact = st.columns([0.72, 0.28])
     with c_search:
@@ -445,14 +486,14 @@ def render_library_schedule(index_stats: dict | None = None) -> None:
             "Поиск по расписанию",
             key=_SEARCH_KEY,
             placeholder="курс, тема, адрес…",
-            help="Скрывает плитки, которые не содержат запрос.",
+            help="Скрывает карточки, которые не содержат запрос (анатомия та же).",
         ).strip()
     with c_compact:
         compact = st.toggle(
-            "Компактные плитки",
+            "Сетка 3→2→1",
             key=_COMPACT_KEY,
             value=True,
-            help="Показывает каталог плотной сеткой с мини-обложками курсов.",
+            help="Плотная сетка с мини-обложками; на узком экране — 2, затем 1 колонка.",
         )
     if _SEG_KEY not in st.session_state:
         st.session_state[_SEG_KEY] = SCHEDULE_SEGMENTS[0]
@@ -464,7 +505,6 @@ def render_library_schedule(index_stats: dict | None = None) -> None:
         label_visibility="collapsed",
     )
     _render_schedule_segment(segment, ctx, query=query, index_stats=index_stats, compact=compact)
-    st.markdown("</div>", unsafe_allow_html=True)
 
 
 __all__ = [

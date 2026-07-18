@@ -163,11 +163,21 @@ def render_tutor_chat_footer(session_id: str, sessions_count: int, concepts_coun
     _render_tutor_expert_session_reset(session_id)
     if st.session_state.get("flashcard_review_return"):
         if st.button(tutor_back_to_flashcards_ru(), key="tutor_back_to_flashcards", width="stretch", type="secondary"):
-            st.session_state["current_view"] = "Flashcards"
+            from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
+
+            st.session_state[PENDING_CURRENT_VIEW_KEY] = "Flashcards"
             st.session_state["flashcards_main_section"] = "review"
             st.session_state["flashcards_section_pending"] = "review"
             st.session_state["flashcard_review_return"] = False
             st.rerun()
-    st.caption(
-        f"Сессия: {session_id[:8]}… · чатов в базе: {sessions_count} · концептов в графе: {concepts_count}"
-    )
+    # W9: technical counters only in diagnostic/expert layer (not permanent footer chrome).
+    try:
+        from app.ui_preferences import get_ui_level
+
+        if get_ui_level() == "diagnostic":
+            st.caption(
+                f"Сессия: {session_id[:8]}… · чатов в базе: {sessions_count} · "
+                f"концептов в графе: {concepts_count}"
+            )
+    except Exception:  # noqa: BLE001 - footer must not fail on preferences
+        pass

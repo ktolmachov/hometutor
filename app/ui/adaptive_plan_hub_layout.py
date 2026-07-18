@@ -227,21 +227,46 @@ def render_adaptive_plan_hub(
         _card.render_plan_concepts_delta_ui(plan)
         _card.render_recent_adaptive_plan_history()
         st.markdown("**Ближайшие шаги**")
-        cols = st.columns(len(preview))
-        for col, (block_index, raw) in zip(cols, preview):
-            bt = str(raw.get("type") or "").strip()
-            title = _card._BLOCK_LABEL.get(bt, bt or "шаг")
-            badge = _card.block_badge_label(raw)
-            with col:
-                with st.container(border=True):
-                    st.caption(f"[{badge}]")
-                    st.markdown(f"**{block_index + 1}. {title}**")
-                    line = _card._block_concept_line(raw)
-                    if line:
-                        st.caption(line[:90])
-                    st.caption(f"~{raw.get('duration_min', 5)} мин · XP {raw.get('xp_base') or 'auto'}")
-                    if st.button("В чат", key=f"{key_prefix}_preview_{block_index}", width='stretch'):
-                        _card.launch_tutor_for_plan_block(raw, action_label="Adaptive Plan Hub")
+        # W9b: at most 2 columns (not 4 narrow ones); XP internals stay out of preview.
+        for row_start in range(0, len(preview), 2):
+            chunk = preview[row_start : row_start + 2]
+            cols = st.columns(len(chunk))
+            for col, (block_index, raw) in zip(cols, chunk):
+                bt = str(raw.get("type") or "").strip()
+                title = _card._BLOCK_LABEL.get(bt, bt or "шаг")
+                badge = _card.block_badge_label(raw)
+                with col:
+                    with st.container(border=True):
+                        st.caption(f"[{badge}]")
+                        st.markdown(f"**{block_index + 1}. {title}**")
+                        line = _card._block_concept_line(raw)
+                        if line:
+                            st.caption(line[:90])
+                        try:
+                            from app.ui.source_address import address_from_mapping
+
+                            addr = address_from_mapping(raw)
+                            if addr and addr != "—":
+                                st.caption(f"📍 {addr}")
+                        except Exception:  # noqa: BLE001
+                            pass
+                        reason = str(
+                            raw.get("worth_reason")
+                            or raw.get("reason")
+                            or raw.get("why")
+                            or ""
+                        ).strip()
+                        if reason:
+                            st.caption(f"потому что: {reason[:120]}")
+                        st.caption(f"⏱ ~{raw.get('duration_min', 5)} мин")
+                        if st.button(
+                            "В чат",
+                            key=f"{key_prefix}_preview_{block_index}",
+                            width="stretch",
+                        ):
+                            _card.launch_tutor_for_plan_block(
+                                raw, action_label="Adaptive Plan Hub"
+                            )
     elif st.session_state.get("home_adp_full_expanded"):
         st.caption("На сегодня пока нет дополнительных шагов сверх главного next step.")
 

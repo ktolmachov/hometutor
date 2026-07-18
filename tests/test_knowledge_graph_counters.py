@@ -764,6 +764,18 @@ class Test3DCoverageAndContracts:
         assert "applyHostPresentation" in html
         assert "SCENE_PRESENTATION" in html
         assert "domain" in html.lower() or "presentation" in html.lower()
+        # W5 UI/UX: editorial chrome + single announcer + scene summary
+        assert 'id="kgx-announcer"' in html and "function announce" in html
+        assert 'id="kgx-scene-summary"' in html and "function updateSceneSummary" in html
+        assert "replayToolsOpen" in html and 'id="replaytoolsbtn"' in html
+        assert 'data-preset="weak"' in html and 'data-preset="clear"' in html
+        # Duplicate Маршрут/Созвездие presets removed (modes stay in topbar only)
+        assert 'data-preset="route"' not in html
+        assert 'data-preset="local"' not in html
+        # Utility hosts calm/photo/presets; first-level keeps Route/Constellation/Memory
+        assert 'id="routemorepanel"' in html and "Инструменты зала" in html
+        assert "aria-describedby=\"kgx-scene-summary\"" in html or "aria-describedby='kgx-scene-summary'" in html
+        assert "prefersReducedMotion" in html and "spatial orbit" in html
         # W4c district doors
         assert 'id="districts"' in html
         assert "door_quiz" in html and "door_flashcards" in html

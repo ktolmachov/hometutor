@@ -1744,3 +1744,81 @@ div[data-testid="stExpander"] {
     border-radius: 12px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
+
+/* ─────────────────────────────────────────────────────────────
+   W8 Library / SourceAddress — unified cards + 3→2→1 grid
+   ───────────────────────────────────────────────────────────── */
+
+.src-addr {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.5rem;
+  font-size: var(--type-meta, 12px);
+  color: var(--text-muted, var(--muted));
+  line-height: 1.35;
+  margin: 0 0 0.25rem 0;
+}
+.src-addr-pin { flex: 0 0 auto; opacity: 0.85; }
+.src-addr-text {
+  font-weight: 600;
+  color: var(--text, var(--ink));
+  word-break: break-word;
+}
+.src-addr-quant {
+  opacity: 0.8;
+  font-weight: 500;
+}
+
+.lib-card {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+  border: 1px solid var(--border, var(--line));
+  border-radius: var(--radius-card, 12px);
+  padding: 0.75rem 0.85rem;
+  margin: 0 0 0.15rem 0;
+  background: var(--surface-card, var(--bg-panel));
+  min-height: 4.5rem;
+  box-sizing: border-box;
+}
+.lib-card-thumb {
+  width: 64px;
+  height: 64px;
+  flex: 0 0 64px;
+  border-radius: 12px;
+  object-fit: cover;
+  display: block;
+  box-shadow: var(--elevation-1, 0 6px 14px rgba(0, 0, 0, 0.12));
+}
+.lib-card-body { flex: 1 1 auto; min-width: 0; }
+.lib-card-title {
+  font-size: var(--type-section, 18px);
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text, var(--ink));
+  margin: 0.1rem 0 0.25rem 0;
+  word-break: break-word;
+}
+.lib-card-status {
+  font-size: var(--type-meta, 12px);
+  color: var(--text-muted, var(--muted));
+  line-height: 1.35;
+}
+
+/* Fluid 3→2→1: library horizontal blocks wrap by min card width */
+div[data-testid="stHorizontalBlock"]:has(.lib-card) {
+  flex-wrap: wrap !important;
+  gap: 0.65rem 0.75rem;
+}
+div[data-testid="stHorizontalBlock"]:has(.lib-card) > div[data-testid="stColumn"] {
+  flex: 1 1 280px !important;
+  min-width: min(100%, 280px) !important;
+  max-width: 100% !important;
+}
+@media (max-width: 640px) {
+  div[data-testid="stHorizontalBlock"]:has(.lib-card) > div[data-testid="stColumn"] {
+    flex: 1 1 100% !important;
+    min-width: 100% !important;
+  }
+}

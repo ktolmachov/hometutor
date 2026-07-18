@@ -80,15 +80,16 @@
     content:"";position:absolute;inset:4px;border:1px solid var(--kgx-cyan);transform:rotate(45deg);
   }
   .kgx-brand-mark::after{inset:8px;background:var(--kgx-coral);border:0}
-  .kgx-brand-copy strong{display:block;font-size:0.74rem;letter-spacing:0.08em;text-transform:uppercase;line-height:1.15}
-  .kgx-brand-copy span{display:block;color:var(--kgx-muted);font-size:0.62rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2}
+  .kgx-brand-copy strong{display:block;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;line-height:1.15}
+  .kgx-brand-copy span{display:block;color:var(--kgx-muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2}
   .kgx-modes{
-    display:inline-flex;align-items:center;padding:2px;gap:2px;
-    border:1px solid var(--kgx-line);border-radius:6px;background:var(--kgx-panel);
+    display:inline-flex;align-items:center;padding:3px;gap:3px;
+    border:1px solid var(--kgx-line);border-radius:8px;background:var(--kgx-panel);
   }
   .kgx-mode{
-    border:0;border-radius:4px;padding:0.32rem 0.62rem;background:transparent;
-    color:var(--kgx-muted);cursor:pointer;font-size:0.72rem;font-weight:600;line-height:1.2;
+    border:0;border-radius:6px;padding:0.4rem 0.85rem;background:transparent;
+    color:var(--kgx-muted);cursor:pointer;font-size:13px;font-weight:600;line-height:1.2;
+    min-height:40px;
   }
   .kgx-mode:hover{color:var(--kgx-text);background:rgba(255,255,255,0.05)}
   .kgx-mode.on,.kgx-mode[aria-pressed="true"]{
@@ -97,8 +98,8 @@
   }
   .kgx-progress{justify-self:end;display:flex;align-items:center;gap:0.55rem}
   .kgx-progress-copy{text-align:right}
-  .kgx-progress-copy strong,.progress-line{color:var(--kgx-text);display:block;font-size:0.78rem;line-height:1.15}
-  .kgx-progress-copy span{color:var(--kgx-muted);display:block;font-size:0.62rem;line-height:1.15}
+  .kgx-progress-copy strong,.progress-line{color:var(--kgx-text);display:block;font-size:13px;line-height:1.15}
+  .kgx-progress-copy span{color:var(--kgx-muted);display:block;font-size:12px;line-height:1.15}
   .kgx-progress-ring{
     /* Q9 + W0′ R6: track always visible and readable even at --p:0% */
     --p:0%;width:32px;height:32px;border-radius:50%;position:relative;flex:none;
@@ -195,20 +196,16 @@
     font-size:0.72rem;line-height:1;
   }
   .kgx-photo-btn:hover{color:var(--kgx-text);border-color:var(--kgx-accent)}
-  /* W5b.1: presentation presets (domain day_route never rewritten) */
+  /* W5b.1: presentation presets (domain day_route never rewritten); chrome in utility (W5) */
   .kgx-scene-presets{
-    position:absolute;left:calc(var(--hud-l) + 1rem);bottom:4.6rem;z-index:3;
-    display:flex;flex-wrap:wrap;gap:0.25rem;max-width:min(280px,40vw);
+    display:flex;flex-wrap:wrap;gap:0.3rem;
   }
   .kgx-scene-presets button{
-    min-height:26px;padding:0 0.4rem;border:1px solid var(--kgx-line);border-radius:5px;
-    background:rgba(12,16,20,0.88);color:var(--kgx-muted);font-size:0.64rem;cursor:pointer;
+    min-height:40px;padding:0 0.55rem;border:1px solid var(--kgx-line);border-radius:6px;
+    background:rgba(12,16,20,0.88);color:var(--kgx-muted);font-size:12px;cursor:pointer;
   }
   .kgx-scene-presets button:hover,.kgx-scene-presets button.on{
     border-color:var(--kgx-accent);color:var(--kgx-accent);
-  }
-  @media (max-width:860px){
-    .kgx-scene-presets{position:static;max-width:none;padding:0.35rem 0.5rem}
   }
   /* W5c: inline concept brief (graph retrieval; stay in hall) */
   .kgx-brief{
@@ -318,7 +315,7 @@
     backdrop-filter:blur(4px);
   }
   .kgx-icon-btn{
-    width:36px;height:36px;border:1px solid var(--kgx-line);border-radius:5px;
+    width:40px;height:40px;min-width:40px;min-height:40px;border:1px solid var(--kgx-line);border-radius:6px;
     background:rgba(12,16,20,0.88);color:var(--kgx-text);cursor:pointer;padding:0;
   }
   .kgx-icon-btn:hover{border-color:var(--kgx-accent);color:var(--kgx-accent)}
@@ -328,11 +325,51 @@
   .kgx-route-more{position:relative;display:flex;align-items:center}
   .kgx-route-more-panel{
     display:none;position:absolute;left:50%;bottom:calc(100% + 6px);transform:translateX(-50%);
-    gap:0.35rem;padding:0.3rem;border:1px solid var(--kgx-line);border-radius:6px;
-    background:rgba(12,16,20,0.94);box-shadow:0 10px 28px rgba(0,0,0,0.35);
+    flex-direction:column;align-items:stretch;gap:0.45rem;padding:0.55rem 0.6rem;
+    min-width:min(280px,72vw);max-width:min(320px,88vw);
+    border:1px solid var(--kgx-line);border-radius:10px;
+    background:rgba(12,16,20,0.96);box-shadow:0 14px 36px rgba(0,0,0,0.42);
   }
   .kgx-route-more.is-open .kgx-route-more-panel{display:flex}
   .kgx-route-more.is-open #morebtn{border-color:var(--kgx-accent);color:var(--kgx-accent)}
+  .kgx-util-label{
+    font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:var(--kgx-muted);
+    margin:0.15rem 0 0.1rem;
+  }
+  .kgx-util-row{display:flex;flex-wrap:wrap;gap:0.35rem;align-items:center}
+  .kgx-util-btn{
+    min-height:40px;padding:0.35rem 0.65rem;border:1px solid var(--kgx-line);border-radius:6px;
+    background:rgba(12,16,20,0.88);color:var(--kgx-text);cursor:pointer;font-size:13px;font-weight:600;
+  }
+  .kgx-util-btn:hover,.kgx-util-btn.on{border-color:var(--kgx-accent);color:var(--kgx-accent)}
+  .kgx-util-btn[hidden]{display:none}
+  .kgx-sr-only{
+    position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+    clip:rect(0,0,0,0);white-space:nowrap;border:0;
+  }
+  /* W5: presentation presets live inside utility menu, not on stage chrome */
+  .kgx-route-more-panel .kgx-scene-presets{
+    position:static;left:auto;bottom:auto;max-width:none;padding:0;
+  }
+  .kgx-route-more-panel .kgx-scene-presets button{
+    min-height:40px;font-size:12px;padding:0 0.55rem;
+  }
+  .kgx-route-more-panel .kgx-calm-btn,
+  .kgx-route-more-panel .kgx-photo-btn,
+  .kgx-route-more-panel .kgx-help-btn{
+    min-height:40px;min-width:40px;font-size:13px;border-radius:6px;
+  }
+  .kgx-route-more-panel .kgx-help-btn{
+    border:1px solid var(--kgx-line);padding:0 0.65rem;text-decoration:none;
+  }
+  @media (pointer: coarse){
+    .kgx-mode,.kgx-icon-btn,.kgx-util-btn,.kgx-action,
+    .kgx-route-more-panel .kgx-scene-presets button,
+    .kgx-calm-btn,.kgx-photo-btn,.kgx-help-btn,.kgx-depth-btn{
+      min-height:44px;
+    }
+    .kgx-icon-btn{width:44px;height:44px;min-width:44px}
+  }
   /* U5 HUD rails: two floating docks over a full-bleed stage.
      Left = current stop, right = day route. Frees Мнемополис to full width
      and removes the nested right-column scroll (route was buried below the card). */
@@ -485,7 +522,8 @@
   #sidetoggle{display:none}
   .kgx-mode:focus-visible,.kgx-action:focus-visible,.kgx-icon-btn:focus-visible,.stop:focus-visible,
   #sidetoggle:focus-visible,.kgx-link-btn:focus-visible,.kgx-depth-btn:focus-visible,.kgx-onboard-ok:focus-visible,
-  .kgx-calm-btn:focus-visible,.kgx-help-btn:focus-visible{
+  .kgx-calm-btn:focus-visible,.kgx-help-btn:focus-visible,.kgx-util-btn:focus-visible,
+  .kgx-scene-presets button:focus-visible,.kgx-photo-btn:focus-visible{
     outline:2px solid var(--kgx-cyan);outline-offset:2px;
   }
   /* Interior drill-down (U3) */
@@ -598,18 +636,22 @@
     /* W0′ R3: compass above axis+nav chrome on mobile */
     .kgx-compass{transform:scale(0.85);transform-origin:left bottom;bottom:4.8rem;left:0.4rem}
     .kgx-route-actions{bottom:0.7rem;gap:0.3rem;padding:0.22rem 0.32rem}
-    .kgx-icon-btn{width:34px;height:34px}
+    .kgx-icon-btn{width:40px;height:40px}
     #toplist.list{grid-template-columns:1fr}
     .kgx-primary-actions{grid-template-columns:1fr}
   }
   @media (prefers-reduced-motion: reduce){
     #wrap.interior-open #stage canvas{filter:brightness(0.45)}
     .kgx-toast{transition:none}
+    .kgx-compass i{filter:none}
   }
 </style>
 </head>
 <body>
 <div id="wrap" data-scene-mode="route" data-memory="off" data-calm="off">
+  <!-- W5: single live announcer + nonvisual scene summary (canvas projection) -->
+  <div id="kgx-announcer" class="kgx-sr-only" aria-live="polite" aria-atomic="true"></div>
+  <div id="kgx-scene-summary" class="kgx-sr-only">Мнемополис · маршрут дня · остановка не выбрана</div>
   <button id="sidetoggle" type="button" aria-label="Показать/скрыть панели" aria-controls="stopdock side" aria-expanded="true">☰</button>
   <header id="topbar" class="kgx-topbar">
     <div class="kgx-brand">
@@ -627,36 +669,21 @@
     </div>
     <div class="kgx-progress">
       <span class="kgx-progress-copy">
-        <strong id="progressline" class="progress-line" aria-live="polite">0 из 0 с quiz-следом</strong>
+        <strong id="progressline" class="progress-line">0 из 0 с quiz-следом</strong>
         <span id="progresshint">маршрут перестраивается по памяти</span>
       </span>
       <span id="progressring" class="kgx-progress-ring" aria-hidden="true"></span>
-      <button class="kgx-calm-btn" id="calmbtn" type="button"
-        title="Спокойный мир: скрыть туман забывания (доступность / вкус)"
-        aria-label="Спокойный мир" aria-pressed="false">◌</button>
-      <button class="kgx-photo-btn" id="photobtn" type="button"
-        title="G4.3: локальный PNG на ваш диск (без сервера и без облака)"
-        aria-label="Скачать локальное фото зала">📷</button>
-      <button class="kgx-help-btn" id="helpbtn" type="button" title="Правила зала" aria-label="Открыть правила зала">Правила</button>
     </div>
   </header>
   <div id="body" class="kgx-body">
     <div id="stage" class="kgx-stage">
-      <canvas id="cv" width="900" height="700" role="img" aria-label="3D knowledge graph — Memory Run"></canvas>
+      <canvas id="cv" width="900" height="700" role="img" aria-label="3D knowledge graph — Memory Run" aria-describedby="kgx-scene-summary"></canvas>
       <div class="kgx-stage-status">
         <span class="kgx-live-dot" aria-hidden="true"></span>
-        <div id="statsline" class="st" role="status" aria-live="polite"></div>
-        <button class="kgx-depth-btn" id="depthbtn" type="button" hidden title="Показать полный граф">Вся карта</button>
+        <div id="statsline" class="st" role="status"></div>
       </div>
-      <div id="architectbox" class="kgx-architect" role="status" aria-live="polite" hidden>
+      <div id="architectbox" class="kgx-architect" role="status" hidden>
         <strong>Стройка</strong> · <span id="architectline">—</span>
-      </div>
-      <div class="kgx-scene-presets" id="scenepresets" role="group" aria-label="Пресеты сцены (presentation only)">
-        <button type="button" data-preset="route" title="Режим Маршрут">Маршрут</button>
-        <button type="button" data-preset="local" title="Созвездие">Созвездие</button>
-        <button type="button" data-preset="weak" title="Подсветить слабые (туман/разлом)">Слабое</button>
-        <button type="button" data-preset="calm" title="Спокойный мир (скрыть антагонистов)">◌</button>
-        <button type="button" data-preset="clear" title="Сбросить presentation-фильтр">Сброс</button>
       </div>
       <div id="replaybar" class="kgx-replay" role="group" aria-label="Реплей снимков mastery">
         <button type="button" id="replayprev" title="Предыдущий снимок" aria-label="Предыдущий снимок">◀</button>
@@ -665,7 +692,7 @@
         <button type="button" id="replayplay" title="Проиграть историю" aria-label="Проиграть историю">▷</button>
         <button type="button" id="replaylive" title="Вернуться к live" aria-label="Live">Live</button>
       </div>
-      <div id="chroniclebox" class="kgx-chronicle" role="status" aria-live="polite" hidden>
+      <div id="chroniclebox" class="kgx-chronicle" role="status" hidden>
         <span id="chronicleline">—</span>
       </div>
       <div class="kgx-compass" aria-hidden="true" title="Курс маршрута (стрелка)">
@@ -676,11 +703,37 @@
         <button class="kgx-icon-btn" id="playbtn" type="button" title="Экскурсия дня" aria-label="Экскурсия дня">▶</button>
         <button class="kgx-icon-btn" id="nextbtn" type="button" title="Следующая остановка" aria-label="Следующая остановка">→</button>
         <div class="kgx-route-more" id="routemore">
-          <button class="kgx-icon-btn" id="morebtn" type="button" title="Камера и сброс" aria-label="Ещё: Home, сверху, сброс" aria-expanded="false" aria-controls="routemorepanel">⋯</button>
-          <div class="kgx-route-more-panel" id="routemorepanel" role="group" aria-label="Камера">
-            <button class="kgx-icon-btn" id="homebtn" type="button" title="Вернуть читаемый вид маршрута" aria-label="Home">⌂</button>
-            <button class="kgx-icon-btn" id="topbtn" type="button" title="Вид сверху" aria-label="Сверху">⊤</button>
-            <button class="kgx-icon-btn" id="resetbtn" type="button" title="Сброс" aria-label="Сброс">↺</button>
+          <button class="kgx-icon-btn" id="morebtn" type="button" title="Инструменты зала" aria-label="Инструменты: карта, спокойный мир, фото, реплей, пресеты, камера" aria-expanded="false" aria-controls="routemorepanel">⋯</button>
+          <div class="kgx-route-more-panel" id="routemorepanel" role="group" aria-label="Инструменты зала">
+            <div class="kgx-util-label">Карта</div>
+            <div class="kgx-util-row">
+              <button class="kgx-depth-btn kgx-util-btn" id="depthbtn" type="button" hidden title="Показать полный граф">Вся карта</button>
+            </div>
+            <div class="kgx-util-label">Сцена</div>
+            <div class="kgx-util-row">
+              <button class="kgx-calm-btn" id="calmbtn" type="button"
+                title="Спокойный мир: скрыть туман забывания (доступность / вкус)"
+                aria-label="Спокойный мир" aria-pressed="false">◌</button>
+              <button class="kgx-photo-btn" id="photobtn" type="button"
+                title="G4.3: локальный PNG на ваш диск (без сервера и без облака)"
+                aria-label="Скачать локальное фото зала">📷</button>
+              <button class="kgx-util-btn" id="replaytoolsbtn" type="button"
+                title="Показать/скрыть реплей снимков mastery"
+                aria-pressed="false" aria-controls="replaybar">Реплей</button>
+              <button class="kgx-help-btn" id="helpbtn" type="button" title="Правила зала" aria-label="Открыть правила зала">Правила</button>
+            </div>
+            <div class="kgx-util-label">Пресеты (presentation)</div>
+            <div class="kgx-scene-presets" id="scenepresets" role="group" aria-label="Пресеты сцены (presentation only)">
+              <button type="button" data-preset="weak" title="Подсветить слабые (туман/разлом)">Слабое</button>
+              <button type="button" data-preset="calm" title="Спокойный мир (скрыть антагонистов)">◌</button>
+              <button type="button" data-preset="clear" title="Сбросить presentation-фильтр">Сброс</button>
+            </div>
+            <div class="kgx-util-label">Камера</div>
+            <div class="kgx-util-row">
+              <button class="kgx-icon-btn" id="homebtn" type="button" title="Вернуть читаемый вид маршрута" aria-label="Home">⌂</button>
+              <button class="kgx-icon-btn" id="topbtn" type="button" title="Вид сверху" aria-label="Сверху">⊤</button>
+              <button class="kgx-icon-btn" id="resetbtn" type="button" title="Сброс камеры" aria-label="Сброс">↺</button>
+            </div>
           </div>
         </div>
       </div>
@@ -765,9 +818,9 @@
           <button class="kgx-link-btn" id="askbtn" type="button" title="Спросить тьютора об этом концепте">💬 Спросить</button>
           <div id="sectionlinks"></div>
         </div>
-        <div id="actionstatus" class="status-line" role="status" aria-live="polite"></div>
-        <!-- keep stopinfo for tests / a11y live region mirror -->
-        <div id="stopinfo" class="status-line" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">Стоп — · выберите остановку</div>
+        <div id="actionstatus" class="status-line" role="status"></div>
+        <!-- keep stopinfo for tests; live announcements go through #kgx-announcer (W5) -->
+        <div id="stopinfo" class="status-line" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">Стоп — · выберите остановку</div>
       </div>
     </aside>
     <aside id="side" class="kgx-panel kgx-hud" aria-label="Маршрут дня">
@@ -805,7 +858,7 @@
       <div class="mini" id="hint"></div>
     </aside>
   </div>
-  <div id="toast" class="kgx-toast" role="status" aria-live="polite"></div>
+  <div id="toast" class="kgx-toast" role="status" aria-live="off"></div>
   <div id="onboard" role="dialog" aria-modal="true" aria-labelledby="onboard-title">
     <div class="kgx-onboard-card">
       <h2 id="onboard-title">Правила зала памяти</h2>
@@ -970,6 +1023,64 @@ const prefersReducedMotion = (() => {
   try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
   catch (_) { return false; }
 })();
+
+/** W5: learner opted into mastery replay chrome (default off — utility menu). */
+let replayToolsOpen = false;
+let _announceSeq = 0;
+
+/** Single polite announcer for mode/stop/action changes (W5). */
+function announce(message) {
+  const el = document.getElementById('kgx-announcer');
+  if (!el) return;
+  const text = String(message || '').trim();
+  if (!text) return;
+  // Force re-announce identical strings by brief clear.
+  _announceSeq += 1;
+  const seq = _announceSeq;
+  el.textContent = '';
+  requestAnimationFrame(() => {
+    if (seq !== _announceSeq) return;
+    el.textContent = text;
+  });
+}
+
+/** Nonvisual projection of current scene (mode, stop, relations, retention, gap). */
+function updateSceneSummary() {
+  const el = document.getElementById('kgx-scene-summary');
+  if (!el) return;
+  const route = dayRouteIds();
+  const stopId = activeRouteId();
+  const n = stopId ? (byId.get(stopId) || {}) : {};
+  const modeLabel = viewMode === 'route' ? 'Маршрут' : (viewMode === 'local' ? 'Созвездие' : 'Вся карта');
+  const stopLabel = stopId ? String(n.label || stopId) : 'остановка не выбрана';
+  const prereqs = (n.prereqs || []).length;
+  const unlocks = (n.unlocks || []).length;
+  const ret = stopId ? retentionFor(stopId) : null;
+  const forget = stopId ? forgettingFor(stopId) : 0;
+  const retPart = (ret != null && Number.isFinite(ret))
+    ? `retention ${Math.round(ret * 100)}%`
+    : 'retention неизвестен';
+  const fogPart = (!calmWorld && forget >= FOG_FORGET_MIN)
+    ? ` · туман ~${Math.round(forget * 100)}%`
+    : '';
+  let gapPart = '';
+  if (stopId && typeof riftActiveFor === 'function' && riftActiveFor(stopId)) {
+    gapPart = ' · разлом: слабые prerequisite';
+  }
+  const reason = String(n.worth_reason || '').trim();
+  const reasonPart = reason ? ` · потому что: ${reason}` : '';
+  const memPart = memoryOverlay ? ' · след памяти включён' : '';
+  const routePart = route.length
+    ? `стоп ${activeStopIndex + 1} из ${route.length}`
+    : 'маршрут пуст';
+  el.textContent = [
+    `Мнемополис · ${modeLabel}`,
+    routePart,
+    stopLabel,
+    `связи: ${prereqs} опор / ${unlocks} unlock`,
+    retPart + fogPart + gapPart + reasonPart + memPart,
+  ].join(' · ');
+}
 
 const byId = new Map((NODES || []).map(n => [n.id, n]));
 
@@ -2798,13 +2909,16 @@ function showToast(message, opts) {
   const el = document.getElementById('toast');
   if (!el) return;
   const isError = !!(opts && opts.error);
-  el.textContent = String(message || '').trim();
-  if (!el.textContent) {
+  const text = String(message || '').trim();
+  el.textContent = text;
+  if (!text) {
     el.classList.remove('is-visible', 'is-error');
     return;
   }
   el.classList.toggle('is-error', isError);
   el.classList.add('is-visible');
+  // Visual toast + single live announcer (W5) — no second aria-live on #toast.
+  announce(text);
   if (toastTimer) clearTimeout(toastTimer);
   const ms = prefersReducedMotion ? 900 : 1800;
   toastTimer = setTimeout(() => {
@@ -3037,9 +3151,16 @@ function updateReplayBar() {
   const bar = document.getElementById('replaybar');
   if (!bar) return;
   const hist = MASTERY_HISTORY || [];
-  // G4.2: scrubber when ≥2 snapshots; visible in local/all or memory overlay (route stays sparse)
-  const show = hist.length >= 2 && (viewMode !== 'route' || memoryOverlay || historyReplayIndex >= 0);
+  // W5: replay chrome is utility-gated; data still available when opened.
+  const can = hist.length >= 2 && (viewMode !== 'route' || memoryOverlay || historyReplayIndex >= 0);
+  const show = can && replayToolsOpen;
   bar.classList.toggle('is-on', show);
+  const toolsBtn = document.getElementById('replaytoolsbtn');
+  if (toolsBtn) {
+    toolsBtn.setAttribute('aria-pressed', String(!!replayToolsOpen));
+    toolsBtn.classList.toggle('on', !!replayToolsOpen);
+    toolsBtn.disabled = hist.length < 2;
+  }
   if (!show) return;
   const dateEl = document.getElementById('replaydate');
   const prev = document.getElementById('replayprev');
@@ -3607,6 +3728,7 @@ function updateStopInfo() {
     updateVoicesPanel();
     updateChronicleLine();
     updateArchitectBanner();
+    updateSceneSummary();
     return;
   }
   const i = activeStopIndex;
@@ -3646,6 +3768,7 @@ function updateStopInfo() {
   updateVoicesPanel();
   updateChronicleLine();
   updateArchitectBanner();
+  updateSceneSummary();
   if (worthBadge) worthBadge.textContent = `W ${(n.worth || 0).toFixed(1)}`;
   if (masteryRing) {
     masteryRing.style.setProperty('--m', (masteryPct != null ? masteryPct : 0) + '%');
@@ -3760,13 +3883,16 @@ function setViewMode(mode) {
   if (h) {
     if (mode === 'route') h.textContent = 'Режим маршрута: чистая дорожка дня; контекст — в «Созвездии»';
     else if (mode === 'local') h.textContent = 'Созвездие: активная остановка + immediate prereqs/unlocks · районы-двери';
-    else h.textContent = 'Вся карта: этажи + районы-двери · реплей снимков справа';
+    else h.textContent = 'Вся карта: этажи + районы-двери · реплей в инструментах ⋯';
   }
   buildTopList();
   updateStats();
   updateReplayBar();
   updateDistrictDoors();
   updateActionUI();
+  updateSceneSummary();
+  const modeLabel = mode === 'route' ? 'Маршрут' : (mode === 'local' ? 'Созвездие' : 'Вся карта');
+  announce(`Режим: ${modeLabel}`);
   render();
 }
 
@@ -4115,12 +4241,17 @@ window.addEventListener('mousemove', e => {
     if (total >= DRAG_CLICK_PX) dragMoved = true;
   }
   if (!dragMoved) return;
-  yaw += dx * 0.0045;
-  pitch = Math.max(-1.0, Math.min(1.1, pitch - dy * 0.004));
+  // W5: reduced-motion disables spatial orbit rotation (no yaw/pitch camera spin).
+  if (!prefersReducedMotion) {
+    yaw += dx * 0.0045;
+    pitch = Math.max(-1.0, Math.min(1.1, pitch - dy * 0.004));
+  }
   lx = e.clientX; ly = e.clientY;
   render();
 });
 canvas.addEventListener('wheel', e => {
+  // W5: reduced-motion also skips z-camera zoom via wheel.
+  if (prefersReducedMotion) { e.preventDefault(); return; }
   zoom = Math.max(0.45, Math.min(2.6, zoom - e.deltaY * 0.0015));
   render();
   e.preventDefault();
@@ -4221,6 +4352,14 @@ if (scenePresets) {
   scenePresets.querySelectorAll('button[data-preset]').forEach((btn) => {
     btn.onclick = () => applyScenePreset(btn.getAttribute('data-preset'));
   });
+}
+const replayToolsBtn = document.getElementById('replaytoolsbtn');
+if (replayToolsBtn) {
+  replayToolsBtn.onclick = () => {
+    replayToolsOpen = !replayToolsOpen;
+    updateReplayBar();
+    announce(replayToolsOpen ? 'Реплей снимков открыт' : 'Реплей снимков скрыт');
+  };
 }
 document.getElementById('memorybtn').onclick = () => {
   memoryOverlay = !memoryOverlay;

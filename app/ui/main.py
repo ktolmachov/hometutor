@@ -23,6 +23,10 @@ from app.ui.auth_gate import require_ui_auth_or_stop
 from app.session_tape import ensure_session_started
 from app.ui.config_env_banner import render_config_env_banner as _render_config_env_banner
 from app.ui.constants import ALL_VIEWS
+from app.ui.global_navigation import (
+    page_title_for_view as _page_title_for_view,
+    render_primary_destination_rail as _render_primary_destination_rail,
+)
 from app.ui.navigation_visibility import hidden_nav_views_for_level, visible_nav_views_for_level
 from app.ui.offline_banner import render_offline_banner as _render_offline_banner
 from app.ui.quick_answer import render_quick_answer_tab as _render_quick_answer_tab
@@ -254,25 +258,8 @@ if isinstance(_active_scope, dict) and _active_scope.get("active"):
 else:
     st.markdown('<div data-testid="e2e-active-scope"></div>', unsafe_allow_html=True)
 
-_view_nav_labels = {
-    HOME_VIEW: "Главная — Mission Control",
-    "Быстрый ответ": "База знаний — Быстрый ответ",
-    "Чат с тьютором": "Обучение — Чат с тьютором",
-    "Интерактивный Quiz": "Обучение — Интерактивный Quiz",
-    "Flashcards": "Обучение — Flashcards (интервальное повторение)",
-    "Курс": "Обучение — Курс",
-    "Адаптивный план": "Обучение — Адаптивный план",
-    "Прогресс обучения": "Обучение — Прогресс обучения",
-    "Темы": "База знаний — Темы",
-    "Библиотека": "База знаний — Библиотека",
-    "Найти материалы": "База знаний — Поиск по материалам",
-    "Объяснить файл": "База знаний — Объяснить файл",
-    "Knowledge Graph": "Ещё — Knowledge Graph",
-    "Живой конспект": "База знаний — Живой конспект",
-    "История": "Ещё — История",
-    "Метрики": "Ещё — Метрики",
-    "Чистый вид": "Ещё — Чистый вид",
-}
+# Command-access labels: parent destination · leaf (W6).
+_view_nav_labels = {v: _page_title_for_view(v) for v in ALL_VIEWS}
 BEGINNER_VIEW_LABELS_RU = {
     HOME_VIEW: "Главная",
     "Быстрый ответ": "Спросить по материалам",
@@ -312,33 +299,40 @@ visible_nav_views = visible_nav_views_for_level(
 )
 
 st.markdown('<div data-testid="e2e-view-switcher"></div>', unsafe_allow_html=True)
-selected_view = st.selectbox(
-    "Раздел",
-    visible_nav_views,
-    format_func=lambda v: _nav_labels.get(v, _view_nav_labels.get(v, v)),
-    key="current_view",
-    label_visibility="collapsed",
+# W6: four destinations + leaf strip (primary); full selectbox stays as command access.
+_render_primary_destination_rail(
+    current_view=str(st.session_state.get("current_view") or HOME_VIEW),
+    visible_views=visible_nav_views,
 )
-
-
-def _render_hidden_nav_expander() -> None:
-    if not _hidden_nav_views:
-        return
-    with st.expander("Ещё разделы", expanded=False):
+with st.expander("Ещё · все разделы", expanded=False):
+    st.caption("Полный список разделов (deep link и экспертный доступ).")
+    selected_view = st.selectbox(
+        "Раздел",
+        visible_nav_views,
+        format_func=lambda v: _nav_labels.get(v, _view_nav_labels.get(v, v)),
+        key="current_view",
+        label_visibility="collapsed",
+    )
+    if _hidden_nav_views:
+        st.markdown("**Скрытые для текущего уровня**")
         for _view in ALL_VIEWS:
             if _view not in _hidden_nav_views:
                 continue
-            if st.button(_nav_labels.get(_view, _view_nav_labels.get(_view, _view)), key=f"hidden_nav_{_view}", width="stretch"):
+            if st.button(
+                _nav_labels.get(_view, _view_nav_labels.get(_view, _view)),
+                key=f"hidden_nav_{_view}",
+                width="stretch",
+            ):
                 st.session_state[PENDING_CURRENT_VIEW_KEY] = _view
                 st.rerun()
-        if st.button("Настроить интерфейс", key="hidden_nav_control_panel", width="stretch"):
-            from app.ui.control_panel import open_control_panel_dialog
+    if st.button("Настроить интерфейс", key="hidden_nav_control_panel", width="stretch"):
+        from app.ui.control_panel import open_control_panel_dialog
 
-            open_control_panel_dialog()
-
-
-if selected_view != HOME_VIEW:
-    _render_hidden_nav_expander()
+        open_control_panel_dialog()
+# Selectbox always runs inside expander (Streamlit still instantiates it).
+selected_view = st.session_state.get("current_view") or HOME_VIEW
+if selected_view not in ALL_VIEWS:
+    selected_view = HOME_VIEW
 _session_tape_id = str(st.session_state.get("_session_tape_id") or "").strip()
 if _session_tape_id and get_settings().session_tape_full_events_enabled:
     ensure_session_started(
@@ -389,8 +383,29 @@ elif selected_view == "Курс":
     else:
         st.info("Активируйте курс на Mission Control или во вкладке «Темы».")
 elif selected_view == "Адаптивный план":
-    render_adaptive_plan_hub(key_prefix="adaptive_plan_view_hub")
-    render_adaptive_daily_plan(key_prefix="adaptive_plan_view_daily")
+    # W9b: hub OR daily detail (not both stacked) — master/detail style.
+    _adp_surface = st.radio(
+        "Поверхность плана",
+        options=("Сводка", "Детали дня"),
+        horizontal=True,
+        key="adaptive_plan_surface",
+        label_visibility="collapsed",
+    )
+    if _adp_surface == "Сводка":
+        render_adaptive_plan_hub(key_prefix="adaptive_plan_view_hub")
+        if st.button(
+            "Открыть детали дня →",
+            key="adp_open_daily_detail",
+            type="primary",
+            width="stretch",
+        ):
+            st.session_state["adaptive_plan_surface"] = "Детали дня"
+            st.rerun()
+    else:
+        if st.button("← К сводке", key="adp_back_to_hub", width="stretch"):
+            st.session_state["adaptive_plan_surface"] = "Сводка"
+            st.rerun()
+        render_adaptive_daily_plan(key_prefix="adaptive_plan_view_daily")
 elif selected_view == "Knowledge Graph":
     from app.ui.e2e_demo_scenes import render_e2e_demo_scene_for_view
 

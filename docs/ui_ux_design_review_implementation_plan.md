@@ -390,6 +390,14 @@ with mnemonic-primary / interval-secondary, tests in
 
 **Приоритет:** P1, сердце продукта.
 
+**Статус runtime:** implemented 2026-07-18 —
+`app/ui/assets/kg_3d_template.html`: first-level Route/Constellation/Memory +
+stop dock; utility ⋯ menu for weak/calm/clear presets, calm, photo, help,
+replay, depth map, camera; single `#kgx-announcer` + `#kgx-scene-summary`;
+W3 type/touch baseline (40/44 px); reduced-motion disables orbit/zoom/z-fly;
+fog/dawn/lantern/rift data-binding unchanged. Contract asserts in
+`tests/test_knowledge_graph_counters.py`.
+
 **Зависимость:** W3.
 
 **Связанные product-планы:**
@@ -402,6 +410,7 @@ with mnemonic-primary / interval-secondary, tests in
 - `app/ui/assets/kg_3d_component/index.html` только если нужен bridge contract;
 - Python builder/call-site только при необходимости нового accessible payload;
 - `tests/test_knowledge_graph_d3_section.py`;
+- `tests/test_knowledge_graph_counters.py` (W5 chrome contract);
 - `tests/test_knowledge_graph_audit.py`;
 - `tests/test_mnemo_scene_dsl.py`;
 - `tests/test_sidebar_mnemo_polis.py`;
@@ -440,16 +449,25 @@ with mnemonic-primary / interval-secondary, tests in
 
 **Приоритет:** P1.
 
+**Статус runtime:** implemented 2026-07-18 —
+`app/ui/global_navigation.py` (4 destinations + leaf map + page titles +
+PENDING helper), primary rail in `main.py`, command access expander
+«Ещё · все разделы» keeps `key=current_view` selectbox, sidebar
+context-first (live metrics only on diagnostic), RU labels «Режим
+чтения/фокуса». Tests: `tests/test_global_navigation.py` (+ existing
+navigation/mission_control bundles).
+
 **Зависимость:** W3.
 
 **Write-set:**
 
-- `app/ui/constants.py`;
+- `app/ui/constants.py` (ALL_VIEWS unchanged as contract);
+- `app/ui/global_navigation.py` (new);
 - `app/ui/main.py`;
 - `app/ui/sidebar.py`;
-- `app/ui/feature_registry.py`;
-- `app/ui/navigation_visibility.py`;
-- при необходимости новый `app/ui/global_navigation.py`;
+- `app/ui/feature_registry.py` (no change required if contract holds);
+- `app/ui/navigation_visibility.py` (no change required);
+- `tests/test_global_navigation.py`;
 - `tests/test_navigation_visibility.py`;
 - `tests/test_mission_control_navigation.py`;
 - `tests/test_mission_control_progressive.py`;
@@ -493,12 +511,20 @@ with mnemonic-primary / interval-secondary, tests in
 
 **Приоритет:** P1.
 
+**Статус runtime:** implemented 2026-07-18 —
+`living_konspekt_reader.py` reading route (open current section, rail
+current/next/reason, Next=mark-read+advance, 3-state confidence, contextual
+thought/question, source metadata disclosure); mermaid/markdown split to
+`living_konspekt_reader_markdown.py` (size budget). Tests in
+`test_living_konspekt_add_panel_reader.py` (route helpers).
+
 **Зависимости:** W3, желательно W6.
 
 **Write-set:**
 
-- `app/ui/living_konspekt_view.py`;
+- `app/ui/living_konspekt_view.py` (call-site unchanged if DI stable);
 - `app/ui/living_konspekt_reader.py`;
+- `app/ui/living_konspekt_reader_markdown.py` (extract for size budget);
 - только затронутые Living Konspekt helpers;
 - `tests/test_living_konspekt_view_smoke.py`;
 - `tests/test_living_konspekt_add_panel_reader.py`;
@@ -535,6 +561,13 @@ with mnemonic-primary / interval-secondary, tests in
 
 **Приоритет:** P1.
 
+**Статус runtime:** implemented 2026-07-18 —
+`app/ui/source_address.py` (SourceAddress + card HTML), unified
+`_render_unified_card` / `_render_card_grid` in `library_schedule.py`,
+3→2→1 CSS in `ui_theme.css`, activate requires confirmation checkbox,
+same card model for search filter. Tests: `test_source_address.py`,
+`test_library_schedule_ui_contract.py`.
+
 **Зависимость:** W3; общий `SourceAddress` согласован с W5/W7.
 
 **Связанный product-план:**
@@ -545,11 +578,13 @@ direction 3→2→1 не переопределяются в runtime-волне.
 
 - `app/ui/library_catalog.py`;
 - `app/ui/library_schedule.py`;
-- общий UI-компонент address в `app/ui/`;
+- `app/ui/source_address.py` (shared address component);
+- `app/ui_theme.css` (lib-card + 3→2→1);
 - только read-model helpers при доказанной необходимости;
 - `tests/test_library_schedule_read.py`;
 - `tests/test_library_catalog_read.py`;
-- новый `tests/test_library_schedule_ui_contract.py`;
+- `tests/test_library_schedule_ui_contract.py`;
+- `tests/test_source_address.py`;
 - `docs/user_guide.md`.
 
 **Работы:**
@@ -579,6 +614,14 @@ direction 3→2→1 не переопределяются в runtime-волне.
 ### W9 — Tutor Chat и Adaptive Plan polish
 
 **Приоритет:** P1/P2.
+
+**Статус runtime:** implemented 2026-07-18 —
+W9a: collapsed intro after first reply, history→input→exports order,
+human session titles, depth labels without JSON jargon, tech counters only
+on diagnostic, reduced-motion chat fade. W9b: hub/detail surface switch in
+`main.py`, preview max 2 cols without XP auto, XP multipliers in expert
+disclosure, route because/address on plan blocks. Tests:
+`test_tutor_chat_ui_contract.py`, `test_adaptive_plan_ui_contract.py`.
 
 **Зависимости:** W3, W6; общий `SourceAddress` после W8.
 

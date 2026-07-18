@@ -10,7 +10,15 @@ from app.ui.living_konspekt_add_panel import (
     search_sections_across,
     sections_of_document,
 )
-from app.ui.living_konspekt_reader import reader_blocks, reader_toc
+from app.ui.living_konspekt_reader import (
+    clamp_reader_index,
+    default_reader_index,
+    neighbor_indices,
+    reader_blocks,
+    reader_toc,
+    resolve_reader_index,
+    section_route_reason,
+)
 
 
 def _write_md(path: Path, body: str) -> Path:
@@ -121,6 +129,44 @@ class TestReaderBlocks:
         assert [item["label"] for item in toc] == [f"Тема {index}" for index in range(1, 9)]
         assert toc[0]["anchor"] == "lk-reader-1"
         assert reader_toc(rows[:7]) == []
+
+
+class TestReaderRouteHelpers:
+    """W7 reading route: index, neighbors, reason (pure, no Streamlit)."""
+
+    def test_default_index_is_first_unread(self, tmp_path: Path) -> None:
+        rows = [
+            section_to_row(_section(tmp_path / "a.md", 10, "A", "a")),
+            section_to_row(_section(tmp_path / "b.md", 20, "B", "b")),
+            section_to_row(_section(tmp_path / "c.md", 30, "C", "c")),
+        ]
+        rows[0]["read_at"] = "2026-07-01"
+        assert default_reader_index(rows) == 1
+        rows[1]["read_at"] = "2026-07-02"
+        assert default_reader_index(rows) == 2
+        rows[2]["read_at"] = "2026-07-03"
+        assert default_reader_index(rows) == 0
+
+    def test_clamp_and_neighbors(self) -> None:
+        assert clamp_reader_index(-1, 3) == 0
+        assert clamp_reader_index(99, 3) == 2
+        assert neighbor_indices(0, 3) == (None, 1)
+        assert neighbor_indices(1, 3) == (0, 2)
+        assert neighbor_indices(2, 3) == (1, None)
+
+    def test_resolve_prefers_stored_when_present(self, tmp_path: Path) -> None:
+        rows = [
+            section_to_row(_section(tmp_path / "a.md", 10, "A", "a")),
+            section_to_row(_section(tmp_path / "b.md", 20, "B", "b")),
+        ]
+        assert resolve_reader_index(rows, None) == 0
+        assert resolve_reader_index(rows, 1) == 1
+        assert resolve_reader_index(rows, 9, prefer_unread_when_missing=False) == 1
+
+    def test_section_route_reason_honest(self) -> None:
+        assert "не прочитано" in section_route_reason({"read_at": ""})
+        assert "понято" in section_route_reason({"read_at": "x", "knowledge_status": "understood"})
+        assert "конец" in section_route_reason(None)
 
 
 # ── A1: narrow test for quality rubric parser (konspekt_quality_plan) ─────

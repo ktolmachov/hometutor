@@ -9,10 +9,15 @@ import streamlit as st
 
 
 def render_tutor_depth_switcher() -> None:
-    """Глубина ответа: short | examples | deep → query_service / промпт."""
+    """Глубина ответа: short | examples | deep (human labels only — W9)."""
     st.markdown("##### Глубина ответа")
     opts = ["short", "examples", "deep"]
-    labels = {"short": "📉 Коротко", "examples": "💡 С примерами", "deep": "🔬 Глубоко"}
+    # W9: no JSON/API terminology in normal UI.
+    labels = {
+        "short": "Кратко",
+        "examples": "С объяснением",
+        "deep": "Глубоко",
+    }
     cur = st.session_state.get("tutor_answer_depth", "examples")
     if cur not in opts:
         cur = "examples"
@@ -25,9 +30,7 @@ def render_tutor_depth_switcher() -> None:
         label_visibility="collapsed",
     )
     st.session_state["tutor_answer_depth"] = sel
-    st.caption(
-        "Эта настройка влияет на следующий ответ тьютора (промпт + поле depth_level в JSON)."
-    )
+    st.caption("Влияет на следующий ответ тьютора: объём и детализация объяснения.")
 
 
 def render_tutor_extra_controls(session_id: str | None = None) -> None:
@@ -63,6 +66,22 @@ def render_tutor_extra_controls(session_id: str | None = None) -> None:
         )
 
 
+def format_tutor_session_title(session_row: dict[str, Any] | None, *, session_id: str = "") -> str:
+    """Human-readable session label (topic/preview · date) — not raw UUID (W9)."""
+    row = session_row if isinstance(session_row, dict) else {}
+    lu = str(row.get("last_updated") or "").replace("T", " ")[:16]
+    topic = str(row.get("topic") or row.get("current_topic") or "").strip()
+    pv = str(row.get("last_user_preview") or "").strip()
+    head = topic or pv
+    if head:
+        short = head if len(head) <= 48 else head[:45] + "…"
+        return f"{short}" + (f" · {lu}" if lu else "")
+    if lu:
+        return f"Чат · {lu}"
+    sid = str(session_id or row.get("session_id") or "").strip()
+    return f"Новый чат" if not sid else f"Чат · {sid[:6]}"
+
+
 def render_tutor_session_selector(sessions: list[dict[str, Any]], current_session_id: str) -> str:
     """Session switcher and 'New Chat' button. Returns the selected or new session_id."""
     stored_ids = [s["session_id"] for s in sessions]
@@ -72,14 +91,9 @@ def render_tutor_session_selector(sessions: list[dict[str, Any]], current_sessio
 
     def _format_tutor_session_pick(sid_pick: str) -> str:
         if sid_pick not in stored_ids:
-            return f"{sid_pick[:8]}… (новая)"
+            return "Новый чат"
         row = _sess_by_id.get(sid_pick) or {}
-        lu = str(row.get("last_updated") or "")[:19]
-        pv = str(row.get("last_user_preview") or "").strip()
-        if pv:
-            short = pv if len(pv) <= 52 else pv[:49] + "…"
-            return f"{sid_pick[:8]}… · {short} · {lu}"
-        return f"{sid_pick[:8]}… ({lu})"
+        return format_tutor_session_title(row, session_id=sid_pick)
 
     c1, c2 = st.columns([2, 1])
     with c1:

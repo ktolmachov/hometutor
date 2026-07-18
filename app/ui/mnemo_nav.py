@@ -88,6 +88,22 @@ def arrival_banner_message() -> str | None:
     )
 
 
+def consume_mnemo_arrival() -> tuple[bool, str | None]:
+    """Consume the one-shot deep link and return its optional arrival message."""
+    try:
+        message = arrival_banner_message()
+        return bool(message), message
+    except Exception:  # noqa: BLE001 - navigation hint must not break the graph tab
+        opened = bool(st.session_state.pop(KG_OPEN_3D_HALL_KEY, False))
+        if not opened:
+            return False, None
+        return (
+            True,
+            "🌆 Мнемополис · Memory Run (3D-зал). "
+            "Mission Control остаётся главным экраном.",
+        )
+
+
 def _default_help(return_from: str) -> str:
     if return_from == "quiz":
         return (

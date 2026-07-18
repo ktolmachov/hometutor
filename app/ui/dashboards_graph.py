@@ -13,8 +13,6 @@ expander as a fallback and for click-to-select interaction.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import streamlit as st
 
 from app.knowledge_text import tokenize_filtered
@@ -33,6 +31,11 @@ from app.ui.dashboards_graph_state import (
     _prime_kg_3d_action_focus,
     _workbench_collected_concept_ids,
     _workbench_state_rows,
+)
+from app.ui.dashboards_graph_publish_status import (
+    get_graph_publish_status as _get_graph_publish_status,
+    load_staging_preview_graph as _load_staging_preview_graph,
+    render_graph_publish_status as _render_graph_publish_status,
 )
 from app.ui.knowledge_graph_d3 import (
     KG_3D_ACTION_KEY,
@@ -55,6 +58,7 @@ from app.ui.knowledge_graph_d3 import (
 from app.ui.mnemo_nav import (
     KG_GRAPH_TAB_LABEL,
     KG_MNEMO_TAB_LABEL,
+    consume_mnemo_arrival as _consume_mnemo_arrival,
     knowledge_surface_tab_key,
 )
 from app.ui.topics_catalog import load_topics_catalog as _load_topics_catalog
@@ -1260,76 +1264,6 @@ def _render_graph_quality_audit(audit: dict[str, object]) -> None:
                     st.rerun()
 
 
-def _get_graph_publish_status() -> dict | None:
-    try:
-        from app.graph_publish_status import get_graph_publish_status
-
-        return get_graph_publish_status()
-    except Exception:  # noqa: BLE001 - status is optional enrichment for both surfaces
-        return None
-
-
-def _render_graph_publish_status(status: dict | None = None) -> dict | None:
-    if status is None:
-        status = _get_graph_publish_status()
-    try:
-        from app.graph_publish_status import build_learner_publish_status_view
-    except Exception:  # noqa: BLE001 - diagnostics only; graph tab must still render
-        st.caption("Статус карты временно недоступен.")
-        return None
-
-    view = build_learner_publish_status_view(status)
-    primary = str(view.get("primary") or "")
-    tone = str(view.get("tone") or "info")
-    if tone == "success":
-        st.success(primary)
-    elif tone == "warning":
-        st.warning(primary, icon="⚠️")
-    else:
-        st.info(primary)
-    for caption in view.get("captions") or []:
-        st.caption(str(caption))
-
-    failed_title = view.get("failed_title")
-    if failed_title:
-        with st.expander(str(failed_title), expanded=False):
-            metrics = [str(m) for m in (view.get("failed_metrics") or []) if str(m).strip()]
-            if metrics:
-                st.caption(" · ".join(metrics))
-            for reason in list(view.get("failed_reasons") or [])[:6]:
-                st.caption(f"- {reason}")
-            debug_lines = [str(x) for x in (view.get("debug_lines") or []) if str(x).strip()]
-            if debug_lines:
-                st.caption("Отладка: " + " · ".join(debug_lines[:4]))
-    elif view.get("debug_lines"):
-        with st.expander("Технические детали карты", expanded=False):
-            for line in view["debug_lines"]:
-                st.caption(str(line))
-    return status
-
-
-def _load_staging_preview_graph(status: dict | None):
-    """Load latest failed staging graph for read-only UI preview, never for publish/runtime use."""
-    if not isinstance(status, dict):
-        return None, None
-    failed = status.get("latest_failed_staging")
-    if not isinstance(failed, dict) or not failed.get("exists"):
-        return None, None
-    raw_bundle_dir = str(failed.get("bundle_dir") or "").strip()
-    if not raw_bundle_dir:
-        return None, None
-    bundle_dir = Path(raw_bundle_dir)
-    try:
-        from app.knowledge_graph import SqliteBundleKnowledgeGraph
-
-        graph = SqliteBundleKnowledgeGraph(bundle_dir)
-        if graph.get_concepts():
-            return graph, failed
-    except Exception:  # noqa: BLE001 - staging preview must not break the published graph tab.
-        return None, None
-    return None, None
-
-
 def _render_concept_actions(
     sel: str,
     knowledge_graph,
@@ -1578,24 +1512,6 @@ def _render_classic_agraph(knowledge_graph, learned_set: set[str]) -> None:
             st.rerun()
 
 
-def _consume_mnemo_arrival() -> tuple[bool, str | None]:
-    """Consume the one-shot MnemoPolis deep-link flag before graph rendering."""
-    try:
-        from app.ui.mnemo_nav import arrival_banner_message
-
-        message = arrival_banner_message()
-        return bool(message), message
-    except Exception:  # noqa: BLE001 - navigation hint must not break the graph tab
-        opened = bool(st.session_state.pop("kg_open_3d_hall", False))
-        if not opened:
-            return False, None
-        return (
-            True,
-            "🌆 Мнемополис · Memory Run (3D-зал). "
-            "Mission Control остаётся главным экраном.",
-        )
-
-
 def _render_kg_graph_controls(
     *,
     payload: dict,
@@ -1701,16 +1617,15 @@ def _build_keeper_view_models(payload) -> dict:
         return {}
 
 
-def _render_mnemo_polis_surface(
+def _prepare_mnemo_polis_surface(
     *,
     payload: dict,
     node_ids: list[str],
     knowledge_graph,
     doc_index: dict,
     publish_status: dict | None,
-    arrival_message: str | None,
-) -> str | None:
-    """Render the active MnemoPolis tab and return its selected concept."""
+) -> dict:
+    """Prepare action state and view models for the active MnemoPolis tab."""
     action_result = _consume_and_apply_kg_3d_query(
         node_ids=node_ids,
         knowledge_graph=knowledge_graph,
@@ -1763,6 +1678,35 @@ def _render_mnemo_polis_surface(
     except Exception:  # noqa: BLE001 - optional architect banner must not block the hall
         architect_signal = None
 
+    return {
+        "action_result": action_result,
+        "architect_signal": architect_signal,
+        "collected_ids": collected_ids,
+        "concept_sections": concept_sections,
+        "keeper_vms": keeper_vms,
+        "nonce": nonce,
+        "show_onboarding": show_onboarding,
+        "wb_count": wb_count,
+    }
+
+
+def _render_mnemo_polis_surface(
+    *,
+    payload: dict,
+    node_ids: list[str],
+    knowledge_graph,
+    doc_index: dict,
+    publish_status: dict | None,
+    arrival_message: str | None,
+) -> str | None:
+    """Render the active MnemoPolis tab and return its selected concept."""
+    runtime = _prepare_mnemo_polis_surface(
+        payload=payload,
+        node_ids=node_ids,
+        knowledge_graph=knowledge_graph,
+        doc_index=doc_index,
+        publish_status=publish_status,
+    )
     if arrival_message:
         st.success(arrival_message)
     st.markdown("##### 🏛 3D-зал · Мнемополис")
@@ -1775,18 +1719,18 @@ def _render_mnemo_polis_surface(
     render_keeper_control_panel()
     hall_value = render_kg_3d_hall(
         payload,
-        session_nonce=nonce,
-        collected_concept_ids=collected_ids,
-        workbench_count=wb_count,
-        action_result=action_result,
-        concept_sections=concept_sections,
-        show_onboarding=show_onboarding,
-        keeper_guide=keeper_vms.get("guide"),
-        keeper_threats=keeper_vms.get("threats"),
-        keeper_quest=keeper_vms.get("quest"),
-        keeper_voices=keeper_vms.get("voices"),
-        keeper_chronicle=keeper_vms.get("chronicle"),
-        architect_signal=architect_signal,
+        session_nonce=runtime["nonce"],
+        collected_concept_ids=runtime["collected_ids"],
+        workbench_count=runtime["wb_count"],
+        action_result=runtime["action_result"],
+        concept_sections=runtime["concept_sections"],
+        show_onboarding=runtime["show_onboarding"],
+        keeper_guide=runtime["keeper_vms"].get("guide"),
+        keeper_threats=runtime["keeper_vms"].get("threats"),
+        keeper_quest=runtime["keeper_vms"].get("quest"),
+        keeper_voices=runtime["keeper_vms"].get("voices"),
+        keeper_chronicle=runtime["keeper_vms"].get("chronicle"),
+        architect_signal=runtime["architect_signal"],
         height=720,
         key="kg_3d_hall_component",
     )

@@ -1340,6 +1340,25 @@ def render_kg_3d_hall(
     )
 
 
+def render_kg_d3_component(
+    payload: Dict[str, Any],
+    *,
+    height: int = 720,
+    key: str = "kg_d3_component",
+) -> Dict[str, Any]:
+    """Render the D3 graph for an already assembled payload."""
+    if payload["nodes"]:
+        selected = _kg_d3_component()(
+            html=build_kg_html(payload),
+            height=height,
+            default=None,
+            key=key,
+        )
+        if isinstance(selected, str) and selected.strip():
+            payload["selected_concept"] = selected.strip()
+    return payload
+
+
 def render_d3_knowledge_graph(
     concepts: Mapping[str, Any],
     mastery_vector: Mapping[str, float] | None = None,
@@ -1350,6 +1369,7 @@ def render_d3_knowledge_graph(
     due_reviews: List[Dict[str, Any]] | None = None,
     *,
     height: int = 720,
+    render_component: bool = True,
 ) -> Dict[str, Any]:
     """Render via a local Streamlit component; return payload for companion widgets."""
     sr_records: List[Dict[str, Any]] = []
@@ -1401,13 +1421,6 @@ def render_d3_knowledge_graph(
         typed_relations,
         compiler_health=compiler_health,
     )
-    if payload["nodes"]:
-        selected = _kg_d3_component()(
-            html=build_kg_html(payload),
-            height=height,
-            default=None,
-            key="kg_d3_component",
-        )
-        if isinstance(selected, str) and selected.strip():
-            payload["selected_concept"] = selected.strip()
+    if render_component:
+        render_kg_d3_component(payload, height=height)
     return payload

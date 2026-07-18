@@ -47,6 +47,7 @@ from app.ui.knowledge_graph_d3 import (
     mark_kg_3d_event,
     parse_kg_3d_component_value,
     render_d3_knowledge_graph,
+    render_kg_d3_component,
     render_kg_3d_hall,
     reserve_kg_3d_event_id,
     validate_kg_3d_envelope,
@@ -1566,6 +1567,87 @@ def _render_classic_agraph(knowledge_graph, learned_set: set[str]) -> None:
             st.rerun()
 
 
+def _consume_mnemo_arrival() -> tuple[bool, str | None]:
+    """Consume the one-shot MnemoPolis deep-link flag before graph rendering."""
+    try:
+        from app.ui.mnemo_nav import arrival_banner_message
+
+        message = arrival_banner_message()
+        return bool(message), message
+    except Exception:  # noqa: BLE001 - navigation hint must not break the graph tab
+        opened = bool(st.session_state.pop("kg_open_3d_hall", False))
+        if not opened:
+            return False, None
+        return (
+            True,
+            "🌆 Мнемополис · Memory Run (3D-зал). "
+            "Mission Control остаётся главным экраном.",
+        )
+
+
+def _render_kg_graph_controls(
+    *,
+    payload: dict,
+    concepts: dict,
+    typed_relations,
+) -> None:
+    """Render compact graph stats, exports and diagnostics."""
+    stats = payload.get("stats", {})
+    # B1: "концептов" uses total_concepts (excludes lesson nodes) — same value the Mission
+    # Control KG card shows, both sourced from compute_kg_counters / build_kg_payload.
+    st.caption(
+        f"📊 {stats.get('total_concepts', stats.get('total', 0))} концептов · {stats.get('avg_mastery', 0)}% ср. mastery · "
+        f"{stats.get('learned', 0)} освоено · {stats.get('frontier', 0)} доступно · "
+        f"{stats.get('clusters', 0)} кластеров"
+    )
+    st.download_button(
+        "⬇ Скачать живую карту (HTML)",
+        data=build_kg_html(payload),
+        file_name="knowledge_graph.html",
+        mime="text/html",
+        key="kg_download_live_html",
+        help="Самодостаточная интерактивная карта курса для локального открытия без приложения.",
+    )
+
+    # 3D hall export: same payload; first frame = day route; worth = rank/reason (not height).
+    # Bake offline Keeper VMs (no LLM) so export stays self-contained.
+    export_guide = export_threats = export_quest = export_voices = export_chronicle = None
+    try:
+        from app.mnemo_keeper_views import assemble_keeper_hall_vms
+
+        _ex = assemble_keeper_hall_vms(payload)
+        export_guide = _ex.get("guide")
+        export_threats = _ex.get("threats")
+        export_quest = _ex.get("quest")
+        export_voices = _ex.get("voices")
+        export_chronicle = _ex.get("chronicle")
+    except Exception:  # noqa: BLE001 - export must not fail if keeper missing
+        pass
+    st.download_button(
+        "⬇ Скачать 3D-зал (HTML)",
+        data=build_kg_3d_html(
+            payload,
+            keeper_guide=export_guide,
+            keeper_threats=export_threats,
+            keeper_quest=export_quest,
+            keeper_voices=export_voices,
+            keeper_chronicle=export_chronicle,
+        ),
+        file_name="knowledge_graph_3d.html",
+        mime="text/html",
+        key="kg_download_3d_html",
+        help=(
+            "Офлайн 3D-зал: первый кадр — маршрут дня; Хранитель "
+            "(экскурсия + угрозы + цель утра); export read-only."
+        ),
+    )
+
+    with st.expander("🔬 Качество графа", expanded=False):
+        _render_graph_quality_audit(
+            _graph_quality_audit(concepts, payload, list(typed_relations or []))
+        )
+
+
 def _build_keeper_view_models(payload) -> dict:
     """Keeper hall VMs (offline first; LLM on explicit session flags)."""
     snap_date = ""
@@ -1681,6 +1763,7 @@ def _render_knowledge_graph_tab() -> None:
     except Exception:  # noqa: BLE001
         pass
 
+    open_3d_first, mnemo_arrival_message = _consume_mnemo_arrival()
     payload = render_d3_knowledge_graph(
         concepts,
         mastery_vector=mastery_vector,
@@ -1690,62 +1773,14 @@ def _render_knowledge_graph_tab() -> None:
         source_paths=source_paths,
         due_reviews=due_reviews,
         height=740,
+        render_component=not open_3d_first,
     )
 
-    # ── Concept action selector (preserves Streamlit-side actions) ──
-    stats = payload.get("stats", {})
-    # B1: "концептов" uses total_concepts (excludes lesson nodes) — same value the Mission
-    # Control KG card shows, both sourced from compute_kg_counters / build_kg_payload.
-    st.caption(
-        f"📊 {stats.get('total_concepts', stats.get('total', 0))} концептов · {stats.get('avg_mastery', 0)}% ср. mastery · "
-        f"{stats.get('learned', 0)} освоено · {stats.get('frontier', 0)} доступно · "
-        f"{stats.get('clusters', 0)} кластеров"
-    )
-    st.download_button(
-        "⬇ Скачать живую карту (HTML)",
-        data=build_kg_html(payload),
-        file_name="knowledge_graph.html",
-        mime="text/html",
-        key="kg_download_live_html",
-        help="Самодостаточная интерактивная карта курса для локального открытия без приложения.",
-    )
-
-    # 3D hall export: same payload; first frame = day route; worth = rank/reason (not height).
-    # Bake offline Keeper VMs (no LLM) so export stays self-contained.
-    export_guide = export_threats = export_quest = export_voices = export_chronicle = None
-    try:
-        from app.mnemo_keeper_views import assemble_keeper_hall_vms
-
-        _ex = assemble_keeper_hall_vms(payload)
-        export_guide = _ex.get("guide")
-        export_threats = _ex.get("threats")
-        export_quest = _ex.get("quest")
-        export_voices = _ex.get("voices")
-        export_chronicle = _ex.get("chronicle")
-    except Exception:  # noqa: BLE001 - export must not fail if keeper missing
-        pass
-    st.download_button(
-        "⬇ Скачать 3D-зал (HTML)",
-        data=build_kg_3d_html(
-            payload,
-            keeper_guide=export_guide,
-            keeper_threats=export_threats,
-            keeper_quest=export_quest,
-            keeper_voices=export_voices,
-            keeper_chronicle=export_chronicle,
-        ),
-        file_name="knowledge_graph_3d.html",
-        mime="text/html",
-        key="kg_download_3d_html",
-        help=(
-            "Офлайн 3D-зал: первый кадр — маршрут дня; Хранитель "
-            "(экскурсия + угрозы + цель утра); export read-only."
-        ),
-    )
-
-    with st.expander("🔬 Качество графа", expanded=False):
-        _render_graph_quality_audit(
-            _graph_quality_audit(concepts, payload, list(typed_relations or []))
+    if not open_3d_first:
+        _render_kg_graph_controls(
+            payload=payload,
+            concepts=concepts,
+            typed_relations=typed_relations,
         )
 
     node_ids = [n["id"] for n in payload.get("nodes", [])]
@@ -1808,18 +1843,8 @@ def _render_knowledge_graph_tab() -> None:
         architect_signal = None
 
     # W4a/W4b: deep link / return-from-quiz lands on this hall section.
-    try:
-        from app.ui.mnemo_nav import arrival_banner_message
-
-        _mnemo_msg = arrival_banner_message()
-        if _mnemo_msg:
-            st.success(_mnemo_msg)
-    except Exception:  # noqa: BLE001 - banner is non-critical
-        if st.session_state.pop("kg_open_3d_hall", False):
-            st.success(
-                "🌆 Мнемополис · Memory Run (3D-зал). "
-                "Mission Control остаётся главным экраном."
-            )
+    if mnemo_arrival_message:
+        st.success(mnemo_arrival_message)
     st.markdown("##### 🏛 3D-зал (embedded) · Мнемополис")
     st.caption(
         "Memory Run · ▶ · 🔁 · 📜 · 💬 · Хранитель (экскурсия/угрозы/цель/голоса/летопись) · Правила · ◌."
@@ -1861,6 +1886,15 @@ def _render_knowledge_graph_tab() -> None:
     if hall_selected and hall_selected in node_ids:
         st.session_state["kg_selected_concept"] = hall_selected
         st.session_state["kg_action_concept"] = hall_selected
+
+    if open_3d_first:
+        st.markdown("##### 🕸 Граф знаний")
+        payload = render_kg_d3_component(payload, height=740)
+        _render_kg_graph_controls(
+            payload=payload,
+            concepts=concepts,
+            typed_relations=typed_relations,
+        )
 
     # ── D3 → Streamlit concept bridge ──────────────────────────────────
     # The D3 graph is rendered as a Streamlit custom component. On node click,

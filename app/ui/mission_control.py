@@ -887,27 +887,25 @@ def render_kg_mission_card() -> None:
 
 def build_living_konspekt_card_stats(rows: list[dict[str, Any]]) -> dict[str, Any]:
     """Чистая сводка корзины «Живого конспекта» для resume-карточки (тестируется отдельно)."""
-    documents = {str(row.get("konspekt_md_abs") or "") for row in rows if row.get("konspekt_md_abs")}
-    concepts = [
-        concept
-        for concept in dict.fromkeys(str(row.get("concept") or "").strip() for row in rows)
-        if concept
-    ]
+    from app.konspekt_learning_passport import build_konspekt_learning_passport
+
+    passport = build_konspekt_learning_passport(rows)
+    counts = passport["counts"]
     recent_headings = [
         heading
         for heading in (str(row.get("heading_text") or "").strip() for row in reversed(rows))
         if heading
     ][:2]
-    # A2: add understanding stats (pure, no side effects)
-    understood = sum(1 for r in rows if str(r.get("knowledge_status") or "") == "understood")
-    open_qs = sum(1 for r in rows if str(r.get("open_question") or "").strip())
     return {
-        "sections": len(rows),
-        "documents": len(documents),
-        "concepts": len(concepts),
+        "sections": counts["sections"],
+        "documents": counts["documents"],
+        "concepts": counts["concepts"],
         "recent_headings": recent_headings,
-        "understood": understood,
-        "open_questions": open_qs,
+        "understood": counts["understood"],
+        "open_questions": counts["open_questions"],
+        "consumed": counts["consumed"],
+        "status": passport["status"],
+        "next_step": passport["next_step"],
     }
 
 
@@ -938,17 +936,23 @@ def render_living_konspekt_mission_card() -> None:
     stats = build_living_konspekt_card_stats(rows)
     recent = " · ".join(html.escape(heading) for heading in stats["recent_headings"])
     subtitle = f"Последние разделы: {recent}" if recent else "Сборка рабочего конспекта из разделов лекций"
+    status_label = {"raw": "сырой", "in_progress": "в работе", "ready": "готов"}.get(
+        str(stats.get("status") or ""),
+        "в работе",
+    )
     st.html(
         f'<div class="kg-mc-card" data-testid="mc-living-konspekt-card">'
         f'<div class="kg-mc-header">'
         f'<span class="kg-mc-icon">📚</span>'
         f'<div class="kg-mc-titles">'
-        f'<div class="kg-mc-title">Живой конспект — сборка не закончена</div>'
+        f'<div class="kg-mc-title">Живой конспект — {status_label}</div>'
         f'<div class="kg-mc-subtitle">{subtitle}</div>'
         f'</div></div>'
         f'<div class="kg-mc-stats">'
         f'<div class="kg-mc-stat"><span class="kg-mc-num">{stats["sections"]}</span>'
         f'<span class="kg-mc-lbl">разделов</span></div>'
+        f'<div class="kg-mc-stat"><span class="kg-mc-num">{stats.get("consumed", 0)}</span>'
+        f'<span class="kg-mc-lbl">прочитано</span></div>'
         f'<div class="kg-mc-stat"><span class="kg-mc-num">{stats["documents"]}</span>'
         f'<span class="kg-mc-lbl">лекций</span></div>'
         f'<div class="kg-mc-stat"><span class="kg-mc-num">{stats["concepts"]}</span>'

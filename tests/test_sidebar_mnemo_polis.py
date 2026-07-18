@@ -110,3 +110,6 @@ class TestSidebarMnemoPolisNavigation:
         fc = Path("app/ui/flashcards_review_view.py").read_text(encoding="utf-8")
         assert "flashcards_review_return_mnemo" in fc
         assert "return_from=\"flashcards\"" in fc or "return_from='flashcards'" in fc
+        graph = Path("app/ui/dashboards_graph.py").read_text(encoding="utf-8")
+        assert "render_component=not open_3d_first" in graph
+        assert "render_kg_d3_component(payload, height=740)" in graph

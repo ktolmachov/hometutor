@@ -19,6 +19,8 @@ from typing import Any, Callable, Mapping
 
 import streamlit as st
 
+from app.konspekt_learning_passport import build_konspekt_learning_passport_for_rows
+
 MediaRenderer = Callable[[dict[str, Any], bool], None]
 SaveNote = Callable[[str, str], None]
 MarkRead = Callable[[str], None]
@@ -76,20 +78,31 @@ def render_reader(
     for doc_name, idea in _lecture_main_ideas(rows):
         st.markdown(f"> **Главная мысль ({doc_name}):** {idea}")
 
-    # B2: derived novelty for the whole сборка (доля концептов ниже порога)
-    try:
-        from app.quiz_adaptive import get_all_mastery_levels, mastery_percent_for_level
-        concepts = [str(r.get("concept") or "").strip() for r in rows if r.get("concept")]
-        unique = list(dict.fromkeys([c for c in concepts if c]))  # unique preserve order
-        if unique:
-            levels = get_all_mastery_levels()
-            low = sum(1 for c in unique if mastery_percent_for_level(levels.get(c, "recognition")) < 60)
-            n = len(unique)
-            if low > 0:
-                pct = round(low / n * 100)
-                st.caption(f"🆕 Нового для тебя ~{pct}% ({low} из {n} концептов в сборке)")
-    except Exception:  # noqa: BLE001
-        pass
+    passport = build_konspekt_learning_passport_for_rows(rows)
+    counts = passport["counts"]
+    status_label = {"raw": "сырой", "in_progress": "в работе", "ready": "готов"}.get(
+        str(passport.get("status") or ""),
+        "в работе",
+    )
+    readiness_parts = [
+        f"готовность: {status_label}",
+        f"прочитано/прослушано {counts['consumed']}/{counts['sections']}",
+        f"понято {counts['understood']}/{counts['sections']}",
+        f"вопросов {counts['open_questions']}",
+    ]
+    quality = passport["quality"]
+    if quality.get("rubric_average") is not None:
+        readiness_parts.append(f"рубрика {quality['rubric_average']}/5")
+    if passport["flags"].get("has_stale_sources"):
+        readiness_parts.append("есть устаревшие источники")
+    st.caption(" · ".join(readiness_parts))
+
+    novelty = passport["novelty"]
+    if not novelty.get("unknown") and novelty.get("low_mastery_concepts"):
+        st.caption(
+            f"🆕 Нового для тебя ~{novelty['pct']}% "
+            f"({novelty['low_mastery_concepts']} из {novelty['concepts']} концептов в сборке)"
+        )
 
     toc = reader_toc(rows)
     if toc:

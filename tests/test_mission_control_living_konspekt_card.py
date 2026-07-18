@@ -43,3 +43,14 @@ class TestBuildLivingKonspektCardStats:
         stats = build_living_konspekt_card_stats(rows)
         assert stats.get("understood") == 2
         assert stats.get("open_questions") == 2
+
+    def test_card_stats_include_passport_status_and_consumed_count(self):
+        rows = [
+            {"read_at": "2026-07-18T10:00:00Z", "knowledge_status": "unsure"},
+            {"listened_at": "2026-07-18T10:05:00Z"},
+            {"read_at": "2026-07-18T10:10:00Z", "listened_at": "2026-07-18T10:12:00Z"},
+        ]
+        stats = build_living_konspekt_card_stats(rows)
+        assert stats["status"] == "in_progress"
+        assert stats["next_step"] == "add_personal_note"
+        assert stats["consumed"] == 3

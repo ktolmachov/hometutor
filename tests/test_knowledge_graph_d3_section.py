@@ -290,3 +290,42 @@ class TestKnowledgeGraphSelectionBridge:
         assert payload["selected_concept"] == "llm-agent"
         assert captured["height"] == 500
         assert "LLM Agent" in str(captured["html"])
+
+    def test_renderer_can_defer_d3_component(self, monkeypatch: pytest.MonkeyPatch):
+        import app.ui.knowledge_graph_d3 as kg_d3
+
+        captured: dict[str, object] = {}
+        calls = {"n": 0}
+
+        def fake_component():
+            def _call(**kwargs):
+                calls["n"] += 1
+                captured.update(kwargs)
+                return "llm-agent"
+
+            return _call
+
+        monkeypatch.setattr(kg_d3, "_kg_d3_component", fake_component)
+
+        payload = kg_d3.render_d3_knowledge_graph(
+            {
+                "llm-agent": {
+                    "label": "LLM Agent",
+                    "level": "beginner",
+                    "description": "Agent concept.",
+                }
+            },
+            due_reviews=[],
+            height=500,
+            render_component=False,
+        )
+
+        assert calls["n"] == 0
+        assert "selected_concept" not in payload
+
+        payload = kg_d3.render_kg_d3_component(payload, height=333, key="kg_d3_after_hall")
+
+        assert calls["n"] == 1
+        assert payload["selected_concept"] == "llm-agent"
+        assert captured["height"] == 333
+        assert captured["key"] == "kg_d3_after_hall"

@@ -11,6 +11,9 @@ from __future__ import annotations
 # Fail-closed copy when LLM is unavailable / budget exhausted (vision §6.2).
 KEEPER_SILENT_COPY = "Хранитель молчит — данные на месте."
 
+# Bump when system/user prompt contracts change (cache isolation, vision §6.1).
+KEEPER_PROMPT_VERSION = "2026-07-18.v1"
+
 # Scenario ids (stable contract for cache keys + callers).
 SCENARIO_GUIDE = "guide"  # A — экскурсовод
 SCENARIO_THREATS = "threats"  # B — сводка угроз

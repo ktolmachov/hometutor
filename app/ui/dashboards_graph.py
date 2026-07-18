@@ -283,20 +283,31 @@ def _run_kg_3d_review_action(
     label: str,
     state,
 ) -> None:
-    """W2b: navigation-only → Flashcards review (dispel fog / retrieval practice).
+    """W2b: Flashcards review handoff with concept-scoped due autoload.
 
-    Best-available preselect: concept focus keys + review section pending.
-    Does not invent flashcard rows or write domain state (nav only, like start).
+    Sets focus + tags hint + ``flashcards_review_autoload_pending`` so Review
+    loads due cards and filters to the concept (tags/front/back match).
+    Does not invent flashcard rows or write domain DB state.
     """
     from app.ui.flashcards_sections import FC_MAIN_SECTION_REVIEW, pending_section_key
     from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
 
-    # Session focus for review surfaces (UI-state; optional consumers).
-    target["flashcards_focus_concept"] = concept_id
+    focus = str(concept_id or "").strip()
+    pretty = str(label or focus).strip() or focus
+    # UI-state focus consumed by flashcards_review_view after due load.
+    target["flashcards_focus_concept"] = focus
     target["flashcards_subview"] = "review"
     target[pending_section_key()] = FC_MAIN_SECTION_REVIEW
+    # Prefer concept id as tag filter (cards often tagged with concept/source);
+    # review view also client-filters by focus if tags alone miss cards.
+    tag_bits = [focus]
+    if pretty and pretty.lower() != focus.lower():
+        tag_bits.append(pretty)
+    target["flashcards_review_session_tags_text"] = ", ".join(tag_bits)
+    target["flashcards_review_session_tag_ids"] = list(tag_bits)
     # Clear any prior in-progress queue so review opens cleanly on the concept context.
     target["flashcards_review_queue"] = []
+    target["flashcards_review_queue_raw"] = []
     target["flashcards_review_index"] = 0
     target["flashcards_card_flipped"] = False
     target["flashcards_review_stats"] = {"again": 0, "hard": 0, "good": 0, "easy": 0}
@@ -304,14 +315,14 @@ def _run_kg_3d_review_action(
     target["flashcards_review_session_error"] = None
     target["flashcards_review_session_deck_id"] = None
     target["flashcards_review_deck_sync_pending"] = None
-    # Soft topic hint for human-readable context (not a domain write).
-    target["flashcards_review_session_tags_text"] = str(label or concept_id)
+    # Autoload due queue on next Flashcards review render (same key as deck seed).
+    target["flashcards_review_autoload_pending"] = True
     target[PENDING_CURRENT_VIEW_KEY] = "Flashcards"
     mark_kg_3d_event(target, event_id, "succeeded")
     # Same as start: navigate away — no sticky hall action_result.
     target.pop(KG_3D_ACTION_RESULT_KEY, None)
     if state is None:
-        st.toast(f"🔁 Повтор из 3D-зала: **{label or concept_id}** → Flashcards", icon="🃏")
+        st.toast(f"🔁 Повтор из 3D-зала: **{pretty}** → Flashcards (due · фокус)", icon="🃏")
         st.rerun()
 
 

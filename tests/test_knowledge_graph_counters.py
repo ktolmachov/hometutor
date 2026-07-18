@@ -675,6 +675,8 @@ class Test3DCoverageAndContracts:
         assert "function openInterior" in html
         assert "function openOnboarding" in html
         assert "Правила зала" in html
+        assert "Мнемополис — город твоей памяти" in html
+        assert 'id="onboard-tagline"' in html
         assert 'id="helpbtn"' in html and ">Правила</button>" in html
         assert "localStorage.getItem(ONBOARD_SEEN_KEY)" in html
         assert "localStorage.setItem(ONBOARD_SEEN_KEY, '1')" in html
@@ -1748,6 +1750,10 @@ class TestKg3dProductActions:
         assert state[PENDING_CURRENT_VIEW_KEY] == "Flashcards"
         assert state[pending_section_key()] == FC_MAIN_SECTION_REVIEW
         assert state["flashcards_focus_concept"] == "rag"
+        assert state["flashcards_review_autoload_pending"] is True
+        tags_text = str(state.get("flashcards_review_session_tags_text") or "")
+        assert "rag" in tags_text.lower()
+        assert state["flashcards_review_queue"] == []
         assert state["kg_action_concept"] == "rag"
         assert state[KG_3D_ACTION_KEY]["action"] == "review"
         assert KG_3D_ACTION_RESULT_KEY not in state

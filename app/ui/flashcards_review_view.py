@@ -1030,6 +1030,11 @@ def render_review(
             except Exception as ex:  # noqa: BLE001 - UI displays API failure.
                 st.error(str(ex))
 
+    # W2b / 3D hall: seed tag UI from concept focus if host only set the focus key.
+    _focus_seed = str(st.session_state.get("flashcards_focus_concept") or "").strip()
+    if _focus_seed and not str(st.session_state.get("flashcards_review_session_tags_text") or "").strip():
+        st.session_state["flashcards_review_session_tags_text"] = _focus_seed
+
     autoload_queue = bool(st.session_state.pop(_FC_REVIEW_AUTOLOAD_PENDING_KEY, False))
     c_load, c_clear = st.columns([2, 1])
     with c_load:
@@ -1043,7 +1048,32 @@ def render_review(
             st.session_state["flashcards_review_session_status"] = "loading"
             try:
                 data = api_call("GET", "/flashcards/due", params=build_review_due_params(selected_deck_id, selected_tags))
-                queue = data.get("cards") or []
+                queue = list(data.get("cards") or [])
+                # Concept-scoped review from 3D «Развеять» / focus handoff:
+                # tags API filter is best-effort; also match front/back/tags blob.
+                focus = str(st.session_state.get("flashcards_focus_concept") or "").strip()
+                if focus:
+                    fl = focus.lower()
+                    def _card_matches_focus(card: dict) -> bool:
+                        blob = " ".join(
+                            str(card.get(k) or "")
+                            for k in ("tags", "front", "back", "concept", "topic")
+                        ).lower()
+                        return fl in blob
+
+                    scoped = [c for c in queue if isinstance(c, dict) and _card_matches_focus(c)]
+                    # If tag filter already empty due to mismatch, reload unscoped due then filter.
+                    if not scoped and selected_tags:
+                        data_all = api_call(
+                            "GET",
+                            "/flashcards/due",
+                            params=build_review_due_params(selected_deck_id, None),
+                        )
+                        queue_all = list(data_all.get("cards") or [])
+                        scoped = [
+                            c for c in queue_all if isinstance(c, dict) and _card_matches_focus(c)
+                        ]
+                    queue = scoped
                 st.session_state["flashcards_review_queue_raw"] = list(queue)
                 st.session_state["flashcards_review_session_audit"] = []
                 _fc_ensure_expert_filter_defaults()

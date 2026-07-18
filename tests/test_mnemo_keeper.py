@@ -16,6 +16,69 @@ def test_prompts_package_has_scenarios_and_silent_copy():
     assert "Хранитель молчит" in prompts.KEEPER_SILENT_COPY
     assert "GUIDE_SYSTEM" in dir(prompts)
     assert "из" in prompts.static_quest_text(stop_count=6, done_count=2, focus="RAG")
+    assert str(prompts.KEEPER_PROMPT_VERSION).strip()
+
+
+def test_build_cache_key_includes_provider_model_prompt_version():
+    """Vision §6.1: cache must isolate provider/model/prompt changes."""
+    k1 = keeper.build_cache_key(
+        scenario=prompts.SCENARIO_GUIDE,
+        snapshot_date="2026-07-18",
+        route_fp="r1",
+        concept_hash="c1",
+        locale="ru",
+        mode="static",
+        provider_id="prov-a",
+        model_id="model-x",
+        prompt_version="2026-07-18.v1",
+    )
+    k2 = keeper.build_cache_key(
+        scenario=prompts.SCENARIO_GUIDE,
+        snapshot_date="2026-07-18",
+        route_fp="r1",
+        concept_hash="c1",
+        locale="ru",
+        mode="static",
+        provider_id="prov-a",
+        model_id="model-y",  # model change
+        prompt_version="2026-07-18.v1",
+    )
+    k3 = keeper.build_cache_key(
+        scenario=prompts.SCENARIO_GUIDE,
+        snapshot_date="2026-07-18",
+        route_fp="r1",
+        concept_hash="c1",
+        locale="ru",
+        mode="static",
+        provider_id="prov-b",  # provider change
+        model_id="model-x",
+        prompt_version="2026-07-18.v1",
+    )
+    k4 = keeper.build_cache_key(
+        scenario=prompts.SCENARIO_GUIDE,
+        snapshot_date="2026-07-18",
+        route_fp="r1",
+        concept_hash="c1",
+        locale="ru",
+        mode="static",
+        provider_id="prov-a",
+        model_id="model-x",
+        prompt_version="2026-07-18.v2",  # prompt change
+    )
+    assert k1 != k2
+    assert k1 != k3
+    assert k1 != k4
+    assert "prov-a" in k1
+    assert "model-x" in k1
+    assert "2026-07-18.v1" in k1
+    # Default prompt version is taken from prompts package when omitted.
+    k_default = keeper.build_cache_key(
+        scenario=prompts.SCENARIO_GUIDE,
+        snapshot_date="2026-07-18",
+        provider_id="p",
+        model_id="m",
+    )
+    assert prompts.KEEPER_PROMPT_VERSION in k_default
 
 
 def test_module_does_not_import_domain_writers():
@@ -185,6 +248,88 @@ def test_llm_error_degrades_fail_closed():
     assert r.source == "degrade"
     assert "llm_error" in r.reason
     assert "RAG" in r.text
+
+
+def test_llm_timeout_degrades_to_static():
+    """Wall-clock budget: slow completer must not poison cache with late LLM text."""
+    import time
+
+    state: dict = {}
+    slow_ms = int((keeper.DEFAULT_TIMEOUT_LOCAL_SEC + 0.05) * 1000)
+
+    def slow(system: str, user: str) -> str:
+        time.sleep(0.02)  # always > synthetic tiny timeout when patched
+        return "LATE-LLM-TEXT-SHOULD-NOT-CACHE"
+
+    # Force a very small timeout so the test stays fast.
+    original = keeper._keeper_timeout_sec
+    keeper._keeper_timeout_sec = lambda: 0.001  # type: ignore[assignment]
+    try:
+        r = keeper.request_keeper(
+            prompts.SCENARIO_GUIDE,
+            snapshot_date="2026-07-18",
+            stops=[{"id": "rag", "label": "RAG", "worth_reason": "x"}],
+            day_route=["rag"],
+            allow_llm=True,
+            session_state=state,
+            llm_complete=slow,
+        )
+    finally:
+        keeper._keeper_timeout_sec = original  # type: ignore[assignment]
+
+    assert r.source == "degrade"
+    assert r.reason == "timeout"
+    assert "LATE-LLM" not in r.text
+    assert "RAG" in r.text
+    # Cache holds static degrade, not late LLM prose.
+    cached = keeper.cache_from_session(state).get(r.cache_key)
+    assert cached is not None
+    assert "LATE-LLM" not in cached
+    _ = slow_ms  # silence unused if timeout constants change
+
+
+def test_llm_output_cap_truncates_long_response():
+    state: dict = {}
+    huge = "x" * (keeper.MAX_OUTPUT_TOKENS_PER_CALL * 8)
+
+    def fat(system: str, user: str) -> str:
+        return huge
+
+    r = keeper.request_keeper(
+        prompts.SCENARIO_GUIDE,
+        snapshot_date="2026-07-18",
+        stops=[{"id": "rag", "label": "RAG", "worth_reason": "x"}],
+        day_route=["rag"],
+        allow_llm=True,
+        session_state=state,
+        llm_complete=fat,
+    )
+    assert r.source == "llm"
+    assert len(r.text) < len(huge)
+    assert r.text.endswith("…")
+    assert r.budget_snapshot["output_tokens"] <= keeper.MAX_OUTPUT_TOKENS_PER_CALL + 5
+
+
+def test_cache_miss_when_prompt_version_changes():
+    stops = [{"id": "rag", "label": "RAG", "worth_reason": "x"}]
+    state: dict = {}
+    r1 = keeper.request_keeper(
+        prompts.SCENARIO_GUIDE,
+        snapshot_date="2026-07-18",
+        stops=stops,
+        day_route=["rag"],
+        allow_llm=False,
+        session_state=state,
+    )
+    assert r1.source == "degrade"
+    # Simulate prompt bump: inject entry under old key only; new version must miss.
+    old_key = r1.cache_key
+    assert prompts.KEEPER_PROMPT_VERSION in old_key
+    new_key = old_key.replace(prompts.KEEPER_PROMPT_VERSION, "2099-01-01.v99")
+    assert new_key != old_key
+    cache = keeper.cache_from_session(state)
+    assert cache.get(old_key) is not None
+    assert cache.get(new_key) is None
 
 
 def test_threats_static_and_voices():

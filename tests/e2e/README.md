@@ -10,6 +10,9 @@ against a real `streamlit run app/ui/main.py`). It complements — does **not**
 replace — `tests/test_w10_release_gates.py` (static) and
 `tests/test_w10_visual_matrix.py` (pure-HTML Playwright fixtures).
 
+The live suite is excluded from default `pytest` collection by
+`tests/conftest.py`; run it explicitly with `pytest tests/e2e`.
+
 ### W10.F1 (2026-07-18) — closed
 
 - Mission Control cold-state live smoke on the release viewport matrix
@@ -17,8 +20,11 @@ replace — `tests/test_w10_release_gates.py` (static) and
   - HTTP 200 + Streamlit `stMain` present,
   - **no `stException`** (catches regressions like the
     `_render_hidden_nav_expander` leftover call fixed in this wave),
-  - Mission Control DOM markers (`mode-card`, `mission-tile`, `ssr-banner`)
-    present,
+  - Mission Control real-DOM markers present via `querySelectorAll` on the
+    explicit `data-testid` hooks the renderer emits
+    (`[data-testid="mission-control-ssr-banner"]` ≥1,
+    `[data-testid^="mission-tile-"]` ≥3) — not CSS-class substrings in
+    `body_html`, which would also match the injected `<style>`,
   - no horizontal `scrollWidth` overflow,
   - no Playwright `pageerror` during render,
   - artifact screenshot under `_artifacts/` for human review (inventory,

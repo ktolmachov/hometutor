@@ -820,8 +820,11 @@ Additional axes:
 
 #### W10.E — Open (required for full W10 / release close)
 
-- [~] Full Streamlit app screenshot/DOM regression on matrix — `tests/e2e`
-      harness scaffold **landed (W10.F1)**; pixel baseline/diff still **open**.
+- [ ] **[W10-PIXEL-OPEN]** Full Streamlit app pixel/DOM baseline + diff на матрице
+      — **open** (live artifacts в `tests/e2e/_artifacts/` — inventory only;
+      baseline/diff pipeline не реализован; W10.F1 закрыл только cold smoke).
+- [~] Full Streamlit app screenshot/DOM regression на matrix — `tests/e2e`
+      harness scaffold **landed (W10.F1)**; pixel baseline/diff → см. `[W10-PIXEL-OPEN]`.
 - [ ] Live focus vs sticky surfaces in Streamlit chrome.
 - [ ] Full-app keyboard-only smoke (all critical destinations).
 - [ ] Empty/loading/error/offline **visual** pass on matrix.
@@ -875,7 +878,12 @@ harness в `tests/e2e/` (external-stack mode; см. `tests/e2e/README.md`).
       в `app/ui/main.py` (regression из коммита 322) — app падал на главной;
       теперь Mission Control рендерится чисто на всех 3 viewports.
 - [x] Honesty gate усилен: `tests/test_w10_release_gates.py` теперь требует
-      `tests/e2e/test_mission_control_live.py` + явное «pixel … open» в плане.
+      `tests/e2e/test_mission_control_live.py` + structured anchor
+      `[W10-PIXEL-OPEN]` в §W10.E (открытый `[ ]` checkbox; flip в `[x]` —
+      единственный способ пометить pixel done, и это review-checkpoint).
+- [x] Live markers проверяются через реальные DOM-селекторы Mission Control
+      (`[data-testid="mission-control-ssr-banner"]`, `[data-testid^="mission-tile-"]`),
+      не через подстроки CSS-классов в `body_html`.
 
 **Write-set:**
 - `app/ui/main.py` *(blocker fix)*

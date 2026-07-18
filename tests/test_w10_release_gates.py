@@ -367,8 +367,14 @@ def test_w10_full_app_e2e_status_is_documented_without_blocking_future_suite() -
     W10.F1 (2026-07-18) landed ``tests/e2e`` with a Mission Control live smoke
     against a running stack. That closes *one* live gate; it does **not** close
     pixel baseline/diff, focus-vs-sticky, full-app keyboard, SR smoke, or
-    empty/loading/error/offline visuals. The plan must say so explicitly so W10
-    cannot be silently flipped to “fully done”.
+    empty/loading/error/offline visuals. The plan must say so unambiguously.
+
+    A bare word match on ``pixel`` would silently pass even if the plan later
+    claimed ``pixel baseline done`` (and mixed-status lines like
+    ``auto gates ✓; ... pixel ... open`` make per-line done-token bans brittle).
+    Instead we require a structured anchor ``[W10-PIXEL-OPEN]`` whose checkbox
+    stays open — flipping it to ``[x]`` is the only way to mark pixel done, and
+    that flip is itself a review checkpoint.
     """
     plan = _read("docs/ui_ux_design_review_implementation_plan.md")
     e2e_dir = ROOT / "tests" / "e2e"
@@ -376,11 +382,54 @@ def test_w10_full_app_e2e_status_is_documented_without_blocking_future_suite() -
     assert (e2e_dir / "test_mission_control_live.py").is_file(), (
         "Mission Control live smoke missing in tests/e2e"
     )
-    # Plan must acknowledge both the live scaffold and the still-open pixel work.
+    # Plan must acknowledge the W10.F1 wave.
     assert "W10.F1" in plan, "plan must reference W10.F1 live e2e wave"
     assert "tests/e2e" in plan
-    # Honesty: pixel regression must remain explicitly open in the plan.
-    assert "pixel" in plan.casefold() or "pixel/DOM" in plan
+
+    # Structured anchor: the plan must carry exactly one ``[W10-PIXEL-OPEN]``
+    # checkbox item whose status stays open. Other lines may *mention* the
+    # anchor in prose (cross-references are fine); only the checkbox line is
+    # authoritative. Flipping that one checkbox to ``[x]`` is the only way to
+    # mark pixel regression done, and that flip is itself a review checkpoint.
+    anchor = "[W10-PIXEL-OPEN]"
+    anchor_lines = [ln for ln in plan.splitlines() if anchor in ln]
+    assert anchor_lines, (
+        f"plan must contain the {anchor} anchor marking pixel regression open"
+    )
+    checkbox_lines = [ln for ln in anchor_lines if ln.lstrip().startswith(("- [ ]", "- [x]", "- [~]"))]
+    assert len(checkbox_lines) == 1, (
+        f"exactly one {anchor} checkbox item expected, found {len(checkbox_lines)}: "
+        f"{checkbox_lines}"
+    )
+    anchor_line = checkbox_lines[0]
+    assert "[ ]" in anchor_line, (
+        f"{anchor} checkbox must stay OPEN ([ ]): {anchor_line!r}"
+    )
+    assert "[x]" not in anchor_line, (
+        f"{anchor} checkbox must NOT be closed ([x]): {anchor_line!r}"
+    )
+    # And the anchor paragraph must explicitly say "open".
+    window = plan.split(anchor)[1][:160].lower()
+    assert "open" in window, (
+        f"{anchor} anchor must state the status is open near the marker"
+    )
+
     # KG visual smoke remains part of W10 evidence until full-app e2e lands.
     kg_tests = _read("tests/test_knowledge_graph_counters.py")
     assert "3d_visual_smoke_viewport_matrix" in kg_tests or "viewport" in kg_tests
+
+
+def test_w10_live_e2e_is_explicit_opt_in_not_default_collection() -> None:
+    """Live Playwright tests must not contaminate the normal pytest suite."""
+    root_conftest = _read("tests/conftest.py")
+    pyproject = _read("pyproject.toml")
+    live_test = _read("tests/e2e/test_mission_control_live.py")
+    readme = _read("tests/e2e/README.md")
+
+    assert "pytest_ignore_collect" in root_conftest
+    assert "_E2E_ROOT" in root_conftest
+    assert "_explicit_e2e_arg" in root_conftest
+    assert "pytest tests/e2e" in root_conftest
+    assert "e2e: live Streamlit/Playwright tests" in pyproject
+    assert "pytestmark = pytest.mark.e2e" in live_test
+    assert "excluded from default `pytest` collection" in readme

@@ -149,7 +149,13 @@ class TestSidebarMnemoPolisNavigation:
         assert "if graph_tab.open" in graph
         assert "if mnemo_tab.open" in graph
         assert "render_component=False" in graph
-        assert "render_kg_d3_component(payload, height=740)" in graph
+        # Commit 326 extended the D3 component call with `initial_selected_concept`
+        # (persist the selected concept across tab switches). The assertion checks
+        # the components of the new signature rather than a single exact line, so
+        # it stays green whether the call is one-line or multi-line.
+        assert "render_kg_d3_component(" in graph
+        assert "height=740" in graph
+        assert "initial_selected_concept" in graph
 
     def test_knowledge_graph_is_default_and_mnemo_state_is_lazy(self):
         at = AppTest.from_function(_app_knowledge_surface_tabs)

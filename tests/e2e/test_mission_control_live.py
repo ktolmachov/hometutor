@@ -17,6 +17,8 @@ import pytest
 
 from tests.e2e.conftest import OVERFLOW_JS, open_streamlit_page
 
+pytestmark = pytest.mark.e2e
+
 # Release viewport matrix (docs/ui_ux_design_review_implementation_plan.md §W10.D).
 MISSION_CONTROL_VIEWPORTS: tuple[dict[str, int], ...] = (
     {"width": 1366, "height": 768},
@@ -24,12 +26,20 @@ MISSION_CONTROL_VIEWPORTS: tuple[dict[str, int], ...] = (
     {"width": 390, "height": 844},
 )
 
-# DOM markers proving Mission Control actually rendered (data-honesty: only
-# surfaces the home screen unconditionally paints in cold state).
-_MISSION_CONTROL_MARKERS: tuple[tuple[str, str], ...] = (
-    ("mode-card", "primary destination tiles"),
-    ("mission-tile", "mission tile content"),
-    ("ssr-banner", "Smart Study Router banner"),
+# DOM selectors proving Mission Control actually rendered. These are explicit
+# ``data-testid`` hooks emitted by ``app/ui/mission_control.py`` (not CSS class
+# names that also appear in injected ``<style>``), so a passing query means the
+# surface painted real elements — not just that the stylesheet was injected.
+#   * ``mission-control-ssr-banner`` — mission_control.py:401, rendered for both
+#     cold and returning users (render_mission_control → _render_ssr_banner).
+#   * ``mission-tile-`` prefix — mission_control.py:450, one per tile.
+#     Cold state paints exactly 3 (``_COLD_USER_TILE_IDS``); returning paints
+#     more. We assert the floor (>=3) so the gate is honest for cold smoke and
+#     does not over-fit to a specific non-cold tile count.
+_MISSION_CONTROL_SELECTORS: tuple[tuple[str, str, int], ...] = (
+    # (css_selector, label, min_count)
+    ('[data-testid="mission-control-ssr-banner"]', "SSR banner", 1),
+    ('[data-testid^="mission-tile-"]', "mission tile", 3),
 )
 
 
@@ -57,11 +67,27 @@ def test_mission_control_cold_state_live(
         main_el = page.query_selector('section[data-testid="stMain"]')
         assert main_el is not None, f"[{_vp_id(viewport)}] stMain container missing"
 
-        body_html = page.inner_html("body")
-        missing = [
-            token for token, _label in _MISSION_CONTROL_MARKERS if token not in body_html
-        ]
-        assert not missing, f"[{_vp_id(viewport)}] missing Mission Control markers: {missing}"
+        # Real-DOM marker check (NOT substring search in body_html — the CSS
+        # class names ``.mode-card`` / ``.mission-tile`` / ``.ssr-banner`` also
+        # live in the injected stylesheet, so a substring match could pass even
+        # when Mission Control never painted). Query actual elements by the
+        # explicit ``data-testid`` hooks the renderer emits.
+        counts = page.evaluate(
+            """
+            (selectors) => selectors.map(s => document.querySelectorAll(s).length)
+            """,
+            [sel for sel, _label, _min in _MISSION_CONTROL_SELECTORS],
+        )
+        observed = {
+            label: count
+            for (sel, label, _min), count in zip(_MISSION_CONTROL_SELECTORS, counts)
+        }
+        for sel, label, min_count in _MISSION_CONTROL_SELECTORS:
+            actual = observed[label]
+            assert actual >= min_count, (
+                f"[{_vp_id(viewport)}] {label}: querySelectorAll('{sel}') "
+                f"→ {actual}, expected >= {min_count}. observed={observed}"
+            )
 
         overflow = page.evaluate(OVERFLOW_JS)
         assert overflow["overflowX"] is False, (

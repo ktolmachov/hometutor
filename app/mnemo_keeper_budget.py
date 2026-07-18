@@ -108,17 +108,56 @@ def concept_set_hash(concept_ids: list[str] | tuple[str, ...] | None) -> str:
 
 
 def _provider_model_ids() -> tuple[str, str]:
-    """Best-effort provider/model identity for cache isolation (vision §6.1)."""
+    """Best-effort provider/model identity for cache isolation (vision §6.1).
+
+    Must mirror :func:`app.provider.get_llm` routing:
+    * ``cloud_fast`` → OPENAI_API_BASE + llm_model
+    * ``local_strict`` / ``balanced`` (local path) → LMSTUDIO_API_BASE + llm_model
+    * ``balanced`` with open CB + ready fallback → fallback base/model
+
+    Do **not** prefer ``openai_api_base`` for local profiles (it is non-empty by
+    default and would hide LMSTUDIO_API_BASE changes).
+    """
     try:
+        from app.llm_local_circuit import is_open
+        from app.provider import (
+            _lmstudio_api_base,
+            _resolve_primary_fallback_api_base,
+            _resolve_primary_fallback_model,
+            normalize_openai_compatible_api_base,
+            primary_chat_fallback_ready,
+        )
+
         settings = get_settings()
-        model = str(getattr(settings, "llm_model", "") or "").strip() or "unknown-model"
-        base = str(
-            getattr(settings, "openai_api_base", None)
-            or getattr(settings, "lmstudio_api_base", None)
-            or ""
-        ).strip()
-        provider = base or str(getattr(settings, "home_rag_local_profile", "") or "default")
-        # Compact stable ids (avoid huge keys with full URLs).
+        profile = str(
+            getattr(settings, "home_rag_local_profile", "balanced") or "balanced"
+        ).strip().lower()
+        default_model = str(getattr(settings, "llm_model", "") or "").strip() or "unknown-model"
+
+        if profile == "cloud_fast":
+            base = normalize_openai_compatible_api_base(
+                str(getattr(settings, "openai_api_base", "") or "")
+            )
+            model = default_model
+        else:
+            local_base = normalize_openai_compatible_api_base(_lmstudio_api_base(settings))
+            use_fallback = False
+            if profile == "balanced":
+                try:
+                    cb_open = bool(local_base and is_open(local_base))
+                    use_fallback = cb_open and primary_chat_fallback_ready(settings)
+                except Exception:  # noqa: BLE001 - CB probe must not break cache path
+                    use_fallback = False
+            if use_fallback:
+                fb_base = _resolve_primary_fallback_api_base(settings) or ""
+                fb_model = _resolve_primary_fallback_model(settings) or ""
+                base = normalize_openai_compatible_api_base(fb_base) if fb_base else local_base
+                model = str(fb_model).strip() or default_model
+            else:
+                base = local_base
+                model = default_model
+
+        provider = base or profile or "default"
         provider_id = hashlib.sha256(provider.encode("utf-8")).hexdigest()[:12]
         model_id = model[:64]
         return provider_id, model_id

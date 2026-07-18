@@ -306,8 +306,30 @@ def request_keeper(
     timeout_sec = _keeper_timeout_sec()
     t0 = time.perf_counter()
     try:
-        text = completer(system, user)
+        # Wall-clock guard: do not block UI beyond budget if provider hangs.
+        # Thread cannot be hard-killed; late result is discarded (vision §6.2 open #8).
+        text = _complete_with_timeout(completer, system, user, timeout_sec=timeout_sec)
         text = str(text or "").strip() or static_text
+    except TimeoutError:
+        elapsed_to = time.perf_counter() - t0
+        logger.info(
+            "mnemo_keeper_llm_timeout",
+            extra={
+                "scenario": scenario,
+                "elapsed_ms": int(elapsed_to * 1000),
+                "limit_s": timeout_sec,
+            },
+        )
+        cache.set(key, static_text)
+        return KeeperResult(
+            text=static_text,
+            scenario=scenario,
+            source="degrade",
+            reason="timeout",
+            cache_key=key,
+            used_llm=False,
+            budget_snapshot=budget.as_dict(),
+        )
     except Exception as exc:  # noqa: BLE001 — always degrade on LLM failure
         logger.info("mnemo_keeper_llm_failed", extra={"scenario": scenario, "error": str(exc)[:200]})
         cache.set(key, static_text)
@@ -322,7 +344,7 @@ def request_keeper(
         )
 
     elapsed = time.perf_counter() - t0
-    # Wall-clock budget (vision §6.2): late responses degrade rather than trust slow prose.
+    # Defense in depth if completer ignored the worker timeout.
     if elapsed > timeout_sec:
         logger.info(
             "mnemo_keeper_llm_timeout",
@@ -403,6 +425,37 @@ def _prompts_for_scenario(
 def _keeper_timeout_sec() -> float:
     """Module-level alias so tests can patch ``mnemo_keeper._keeper_timeout_sec``."""
     return keeper_timeout_sec()
+
+
+def _complete_with_timeout(
+    completer: Callable[[str, str], str],
+    system: str,
+    user: str,
+    *,
+    timeout_sec: float,
+) -> str:
+    """Run completer with a wall-clock deadline; raise TimeoutError on overrun.
+
+    Uses a worker thread so a hung provider does not block the Streamlit request
+    forever. The worker is not hard-cancelled (Python limitation); callers must
+    discard late results (we never join past the deadline).
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    from concurrent.futures import TimeoutError as FuturesTimeout
+
+    # Tiny / zero timeouts still go through the pool so tests stay uniform.
+    limit = max(0.001, float(timeout_sec or 0.001))
+    # wait=False on shutdown: do not block UI if the provider thread is still hung.
+    pool = ThreadPoolExecutor(max_workers=1)
+    try:
+        fut = pool.submit(completer, system, user)
+        try:
+            return str(fut.result(timeout=limit) or "")
+        except FuturesTimeout as exc:
+            fut.cancel()
+            raise TimeoutError(f"keeper LLM exceeded {limit}s") from exc
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
 
 def _default_llm_complete(system: str, user: str) -> str:

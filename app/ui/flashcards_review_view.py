@@ -87,6 +87,37 @@ _FC_INLINE_TUTOR_SESSION_ID_KEY = "fc_inline_tutor_session_id"
 _FC_INLINE_TUTOR_CARD_ID_KEY = "fc_inline_tutor_card_id"
 
 
+def _collapse_match_text(value: str) -> str:
+    """Normalize for soft concept/tag match: alnum runs, collapse separators."""
+    chars: list[str] = []
+    for ch in str(value or "").lower():
+        chars.append(ch if ch.isalnum() else " ")
+    return " ".join("".join(chars).split())
+
+
+def _card_matches_focus_needles(card: dict, needles: list[str]) -> bool:
+    """Soft match any needle against tags/front/back (hyphen vs space tolerant)."""
+    blob = " ".join(
+        str(card.get(k) or "") for k in ("tags", "front", "back", "concept", "topic")
+    )
+    blob_l = blob.lower()
+    blob_soft = _collapse_match_text(blob)
+    blob_alnum = "".join(ch for ch in blob_l if ch.isalnum())
+    for raw in needles:
+        n = str(raw or "").strip().lower()
+        if not n:
+            continue
+        if n in blob_l:
+            return True
+        soft = _collapse_match_text(n)
+        if soft and soft in blob_soft:
+            return True
+        alnum = "".join(ch for ch in n if ch.isalnum())
+        if alnum and alnum in blob_alnum:
+            return True
+    return False
+
+
 def _clear_inline_explanation_state() -> None:
     st.session_state.pop(_FC_INLINE_EXPLANATION_IDX_KEY, None)
     st.session_state.pop(_FC_INLINE_EXPLANATION_SEEDED_IDX_KEY, None)
@@ -142,6 +173,9 @@ def apply_pending_review_scope_reset(
     state["flashcards_review_session_tags_text"] = ""
     state["flashcards_review_session_tag_ids"] = []
     state["flashcards_review_session_scope_signature"] = review_scope_signature(None, None)
+    # Explicit scope reset must drop sticky 3D concept focus.
+    state.pop("flashcards_focus_concept", None)
+    state.pop("flashcards_review_focus_filter_once", None)
     reset_review_session_state(state)
     return True
 
@@ -1049,31 +1083,30 @@ def render_review(
             try:
                 data = api_call("GET", "/flashcards/due", params=build_review_due_params(selected_deck_id, selected_tags))
                 queue = list(data.get("cards") or [])
-                # Concept-scoped review from 3D «Развеять» / focus handoff:
-                # tags API filter is best-effort; also match front/back/tags blob.
-                focus = str(st.session_state.get("flashcards_focus_concept") or "").strip()
-                if focus:
-                    fl = focus.lower()
-                    def _card_matches_focus(card: dict) -> bool:
-                        blob = " ".join(
-                            str(card.get(k) or "")
-                            for k in ("tags", "front", "back", "concept", "topic")
-                        ).lower()
-                        return fl in blob
-
-                    scoped = [c for c in queue if isinstance(c, dict) and _card_matches_focus(c)]
-                    # If tag filter already empty due to mismatch, reload unscoped due then filter.
-                    if not scoped and selected_tags:
-                        data_all = api_call(
-                            "GET",
-                            "/flashcards/due",
-                            params=build_review_due_params(selected_deck_id, None),
-                        )
-                        queue_all = list(data_all.get("cards") or [])
-                        scoped = [
-                            c for c in queue_all if isinstance(c, dict) and _card_matches_focus(c)
+                # One-shot concept handoff from 3D: never sticky across later loads.
+                focus_once = bool(
+                    st.session_state.pop("flashcards_review_focus_filter_once", False)
+                )
+                focus = str(st.session_state.pop("flashcards_focus_concept", "") or "").strip()
+                if focus_once:
+                    needles = [t for t in (list(selected_tags or []) + [focus]) if str(t).strip()]
+                    if selected_tags and queue:
+                        # Tag API already OR-matched; trust it (label tags may not
+                        # contain raw concept_id substrings like linear-algebra).
+                        pass
+                    elif needles:
+                        if not queue and selected_tags:
+                            data_all = api_call(
+                                "GET",
+                                "/flashcards/due",
+                                params=build_review_due_params(selected_deck_id, None),
+                            )
+                            queue = list(data_all.get("cards") or [])
+                        queue = [
+                            c
+                            for c in queue
+                            if isinstance(c, dict) and _card_matches_focus_needles(c, needles)
                         ]
-                    queue = scoped
                 st.session_state["flashcards_review_queue_raw"] = list(queue)
                 st.session_state["flashcards_review_session_audit"] = []
                 _fc_ensure_expert_filter_defaults()

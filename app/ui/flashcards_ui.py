@@ -193,6 +193,9 @@ def _reset_review_session_state(state: Any) -> None:
     state["flashcards_review_queue_nonce"] = int(state.get("flashcards_review_queue_nonce", 0)) + 1
     state.pop("flashcards_review_last_action", None)
     state.pop(FLASHCARDS_REVIEW_RECEIPT_BASELINE_KEY, None)
+    # 3D / concept handoff is one-shot — never stick across «Начать снова» / reset.
+    state.pop("flashcards_focus_concept", None)
+    state.pop("flashcards_review_focus_filter_once", None)
 
 
 def _seed_review_scope(deck_id: int | None, *, autoload: bool = False) -> None:

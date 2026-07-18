@@ -19,6 +19,36 @@ def test_prompts_package_has_scenarios_and_silent_copy():
     assert str(prompts.KEEPER_PROMPT_VERSION).strip()
 
 
+def test_provider_model_ids_uses_lmstudio_for_local_profiles(monkeypatch):
+    """Local/BALANCED cache key must track LMSTUDIO_API_BASE, not default OPENAI base."""
+    from app import mnemo_keeper_budget as budget_mod
+
+    class _S:
+        home_rag_local_profile = "balanced"
+        llm_model = "local-qwen"
+        openai_api_base = "https://openrouter.ai/api/v1"
+        lmstudio_api_base = "http://127.0.0.1:1234/v1"
+        llm_api_base = ""
+
+    monkeypatch.setattr(budget_mod, "get_settings", lambda: _S())
+    monkeypatch.setattr(
+        "app.provider.primary_chat_fallback_ready",
+        lambda settings=None: False,
+    )
+    monkeypatch.setattr("app.llm_local_circuit.is_open", lambda base: False)
+
+    pid1, mid1 = budget_mod._provider_model_ids()
+    assert mid1 == "local-qwen"
+
+    class _S2(_S):
+        lmstudio_api_base = "http://127.0.0.1:9999/v1"
+
+    monkeypatch.setattr(budget_mod, "get_settings", lambda: _S2())
+    pid2, mid2 = budget_mod._provider_model_ids()
+    assert mid2 == "local-qwen"
+    assert pid1 != pid2  # base port change must isolate cache
+
+
 def test_build_cache_key_includes_provider_model_prompt_version():
     """Vision §6.1: cache must isolate provider/model/prompt changes."""
     k1 = keeper.build_cache_key(

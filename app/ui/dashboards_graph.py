@@ -250,14 +250,23 @@ def _run_kg_3d_door_action(
         target["current_topic"] = label or concept_id
         if action == "door_quiz":
             target["interactive_quiz_focus_concept"] = concept_id
-        if action == "door_flashcards":
-            target["flashcards_focus_concept"] = concept_id
 
     if action == "door_flashcards":
-        target["flashcards_subview"] = "review"
-        target[pending_section_key()] = FC_MAIN_SECTION_REVIEW
-        target["flashcards_review_queue"] = []
-        target["flashcards_review_index"] = 0
+        # Concept door → same due handoff as W2b review; bare district → Review nav only.
+        if concept_id and concept_id != "_district":
+            _apply_flashcards_concept_due_handoff(
+                target,
+                concept_id=concept_id,
+                label=label,
+            )
+        else:
+            target["flashcards_subview"] = "review"
+            target[pending_section_key()] = FC_MAIN_SECTION_REVIEW
+            target["flashcards_review_queue"] = []
+            target["flashcards_review_index"] = 0
+            target.pop("flashcards_focus_concept", None)
+            target.pop("flashcards_review_focus_filter_once", None)
+            target.pop("flashcards_review_autoload_pending", None)
 
     target[PENDING_CURRENT_VIEW_KEY] = view
     mark_kg_3d_event(target, event_id, "succeeded")
@@ -274,32 +283,23 @@ def _run_kg_3d_door_action(
         st.rerun()
 
 
-def _run_kg_3d_review_action(
-    *,
+def _apply_flashcards_concept_due_handoff(
     target,
-    envelope: dict,
+    *,
     concept_id: str,
-    event_id: str,
-    label: str,
-    state,
+    label: str = "",
 ) -> None:
-    """W2b: Flashcards review handoff with concept-scoped due autoload.
-
-    Sets focus + tags hint + ``flashcards_review_autoload_pending`` so Review
-    loads due cards and filters to the concept (tags/front/back match).
-    Does not invent flashcard rows or write domain DB state.
-    """
+    """Shared W2b / Оранжерея handoff: tags + one-shot focus + due autoload (UI-state only)."""
     from app.ui.flashcards_sections import FC_MAIN_SECTION_REVIEW, pending_section_key
-    from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
 
     focus = str(concept_id or "").strip()
     pretty = str(label or focus).strip() or focus
-    # UI-state focus consumed by flashcards_review_view after due load.
+    # One-shot keys: review view pops them on the first load (not sticky).
     target["flashcards_focus_concept"] = focus
+    target["flashcards_review_focus_filter_once"] = True
     target["flashcards_subview"] = "review"
     target[pending_section_key()] = FC_MAIN_SECTION_REVIEW
-    # Prefer concept id as tag filter (cards often tagged with concept/source);
-    # review view also client-filters by focus if tags alone miss cards.
+    # Tag bits: concept id + human label (backend tags filter is OR).
     tag_bits = [focus]
     if pretty and pretty.lower() != focus.lower():
         tag_bits.append(pretty)
@@ -315,8 +315,28 @@ def _run_kg_3d_review_action(
     target["flashcards_review_session_error"] = None
     target["flashcards_review_session_deck_id"] = None
     target["flashcards_review_deck_sync_pending"] = None
-    # Autoload due queue on next Flashcards review render (same key as deck seed).
     target["flashcards_review_autoload_pending"] = True
+
+
+def _run_kg_3d_review_action(
+    *,
+    target,
+    envelope: dict,
+    concept_id: str,
+    event_id: str,
+    label: str,
+    state,
+) -> None:
+    """W2b: Flashcards review handoff with concept-scoped due autoload.
+
+    Sets tags + one-shot focus + ``flashcards_review_autoload_pending``.
+    Does not invent flashcard rows or write domain DB state.
+    """
+    from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
+
+    focus = str(concept_id or "").strip()
+    pretty = str(label or focus).strip() or focus
+    _apply_flashcards_concept_due_handoff(target, concept_id=focus, label=pretty)
     target[PENDING_CURRENT_VIEW_KEY] = "Flashcards"
     mark_kg_3d_event(target, event_id, "succeeded")
     # Same as start: navigate away — no sticky hall action_result.
@@ -384,7 +404,14 @@ def _execute_kg_3d_action(
     action = str(envelope.get("action") or "")
     concept_id = str(envelope.get("concept_id") or "").strip()
     event_id = str(envelope.get("event_id") or "").strip()
-    label = _kg_3d_concept_label(knowledge_graph, concept_id)
+    # Prefer real graph label; identity fallback is not a human name.
+    # Envelope may carry the hall display label when the graph is thin/missing.
+    graph_label = str(_kg_3d_concept_label(knowledge_graph, concept_id) or "").strip()
+    env_label = str(envelope.get("label") or "").strip()
+    if graph_label and graph_label != concept_id:
+        label = graph_label
+    else:
+        label = env_label or graph_label or concept_id
     if action not in _KG3D_ACTIONS:
         mark_kg_3d_event(target, event_id, "failed")
         _set_kg_3d_action_result(

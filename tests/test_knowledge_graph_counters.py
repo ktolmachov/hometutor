@@ -1750,6 +1750,7 @@ class TestKg3dProductActions:
         assert state[PENDING_CURRENT_VIEW_KEY] == "Flashcards"
         assert state[pending_section_key()] == FC_MAIN_SECTION_REVIEW
         assert state["flashcards_focus_concept"] == "rag"
+        assert state["flashcards_review_focus_filter_once"] is True
         assert state["flashcards_review_autoload_pending"] is True
         tags_text = str(state.get("flashcards_review_session_tags_text") or "")
         assert "rag" in tags_text.lower()
@@ -1758,6 +1759,44 @@ class TestKg3dProductActions:
         assert state[KG_3D_ACTION_KEY]["action"] == "review"
         assert KG_3D_ACTION_RESULT_KEY not in state
         assert calls["collect"] == 0
+
+    def test_door_flashcards_with_concept_due_handoff(self, monkeypatch):
+        """Оранжерея + concept → same due autoload contract as W2b review."""
+        from app.ui import dashboards_graph as dg
+        from app.ui.flashcards_sections import FC_MAIN_SECTION_REVIEW, pending_section_key
+        from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
+
+        state: dict = {}
+
+        class _FakeSt:
+            @staticmethod
+            def toast(*a, **k):
+                pass
+
+            @staticmethod
+            def rerun():
+                pass
+
+            @staticmethod
+            def error(*a, **k):
+                pass
+
+        monkeypatch.setattr(dg, "st", _FakeSt)
+        env = {
+            "action": "door_flashcards",
+            "concept_id": "linear-algebra",
+            "label": "Линейная алгебра",
+            "event_id": "12345678-1234-1234-1234-1234567890bb",
+        }
+        dg._execute_kg_3d_action(env, knowledge_graph=None, doc_index={}, state=state)
+        assert state[PENDING_CURRENT_VIEW_KEY] == "Flashcards"
+        assert state[pending_section_key()] == FC_MAIN_SECTION_REVIEW
+        assert state["flashcards_focus_concept"] == "linear-algebra"
+        assert state["flashcards_review_focus_filter_once"] is True
+        assert state["flashcards_review_autoload_pending"] is True
+        tags = str(state.get("flashcards_review_session_tags_text") or "").lower()
+        assert "linear-algebra" in tags
+        assert "линейная" in tags or "алгебра" in tags
 
     def test_door_quiz_navigates_without_workbench(self, monkeypatch):
         """W4c: district door → product view; nav only."""

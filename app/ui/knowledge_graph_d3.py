@@ -680,6 +680,11 @@ def build_kg_payload(
         typed_relations=typed_relations,
     )
 
+    # P2: course lane colors + transfer flags (presentation only; no precedes writes)
+    from app.course_lanes import enrich_nodes_with_course_lanes
+
+    course_lanes = enrich_nodes_with_course_lanes(nodes)
+
     day_route = select_day_route(nodes, k=6)
 
     stats = _kg_counters_from_skeleton(skel, mastery_vector, learned)
@@ -702,6 +707,8 @@ def build_kg_payload(
         # Wave 3 enrichments
         "mastery_history": build_mastery_history(quiz_rows or [], ids),  # KG-07
         "compiler_health": dict(compiler_health) if isinstance(compiler_health, Mapping) else None,
+        # P2: hall course-lane legend (paint order; not curriculum)
+        "course_lanes": course_lanes,
     }
 
 
@@ -734,6 +741,29 @@ def _day_route_ids(payload: Mapping[str, Any]) -> list[str]:
             if rid:
                 route_ids.append(rid)
     return route_ids
+
+
+def _nodes_with_course_lanes(
+    payload: Mapping[str, Any],
+) -> tuple[list[Any], list[dict[str, Any]]]:
+    """Copy nodes and attach P2 course lane fields for hall/export paint.
+
+    Optional ``payload["course_owner_order"]`` reorders lanes/recommendations only —
+    never invents cross-course ``precedes``.
+    """
+    from app.course_lanes import enrich_nodes_with_course_lanes
+
+    raw = payload.get("nodes") or []
+    nodes: list[Any] = [dict(n) if isinstance(n, Mapping) else n for n in raw]
+    mutable = [n for n in nodes if isinstance(n, dict)]
+    owner = payload.get("course_owner_order")
+    owner_list = (
+        [str(x).strip() for x in owner if str(x).strip()]
+        if isinstance(owner, list)
+        else None
+    )
+    legend_rows = enrich_nodes_with_course_lanes(mutable, owner_order=owner_list)
+    return nodes, list(legend_rows)
 
 
 def build_kg_html(payload: Mapping[str, Any]) -> str:
@@ -1253,12 +1283,15 @@ def _kg3d_template_replacements(
             pres["route_override"] = []
         pres["domain_day_route_unchanged"] = True
         pres["route_override_presentation_only"] = True
+    # P2: ensure presentation lanes on nodes (export-safe; never writes precedes)
+    lane_nodes, course_lanes = _nodes_with_course_lanes(payload)
     return {
-        "__NODES__": _json_for_script(payload.get("nodes", [])),
+        "__NODES__": _json_for_script(lane_nodes),
         "__EDGES__": _json_for_script(payload.get("edges", [])),
         "__STATS__": _json_for_script(payload.get("stats", {})),
         "__HEALTH__": _json_for_script(payload.get("health")),
         "__DAY_ROUTE__": _json_for_script(_day_route_ids(payload)),
+        "__COURSE_LANES__": _json_for_script(course_lanes),
         "__MASTERY_HISTORY__": _json_for_script(payload.get("mastery_history", [])),
         "__DECAY_VECTOR__": _json_for_script(payload.get("decay_vector", {})),
         "__SNAPSHOT_DATE__": _json_for_script(snap),

@@ -687,6 +687,9 @@ class Test3DCoverageAndContracts:
         assert "function showToast" in html
         # R3 hall architecture (lanes + route underglow); no Three.js entities
         assert "laneColors" in html
+        assert "function isTransferNode" in html  # P2 multi-course highlight
+        assert "function courseLaneColor" in html  # P2 course lane tint
+        assert "COURSE_LANES" in html
         assert "rgba(154,108,255,0.14)" in html  # route underglow
         assert "no particles" in html.lower() or "no particles / stars / bokeh" in html
         # W0 quality: axis/nav, mobile fit, learner status, Q5/Q8/Q9

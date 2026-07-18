@@ -1,6 +1,7 @@
-"""P0-2a thin «Библиотека области»: catalog segment only (0 LLM, 0 storage).
+"""«Библиотека области»: catalog body (P0-2a) + schedule entry (P0-2b).
 
-Streamlit paints the shared read-model from ``app.library_catalog_read``.
+Catalog body paints courses/konspekts from ``app.library_catalog_read``.
+``render_library_catalog`` opens the schedule shell (Каталог | Пересадки | Маршрут).
 Browse never mutates study scope; ``activate_scope`` runs only on explicit button.
 """
 
@@ -21,7 +22,6 @@ from app.library_catalog_read import (
 )
 from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
 from app.ui.study_scope import activate_scope, get_active_scope
-from app.ui.widgets import render_panel_header
 from app.ui_client import load_index_stats
 
 LIBRARY_VIEW_NAME = "Библиотека"
@@ -161,25 +161,15 @@ def _render_source_paths(course: LibraryCourse) -> None:
             st.caption(f"… и ещё {overflow}")
 
 
-def render_library_catalog(index_stats: dict | None = None) -> None:
-    """Catalog-only library view: multi-course browse without changing scope."""
+def render_library_catalog_body(index_stats: dict | None = None) -> None:
+    """Catalog segment body: courses → konspekts → sections (no outer panel)."""
     if index_stats is None:
         index_stats = load_index_stats()
-
-    st.markdown('<div class="panel">', unsafe_allow_html=True)
-    render_panel_header(
-        "Библиотека области",
-        "Курсы и конспекты всей области — без смены активного курса",
-    )
-    st.caption(
-        "Просмотр не активирует курс. «Сделать активным» — только явная кнопка. "
-        "«Спросить» открывает Быстрый ответ с фильтром папки."
-    )
 
     active = get_active_scope()
     if active:
         title = active.get("title") or active.get("folder_rel") or "курс"
-        st.info(f"Сейчас активен: **{title}**. Библиотека показывает все курсы области.")
+        st.info(f"Сейчас активен: **{title}**. Каталог показывает все курсы области.")
 
     courses = list_library_courses(index_stats if isinstance(index_stats, dict) else None)
     if not courses:
@@ -187,16 +177,17 @@ def render_library_catalog(index_stats: dict | None = None) -> None:
             "Курсов в области пока нет. Добавьте материалы в data/ и обновите индекс "
             "или проверьте Mission Control."
         )
-        st.markdown("</div>", unsafe_allow_html=True)
         return
 
-    st.caption(f"Курсов: {len(courses)}")
+    st.caption(
+        f"Курсов: {len(courses)}. Просмотр не активирует курс; "
+        "«Сделать активным» — только явная кнопка."
+    )
 
     for idx, course in enumerate(courses):
         reindex_mark = " · нужна переиндексация" if course.needs_reindex else ""
         docs_n = len(course.source_paths)
-        header = f"### {course.title}"
-        st.markdown(header)
+        st.markdown(f"### {course.title}")
         st.caption(
             f"`{course.folder_rel}` · документов в индексе: {docs_n}{reindex_mark}"
         )
@@ -220,7 +211,12 @@ def render_library_catalog(index_stats: dict | None = None) -> None:
         _render_source_paths(course)
         st.markdown("---")
 
-    st.markdown("</div>", unsafe_allow_html=True)
+
+def render_library_catalog(index_stats: dict | None = None) -> None:
+    """Library entry: P0-2b schedule shell (Каталог | Пересадки | Маршрут)."""
+    from app.ui.library_schedule import render_library_schedule
+
+    render_library_schedule(index_stats)
 
 
 __all__ = [
@@ -228,5 +224,6 @@ __all__ = [
     "activate_course_from_library",
     "navigate_to_ask",
     "render_library_catalog",
+    "render_library_catalog_body",
     "_scope_snapshot",
 ]

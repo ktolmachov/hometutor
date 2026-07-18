@@ -37,11 +37,17 @@ def is_placeholder_plan_concept(raw: str | None) -> bool:
 def plan_block_concept_line(block: dict[str, Any]) -> str:
     # P1: prefer precomputed address «курс · урок» when present on the block.
     address = str(block.get("address") or "").strip()
+    # P2: optional transfer recommend hint (not a curriculum edge).
+    transfer = str(block.get("transfer_hint") or "").strip()
+    if address and transfer:
+        return f"{address} · {transfer}"
     if address:
         return address
     c = str(block.get("concept") or "").strip()
     if is_placeholder_plan_concept(c):
         return FALLBACK_CONCEPT_LINE_RU
+    if c and transfer:
+        return f"{c} · {transfer}"
     if c:
         return c
     return str(block.get("description") or "").strip()

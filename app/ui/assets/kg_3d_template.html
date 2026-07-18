@@ -821,6 +821,8 @@ const EDGES = __EDGES__ || [];
 const STATS = __STATS__ || {};
 const HEALTH = __HEALTH__ || null; // optional graph health from payload (score in statsline)
 const DAY_ROUTE = __DAY_ROUTE__ || [];
+/** P2: [{course, lane, color}] presentation legend — not curriculum. */
+const COURSE_LANES = __COURSE_LANES__ || [];
 const MASTERY_HISTORY = __MASTERY_HISTORY__ || [];
 const DECAY_VECTOR = __DECAY_VECTOR__ || {};
 const SNAPSHOT_DATE = __SNAPSHOT_DATE__ || '';
@@ -1243,6 +1245,35 @@ function conceptProgressX(n) {
   return ((hsh % 17) - 8) * (X_STEP * 0.35);
 }
 
+/** P2: course lane paint helpers (local|all). Presentation only — no precedes. */
+function isTransferNode(n) {
+  if (!n || n.is_lesson) return false;
+  if (n.is_transfer) return true;
+  const cs = Array.isArray(n.courses) ? n.courses : [];
+  return cs.length >= 2;
+}
+function courseLaneColor(n) {
+  if (!n) return '';
+  const baked = String(n.lane_color || '').trim();
+  if (baked) return baked;
+  const lane = Number(n.course_lane);
+  if (Number.isFinite(lane) && COURSE_LANES[lane] && COURSE_LANES[lane].color) {
+    return String(COURSE_LANES[lane].color);
+  }
+  const primary = String(n.primary_course || (Array.isArray(n.courses) ? n.courses[0] : '') || '').trim();
+  if (!primary) return '';
+  const hit = (COURSE_LANES || []).find((row) => String(row.course || '') === primary);
+  return hit ? String(hit.color || '') : '';
+}
+function hexToRgba(hex, alpha) {
+  const h = String(hex || '').replace('#', '').trim();
+  if (h.length !== 6) return `rgba(160,140,255,${alpha})`;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 function nodePos(n) {
   // Axes (independent meanings):
   //   Y = floor/layer (lesson order from precedes; concepts hug linked lesson floor)
@@ -1281,9 +1312,14 @@ function nodePos(n) {
   const route = dayRouteIds();
   const ri = route.indexOf(n.id);
   const routeLane = ri >= 0 ? ((ri % 3) - 1) * 42 : null;
-  const z = routeLane != null
+  let z = routeLane != null
     ? routeLane
     : ((c * 19 + (hsh % 29)) % 15 - 7) * 14 + ((hsh % 7) - 3) * 3;
+  // P2: slight Z bias by course_lane (owner order) — presentation only, floors stay on Y.
+  const courseLane = Number(n.course_lane);
+  if (Number.isFinite(courseLane) && routeLane == null) {
+    z += ((courseLane % 5) - 2) * 10;
+  }
   return { x, y, z };
 }
 
@@ -2263,9 +2299,22 @@ function draw() {
     if (viewMode === 'route' && !bothRoute) {
       ctx.strokeStyle = 'rgba(160,140,255,0.06)';
       ctx.lineWidth = 0.6;
-    } else if (viewMode === 'all') {
-      ctx.strokeStyle = 'rgba(160,140,255,0.14)';
-      ctx.lineWidth = 0.75;
+    } else if (viewMode === 'local' || viewMode === 'all') {
+      // P2: same-course tint; different courses = transfer-ish gold (still domain edges only)
+      const ca = courseLaneColor(a.n);
+      const cb = courseLaneColor(b.n);
+      const sameCourse = ca && cb && ca === cb;
+      const crossCourse = ca && cb && ca !== cb;
+      if (sameCourse) {
+        ctx.strokeStyle = hexToRgba(ca, viewMode === 'all' ? 0.28 : 0.34);
+        ctx.lineWidth = bothRoute ? 1.1 : 0.85;
+      } else if (crossCourse) {
+        ctx.strokeStyle = 'rgba(255,200,87,0.22)';
+        ctx.lineWidth = 0.9;
+      } else {
+        ctx.strokeStyle = viewMode === 'all' ? 'rgba(160,140,255,0.14)' : 'rgba(160,140,255,0.12)';
+        ctx.lineWidth = 0.75;
+      }
     } else {
       ctx.strokeStyle = bothRoute ? 'rgba(160,140,255,0.22)' : 'rgba(160,140,255,0.12)';
       ctx.lineWidth = 0.8;
@@ -2305,11 +2354,17 @@ function draw() {
     const isLearned = learnedConceptIds.has(nn.id); // mastery ≥80% (2D parity visual)
     const isCollected = isEmbedded && collectedConceptIds.has(nn.id);
     let col = nn.is_lesson ? '#64748b' : (nn.novel ? '#67e8f9' : ((nn.due || 0) > 0 ? '#60a5fa' : '#a5b4fc'));
+    // P2: in local|all, paint non-active nodes with course lane tint (transfer keeps gold ring later)
+    if ((viewMode === 'local' || viewMode === 'all') && !nn.is_lesson && !isActive && !isNext) {
+      const laneCol = courseLaneColor(nn);
+      if (laneCol && !onRoute) col = laneCol;
+      else if (laneCol && onRoute && !isDone) col = laneCol;
+    }
     if (quietRouteAnchor) col = '#475569';
     if (isDone && onRoute) col = isLearned ? '#72f1a5' : '#86efac';
     if (isActive) col = '#9a6cff';
     else if (isNext) col = '#42e8e0';
-    else if (onRoute && !isDone) col = '#a78bfa';
+    else if (onRoute && !isDone && viewMode === 'route') col = '#a78bfa';
 
     // W1 lantern: only when stop has quiz-seen signal (doneConceptIds).
     if (isDone && onRoute && (viewMode === 'route' || viewMode === 'local')) {
@@ -2371,6 +2426,14 @@ function draw() {
         : (presentHit ? 'rgba(255,201,74,0.75)' : 'rgba(196,181,253,0.45)');
       ctx.lineWidth = isActive ? 2.0 : (presentHit ? 1.8 : 1.4);
       ctx.beginPath(); ctx.arc(pr.sx, pr.sy, r * 1.34, 0, Math.PI * 2); ctx.stroke();
+    }
+    // P2: transfer highlight — multi-course nodes get gold ring in local|all
+    if ((viewMode === 'local' || viewMode === 'all') && isTransferNode(nn) && !quietRouteAnchor) {
+      ctx.strokeStyle = 'rgba(255,200,87,0.78)';
+      ctx.lineWidth = isActive ? 2.2 : 1.6;
+      ctx.beginPath();
+      ctx.arc(pr.sx, pr.sy, r * 1.48, 0, Math.PI * 2);
+      ctx.stroke();
     }
     // Hex focus frame for active stop (mockup contract)
     if (isActive) {

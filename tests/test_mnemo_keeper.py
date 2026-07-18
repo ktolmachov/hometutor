@@ -12,8 +12,10 @@ from app.prompts import mnemo_keeper as prompts
 def test_prompts_package_has_scenarios_and_silent_copy():
     assert prompts.SCENARIO_GUIDE in prompts.KEEPER_SCENARIOS
     assert prompts.SCENARIO_THREATS in prompts.KEEPER_SCENARIOS
+    assert prompts.SCENARIO_QUEST in prompts.KEEPER_SCENARIOS
     assert "Хранитель молчит" in prompts.KEEPER_SILENT_COPY
     assert "GUIDE_SYSTEM" in dir(prompts)
+    assert "из" in prompts.static_quest_text(stop_count=6, done_count=2, focus="RAG")
 
 
 def test_module_does_not_import_domain_writers():
@@ -242,6 +244,48 @@ def test_build_guide_view_model_w3b():
     assert "рассказ" in vm2["by_stop"].get("rag", "") or "рассказ" in vm2["text"]
 
 
+def test_build_quest_view_model_w3d():
+    """W3d: degrade «N из M» + focus; optional LLM one-liner."""
+    payload = {
+        "nodes": [
+            {"id": "rag", "label": "RAG", "mastery": 0.9, "learned": True},
+            {"id": "agent", "label": "Agent", "mastery": 0.2},
+            {"id": "tutor", "label": "Tutor", "mastery": 0.1},
+        ],
+        "day_route": ["rag", "agent", "tutor"],
+        "mastery_history": [{"date": "2026-07-18", "mastery": {}}],
+    }
+    state: dict = {}
+    vm = keeper_views.build_quest_view_model(payload, session_state=state, allow_llm=False)
+    assert vm["source"] == "degrade"
+    assert vm["used_llm"] is False
+    assert vm["stop_count"] == 3
+    assert vm["done_count"] == 1
+    assert "1 из 3" in vm["text"] or "1 из 3" in vm["text"].replace("\u00a0", " ")
+    assert "RAG" in vm["text"] or vm["focus"] == "RAG"
+
+    def fake(system: str, user: str) -> str:
+        assert "квестмейстер" in system.lower() or "Цель" in system or "Memory" in system
+        return "Сегодня мягко закроем 3 остановки, начиная с RAG."
+
+    vm2 = keeper_views.build_quest_view_model(
+        payload, session_state=state, allow_llm=True, llm_complete=fake
+    )
+    assert vm2["source"] == "llm"
+    assert "RAG" in vm2["text"]
+    assert "XP" not in vm2["text"] and "монет" not in vm2["text"].lower()
+
+
+def test_assemble_keeper_hall_vms_includes_quest():
+    payload = {
+        "nodes": [{"id": "rag", "label": "RAG", "worth_reason": "x"}],
+        "day_route": ["rag"],
+    }
+    vms = keeper_views.assemble_keeper_hall_vms(payload, allow_guide_llm=False)
+    assert set(vms) >= {"guide", "threats", "quest"}
+    assert vms["quest"]["stop_count"] == 1
+
+
 def test_guide_html_bakes_keeper_placeholder():
     from app.ui.knowledge_graph_d3 import build_kg_3d_html
 
@@ -252,10 +296,14 @@ def test_guide_html_bakes_keeper_placeholder():
         "day_route": ["rag"],
     }
     guide = keeper_views.build_guide_view_model(payload, allow_llm=False)
-    html = build_kg_3d_html(payload, keeper_guide=guide)
+    quest = keeper_views.build_quest_view_model(payload, allow_llm=False)
+    html = build_kg_3d_html(payload, keeper_guide=guide, keeper_quest=quest)
     assert "keeperbox" in html
     assert "updateKeeperLine" in html
     assert "__KEEPER_GUIDE__" not in html  # replaced
+    assert "__KEEPER_QUEST__" not in html
+    assert "questbox" in html and "updateQuestLine" in html
+    assert "1 из 1" in html or "Цель утра" in html
     assert "пора" in html or "маршруте" in html or "RAG" in html
     assert "function updateKeeperLine" in html
 

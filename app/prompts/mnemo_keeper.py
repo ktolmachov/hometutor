@@ -116,9 +116,19 @@ def static_threats_text(*, threats: list[dict[str, object]]) -> str:
     return "\n".join(lines)
 
 
-def static_quest_text(*, stop_count: int, focus: str = "") -> str:
-    focus_bit = f" Фокус: {focus}." if focus else ""
-    return f"Сегодня — {int(stop_count)} остановок Memory Run.{focus_bit}"
+def static_quest_text(
+    *,
+    stop_count: int,
+    focus: str = "",
+    done_count: int = 0,
+) -> str:
+    """Degrade for D: honest «N из M» (+ optional focus). No currency / XP."""
+    n = max(0, int(stop_count or 0))
+    d = max(0, min(int(done_count or 0), n)) if n else 0
+    if n <= 0:
+        return "Маршрут дня пока пуст — Memory Run ждёт остановки."
+    focus_bit = f" Фокус: {focus}." if str(focus or "").strip() else ""
+    return f"Цель утра: {d} из {n}.{focus_bit}"
 
 
 def static_voices_text() -> str:

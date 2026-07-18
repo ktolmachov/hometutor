@@ -131,6 +131,18 @@
   .kgx-keeper .kgx-keeper-meta{
     margin-top:0.35rem;font-size:0.62rem;color:var(--kgx-muted);letter-spacing:0.04em;
   }
+  /* W3d: quest line (morning goal; N of M degrade) */
+  .kgx-quest{
+    margin:0.45rem 0.75rem 0.15rem;padding:0.4rem 0.55rem;border-radius:6px;
+    border:1px solid rgba(255,201,74,0.28);
+    background:rgba(255,201,74,0.07);
+  }
+  .kgx-quest .kgx-eyebrow{margin:0 0 0.2rem;color:var(--kgx-gold,#ffc94a)}
+  .kgx-quest p{
+    margin:0;color:var(--kgx-text);font-size:0.76rem;line-height:1.35;
+    min-height:1.2em;
+  }
+  .kgx-quest .kgx-keeper-meta{margin-top:0.25rem}
   /* W5c: inline concept brief (graph retrieval; stay in hall) */
   .kgx-brief{
     margin-top:0.55rem;padding:0.5rem 0.6rem;border-radius:6px;
@@ -526,7 +538,7 @@
 </head>
 <body>
 <div id="wrap" data-scene-mode="route" data-memory="off" data-calm="off">
-  <button id="sidetoggle" type="button" aria-label="Показать/скрыть панель" aria-controls="side" aria-expanded="true">☰</button>
+  <button id="sidetoggle" type="button" aria-label="Показать/скрыть панели" aria-controls="stopdock side" aria-expanded="true">☰</button>
   <header id="topbar" class="kgx-topbar">
     <div class="kgx-brand">
       <span class="kgx-brand-mark" aria-hidden="true"></span>
@@ -686,6 +698,11 @@
           <span>Маршрут дня <span class="badge" id="routebadge">0</span></span>
           <strong id="worthbadge">W —</strong>
         </div>
+        <div class="kgx-quest" id="questbox" hidden>
+          <div class="kgx-eyebrow">Квестмейстер · цель утра</div>
+          <p id="questline">—</p>
+          <div class="kgx-keeper-meta" id="questsource"></div>
+        </div>
         <div id="toplist" class="list"></div>
         <div id="inventory" class="kgx-inventory" hidden>
           <span>Живой конспект</span>
@@ -709,6 +726,7 @@
         <li><strong>Хранитель</strong> — рассказ об остановке и список угроз забывания (офлайн; LLM — по кнопке в продукте). 🔁 развеет туман.</li>
         <li><strong>Районы</strong> — в Созвездии / Всей карте: Арена, Оранжерея, Магистраль, Кузница (двери в разделы). Не в первом кадре Маршрута.</li>
         <li><strong>Кратко</strong> — справка из данных графа в зале (read-only, без LLM). <strong>Спросить</strong> — handoff в «Чат с тьютором».</li>
+        <li><strong>Цель утра</strong> — строка квестмейстера: «N из M» офлайн; LLM — по кнопке в продукте. Без XP/монет.</li>
       </ol>
       <p class="kgx-onboard-diag" id="onboard-diag" hidden></p>
       <button class="kgx-onboard-ok" id="onboard-ok" type="button">Понятно</button>
@@ -733,6 +751,7 @@ const ACTION_RESULT = __ACTION_RESULT__ || null;
 const KEEPER_GUIDE = __KEEPER_GUIDE__;
 /** W3c: {text, source, items, count, used_llm} — deterministic threats + prose. */
 const KEEPER_THREATS = __KEEPER_THREATS__;
+const KEEPER_QUEST = __KEEPER_QUEST__;
 const WORKBENCH_COUNT_INIT = __WORKBENCH_COUNT__;
 /** Embedded-only view-model: concept_id → [{heading, in_basket, obsidian_uri}] (U2). */
 const CONCEPT_SECTIONS = __CONCEPT_SECTIONS__ || {};
@@ -2962,6 +2981,32 @@ function updateThreatsPanel(conceptId) {
   }
 }
 
+/** W3d: one-line morning goal (quest); degrade «N из M». */
+function updateQuestLine() {
+  const box = document.getElementById('questbox');
+  const lineEl = document.getElementById('questline');
+  const metaEl = document.getElementById('questsource');
+  if (!box || !lineEl) return;
+  const data = (KEEPER_QUEST && typeof KEEPER_QUEST === 'object') ? KEEPER_QUEST : null;
+  const text = data ? String(data.text || '').trim() : '';
+  if (!text || (data && data.source === 'none')) {
+    box.hidden = true;
+    lineEl.textContent = '—';
+    if (metaEl) metaEl.textContent = '';
+    return;
+  }
+  box.hidden = false;
+  lineEl.textContent = text;
+  if (metaEl) {
+    const src = String((data && data.source) || 'degrade');
+    const srcLabel = src === 'llm' ? 'LLM' : (src === 'cache' ? 'кэш' : 'офлайн');
+    const d = Number(data.done_count || 0);
+    const n = Number(data.stop_count || 0);
+    const prog = n > 0 ? `${d}/${n} · ` : '';
+    metaEl.textContent = `${prog}${srcLabel} · без валюты`;
+  }
+}
+
 function updateStopInfo() {
   const el = document.getElementById('stopinfo');
   const route = dayRouteIds();
@@ -2981,6 +3026,7 @@ function updateStopInfo() {
     if (reasonEl) reasonEl.textContent = 'Добавьте due-карточки или пройдите квиз — маршрут появится.';
     updateKeeperLine('');
     updateThreatsPanel('');
+    updateQuestLine();
     return;
   }
   const i = activeStopIndex;
@@ -3010,6 +3056,7 @@ function updateStopInfo() {
   if (reasonEl) reasonEl.textContent = reason ? `потому что: ${reason}` : 'в маршруте дня';
   updateKeeperLine(id);
   updateThreatsPanel(id);
+  updateQuestLine();
   if (worthBadge) worthBadge.textContent = `W ${(n.worth || 0).toFixed(1)}`;
   if (masteryRing) {
     masteryRing.style.setProperty('--m', (masteryPct != null ? masteryPct : 0) + '%');
@@ -3705,6 +3752,8 @@ function init() {
   activeStopIndex = 0;
   focusId = route[0] || null;
   viewMode = 'route';
+  // Measure docks before first fit (U5 HUD insets).
+  syncHudInsets();
   fitRouteCamera();
   buildTopList();
   updateStopInfo();
@@ -3737,6 +3786,12 @@ function init() {
   if ((SHOW_ONBOARDING || isEmbedded) && !hasSeenOnboarding()) {
     openOnboarding();
   }
+  // U5: second measure after layout settles (srcdoc/iframe first paint can report 0 dock width).
+  requestAnimationFrame(() => {
+    syncHudInsets();
+    if (viewMode === 'route') fitRouteCamera();
+    render();
+  });
 }
 init();
 </script>

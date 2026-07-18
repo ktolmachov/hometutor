@@ -214,3 +214,116 @@ def build_threats_view_model(
         # Hint for UI: review action dispels fog (W2b), not a new action.
         "review_action": "review",
     }
+
+
+# ── W3d: quest view-model (one-line morning goal; degrade = «N из M») ────
+
+
+def _route_done_count(payload: Mapping[str, Any] | None, route_ids: list[str]) -> int:
+    """Count day-route stops already touched (learned or mastery ≥ 0.8)."""
+    payload = payload or {}
+    by_id: dict[str, Mapping[str, Any]] = {}
+    for n in payload.get("nodes") or []:
+        if not isinstance(n, Mapping):
+            continue
+        cid = str(n.get("id") or "").strip()
+        if cid:
+            by_id[cid] = n
+    done = 0
+    for rid in route_ids:
+        n = by_id.get(rid) or {}
+        try:
+            mastery = float(n.get("mastery") or 0.0)
+        except (TypeError, ValueError):
+            mastery = 0.0
+        if mastery > 1.0:
+            mastery = mastery / 100.0
+        if bool(n.get("learned")) or mastery >= 0.8:
+            done += 1
+    return done
+
+
+def build_quest_view_model(
+    payload: Mapping[str, Any] | None,
+    *,
+    session_state: MutableMapping[str, Any] | None = None,
+    allow_llm: bool = False,
+    snapshot_date: str = "",
+    llm_complete: Callable[[str, str], str] | None = None,
+) -> dict[str, Any]:
+    """W3d / Keeper D: hall-ready quest line ``{text, source, stop_count, done_count, focus}``.
+
+    First paint: ``allow_llm=False`` → degrade «d из n» (+ focus label).
+    Optional LLM: one respectful morning-goal sentence (budget/cache via Keeper).
+    """
+    payload = payload or {}
+    stops = stops_from_kg_payload(payload)
+    route = [str(s.get("id") or "") for s in stops if str(s.get("id") or "").strip()]
+    focus = str((stops[0] or {}).get("label") or (route[0] if route else "")).strip()
+    done_count = _route_done_count(payload, route)
+    snap = str(snapshot_date or "").strip()
+    if not snap:
+        hist = payload.get("mastery_history") or []
+        if hist and isinstance(hist[-1], Mapping):
+            snap = str(hist[-1].get("date") or "").strip()
+    result = request_keeper(
+        prompts.SCENARIO_QUEST,
+        snapshot_date=snap,
+        day_route=route,
+        stops=stops,
+        focus=focus,
+        done_count=done_count,
+        allow_llm=allow_llm,
+        session_state=session_state,
+        llm_complete=llm_complete,
+    )
+    text = str(result.text or "").strip()
+    if len(text) > 200:
+        text = text[:199].rstrip() + "…"
+    return {
+        "text": text,
+        "source": result.source,
+        "reason": result.reason,
+        "stop_count": len(route),
+        "done_count": done_count,
+        "focus": focus,
+        "silent": text == KEEPER_SILENT_COPY or not text,
+        "used_llm": result.used_llm,
+        "budget": result.budget_snapshot,
+    }
+
+
+def assemble_keeper_hall_vms(
+    payload: Mapping[str, Any] | None,
+    *,
+    session_state: MutableMapping[str, Any] | None = None,
+    allow_guide_llm: bool = False,
+    allow_threats_llm: bool = False,
+    allow_quest_llm: bool = False,
+    snapshot_date: str = "",
+    llm_complete: Callable[[str, str], str] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """W3b/c/d: build guide + threats + quest for the 3D hall in one place."""
+    return {
+        "guide": build_guide_view_model(
+            payload,
+            session_state=session_state,
+            allow_llm=allow_guide_llm,
+            snapshot_date=snapshot_date,
+            llm_complete=llm_complete,
+        ),
+        "threats": build_threats_view_model(
+            payload,
+            session_state=session_state,
+            allow_llm=allow_threats_llm,
+            snapshot_date=snapshot_date,
+            llm_complete=llm_complete,
+        ),
+        "quest": build_quest_view_model(
+            payload,
+            session_state=session_state,
+            allow_llm=allow_quest_llm,
+            snapshot_date=snapshot_date,
+            llm_complete=llm_complete,
+        ),
+    }

@@ -233,13 +233,16 @@ def _static_for_scenario(
     threats: list[dict[str, object]] | None = None,
     stop_count: int = 0,
     focus: str = "",
+    done_count: int = 0,
 ) -> str:
     if scenario == prompts.SCENARIO_GUIDE:
         return prompts.static_guide_text(stops=list(stops or []))
     if scenario == prompts.SCENARIO_THREATS:
         return prompts.static_threats_text(threats=list(threats or []))
     if scenario == prompts.SCENARIO_QUEST:
-        return prompts.static_quest_text(stop_count=stop_count, focus=focus)
+        return prompts.static_quest_text(
+            stop_count=stop_count, focus=focus, done_count=done_count
+        )
     if scenario == prompts.SCENARIO_VOICES:
         return prompts.static_voices_text()
     return KEEPER_SILENT_COPY
@@ -298,6 +301,7 @@ def request_keeper(
     stops: list[dict[str, str]] | None = None,
     threats: list[dict[str, object]] | None = None,
     focus: str = "",
+    done_count: int = 0,
     locale: str = "ru",
     allow_llm: bool = False,
     session_state: MutableMapping[str, Any] | None = None,
@@ -361,6 +365,7 @@ def request_keeper(
         threats=threats,
         stop_count=stop_count,
         focus=focus,
+        done_count=int(done_count or 0),
     )
 
     if not allow_llm:
@@ -400,7 +405,14 @@ def request_keeper(
             budget_snapshot=budget.as_dict(),
         )
 
-    system, user = _prompts_for_scenario(scenario, stops=stops, threats=threats, stop_count=stop_count, focus=focus)
+    system, user = _prompts_for_scenario(
+        scenario,
+        stops=stops,
+        threats=threats,
+        stop_count=stop_count,
+        focus=focus,
+        done_count=int(done_count or 0),
+    )
     est_in = estimate_tokens(system) + estimate_tokens(user)
     est_out = min(MAX_OUTPUT_TOKENS_PER_CALL, 200)
     if not budget.can_afford(est_input=est_in, est_output=est_out):
@@ -463,13 +475,18 @@ def _prompts_for_scenario(
     threats: list[dict[str, object]],
     stop_count: int,
     focus: str,
+    done_count: int = 0,
 ) -> tuple[str, str]:
     if scenario == prompts.SCENARIO_GUIDE:
         return prompts.GUIDE_SYSTEM, prompts.build_guide_user_prompt(stops=stops)
     if scenario == prompts.SCENARIO_THREATS:
         return prompts.THREATS_SYSTEM, prompts.build_threats_user_prompt(threats=threats)
     if scenario == prompts.SCENARIO_QUEST:
-        user = f"Остановок: {stop_count}. Фокус: {focus or 'маршрут дня'}."
+        user = (
+            f"Остановок: {stop_count}. Пройдено (quiz/mastery): {int(done_count or 0)}. "
+            f"Фокус: {focus or 'маршрут дня'}. "
+            "Одна строка цели утра ≤160 символов, без XP/монет."
+        )
         return prompts.QUEST_SYSTEM, user
     if scenario == prompts.SCENARIO_VOICES:
         return prompts.VOICES_SYSTEM, "Сгенерируй 3 реплики: Туман, Призрак, Разлом."

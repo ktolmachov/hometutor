@@ -1011,6 +1011,31 @@ def _normalize_keeper_threats(
     }
 
 
+def _normalize_keeper_quest(
+    keeper_quest: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """W3d: coerce quest view-model (one morning-goal line)."""
+    if not (isinstance(keeper_quest, Mapping) and keeper_quest):
+        return {
+            "text": "",
+            "source": "none",
+            "reason": "",
+            "stop_count": 0,
+            "done_count": 0,
+            "focus": "",
+            "used_llm": False,
+        }
+    return {
+        "text": str(keeper_quest.get("text") or ""),
+        "source": str(keeper_quest.get("source") or "degrade"),
+        "reason": str(keeper_quest.get("reason") or ""),
+        "stop_count": int(keeper_quest.get("stop_count") or 0),
+        "done_count": int(keeper_quest.get("done_count") or 0),
+        "focus": str(keeper_quest.get("focus") or ""),
+        "used_llm": bool(keeper_quest.get("used_llm")),
+    }
+
+
 def build_kg_3d_html(
     payload: Mapping[str, Any],
     *,
@@ -1024,6 +1049,7 @@ def build_kg_3d_html(
     show_onboarding: bool = False,
     keeper_guide: Mapping[str, Any] | None = None,
     keeper_threats: Mapping[str, Any] | None = None,
+    keeper_quest: Mapping[str, Any] | None = None,
 ) -> str:
     """Self-contained offline 3D Knowledge Graph hall (no CDN).
 
@@ -1041,6 +1067,7 @@ def build_kg_3d_html(
     - ``show_onboarding``: first-open hall rules overlay (U4)
     - ``keeper_guide``: W3b Хранитель view-model ``{text, source, by_stop, ...}``
     - ``keeper_threats``: W3c threats view-model ``{text, items, source, ...}``
+    - ``keeper_quest``: W3d quest line ``{text, stop_count, done_count, ...}``
     """
     mode = "embedded" if str(host_mode or "").strip().lower() == "embedded" else "export"
     snap = str(exported_at or "").strip() or date.today().isoformat()
@@ -1058,6 +1085,7 @@ def build_kg_3d_html(
 
     guide_vm = _normalize_keeper_guide(keeper_guide)
     threats_vm = _normalize_keeper_threats(keeper_threats)
+    quest_vm = _normalize_keeper_quest(keeper_quest)
 
     replacements = {
         "__NODES__": _json_for_script(payload.get("nodes", [])),
@@ -1077,6 +1105,7 @@ def build_kg_3d_html(
         "__SHOW_ONBOARDING__": "true" if onboard else "false",
         "__KEEPER_GUIDE__": _json_for_script(guide_vm),
         "__KEEPER_THREATS__": _json_for_script(threats_vm),
+        "__KEEPER_QUEST__": _json_for_script(quest_vm),
     }
     html = _load_3d_template()
     for placeholder, value in replacements.items():
@@ -1135,6 +1164,7 @@ def render_kg_3d_hall(
     show_onboarding: bool = False,
     keeper_guide: Mapping[str, Any] | None = None,
     keeper_threats: Mapping[str, Any] | None = None,
+    keeper_quest: Mapping[str, Any] | None = None,
     height: int = 720,
     key: str = "kg_3d_hall_component",
 ) -> Any:
@@ -1159,6 +1189,7 @@ def render_kg_3d_hall(
         show_onboarding=show_onboarding,
         keeper_guide=keeper_guide,
         keeper_threats=keeper_threats,
+        keeper_quest=keeper_quest,
     )
     return _kg_3d_component()(
         html=html,

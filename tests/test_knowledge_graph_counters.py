@@ -586,12 +586,16 @@ class Test3DCoverageAndContracts:
         # U5 split-rail HUD: two floating docks over a full-bleed stage.
         # Stop details = left dock (#stopdock), day route = right dock (#side).
         assert 'id="stopdock"' in html3
+        assert 'class="kgx-panel kgx-hud"' in html3  # both docks use floating HUD chrome
         hud_css = html3.split(".kgx-hud{", 1)[1].split("}", 1)[0]
         assert "position:absolute" in hud_css
         assert "overflow-y:auto" in hud_css  # the dock owns its scroll (no nested cap)
         assert "--hud-l" in html3 and "--hud-r" in html3  # stage insets for the docks
         assert "function syncHudInsets" in html3
         assert "function hudInsets" in html3
+        # U5: second measure after layout settles (iframe/srcdoc first paint).
+        assert "requestAnimationFrame" in html3 and "syncHudInsets()" in html3
+        assert 'aria-controls="stopdock side"' in html3
         assert "kgx-route-panel" in html3
         assert "min-height:40px" in html3  # CTA height
         assert "12px system-ui" in html3  # canvas labels ≥12px
@@ -724,6 +728,10 @@ class Test3DCoverageAndContracts:
         assert "threatsbox" in html
         assert "updateThreatsPanel" in html
         assert "KEEPER_THREATS" in html
+        # W3d quest line (morning goal)
+        assert 'id="questbox"' in html
+        assert "updateQuestLine" in html
+        assert "KEEPER_QUEST" in html
         # W4c district doors
         assert 'id="districts"' in html
         assert "door_quiz" in html and "door_flashcards" in html

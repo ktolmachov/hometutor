@@ -747,6 +747,8 @@ class Test3DCoverageAndContracts:
         assert "downloadHallPhotoLocal" in html
         assert 'id="scenepresets"' in html and "applyScenePreset" in html
         assert "scenePresentation" in html
+        assert "applyHostPresentation" in html
+        assert "SCENE_PRESENTATION" in html
         assert "domain" in html.lower() or "presentation" in html.lower()
         # W4c district doors
         assert 'id="districts"' in html

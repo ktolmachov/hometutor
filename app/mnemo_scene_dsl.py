@@ -268,3 +268,137 @@ def preset_presentation(name: str) -> dict[str, Any]:
     if ok is None:
         return empty_presentation()
     return presentation_from_dsl(ok)
+
+
+def _nl_keyword_envelope(low: str) -> dict[str, Any] | None:
+    """Map common Russian/English phrases to a raw DSL envelope."""
+    if low in {"сброс", "clear", "сбросить", "reset", "очистить"}:
+        return {"version": SCENE_DSL_VERSION, "command": "clear"}
+    if any(k in low for k in ("спокойн", "calm", "без туман", "без антагон")):
+        return {
+            "version": SCENE_DSL_VERSION,
+            "command": "set_overlay",
+            "overlay": "calm",
+        }
+    if any(k in low for k in ("вся карта", "all map", "полный граф")):
+        return {
+            "version": SCENE_DSL_VERSION,
+            "command": "set_scene_mode",
+            "scene_mode": "all",
+        }
+    if any(k in low for k in ("созвездие", "local", "контекст")):
+        return {
+            "version": SCENE_DSL_VERSION,
+            "command": "set_scene_mode",
+            "scene_mode": "local",
+        }
+    if any(k in low for k in ("маршрут", "route", "дорожка")):
+        return {
+            "version": SCENE_DSL_VERSION,
+            "command": "set_scene_mode",
+            "scene_mode": "route",
+        }
+    if any(k in low for k in ("слаб", "weak", "туман", "разлом", "забыв")):
+        return {
+            "version": SCENE_DSL_VERSION,
+            "command": "filter",
+            "filter": "weak",
+        }
+    return None
+
+
+def _nl_focus_envelope(
+    focus_key: str,
+    *,
+    node_ids: set[str] | frozenset[str] | None,
+    node_labels: Mapping[str, str] | None,
+) -> dict[str, Any] | None:
+    focus_low = focus_key.lower()
+    allowed = {str(n).strip() for n in (node_ids or set()) if str(n).strip()}
+    labels = {
+        str(k).strip(): str(v or "").strip()
+        for k, v in (node_labels or {}).items()
+        if str(k).strip()
+    }
+    if focus_low in {a.lower() for a in allowed}:
+        cid = next(a for a in allowed if a.lower() == focus_low)
+        return {
+            "version": SCENE_DSL_VERSION,
+            "command": "focus",
+            "node_id": cid,
+        }
+    for cid, label in labels.items():
+        if not label:
+            continue
+        if focus_low == label.lower() or focus_low in label.lower():
+            if allowed and cid not in allowed:
+                continue
+            return {
+                "version": SCENE_DSL_VERSION,
+                "command": "focus",
+                "node_id": cid,
+                "filter": label[:80],
+            }
+    if len(focus_key) >= 2:
+        return {
+            "version": SCENE_DSL_VERSION,
+            "command": "filter",
+            "filter": focus_key[:80],
+        }
+    return None
+
+
+def parse_nl_scene_command(
+    text: str,
+    *,
+    node_ids: set[str] | frozenset[str] | None = None,
+    node_labels: Mapping[str, str] | None = None,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Deterministic NL → DSL envelope (no LLM, no JS).
+
+    Returns ``(raw_envelope, None)`` or ``(None, reason)``. Caller must still
+    run :func:`validate_scene_dsl` / :func:`presentation_from_dsl`.
+    """
+    raw = str(text or "").strip()
+    if not raw:
+        return None, "empty"
+    if len(raw) > 200:
+        return None, "too_long"
+    low = raw.lower()
+    for bad in ("eval", "script", "http://", "https://", "javascript:", "<", ">", "{", "}"):
+        if bad in low:
+            return None, "forbidden_token"
+
+    keyed = _nl_keyword_envelope(low)
+    if keyed is not None:
+        return keyed, None
+
+    focus_key = raw
+    for prefix in ("фокус ", "focus ", "покажи ", "show ", "найди ", "на ", "к "):
+        if low.startswith(prefix):
+            focus_key = raw[len(prefix) :].strip()
+            break
+    focused = _nl_focus_envelope(
+        focus_key, node_ids=node_ids, node_labels=node_labels
+    )
+    if focused is not None:
+        return focused, None
+    return None, "unrecognized"
+
+
+def nl_to_presentation(
+    text: str,
+    *,
+    node_ids: set[str] | frozenset[str] | None = None,
+    node_labels: Mapping[str, str] | None = None,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Parse NL → validate → presentation state. Safe end-to-end helper."""
+    raw, err = parse_nl_scene_command(
+        text, node_ids=node_ids, node_labels=node_labels
+    )
+    if raw is None:
+        return None, err or "unrecognized"
+    ok, verr = try_validate_scene_dsl(raw, node_ids=node_ids)
+    if ok is None:
+        return None, verr or "invalid"
+    return presentation_from_dsl(ok), None

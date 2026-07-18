@@ -1575,48 +1575,6 @@ def _render_kg_graph_controls(
         )
 
 
-def _build_keeper_view_models(payload) -> dict:
-    """Keeper hall VMs (offline first; LLM on explicit session flags)."""
-    snap_date = ""
-    try:
-        hist = payload.get("mastery_history") or []
-        if hist and isinstance(hist[-1], dict):
-            snap_date = str(hist[-1].get("date") or "")
-    except Exception:  # noqa: BLE001 - malformed mastery history must not block keeper build
-        snap_date = ""
-    try:
-        from app.mnemo_keeper_views import assemble_keeper_hall_vms
-
-        vms = assemble_keeper_hall_vms(
-            payload,
-            session_state=st.session_state,
-            allow_guide_llm=bool(st.session_state.pop("kg_3d_keeper_guide_llm_once", False)),
-            allow_threats_llm=bool(
-                st.session_state.pop("kg_3d_keeper_threats_llm_once", False)
-            ),
-            allow_quest_llm=bool(st.session_state.pop("kg_3d_keeper_quest_llm_once", False)),
-            # H/G: first paint offline; no extra host buttons (budget reserved for A/B/D).
-            allow_voices_llm=False,
-            allow_chronicle_llm=False,
-            snapshot_date=snap_date,
-        )
-        st.session_state["kg_3d_keeper_guide_source"] = str(
-            (vms.get("guide") or {}).get("source") or ""
-        )
-        st.session_state["kg_3d_keeper_threats_source"] = str(
-            (vms.get("threats") or {}).get("source") or ""
-        )
-        st.session_state["kg_3d_keeper_threats_count"] = int(
-            (vms.get("threats") or {}).get("count") or 0
-        )
-        st.session_state["kg_3d_keeper_quest_source"] = str(
-            (vms.get("quest") or {}).get("source") or ""
-        )
-        return vms
-    except Exception:  # noqa: BLE001 - keeper is optional; hall must still render
-        return {}
-
-
 def _prepare_mnemo_polis_surface(
     *,
     payload: dict,
@@ -1669,7 +1627,9 @@ def _prepare_mnemo_polis_surface(
     if show_onboarding:
         st.session_state["kg_3d_onboard_shown"] = True
 
-    keeper_vms = _build_keeper_view_models(payload)
+    from app.ui.dashboards_graph_keeper import build_keeper_view_models
+
+    keeper_vms = build_keeper_view_models(payload)
     architect_signal = None
     try:
         from app.ui.knowledge_graph_d3 import build_architect_signal
@@ -1715,8 +1675,13 @@ def _render_mnemo_polis_surface(
         "Хранитель (экскурсия/угрозы/цель/голоса/летопись) · Правила · ◌."
     )
     from app.ui.dashboards_graph_keeper import render_keeper_control_panel
+    from app.ui.dashboards_graph_scene import (
+        consume_scene_presentation,
+        render_scene_dsl_panel,
+    )
 
     render_keeper_control_panel()
+    render_scene_dsl_panel(node_ids=node_ids, payload=payload)
     hall_value = render_kg_3d_hall(
         payload,
         session_nonce=runtime["nonce"],
@@ -1731,6 +1696,7 @@ def _render_mnemo_polis_surface(
         keeper_voices=runtime["keeper_vms"].get("voices"),
         keeper_chronicle=runtime["keeper_vms"].get("chronicle"),
         architect_signal=runtime["architect_signal"],
+        scene_presentation=consume_scene_presentation(),
         height=720,
         key="kg_3d_hall_component",
     )

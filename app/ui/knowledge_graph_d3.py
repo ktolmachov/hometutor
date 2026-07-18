@@ -1139,6 +1139,7 @@ def build_kg_3d_html(
     keeper_voices: Mapping[str, Any] | None = None,
     keeper_chronicle: Mapping[str, Any] | None = None,
     architect_signal: Mapping[str, Any] | None = None,
+    scene_presentation: Mapping[str, Any] | None = None,
 ) -> str:
     """Self-contained offline 3D Knowledge Graph hall (no CDN).
 
@@ -1160,6 +1161,7 @@ def build_kg_3d_html(
     - ``keeper_voices``: H antagonist lines
     - ``keeper_chronicle``: W6c летописец over G4.2 history
     - ``architect_signal``: W6d construction banner when map unready/stale
+    - ``scene_presentation``: W5b.2 presentation-only apply (day_route untouched)
     """
     mode = "embedded" if str(host_mode or "").strip().lower() == "embedded" else "export"
     snap = str(exported_at or "").strip() or date.today().isoformat()
@@ -1170,6 +1172,7 @@ def build_kg_3d_html(
         sections_vm: dict[str, list[dict[str, Any]]] = {}
         # Export snapshot is self-contained — no live publish construction banner.
         architect_signal = None
+        scene_presentation = None
     else:
         wb_count = int(workbench_count) if workbench_count is not None else None
         nonce = str(session_nonce or "").strip()
@@ -1193,6 +1196,7 @@ def build_kg_3d_html(
         keeper_voices=keeper_voices,
         keeper_chronicle=keeper_chronicle,
         architect_signal=architect_signal,
+        scene_presentation=scene_presentation,
     )
     html = _load_3d_template()
     for placeholder, value in replacements.items():
@@ -1217,8 +1221,29 @@ def _kg3d_template_replacements(
     keeper_voices: Mapping[str, Any] | None,
     keeper_chronicle: Mapping[str, Any] | None,
     architect_signal: Mapping[str, Any] | None = None,
+    scene_presentation: Mapping[str, Any] | None = None,
 ) -> dict[str, str]:
     """Build placeholder → JSON map for the 3D hall template."""
+    from app.mnemo_scene_dsl import empty_presentation
+
+    pres = empty_presentation()
+    if isinstance(scene_presentation, Mapping) and scene_presentation:
+        # Only allow known presentation keys (never domain writers).
+        for key in (
+            "scene_mode",
+            "overlay",
+            "filter",
+            "focus_id",
+            "route_override",
+            "route_override_presentation_only",
+            "domain_day_route_unchanged",
+        ):
+            if key in scene_presentation:
+                pres[key] = scene_presentation[key]
+        if not isinstance(pres.get("route_override"), list):
+            pres["route_override"] = []
+        pres["domain_day_route_unchanged"] = True
+        pres["route_override_presentation_only"] = True
     return {
         "__NODES__": _json_for_script(payload.get("nodes", [])),
         "__EDGES__": _json_for_script(payload.get("edges", [])),
@@ -1245,6 +1270,7 @@ def _kg3d_template_replacements(
         "__ARCHITECT_SIGNAL__": _json_for_script(
             _normalize_architect_signal(architect_signal)
         ),
+        "__SCENE_PRESENTATION__": _json_for_script(pres),
     }
 
 
@@ -1303,6 +1329,7 @@ def render_kg_3d_hall(
     keeper_voices: Mapping[str, Any] | None = None,
     keeper_chronicle: Mapping[str, Any] | None = None,
     architect_signal: Mapping[str, Any] | None = None,
+    scene_presentation: Mapping[str, Any] | None = None,
     height: int = 720,
     key: str = "kg_3d_hall_component",
 ) -> Any:
@@ -1331,6 +1358,7 @@ def render_kg_3d_hall(
         keeper_voices=keeper_voices,
         keeper_chronicle=keeper_chronicle,
         architect_signal=architect_signal,
+        scene_presentation=scene_presentation,
     )
     return _kg_3d_component()(
         html=html,

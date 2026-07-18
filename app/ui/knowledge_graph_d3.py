@@ -550,8 +550,12 @@ def build_kg_payload(
     quiz_rows: List[Dict[str, Any]] | None = None,
     typed_relations: Iterable[Mapping[str, Any]] | None = None,
     compiler_health: Mapping[str, Any] | None = None,
+    course_owner_order: Sequence[str] | None = None,
 ) -> Dict[str, Any]:
-    """Assemble all graph data for the D3 renderer."""
+    """Assemble all graph data for the D3 renderer.
+
+    ``course_owner_order`` is presentation-only (lane paint / recommendations).
+    """
     mastery_vector = mastery_vector or {}
     learned = {str(x).strip() for x in (learned_set or []) if str(x).strip()}
     doc_index = doc_index or {}
@@ -683,7 +687,10 @@ def build_kg_payload(
     # P2: course lane colors + transfer flags (presentation only; no precedes writes)
     from app.course_lanes import enrich_nodes_with_course_lanes
 
-    course_lanes = enrich_nodes_with_course_lanes(nodes)
+    owner_list = [
+        str(x).strip() for x in (course_owner_order or []) if str(x).strip()
+    ] or None
+    course_lanes = enrich_nodes_with_course_lanes(nodes, owner_order=owner_list)
 
     day_route = select_day_route(nodes, k=6)
 
@@ -709,6 +716,7 @@ def build_kg_payload(
         "compiler_health": dict(compiler_health) if isinstance(compiler_health, Mapping) else None,
         # P2: hall course-lane legend (paint order; not curriculum)
         "course_lanes": course_lanes,
+        "course_owner_order": list(owner_list or []),
     }
 
 
@@ -1440,6 +1448,7 @@ def render_d3_knowledge_graph(
     *,
     height: int = 720,
     render_component: bool = True,
+    course_owner_order: Sequence[str] | None = None,
 ) -> Dict[str, Any]:
     """Render via a local Streamlit component; return payload for companion widgets."""
     sr_records: List[Dict[str, Any]] = []
@@ -1480,6 +1489,16 @@ def render_d3_knowledge_graph(
     except Exception:  # noqa: BLE001 - missing sidecar must not break graph render
         compiler_health = None
 
+    if course_owner_order is None:
+        try:
+            import streamlit as st
+
+            from app.course_owner_order import read_course_owner_order
+
+            course_owner_order = read_course_owner_order(st.session_state)
+        except Exception:  # noqa: BLE001 - optional session; tests/export without Streamlit
+            course_owner_order = None
+
     payload = build_kg_payload(
         concepts,
         mastery_vector,
@@ -1490,6 +1509,7 @@ def render_d3_knowledge_graph(
         quiz_rows,
         typed_relations,
         compiler_health=compiler_health,
+        course_owner_order=course_owner_order,
     )
     if render_component:
         render_kg_d3_component(payload, height=height)

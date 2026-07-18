@@ -236,21 +236,39 @@ def list_route_tiles(
 
 def list_catalog_course_tiles(
     index_stats: Mapping[str, Any] | None = None,
+    *,
+    owner_order: Sequence[str] | None = None,
 ) -> list[ScheduleTile]:
-    """Course tiles for the catalog segment (same courses as library read-model)."""
+    """Course tiles for the catalog segment (same courses as library read-model).
+
+    Optional ``owner_order`` reorders tiles (presentation only — no precedes).
+    """
+    from app.course_lanes import resolve_course_order
+
+    courses = list_library_courses(index_stats)
+    by_rel = {c.folder_rel: c for c in courses}
+    ordered_rels = resolve_course_order(
+        [c.folder_rel for c in courses],
+        owner_order=owner_order,
+    )
     tiles: list[ScheduleTile] = []
-    for c in list_library_courses(index_stats):
+    for rank, rel in enumerate(ordered_rels, start=1):
+        c = by_rel.get(rel)
+        if c is None:
+            continue
         n_docs = len(c.source_paths)
         status = "нужна переиндексация" if c.needs_reindex else "в индексе"
         if n_docs:
             status = f"{status} · {n_docs} док."
+        if owner_order:
+            status = f"порядок {rank} · {status}"
         tiles.append(
             ScheduleTile(
                 kind="catalog_course",
                 title=c.title,
                 address=f"{c.folder_rel} · курс",
                 status=status,
-                quant=f"{n_docs} док.",
+                quant=f"#{rank} · {n_docs} док." if owner_order else f"{n_docs} док.",
                 courses=(c.folder_rel,),
                 cta="activate",
                 meta=c.folder_rel,

@@ -29,6 +29,12 @@ from app.ui.library_catalog import (
 from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
 from app.ui.widgets import render_panel_header
 from app.ui_client import load_index_stats
+from app.course_owner_order import (
+    merge_owner_order_with_available,
+    move_course_in_order,
+    read_course_owner_order,
+    write_course_owner_order,
+)
 from app.library_catalog_read import list_library_courses
 
 _SEG_KEY = "library_schedule_segment"
@@ -77,10 +83,17 @@ def _optional_mastery_and_due() -> tuple[dict[str, float], list[str]]:
 
 def _build_schedule_context(
     index_stats: dict | None,
+    *,
+    owner_order: list[str] | None = None,
 ) -> dict[str, Any]:
+    from app.course_lanes import enrich_nodes_with_course_lanes
+
     courses = list_library_courses(index_stats)
+    available = [c.folder_rel for c in courses]
+    owner = merge_owner_order_with_available(available, owner_order=owner_order)
     concepts, rels = _load_graph_bundle()
     nodes = build_concept_schedule_nodes(concepts, rels)
+    enrich_nodes_with_course_lanes(nodes, owner_order=owner)
     mastery, due_ids = _optional_mastery_and_due()
     nodes, day_route = enrich_nodes_with_day_route(
         nodes,
@@ -90,7 +103,7 @@ def _build_schedule_context(
     )
     transfers = list_transfer_tiles(nodes)
     route = list_route_tiles(nodes, day_route)
-    catalog = list_catalog_course_tiles(index_stats)
+    catalog = list_catalog_course_tiles(index_stats, owner_order=owner)
     non_lesson = sum(1 for n in nodes if not n.get("is_lesson"))
     summary = build_area_summary_tile(
         index_stats=index_stats,
@@ -105,7 +118,45 @@ def _build_schedule_context(
         "transfers": transfers,
         "route": route,
         "courses": courses,
+        "owner_order": owner,
     }
+
+
+def _render_course_order_panel(available: list[str], *, owner_order: list[str]) -> None:
+    """Explicit owner order for hall lanes (does not write precedes)."""
+    if len(available) < 2:
+        return
+    with st.expander("Порядок курсов (линии в зале)", expanded=False):
+        st.caption(
+            "Влияет на цвет линий в 3D (local/all) и порядок плиток. "
+            "Не создаёт межкурсовые precedes — только presentation / recommend."
+        )
+        for i, rel in enumerate(owner_order):
+            c1, c2, c3 = st.columns([0.15, 0.7, 0.15])
+            with c1:
+                st.caption(f"#{i + 1}")
+            with c2:
+                st.markdown(f"**{rel}**")
+            with c3:
+                up, down = st.columns(2)
+                with up:
+                    if st.button("↑", key=f"lib_ord_up_{i}", disabled=i == 0, help="Выше"):
+                        new_order = move_course_in_order(owner_order, rel, delta=-1)
+                        write_course_owner_order(st.session_state, new_order)
+                        st.rerun()
+                with down:
+                    if st.button(
+                        "↓",
+                        key=f"lib_ord_dn_{i}",
+                        disabled=i >= len(owner_order) - 1,
+                        help="Ниже",
+                    ):
+                        new_order = move_course_in_order(owner_order, rel, delta=1)
+                        write_course_owner_order(st.session_state, new_order)
+                        st.rerun()
+        if st.button("Сбросить порядок", key="lib_ord_reset"):
+            write_course_owner_order(st.session_state, [])
+            st.rerun()
 
 
 def _render_tile_card(tile: ScheduleTile, *, key_prefix: str) -> None:
@@ -210,6 +261,46 @@ def _render_tile_list(tiles: list[ScheduleTile], *, key_prefix: str) -> None:
         _render_tile_card(tile, key_prefix=f"{key_prefix}_{i}")
 
 
+def _render_schedule_segment(
+    segment: str,
+    ctx: dict[str, Any],
+    *,
+    query: str,
+    index_stats: dict,
+) -> None:
+    if segment == "Каталог":
+        tiles = filter_tiles(ctx["catalog"], query)
+        if query:
+            if not tiles:
+                st.warning("По запросу в каталоге ничего не найдено.")
+            else:
+                st.caption(f"Найдено курсов: {len(tiles)}")
+                _render_tile_list(tiles, key_prefix="lib_cat_t")
+        elif not ctx["catalog"]:
+            _render_empty("Каталог")
+        else:
+            render_library_catalog_body(index_stats)
+        return
+    if segment == "Пересадки":
+        tiles = filter_tiles(ctx["transfers"], query)
+        if not tiles:
+            _render_empty("Пересадки") if not query else st.warning(
+                "По запросу пересадок не найдено."
+            )
+        else:
+            st.caption(f"Общих тем: {len(tiles)}")
+            _render_tile_list(tiles, key_prefix="lib_tr")
+        return
+    tiles = filter_tiles(ctx["route"], query)
+    if not tiles:
+        _render_empty("Маршрут") if not query else st.warning(
+            "По запросу остановок не найдено."
+        )
+    else:
+        st.caption(f"Остановок маршрута: {len(tiles)}")
+        _render_tile_list(tiles, key_prefix="lib_rt")
+
+
 def render_library_schedule(index_stats: dict | None = None) -> None:
     """Full schedule surface: summary + search + 3 segments."""
     if index_stats is None:
@@ -227,9 +318,16 @@ def render_library_schedule(index_stats: dict | None = None) -> None:
         "Просмотр не активирует курс."
     )
 
-    ctx = _build_schedule_context(index_stats)
-    summary: ScheduleTile = ctx["summary"]
-    _render_tile_card(summary, key_prefix="lib_sum")
+    raw_owner = read_course_owner_order(st.session_state)
+    courses_preview = list_library_courses(index_stats)
+    available = [c.folder_rel for c in courses_preview]
+    owner_order = merge_owner_order_with_available(available, owner_order=raw_owner)
+    if owner_order and owner_order != raw_owner:
+        write_course_owner_order(st.session_state, owner_order)
+
+    _render_course_order_panel(available, owner_order=owner_order)
+    ctx = _build_schedule_context(index_stats, owner_order=owner_order)
+    _render_tile_card(ctx["summary"], key_prefix="lib_sum")
 
     query = st.text_input(
         "Поиск по расписанию",
@@ -237,8 +335,6 @@ def render_library_schedule(index_stats: dict | None = None) -> None:
         placeholder="курс, тема, адрес…",
         help="Скрывает плитки, которые не содержат запрос.",
     ).strip()
-
-    # Segments: radio acts as tablist (keyboard-friendly in Streamlit).
     if _SEG_KEY not in st.session_state:
         st.session_state[_SEG_KEY] = SCHEDULE_SEGMENTS[0]
     segment = st.radio(
@@ -248,40 +344,7 @@ def render_library_schedule(index_stats: dict | None = None) -> None:
         horizontal=True,
         label_visibility="collapsed",
     )
-
-    if segment == "Каталог":
-        tiles = filter_tiles(ctx["catalog"], query)
-        if query:
-            if not tiles:
-                st.warning("По запросу в каталоге ничего не найдено.")
-            else:
-                st.caption(f"Найдено курсов: {len(tiles)}")
-                _render_tile_list(tiles, key_prefix="lib_cat_t")
-        else:
-            # Full catalog body (konspekts/sections) from P0-2a.
-            if not ctx["catalog"]:
-                _render_empty("Каталог")
-            else:
-                render_library_catalog_body(index_stats)
-    elif segment == "Пересадки":
-        tiles = filter_tiles(ctx["transfers"], query)
-        if not tiles:
-            _render_empty("Пересадки") if not query else st.warning(
-                "По запросу пересадок не найдено."
-            )
-        else:
-            st.caption(f"Общих тем: {len(tiles)}")
-            _render_tile_list(tiles, key_prefix="lib_tr")
-    else:
-        tiles = filter_tiles(ctx["route"], query)
-        if not tiles:
-            _render_empty("Маршрут") if not query else st.warning(
-                "По запросу остановок не найдено."
-            )
-        else:
-            st.caption(f"Остановок маршрута: {len(tiles)}")
-            _render_tile_list(tiles, key_prefix="lib_rt")
-
+    _render_schedule_segment(segment, ctx, query=query, index_stats=index_stats)
     st.markdown("</div>", unsafe_allow_html=True)
 
 

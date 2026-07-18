@@ -24,11 +24,9 @@ def _make_local_video(rel_path: str) -> LocalVideoSource:
 
 
 def test_find_audio_sibling_returns_none_when_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    import app.path_safety as path_safety
+    from tests.path_fixtures import patch_data_dir
 
-    base = tmp_path / "data"
-    base.mkdir()
-    monkeypatch.setattr(path_safety, "DATA_DIR", base)
+    base = patch_data_dir(monkeypatch, tmp_path / "data")
 
     video_rel = "courses/lec/video.mp4"
     (base / "courses" / "lec").mkdir(parents=True)
@@ -40,11 +38,9 @@ def test_find_audio_sibling_returns_none_when_missing(tmp_path: Path, monkeypatc
 
 
 def test_find_audio_sibling_finds_sibling_m4a(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    import app.path_safety as path_safety
+    from tests.path_fixtures import patch_data_dir
 
-    base = tmp_path / "data"
-    base.mkdir()
-    monkeypatch.setattr(path_safety, "DATA_DIR", base)
+    base = patch_data_dir(monkeypatch, tmp_path / "data")
 
     lec_dir = base / "courses" / "lec"
     lec_dir.mkdir(parents=True)
@@ -62,42 +58,30 @@ def test_find_audio_sibling_finds_sibling_m4a(tmp_path: Path, monkeypatch: pytes
     assert abs_found == found
 
 
-def test_audio_for_local_video_uses_path(monkeypatch: pytest.MonkeyPatch):
-    import app.path_safety as path_safety
-    import shutil
-    import tempfile
+def test_audio_for_local_video_uses_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from tests.path_fixtures import patch_data_dir
 
-    base = Path(tempfile.mkdtemp(prefix="ht_audio_test_"))
-    try:
-        monkeypatch.setattr(path_safety, "DATA_DIR", base)
-        (base / "v").mkdir(exist_ok=True)
-        (base / "v" / "lec.mp4").touch()
-        m4a = base / "v" / "lec.m4a"
-        m4a.touch()
+    base = patch_data_dir(monkeypatch, tmp_path / "data")
+    (base / "v").mkdir(exist_ok=True)
+    (base / "v" / "lec.mp4").touch()
+    (base / "v" / "lec.m4a").touch()
 
-        v = _make_local_video("v/lec.mp4")
-        found = audio_for_local_video(v)
-        assert found is not None
-        assert found.name == "lec.m4a"
-    finally:
-        shutil.rmtree(base, ignore_errors=True)
+    v = _make_local_video("v/lec.mp4")
+    found = audio_for_local_video(v)
+    assert found is not None
+    assert found.name == "lec.m4a"
 
 
-def test_audio_for_local_video_none_for_missing(monkeypatch: pytest.MonkeyPatch):
-    import app.path_safety as path_safety
-    import tempfile, shutil
+def test_audio_for_local_video_none_for_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from tests.path_fixtures import patch_data_dir
 
-    base = Path(tempfile.mkdtemp(prefix="ht_audio_test_"))
-    try:
-        monkeypatch.setattr(path_safety, "DATA_DIR", base)
-        (base / "v").mkdir(exist_ok=True)
-        (base / "v" / "lec.mp4").touch()
-        # no m4a
+    base = patch_data_dir(monkeypatch, tmp_path / "data")
+    (base / "v").mkdir(exist_ok=True)
+    (base / "v" / "lec.mp4").touch()
+    # no m4a
 
-        v = _make_local_video("v/lec.mp4")
-        assert audio_for_local_video(v) is None
-    finally:
-        shutil.rmtree(base, ignore_errors=True)
+    v = _make_local_video("v/lec.mp4")
+    assert audio_for_local_video(v) is None
 
 
 def test_audio_for_local_video_handles_none():
@@ -183,12 +167,9 @@ def test_make_basket_audio_release_builds_and_mocks_concat(monkeypatch: pytest.M
 
 def test_find_audio_sibling_returns_none_for_absolute_path_outside_data_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     """Regression: absolute paths outside DATA_DIR must be rejected (path-safety invariant)."""
-    import app.path_safety as path_safety
-    import shutil
+    from tests.path_fixtures import patch_data_dir
 
-    data_dir = tmp_path / "safe_data"
-    data_dir.mkdir(parents=True)
-    monkeypatch.setattr(path_safety, "DATA_DIR", data_dir)
+    patch_data_dir(monkeypatch, tmp_path / "safe_data")
 
     # File outside the DATA_DIR
     outside_dir = tmp_path / "outside"

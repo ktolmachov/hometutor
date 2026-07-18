@@ -120,6 +120,12 @@ def _render_qa_tutor_handoff_transition_styles() -> None:
             background: rgba(46, 125, 50, 0.04);
             font-size: 0.92rem;
         }
+        @media (prefers-reduced-motion: reduce) {
+            div.qa-tutor-handoff-shell {
+                animation: none !important;
+                transform: none !important;
+            }
+        }
         </style>
         """,
         unsafe_allow_html=True,

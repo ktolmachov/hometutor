@@ -84,7 +84,7 @@
     --border: var(--line);
     --focus-ring-color: var(--accent-outline);
     --status-ok: #1e8449;
-    --status-warn: #b9770e;
+    --status-warn: #92600a;
     --status-error: #a93226;
     --status-info: #1a5276;
     --elevation-1: 0 4px 12px rgba(0, 0, 0, 0.08);
@@ -1082,11 +1082,12 @@ div[data-testid="stChatMessage"] .stButton > button[kind="secondary"] {
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    font-size: 0.66rem;
+    /* W10: meaningful text ≥12px; AA contrast on sky banner (was #4a9fd4 ~2.6:1). */
+    font-size: var(--type-meta, 12px);
     font-weight: 800;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: #4a9fd4;
+    color: #1f6a9a;
     margin-bottom: 0.38rem;
 }
 
@@ -1154,9 +1155,10 @@ div[data-testid="stChatMessage"] .stButton > button[kind="secondary"] {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    font-size: 0.78rem;
+    font-size: max(0.78rem, var(--type-meta, 12px));
     font-weight: 700;
-    color: #4a9fd4;
+    /* W10: normal text on light sky surface — AA via darker teal-blue. */
+    color: #1f6a9a;
     cursor: pointer;
     list-style: none;
     user-select: none;
@@ -1419,6 +1421,11 @@ ul[role="listbox"] *:focus-visible {
     .skeleton-shimmer {
         animation: none !important;
     }
+    /* W10: hover lift/scale is non-essential motion on card surfaces. */
+    .home-dash-card,
+    .home-dash-card:hover,
+    .mode-card,
+    .mode-card:hover,
     .hero-grid--4-3 .mission-tile,
     .hero-grid--4-3 .mission-tile:hover,
     .st-key-fc_rate_again button:hover,

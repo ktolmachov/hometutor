@@ -87,7 +87,8 @@ FOUNDATION_TOKENS: Final[dict[str, str]] = {
     "border": "var(--line)",
     "focus-ring-color": "var(--accent-outline)",
     "status-ok": "#1e8449",
-    "status-warn": "#b9770e",
+    # W10 AA: previous #b9770e was ~3.7:1 on white for normal text.
+    "status-warn": "#92600a",
     "status-error": "#a93226",
     "status-info": "#1a5276",
     "elevation-1": "0 4px 12px rgba(0, 0, 0, 0.08)",

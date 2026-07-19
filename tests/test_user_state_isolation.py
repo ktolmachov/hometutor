@@ -181,3 +181,111 @@ class TestConfigSingletonReset:
             pytest.fail(f"Settings not isolated: {db}")
         except ValueError:
             pass
+
+
+class TestNarrativeGraphErrorFallback:
+    """Narrative returns empty weak-concepts on graph error, never raw get_weak_concepts()."""
+
+    def test_graph_error_returns_empty_weak(self) -> None:
+        from app.ssr_weekly_narrative import _collect_production_signals
+        from unittest.mock import patch
+
+        with patch("app.ssr_weekly_narrative.get_active_knowledge_graph", side_effect=Exception("graph down")):
+            signals = _collect_production_signals(now_utc=None)
+            assert signals is not None
+            assert signals.weak_concepts == (), (
+                f"Graph error must yield empty tuple, got: {signals.weak_concepts}"
+            )
+
+
+class TestCleanProgressGhosts:
+    """Fixture matcher and ghost snapshot logic — destructive script safety."""
+
+    def test_is_fixture_concept_exact_matches(self) -> None:
+        from scripts.clean_progress_ghosts import _is_fixture_concept
+
+        assert _is_fixture_concept("topic_x")
+        assert _is_fixture_concept("TopicB")
+        assert _is_fixture_concept("e2e_topic")
+        assert _is_fixture_concept("legacytopic")
+        assert _is_fixture_concept("t")
+
+    def test_is_fixture_concept_false_positives_are_safe(self) -> None:
+        from scripts.clean_progress_ghosts import _is_fixture_concept
+
+        assert not _is_fixture_concept("attention"), "'t' is exact-match only"
+        assert not _is_fixture_concept("token"), "'t' is exact-match only"
+        assert not _is_fixture_concept("binding"), "'bind'/'binda'/'bindb' are exact-match only"
+        assert not _is_fixture_concept("statistical_test_power"), "'test_' is prefix, not substring"
+        assert not _is_fixture_concept("pretest_sensitivity"), "'test_' is prefix, not substring"
+        assert not _is_fixture_concept("global"), "global is not a fixture"
+        assert not _is_fixture_concept("общая"), "общая is not a fixture"
+        assert not _is_fixture_concept("real-concept"), "real concept should not match"
+
+    def test_is_fixture_concept_exact_bind_matches(self) -> None:
+        from scripts.clean_progress_ghosts import _is_fixture_concept
+
+        assert _is_fixture_concept("BindA")
+        assert _is_fixture_concept("bindb")
+
+    def test_is_fixture_concept_prefix_matches(self) -> None:
+        from scripts.clean_progress_ghosts import _is_fixture_concept
+
+        assert _is_fixture_concept("test_xxx")
+        assert _is_fixture_concept("fixture_something")
+        assert not _is_fixture_concept("some_fixture_dangling"), "'fixture_' is prefix, not substring"
+
+    def test_collect_ghost_snapshot_dry_run(self, tmp_path: Path) -> None:
+        import sqlite3
+        from scripts.clean_progress_ghosts import collect_ghost_snapshot, _GHOST_TABLES
+
+        db = tmp_path / "test.db"
+        conn = sqlite3.connect(str(db))
+        for table in _GHOST_TABLES:
+            conn.execute(f"CREATE TABLE IF NOT EXISTS {table} (concept TEXT)")
+        conn.execute("INSERT INTO quiz_mastery VALUES ('real-concept')")
+        conn.execute("INSERT INTO quiz_mastery VALUES ('topic_x')")
+        conn.execute("INSERT INTO quiz_mastery VALUES ('attention')")
+        conn.execute("INSERT INTO spaced_repetition VALUES ('TopicB')")
+        conn.execute("INSERT INTO quiz_results VALUES ('binding')")
+        conn.execute("INSERT INTO quiz_results VALUES ('BindA')")
+        conn.execute("CREATE TABLE IF NOT EXISTS app_kv (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)")
+        conn.execute(
+            "INSERT INTO app_kv VALUES ('emotional_heatmap_json', ?, '')",
+            (json.dumps([
+                {"concept": "TopicA", "date": "2026-07-18", "emotional_score": 0.5},
+                {"concept": "real-concept", "date": "2026-07-18", "emotional_score": 0.7},
+                {"concept": "attention", "date": "2026-07-18", "emotional_score": 0.6},
+            ]),)
+        )
+        conn.commit()
+        conn.close()
+
+        active_ids = {"real-concept", "another-concept"}
+        snapshot = collect_ghost_snapshot(db, active_ids)
+
+        quiz_ghosts = {str(r.get("concept")) for r in snapshot.get("quiz_mastery", [])}
+        assert "topic_x" in quiz_ghosts
+        assert "real-concept" not in quiz_ghosts, "valid concept must not be a ghost"
+        assert "attention" not in quiz_ghosts, "'attention' must not match fixture patterns"
+
+        sr_ghosts = {str(r.get("concept")) for r in snapshot.get("spaced_repetition", [])}
+        assert "TopicB" in sr_ghosts
+
+        qr_ghosts = {str(r.get("concept")) for r in snapshot.get("quiz_results", [])}
+        assert "binding" not in qr_ghosts, "'binding' must be false-negative safe"
+        assert "BindA" in qr_ghosts, "'BindA' is an exact fixture match"
+
+        heatmap = snapshot.get("app_kv_emotional_heatmap", [])
+        hm_concepts = {str(e.get("concept")) for e in heatmap}
+        assert "TopicA" in hm_concepts
+        assert "real-concept" not in hm_concepts
+        assert "attention" not in hm_concepts, "attention must not be flagged as ghost"
+
+    def test_global_not_in_fixture_list(self) -> None:
+        from scripts.clean_progress_ghosts import _is_fixture_concept
+
+        assert not _is_fixture_concept("global")
+        assert not _is_fixture_concept("Global")
+        assert not _is_fixture_concept("общая")
+        assert not _is_fixture_concept("общий фон")

@@ -29,13 +29,18 @@ if str(ROOT) not in sys.path:
 
 CONFIRM_TOKEN = "CLEAN-PROGRESS-GHOSTS"
 
-_KNOWN_FIXTURE_PATTERNS = frozenset({
+_FIXTURE_EXACT = frozenset({
     "topic_x",
     "topica",
     "topicb",
     "e2e_topic",
-    "bind",
     "legacytopic",
+    "binda",
+    "bindb",
+    "bind",
+})
+
+_FIXTURE_PREFIX = frozenset({
     "test_",
     "fixture_",
 })
@@ -63,8 +68,10 @@ def _is_fixture_concept(concept: str) -> bool:
         return False
     if c in _SINGLE_TOKEN_FIXTURES:
         return True
-    for pat in _KNOWN_FIXTURE_PATTERNS:
-        if pat in c:
+    if c in _FIXTURE_EXACT:
+        return True
+    for pat in _FIXTURE_PREFIX:
+        if c.startswith(pat):
             return True
     return False
 
@@ -213,19 +220,13 @@ def main(argv: list[str] | None = None) -> int:
         "--confirm",
         action="store_true",
         default=False,
-        help="Выполнить очистку (требует --confirm-token).",
+        help="Выполнить очистку (требует --confirm-token). Резервная копия создаётся всегда.",
     )
     parser.add_argument(
         "--confirm-token",
         type=str,
         default=None,
         help=f"Токен подтверждения: {CONFIRM_TOKEN}",
-    )
-    parser.add_argument(
-        "--no-backup",
-        action="store_true",
-        default=False,
-        help="Пропустить создание резервной копии (НЕ рекомендуется).",
     )
     args = parser.parse_args(argv)
 
@@ -267,9 +268,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.confirm_token != CONFIRM_TOKEN:
             print(f"\nERROR: --confirm requires --confirm-token {CONFIRM_TOKEN}")
             return 2
-        if not args.no_backup:
-            backup = make_backup(db_path)
-            print(f"\nBackup created: {backup}")
+        backup = make_backup(db_path)
+        print(f"\nBackup created: {backup}")
         deleted = execute_cleanup(db_path, active_ids)
         print("\nCleanup completed:")
         for table, count in deleted.items():

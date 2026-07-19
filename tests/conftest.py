@@ -44,10 +44,9 @@ def pytest_configure(config: Any) -> None:
     os.environ["HOME_RAG_DATA_DIR"] = _SESSION_TMP
     os.environ["HOME_RAG_HOME"] = _SESSION_TMP
     try:
-        import app.config
+        import app.config  # noqa: F811
 
-        app.config._settings = None
-        app.config._retrieval_settings = None
+        app.config.reset_settings_cache()
     except ImportError:
         pass
 

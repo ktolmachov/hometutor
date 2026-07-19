@@ -297,7 +297,8 @@ def render_sidebar(index_stats: dict | None):
         _dest = _dest_for_view(_cv)
         st.caption(f"**{_sidebar_page_title(_cv)}**")
         if st.button("Мой прогресс", width='stretch', key="sidebar_nav_mastery"):
-            st.switch_page("pages/3_Мой_прогресс.py")
+            st.session_state[PENDING_CURRENT_VIEW_KEY] = "Прогресс обучения"
+            st.rerun()
         if st.button("Продолжить обучение", width='stretch', key="sidebar_smart_resume"):
             from app.learning_plan_service import plan_service
 

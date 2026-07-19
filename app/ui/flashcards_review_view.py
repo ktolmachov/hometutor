@@ -640,6 +640,9 @@ def _render_review_completion(
         reset_review_session_state(st.session_state)
         st.rerun()
 
+    # B1 checkpoint: after review batch, show unified next-step gate
+    _render_flashcards_checkpoint(key_prefix="flashcards_review")
+
 
 def _record_review_rating(
     *,
@@ -1477,4 +1480,42 @@ def render_review(
         scope_signature=scope_signature,
         review_progress_ratio=review_progress_ratio,
         merge_session_min_next_review=merge_session_min_next_review,
+    )
+
+
+def _render_flashcards_checkpoint(*, key_prefix: str) -> None:
+    """B1: after flashcard review batch summary, render unified checkpoint."""
+    try:
+        from app.ui.checkpoint import render_checkpoint
+        from app.smart_study_router import build_smart_study_recommendation
+        from app.ui.resume_cards_smart_study import gather_smart_study_router_session_context
+    except Exception as _exc:  # noqa: BLE001 - optional checkpoint
+        import logging as _logging  # noqa: BLE001
+        _logging.getLogger(__name__).debug("checkpoint import failed: %s", _exc)
+        return
+    try:
+        ctx = gather_smart_study_router_session_context(index_stats=None)
+    except Exception as _exc:  # noqa: BLE001
+        import logging as _logging  # noqa: BLE001
+        _logging.getLogger(__name__).debug("checkpoint context gather failed: %s", _exc)
+        return
+    rec = build_smart_study_recommendation(
+        surface="flashcards_hub",
+        flashcard_due_n=ctx.flashcard_due_n,
+        sm2_due_n=ctx.sm2_due_n,
+        quiz_feedback_status=None,
+        has_tutor_resume=bool(ctx.effective_tutor_snap),
+        tutor_topic=ctx.tutor_topic,
+        has_last_answer_qa=ctx.has_last_answer_qa,
+        has_reading_resume=ctx.has_reading,
+        first_weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,
+        plan_primary_block=None,
+    )
+    render_checkpoint(
+        rec,
+        surface="flashcards",
+        origin="flashcards",
+        return_view="Mission Control",
+        key_prefix=key_prefix,
+        weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,
     )

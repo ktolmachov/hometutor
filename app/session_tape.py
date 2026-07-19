@@ -43,6 +43,7 @@ EVENT_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
     "route_offered": ("surface", "primary_nav", "hint_kind", "decision_id", "phase"),
     "route_selected": ("surface", "primary_nav", "hint_kind", "accepted", "decision_id", "phase"),
     "learning_action_started": ("surface", "primary_nav", "decision_id"),
+    "checkpoint_offered": ("surface", "primary_nav", "hint_kind", "decision_id", "phase"),
     "intent_selected": ("intent_id",),
     "surface_breached_soft": (
         "surface",

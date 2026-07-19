@@ -29,6 +29,85 @@ from app.ui.progress_visuals import (
 # ---------------------------------------------------------------------------
 
 
+def _render_home_mastery_one_number(md: dict[str, Any]) -> None:
+    """B3: Один процент mastery (PLM-вектор) с подписью источника."""
+    _mv = md.get("mastery_vector") or {}
+    _avg_quiz = round(float(_mv.get("avg") or 0.0) * 100.0, 1)
+    _quiz_rows_n = len(md.get("quiz_mastery_rows") or [])
+    with st.container(border=True):
+        st.markdown("**Mastery** — на основе проверок знаний")
+        st.metric("PLM-вектор (adaptive quiz)", f"{_avg_quiz}%",
+                  help="Среднее по уровням Recognition / Recall / Transfer. Обновляется после каждого мини-квиза.")
+        if _quiz_rows_n == 0:
+            st.caption("Записей пока нет — заполнится после мини-квизов (вкладка «Расширенные»).")
+        else:
+            st.caption(f"По {_quiz_rows_n} концептам. Покрытие графа и другие проценты — «Расширенные».")
+
+
+def _render_home_my_trail() -> None:
+    """B1 «Мой след»: XP-календарь 7 дней + flashcard counters."""
+    from app.gamification_service import get_xp_history
+    from app.user_state import get_flashcard_progress_stats as _fc_stats
+    from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
+
+    with st.container(border=True):
+        st.markdown("**Мой след** — активность, карточки")
+        hist = get_xp_history(days=7)
+        if hist:
+            days_html = "".join(
+                f"<td style='text-align:center;padding:2px 5px;font-size:0.75rem;"
+                f"background:{'#e8f5e9' if d.get('xp',0)>0 else '#fafafa'};border-radius:4px;'>"
+                f"<div>{d['date'][-5:]}</div>"
+                f"<div style='font-weight:600;color:{'#2e7d32' if d.get('xp',0)>0 else '#9e9e9e'}'>"
+                f"{d.get('xp',0)}</div></td>"
+                for d in hist
+            )
+            st.markdown(f"<table style='border-spacing:2px'><tr>{days_html}</tr></table>",
+                        unsafe_allow_html=True)
+            st.caption("XP по дням (UTC, 7 дней).")
+        try:
+            fc = _fc_stats()
+        except Exception:  # noqa: BLE001 - flashcard stats are optional; progress tab must not break
+            fc = {"total": 0, "mastered": 0, "due": 0}
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.metric("🎴 Карточки", fc.get("total", 0))
+        with c2:
+            st.metric("✅ Освоено", fc.get("mastered", 0))
+        with c3:
+            st.metric("📋 К повтору", fc.get("due", 0))
+        if st.button("Открыть Flashcards", key="home_trail_fc_btn", width="stretch"):
+            st.session_state[PENDING_CURRENT_VIEW_KEY] = "Flashcards"
+            st.rerun()
+
+
+def _render_home_my_path(md: dict[str, Any]) -> None:
+    """B2 «Мой путь»: позиция на маршруте курса из reading_status."""
+    from app.user_state_reading import get_latest_learning_plan_resume
+
+    plan = get_latest_learning_plan_resume()
+    if not plan:
+        return
+    with st.container(border=True):
+        st.markdown("**Мой путь** — позиция на маршруте курса")
+        step_label = str(plan.get("step_label") or "").strip()
+        step_idx_raw = plan.get("step_index")
+        step_idx = int(step_idx_raw) + 1 if step_idx_raw is not None else None
+        title = str(plan.get("display_title") or plan.get("resource_id") or "").strip()
+        progress_raw = float(plan.get("progress") or 0)
+        progress = max(0.0, min(1.0, progress_raw))
+        if step_label and step_idx is not None:
+            st.markdown(f"📖 **Курс:** {title} · шаг {step_idx} «{step_label}»")
+        elif title:
+            st.markdown(f"📖 **Курс:** {title}")
+        else:
+            st.markdown("📖 **Курс:** (без названия)")
+        if progress > 0:
+            st.progress(progress, text=f"Прогресс: {int(progress * 100)}%")
+        else:
+            st.caption("Ещё не начат")
+
+
 def _render_home_handoff_context_and_cta() -> None:
     """Handoff context + primary CTA (next step button)."""
     from app.gamification_service import get_snapshot as _get_gamification_snapshot
@@ -125,9 +204,12 @@ def _render_home_heatmap_and_radar(md: dict[str, Any]) -> None:
 
 
 def render_progress_home_tab_impl(md: dict[str, Any]) -> None:
-    """Вкладка «Главное»: следующий шаг, heatmap, radar, геймификация-кратко, weekly narrative."""
+    """Вкладка «Главное»: mastery, след, путь, следующий шаг, heatmap, radar, narrative."""
     from app.ui.weekly_study_narrative_ui import render_weekly_study_narrative_block
 
+    _render_home_mastery_one_number(md)
+    _render_home_my_trail()
+    _render_home_my_path(md)
     _render_home_handoff_context_and_cta()
     _render_home_heatmap_and_radar(md)
     render_weekly_study_narrative_block(key_prefix="progress_home")

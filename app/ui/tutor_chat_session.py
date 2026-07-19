@@ -454,18 +454,11 @@ def _render_e11_loop_fallback(session_id: str) -> None:
     topic = str(st.session_state.get("current_topic") or "").strip()
     with st.container(border=True):
         st.caption("Завершение 5-минутной сессии")
-        st.caption(continuity_bridge.continuity_next_step_line_ru(topic=topic))
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button("Продолжить 1 шаг", key="tutor_e11_fallback_continue", width="stretch", type="primary"):
-                st.session_state["tutor_pending_prompt"] = "Следующий шаг"
-                st.session_state["tutor_pending_session_id"] = session_id
-                st.rerun()
-        with c2:
-            if st.button("Готово на сегодня", key="tutor_e11_fallback_done", width="stretch", type="secondary"):
-                st.session_state["tutor_e11_loop_active"] = False
-                st.session_state.pop("tutor_e11_loop_origin", None)
-                st.success("Сессию можно завершить: следующий шаг сохранён в контексте.")
+        _render_tutor_checkpoint(
+            session_id=session_id,
+            topic=topic,
+            key_prefix="tutor_e11_fallback",
+        )
 
 
 def _session_has_assistant_reply(session_id: str) -> bool:
@@ -802,3 +795,75 @@ def render_tutor_chat_tab() -> None:
             len(knowledge_service.knowledge_graph.get_concepts()),
         )
     st.markdown("</div>", unsafe_allow_html=True)
+
+
+def _render_tutor_checkpoint(
+    *,
+    session_id: str,
+    topic: str | None = None,
+    key_prefix: str,  # noqa: ARG001 - used by checkpoint button keys
+) -> None:
+    """B1: after tutor micro-step completion, render unified checkpoint."""
+    try:
+        from app.ui.checkpoint import render_checkpoint, store_checkpoint_context, clear_checkpoint_context
+        from app.smart_study_router import build_smart_study_recommendation
+        from app.ui.resume_cards_smart_study import gather_smart_study_router_session_context
+    except Exception as _exc:  # noqa: BLE001 - optional checkpoint
+        import logging as _logging  # noqa: BLE001
+        _logging.getLogger(__name__).debug("checkpoint import failed: %s", _exc)
+        return
+    try:
+        ctx = gather_smart_study_router_session_context(index_stats=None)
+    except Exception as _exc:  # noqa: BLE001
+        import logging as _logging  # noqa: BLE001
+        _logging.getLogger(__name__).debug("checkpoint context gather failed: %s", _exc)
+        ctx = None
+    if ctx is None:
+        return
+    rec = build_smart_study_recommendation(
+        surface="tutor_chat",
+        flashcard_due_n=ctx.flashcard_due_n,
+        sm2_due_n=ctx.sm2_due_n,
+        quiz_feedback_status=None,
+        has_tutor_resume=bool(ctx.effective_tutor_snap),
+        tutor_topic=ctx.tutor_topic or topic,
+        has_last_answer_qa=ctx.has_last_answer_qa,
+        has_reading_resume=ctx.has_reading,
+        first_weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,
+        plan_primary_block=None,
+    )
+    store_checkpoint_context(
+        topic_hint=topic or ctx.tutor_topic,
+        origin="tutor",
+        return_view="Mission Control",
+        decision_id=str(rec.decision_id),
+        phase=str(rec.phase),
+    )
+    def _finish_tutor_loop():
+        st.session_state["tutor_e11_loop_active"] = False
+        st.session_state.pop("tutor_e11_loop_origin", None)
+        clear_checkpoint_context()
+        from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
+        st.session_state[PENDING_CURRENT_VIEW_KEY] = "Mission Control"
+
+    from app.ui.smart_study_next_step_card import render_smart_study_next_step_card
+
+    render_smart_study_next_step_card(
+        rec,
+        key_prefix=f"{key_prefix}_chkpt",
+        primary_topic_hint=topic or ctx.tutor_topic,
+        tutor_session_id=session_id,
+        tutor_topic=ctx.tutor_topic or topic,
+        weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,
+        show_primary_button=True,
+        enable_what_if_preview=False,
+    )
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("✅ Закончить", key=f"{key_prefix}_chkpt_finish", width="stretch", type="secondary"):
+            _finish_tutor_loop()
+            st.rerun()
+    with col2:
+        if st.button("🖐 Вручную", key=f"{key_prefix}_chkpt_manual", width="stretch", type="secondary"):
+            _finish_tutor_loop()
+            st.rerun()

@@ -290,6 +290,12 @@ def render_scoped_self_check_quiz(
                     source_key=source_key,
                     question_idx=-1,
                 )
+            # B1 checkpoint: after quiz feedback CTA, show unified next-step gate
+            _render_quiz_checkpoint_if_due(
+                source_key=source_key,
+                quiz_feedback_status="correct" if pct >= 80 else ("partial" if pct >= 50 else "incorrect"),
+                topic_hint=str(meta.get("identifier") or meta.get("relative_path") or "").strip() or None,
+            )
     else:
         st.caption(f"Отправьте ответы по вопросам выше ({total} вопросов).")
 
@@ -363,3 +369,46 @@ def render_scoped_self_check_quiz(
                 import logging  # noqa: BLE001
                 logging.getLogger(__name__).debug("! caught exception: %s", _exc)
                 st.caption(f"🏆 Новый бейдж: {_lab}")
+
+
+def _render_quiz_checkpoint_if_due(
+    *,
+    source_key: str,
+    quiz_feedback_status: str | None = None,
+    topic_hint: str | None = None,
+) -> None:
+    """B1: after quiz completion, render unified checkpoint (no auto-start)."""
+    try:
+        from app.ui.checkpoint import render_checkpoint
+        from app.smart_study_router import build_smart_study_recommendation
+        from app.ui.resume_cards_smart_study import gather_smart_study_router_session_context
+    except Exception as _exc:  # noqa: BLE001 - optional checkpoint
+        import logging as _logging  # noqa: BLE001
+        _logging.getLogger(__name__).debug("checkpoint import failed: %s", _exc)
+        return
+    try:
+        ctx = gather_smart_study_router_session_context(index_stats=None)
+    except Exception as _exc:  # noqa: BLE001
+        import logging as _logging  # noqa: BLE001
+        _logging.getLogger(__name__).debug("checkpoint context gather failed: %s", _exc)
+        return
+    rec = build_smart_study_recommendation(
+        surface="home",
+        flashcard_due_n=ctx.flashcard_due_n,
+        sm2_due_n=ctx.sm2_due_n,
+        quiz_feedback_status=quiz_feedback_status,
+        has_tutor_resume=bool(ctx.effective_tutor_snap),
+        tutor_topic=ctx.tutor_topic,
+        has_last_answer_qa=ctx.has_last_answer_qa,
+        has_reading_resume=ctx.has_reading,
+        first_weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,
+        plan_primary_block=None,
+    )
+    render_checkpoint(
+        rec,
+        surface="quiz",
+        origin="quiz",
+        return_view="Mission Control",
+        key_prefix=source_key,
+        weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,
+    )

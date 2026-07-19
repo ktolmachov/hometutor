@@ -26,11 +26,18 @@ def _ensure_table(conn: sqlite3.Connection) -> None:
             passed         INTEGER NOT NULL DEFAULT 0,
             predicted_correct  INTEGER DEFAULT NULL,
             gate_score     REAL,
+            total_segments INTEGER DEFAULT NULL,
             completed_at   TEXT NOT NULL,
             PRIMARY KEY (konspekt_path, segment_index)
         )
         """
     )
+    # migration: add total_segments column for existing databases (P1 2026-07-19)
+    try:
+        conn.execute("ALTER TABLE lecture_segment_progress ADD COLUMN total_segments INTEGER DEFAULT NULL")
+    except sqlite3.OperationalError as e:
+        if "duplicate column" not in str(e).lower():
+            raise
 
 
 def upsert_lecture_segment_result(
@@ -40,6 +47,7 @@ def upsert_lecture_segment_result(
     passed: bool,
     predicted_correct: bool | None = None,
     gate_score: float | None = None,
+    total_segments: int | None = None,
 ) -> None:
     """Record one segment gate result. Called from _advance_segment after gate."""
     ts = _utc_now_iso()
@@ -50,12 +58,13 @@ def upsert_lecture_segment_result(
             """
             INSERT INTO lecture_segment_progress(
                 konspekt_path, segment_index, passed, predicted_correct,
-                gate_score, completed_at
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                gate_score, total_segments, completed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(konspekt_path, segment_index) DO UPDATE SET
                 passed = excluded.passed,
                 predicted_correct = excluded.predicted_correct,
                 gate_score = excluded.gate_score,
+                total_segments = excluded.total_segments,
                 completed_at = excluded.completed_at
             """,
             (
@@ -64,6 +73,7 @@ def upsert_lecture_segment_result(
                 1 if passed else 0,
                 predicted_correct,
                 gate_score,
+                total_segments,
                 ts,
             ),
         )
@@ -121,6 +131,7 @@ def get_lecture_depth_summary() -> list[dict[str, Any]]:
             SELECT konspekt_path,
                    COUNT(*) AS total_stored,
                    SUM(CASE WHEN passed THEN 1 ELSE 0 END) AS passed_count,
+                   MAX(total_segments) AS total_segments,
                    MAX(completed_at) AS last_at
             FROM lecture_segment_progress
             GROUP BY konspekt_path
@@ -130,10 +141,10 @@ def get_lecture_depth_summary() -> list[dict[str, Any]]:
         return [
             {
                 "konspekt_path": r[0],
-                "total_stored": r[1],
                 "passed_count": r[2],
-                "depth_pct": round(r[2] / r[1] * 100, 1) if r[1] else 0.0,
-                "last_completed_at": r[3],
+                "total_segments": int(r[3]) if r[3] is not None else int(r[1]),
+                "depth_pct": round(r[2] / max(int(r[3] or 0), int(r[1] or 1)) * 100, 1),
+                "last_completed_at": r[4],
             }
             for r in rows
         ]

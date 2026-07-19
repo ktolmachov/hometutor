@@ -403,7 +403,9 @@ def _prepend_prediction_to_gate(
     questions = quiz.get("questions")
     if not questions:
         return
-    if questions[0] is pq:
+    pq_text = str(pq.get("question", "")).strip()
+    first_text = str(questions[0].get("question", "")).strip() if isinstance(questions[0], dict) else ""
+    if pq_text and first_text and pq_text == first_text:
         return
     quiz["questions"] = [pq] + list(questions)
 
@@ -510,9 +512,11 @@ def _render_gate(
         else:
             st.error(f"Нужно больше правильных. Ваш результат: {c}/{t}")
             gate["gate_score"] = c / t
-            # P1: persist failed result without destroying gate state needed by fallback
-            gate["results"][seg.index] = False
-            _persist_segment_result(gate, seg, correct=False)
+            # P1: persist failed result — only once per attempt
+            already_failed = gate["results"].get(seg.index) is False
+            if not already_failed:
+                gate["results"][seg.index] = False
+                _persist_segment_result(gate, seg, correct=False)
             _render_gate_fallback(seg, gate, source_key=source_key, n_questions=n_questions)
     else:
         st.info(f"Ответьте на все {n_questions} вопросов ({results['answered']}/{n_questions})")
@@ -547,12 +551,14 @@ def _persist_segment_result(
             if correct_answer is not None:
                 predicted_correct = str(pred_answer) == str(correct_answer)
         gate_score = gate.get("gate_score")
+        total_segments = gate.get("total") if isinstance(gate.get("total"), int) else None
         upsert_lecture_segment_result(
             konspekt_path=konspekt_path,
             segment_index=seg.index,
             passed=correct,
             predicted_correct=predicted_correct,
             gate_score=float(gate_score) if gate_score is not None else None,
+            total_segments=total_segments,
         )
     except Exception:  # noqa: BLE001 — persistence is best-effort, never block UI
         pass
@@ -602,4 +608,6 @@ def _render_gate_fallback(
             _clear_gate_scoped_state(source_key, n_questions)
             gate["show_gate"] = False
             gate["gate_questions"] = None
+            gate.pop("gate_score", None)
+            gate["results"].pop(seg.index, None)
             st.rerun()

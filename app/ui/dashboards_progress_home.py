@@ -232,7 +232,7 @@ def _render_lecture_depth_metric() -> None:
         import streamlit as st
         st.html(
             f'<div style="font-size:0.82rem;opacity:0.85;margin:0.15rem 0;">'
-            f"🎧 {fname}: {s['passed_count']}/{s['total_stored']} отрезков "
+            f"🎧 {fname}: {s['passed_count']}/{s['total_segments']} отрезков "
             f"({s['depth_pct']}%)</div>"
         )
 

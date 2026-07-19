@@ -24,6 +24,7 @@ class TestLectureSegmentPersistence:
                 passed INTEGER NOT NULL DEFAULT 0,
                 predicted_correct INTEGER DEFAULT NULL,
                 gate_score REAL,
+                total_segments INTEGER DEFAULT NULL,
                 completed_at TEXT NOT NULL,
                 PRIMARY KEY (konspekt_path, segment_index)
             )"""
@@ -219,6 +220,58 @@ class TestLectureP1SourceContracts:
         """P1: verify hydration source exists but not the exact row access pattern."""
         from app.user_state_lecture import get_lecture_segment_results
         assert callable(get_lecture_segment_results)
+
+
+# ── idempotency behavioral ──────────────────────────────────────────────────
+
+class TestGateIdempotency:
+    def test_prepend_idempotent_by_question_text(self) -> None:
+        from app.ui.living_konspekt_lecture_route import _prepend_prediction_to_gate
+
+        pq = {"question": "What is X?", "options": ["A", "B"]}
+        gate = {"prediction_question": pq}
+        quiz = {"questions": [pq]}  # same dict — should be idempotent
+        _prepend_prediction_to_gate(gate, quiz)
+        assert len(quiz["questions"]) == 1, f"should not duplicate: got {len(quiz['questions'])}"
+
+    def test_prepend_idempotent_by_equal_text(self) -> None:
+        from app.ui.living_konspekt_lecture_route import _prepend_prediction_to_gate
+
+        pq = {"question": "What is X?"}
+        gate = {"prediction_question": pq}
+        quiz = {"questions": [{"question": "What is X?"}]}  # equal text, different object
+        _prepend_prediction_to_gate(gate, quiz)
+        assert len(quiz["questions"]) == 1, f"should not duplicate by text: got {len(quiz['questions'])}"
+
+    def test_prepend_adds_when_different(self) -> None:
+        from app.ui.living_konspekt_lecture_route import _prepend_prediction_to_gate
+
+        pq = {"question": "Predict Y?"}
+        gate = {"prediction_question": pq}
+        quiz = {"questions": [{"question": "Different Q"}]}
+        _prepend_prediction_to_gate(gate, quiz)
+        assert len(quiz["questions"]) == 2
+        assert quiz["questions"][0] is pq
+
+
+# ── depth summary denomator ─────────────────────────────────────────────────
+
+class TestDepthSummaryDenominator:
+    def test_summary_uses_total_segments(self, monkeypatch) -> None:
+        conn = TestLectureSegmentPersistence._in_memory_db()
+        monkeypatch.setattr("app.user_state_lecture._with_db", lambda fn, **kw: fn(conn))
+
+        from app.user_state_lecture import upsert_lecture_segment_result, get_lecture_depth_summary
+
+        upsert_lecture_segment_result(
+            konspekt_path="/test/denom.md", segment_index=0, passed=True, total_segments=5
+        )
+        summary = get_lecture_depth_summary()
+        assert len(summary) == 1
+        assert summary[0]["total_segments"] == 5
+        assert summary[0]["passed_count"] == 1
+        assert summary[0]["depth_pct"] == 20.0
+
 
     def test_no_new_storage_schema_outside_user_state(self) -> None:
         """Kill switch: no ad-hoc SQLite outside user_state_lecture."""

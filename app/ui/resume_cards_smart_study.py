@@ -520,6 +520,8 @@ def render_smart_study_router_strip_from_session_context(
         steering_local=steer_tag or None,
         include_all=False,
     )
+    # B2 compass: compact status line above home route shell
+    _render_compass_for_home(ss_final, ctx.tutor_topic)
     render_smart_study_next_step_card(
         ss_final,
         key_prefix=key_prefix,
@@ -581,5 +583,15 @@ def render_smart_study_router_for_progress_tab(*, index_stats: dict[str, Any] | 
         key_prefix="progress_ssr",
         emit_outcome_receipt=True,
     )
+
+
+def _render_compass_for_home(rec: Any, goal_hint: str | None = None) -> None:
+    """B2: compass above home SSR card."""
+    try:
+        from app.ui.learning_compass import render_learning_compass
+
+        render_learning_compass(rec, goal_text=goal_hint)
+    except Exception:  # noqa: BLE001
+        pass
 
 

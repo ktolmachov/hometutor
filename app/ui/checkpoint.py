@@ -175,6 +175,12 @@ def render_checkpoint(
     rec_capped = _cap_secondaries(rec)
     rec_for_card = _inject_return_view(rec_capped, origin=origin, return_view=return_view)
 
+    # B2 compass: compact status line above route shell
+    _render_compass_above_checkpoint(
+        rec_for_card,
+        return_point=_compass_return_point(return_view),
+    )
+
     render_smart_study_next_step_card(
         rec_for_card,
         key_prefix=f"{key_prefix}_chkpt",
@@ -187,6 +193,20 @@ def render_checkpoint(
         enable_what_if_preview=False,
     )
 
+    _render_checkpoint_actions(
+        key_prefix=key_prefix,
+        return_view=return_view,
+        on_finish=on_finish,
+    )
+
+
+def _render_checkpoint_actions(
+    *,
+    key_prefix: str,
+    return_view: str,
+    on_finish: object = None,
+) -> None:
+    """Render «Закончить» / «Вручную» buttons below the SSR card."""
     col1, col2 = st.columns(2)
     with col1:
         if st.button(
@@ -232,6 +252,41 @@ def _navigate_to_return_view(return_view: str) -> None:
         st.session_state[PENDING_CURRENT_VIEW_KEY] = rv
     clear_checkpoint_context()
     st.rerun()
+
+
+def _compass_return_point(return_view: str) -> str | None:
+    """Return a human-readable return-point label from the view name."""
+    rv = str(return_view or "").strip()
+    if not rv:
+        return None
+    _RETURN_MAP: dict[str, str] = {
+        "Mission Control": "на главную",
+        "Чат с тьютором": "в чат",
+        "Прогресс обучения": "в прогресс",
+        "Flashcards": "к карточкам",
+        "Темы": "к темам",
+        "Живой конспект": "в конспект",
+        "Быстрый ответ": "к ответу",
+        "Адаптивный план": "в план",
+    }
+    return _RETURN_MAP.get(rv, rv)
+
+
+def _render_compass_above_checkpoint(
+    rec: SmartStudyRecommendation,
+    *,
+    return_point: str | None = None,
+) -> None:
+    """B2: render compass line above the checkpoint's SSR card."""
+    try:
+        from app.ui.learning_compass import render_learning_compass
+
+        render_learning_compass(
+            rec,
+            return_point=return_point,
+        )
+    except Exception:  # noqa: BLE001 — compass is optional UI decoration
+        pass
 
 
 def _navigate_manual() -> None:

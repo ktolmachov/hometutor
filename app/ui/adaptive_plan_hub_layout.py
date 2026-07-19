@@ -208,6 +208,12 @@ def render_adaptive_plan_hub(
         steering_local=_steer_local_adp,
         include_all=False,
     )
+    # B2 compass: compact status line above plan route shell
+    try:
+        from app.ui.learning_compass import render_learning_compass
+        render_learning_compass(_ss_plan)
+    except Exception:  # noqa: BLE001
+        pass
     _card.render_smart_study_next_step_card(
         _ss_plan,
         key_prefix=f"{key_prefix}_adp_ss",

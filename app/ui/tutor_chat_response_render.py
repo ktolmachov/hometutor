@@ -186,6 +186,13 @@ def render_tutor_structured_response(
         )
         ss_tutor, defer_applied = apply_smart_study_defer_from_session(ss_tutor)
         _tss_kp = f"tutor_ss_{session_id[:8]}_{msg_idx}"
+        # B2 compass: compact status line above tutor route shell
+        try:
+            from app.ui.learning_compass import render_learning_compass
+
+            render_learning_compass(ss_tutor)
+        except Exception:  # noqa: BLE001
+            pass
         render_smart_study_next_step_card(
             ss_tutor,
             key_prefix=_tss_kp,

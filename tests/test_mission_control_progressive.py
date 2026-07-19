@@ -39,7 +39,7 @@ def test_tile_rows_keep_all_tiles() -> None:
     flattened = tuple(tile for row in rows for tile in row)
 
     assert flattened == tiles
-    assert [len(row) for row in rows] == [4, 4, 1]
+    assert [len(row) for row in rows] == [4, 4]
 
 
 def test_mission_control_includes_library_tile() -> None:
@@ -102,18 +102,23 @@ def test_context_row_segments_combine_course_and_xp() -> None:
 
 
 def test_agent_tile_visible_only_when_agent_enabled(monkeypatch) -> None:
-    """A1: agent tile respects agent_enabled via feature registry (prefill context)."""
+    """B4: agent tile is NOT in primary mission_control tiles;
+    agent view is still accessible via global navigation «Ещё» and respects agent_enabled."""
+    import app.config as _cfg
+
     tiles = _tile_definitions(due_count=0)
     agent_tile = next((t for t in tiles if t.tile_id == "agent_session"), None)
-    assert agent_tile is not None
+    assert agent_tile is None, "B4: agent tile must not appear in primary tiles"
 
-    # disabled
-    monkeypatch.setattr("app.config.get_settings", lambda: types.SimpleNamespace(agent_enabled=False))
-    assert not tile_feature_visible("agent_session", level="diagnostic", overrides={})
-
-    # enabled
-    monkeypatch.setattr("app.config.get_settings", lambda: types.SimpleNamespace(agent_enabled=True))
-    assert tile_feature_visible("agent_session", level="diagnostic", overrides={})
+    # feature spec still respects gate
+    orig = _cfg._settings
+    _cfg._settings = types.SimpleNamespace(agent_enabled=False)
+    try:
+        assert not tile_feature_visible("agent_session", level="diagnostic", overrides={})
+        _cfg._settings = types.SimpleNamespace(agent_enabled=True)
+        assert tile_feature_visible("agent_session", level="diagnostic", overrides={})
+    finally:
+        _cfg._settings = orig
 
 
 def test_course_tile_visible_without_active_scope_for_activation(monkeypatch) -> None:

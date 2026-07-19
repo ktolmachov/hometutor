@@ -4,10 +4,13 @@ from __future__ import annotations
 from app.ui.learning_intents import INTENTS
 
 
-def test_all_seven_intents_defined() -> None:
-    assert len(INTENTS) == 7
+def test_all_intents_defined() -> None:
+    assert len(INTENTS) == 10
     ids = {i.intent_id for i in INTENTS}
-    assert ids == {"simpler", "practice", "check_me", "remember", "plan", "what_next", "didnt_get"}
+    assert ids == {
+        "simpler", "practice", "check_me", "remember", "plan", "what_next", "didnt_get",
+        "compose_session", "find_gap_practice", "connect_graph_quiz",
+    }
 
 
 def test_intent_labels_are_human_readable() -> None:

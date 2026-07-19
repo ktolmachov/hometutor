@@ -100,11 +100,12 @@ def step_completed(
         return
 
     ck = str(completion_key or "").strip()
-    if ck:
-        last_ck = str(st.session_state.get(f"{_AUTOPILOT_PREFIX}_last_completion_key") or "")
-        if ck == last_ck:
-            return
-        st.session_state[f"{_AUTOPILOT_PREFIX}_last_completion_key"] = ck
+    if not ck:
+        return
+    last_ck = str(st.session_state.get(f"{_AUTOPILOT_PREFIX}_last_completion_key") or "")
+    if ck == last_ck:
+        return
+    st.session_state[f"{_AUTOPILOT_PREFIX}_last_completion_key"] = ck
 
     st.session_state[f"{_AUTOPILOT_PREFIX}_steps_completed"] = (
         st.session_state.get(f"{_AUTOPILOT_PREFIX}_steps_completed", 0) + 1

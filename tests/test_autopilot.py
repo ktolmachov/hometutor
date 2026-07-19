@@ -1,8 +1,8 @@
 """B3 Safe autopilot — unit + contract + integration tests.
 
 Verifies: enable/pause/resume/finish lifecycle, budget decrement per step,
-dedup by decision_id (refresh-safe), session-tape privacy-safe payload,
-checkpoint integration (status indicator, activation widget).
+dedup by completion_key (refresh-safe), session-tape privacy-safe payload,
+checkpoint integration (status indicator, activation widget, surface propagation).
 """
 
 from __future__ import annotations
@@ -376,6 +376,109 @@ class TestAutopilotSessionTape:
         tape.append_event = original
 
 
+# ── P2 surface propagation (behavioral) ──────────────────────────────────────
+
+class TestAutopilotSurfacePropagation:
+    def test_enable_autopilot_stores_entry_surface(self, monkeypatch) -> None:
+        import streamlit as st
+        monkeypatch.setattr(st, "session_state", {"_session_tape_id": "s1"})
+        from app.ui.autopilot import enable_autopilot, get_autopilot_state
+
+        enable_autopilot(15, entry_surface="Чат с тьютором")
+        state = get_autopilot_state()
+        assert state["entry_surface"] == "Чат с тьютором"
+
+        enable_autopilot(5, entry_surface="Flashcards")
+        state2 = get_autopilot_state()
+        assert state2["entry_surface"] == "Flashcards"
+
+    def test_autopilot_started_payload_surface(self, monkeypatch) -> None:
+        import streamlit as st
+        monkeypatch.setattr(st, "session_state", {"_session_tape_id": "s1"})
+
+        events = []
+        import app.session_tape as tape
+        original = tape.append_event
+        def capture(sid, evt, payload):
+            events.append((evt, payload))
+        tape.append_event = capture
+
+        from app.ui.autopilot import enable_autopilot
+        enable_autopilot(15, entry_surface="Flashcards")
+
+        started = [e for e in events if e[0] == "autopilot_started"]
+        assert len(started) == 1
+        assert started[0][1]["surface"] == "Flashcards"
+
+        tape.append_event = original
+
+    def test_autopilot_step_payload_surface(self, monkeypatch) -> None:
+        import streamlit as st
+        monkeypatch.setattr(st, "session_state", {"_session_tape_id": "s1"})
+
+        events = []
+        import app.session_tape as tape
+        original = tape.append_event
+        def capture(sid, evt, payload):
+            events.append((evt, payload))
+        tape.append_event = capture
+
+        from app.ui.autopilot import enable_autopilot, step_completed
+        enable_autopilot(15, entry_surface="Чат с тьютором")
+        events.clear()
+
+        step_completed("did-1", completion_key="ck-1")
+        steps = [e for e in events if e[0] == "autopilot_step"]
+        assert len(steps) == 1
+        assert steps[0][1]["surface"] == "Чат с тьютором"
+
+        tape.append_event = original
+
+    def test_activation_ui_path_passes_surface(self, monkeypatch) -> None:
+        """P3 regression: _render_autopilot_activation(surface='Flashcards')
+        must call enable_autopilot(..., entry_surface='Flashcards')."""
+        import streamlit as st
+        monkeypatch.setattr(st, "session_state", {})
+        monkeypatch.setattr(st, "rerun", lambda: None)
+        monkeypatch.setattr(st, "caption", lambda text, **kw: None)
+        monkeypatch.setattr(st, "html", lambda html, **kw: None)
+
+        import contextlib
+
+        @contextlib.contextmanager
+        def _mock_expander(label, expanded=False):
+            yield
+
+        monkeypatch.setattr(st, "expander", _mock_expander)
+
+        class _MockCol:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+        _mock_col = _MockCol()
+        monkeypatch.setattr(st, "columns", lambda n, **kw: (_mock_col,) * n)
+
+        enable_calls = []
+        monkeypatch.setattr(
+            "app.ui.autopilot.enable_autopilot",
+            lambda budget_min, *, entry_surface="Mission Control": enable_calls.append((budget_min, entry_surface)),
+        )
+        monkeypatch.setattr("app.ui.autopilot.is_autopilot_active", lambda: False)
+
+        button_returns = iter([True, False, False])
+        monkeypatch.setattr(st, "button", lambda label, **kw: next(button_returns))
+
+        from app.ui.checkpoint import _render_autopilot_activation
+        _render_autopilot_activation(key_prefix="test_ap_ui", surface="Flashcards")
+
+        assert len(enable_calls) == 1, f"expected 1 enable call, got {enable_calls}"
+        assert enable_calls[0][0] == 5
+        assert enable_calls[0][1] == "Flashcards", (
+            f"surface mismatch: got {enable_calls[0][1]!r}"
+        )
+
+
 # ── autopilot no re-execute on refresh ──────────────────────────────────────
 
 class TestAutopilotNoReExecute:
@@ -390,15 +493,16 @@ class TestAutopilotNoReExecute:
         assert st.session_state["_autopilot_steps_completed"] == 1
         assert st.session_state["_autopilot_budget_remaining_min"] == 20
 
-    def test_empty_completion_key_no_dedup(self, monkeypatch) -> None:
+    def test_empty_completion_key_noop(self, monkeypatch) -> None:
         import streamlit as st
         monkeypatch.setattr(st, "session_state", {"_session_tape_id": "s1"})
         from app.ui.autopilot import enable_autopilot, step_completed
 
         enable_autopilot(15)
-        step_completed("did-1", completion_key="")  # empty ck — tracked (no dedup)
-        step_completed("did-1", completion_key="")  # same empty ck — also tracked
-        assert st.session_state["_autopilot_steps_completed"] == 2
+        step_completed("did-1", completion_key="")  # empty ck → no-op
+        step_completed("did-2", completion_key="")  # empty ck → no-op
+        assert st.session_state["_autopilot_steps_completed"] == 0
+        assert st.session_state["_autopilot_budget_remaining_min"] == 15
 
     def test_different_completion_keys_separate_steps(self, monkeypatch) -> None:
         import streamlit as st

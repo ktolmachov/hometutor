@@ -346,7 +346,6 @@ def _tile_definitions(*, due_count: int | None) -> tuple[MissionTile, ...]:
         MissionTile("library", "Библиотека", "Каталог, пересадки и маршрут области", "разложить", "local_library", "Библиотека", "Открыть", "library"),
         MissionTile("course", course_title, course_desc, "курс", "map", "Курс", "Открыть", "course"),
         MissionTile("adaptive_plan", "Адаптивный план", "Дневной маршрут с приоритетами", "спланировать", "route", "Адаптивный план", "Собрать", "adaptive_plan"),
-        MissionTile("agent_session", "Агент", "Собрать учебную сессию с ИИ-агентом", "сессия", "smart_toy", "Собрать учебную сессию", "Запустить", "agent"),
     )
 
 

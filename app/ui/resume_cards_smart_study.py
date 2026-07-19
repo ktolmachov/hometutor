@@ -123,7 +123,7 @@ def build_ssr_outcome_metric_dict_from_ctx(ctx: SmartStudyRouterSessionContext) 
 
 
 def build_ssr_outcome_metric_dict_live() -> dict[str, Any]:
-    from app.quiz_adaptive import get_weak_concepts
+    from app.learner_state_scope import weak_concepts_for_kg
 
     kg = get_active_knowledge_graph()
     due_n = count_due_reviews_for_kg(kg)
@@ -136,7 +136,7 @@ def build_ssr_outcome_metric_dict_live() -> dict[str, Any]:
         fc = 0
     weak: list[str] = []
     try:
-        weak = list(get_weak_concepts(threshold=60, limit=12))
+        weak = list(weak_concepts_for_kg(kg, threshold=60, limit=12))
     except Exception as _exc:  # noqa: BLE001
         import logging  # noqa: BLE001
 
@@ -341,7 +341,7 @@ def gather_smart_study_router_session_context(
     Pass ``flashcard_due_n`` when the caller already has the value (e.g. from
     ``flashcards_bootstrap()``) to skip a redundant ``count_due_flashcards()`` DB call.
     """
-    from app.quiz_adaptive import get_weak_concepts
+    from app.learner_state_scope import weak_concepts_for_kg
 
     kg = get_active_knowledge_graph()
     due_n = count_due_reviews_for_kg(kg)
@@ -376,7 +376,7 @@ def gather_smart_study_router_session_context(
 
     weak_concepts: list[str] = []
     try:
-        weak_concepts = list(get_weak_concepts(threshold=60, limit=12))
+        weak_concepts = list(weak_concepts_for_kg(kg, threshold=60, limit=12))
     except Exception as _exc:  # noqa: BLE001
         import logging  # noqa: BLE001
 

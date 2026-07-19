@@ -166,11 +166,11 @@ def render_due_reviews_card() -> None:
                     st.error(str(ex))
     if is_soft_recovery_overflow(n):
         st.info("Большая очередь: показаны 7 приоритетных повторений.")
-    from app.quiz_adaptive import get_weak_concepts
+    from app.learner_state_scope import weak_concepts_for_kg
 
     due = filter_due_reviews_for_kg(kg, limit=7)
     concepts_shown = [str(r.get("concept") or "").strip() for r in due if str(r.get("concept") or "").strip()]
-    weak_set = set(get_weak_concepts(threshold=60, limit=64))
+    weak_set = set(weak_concepts_for_kg(kg, threshold=60, limit=64))
     quiz_miss = _concepts_with_recent_quiz_miss(concepts_shown)
     for i, row in enumerate(due):
         c = str(row.get("concept") or "").strip()

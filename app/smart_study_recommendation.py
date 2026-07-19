@@ -42,7 +42,8 @@ class SmartStudySecondaryAction:
 
 @dataclass(frozen=True)
 class SmartStudyRecommendation:
-    """US-20.x: локальный детерминированный контракт «объяснимого следующего шага»."""
+    """US-20.x: локальный детерминированный контракт «объяснимого следующего шага».
+    #23 P0-1: расширен полями phase/topic_hint/origin/return_view/decision_id для единой RoutePolicy."""
 
     hint_kind: SmartStudyRouterHintKind
     primary_label_ru: str
@@ -53,11 +54,48 @@ class SmartStudyRecommendation:
     ml_audit_ru: str = ""
     flashcard_due_n: int = 0
     sm2_due_n: int = 0
+    phase: str = ""
+    topic_hint: str = ""
+    origin: str = ""
+    return_view: str = ""
+    decision_id: str = ""
 
 
 def smart_study_due_total(rec: SmartStudyRecommendation) -> int:
     """Surface total for the two explicit due queues; not a deduplicated review queue."""
     return max(0, int(rec.flashcard_due_n or 0)) + max(0, int(rec.sm2_due_n or 0))
+
+
+_ROUTE_PHASE_MAP: dict[SmartStudyPrimaryNav, str] = {
+    "flashcards_review": "retain",
+    "sm2_tutor": "retain",
+    "quiz_recovery_tutor": "check",
+    "tutor_resume": "understand",
+    "qa_continue": "understand",
+    "tutor_weak_gap": "practice",
+    "plan_block_tutor": "plan",
+    "safe_tutor_5min": "understand",
+}
+
+
+def smart_study_phase(rec: SmartStudyRecommendation) -> str:
+    """Return the pedagogical phase for a recommendation (understand|practice|check|retain|plan)."""
+    return _ROUTE_PHASE_MAP.get(rec.primary_nav, "understand")
+
+
+def compute_route_decision_id(
+    *,
+    primary_nav: str,
+    hint_kind: str,
+    flashcard_due_n: int = 0,
+    sm2_due_n: int = 0,
+    topic_hint: str = "",
+) -> str:
+    """Stable decision_id from local signals — no LLM, no writes."""
+    import hashlib
+
+    seed = f"{primary_nav}|{hint_kind}|{flashcard_due_n}|{sm2_due_n}|{topic_hint}"
+    return hashlib.sha256(seed.encode()).hexdigest()[:12]
 
 
 def smart_study_contrastive_explanation(rec: SmartStudyRecommendation) -> str:
@@ -372,5 +410,45 @@ def _build_smart_study_recommendation_rules(
             plan_primary_block=plan_primary_block,
         )
         if rec is not None:
-            return rec
+            return _enrich_route_decision(
+                rec,
+                surface=surface,
+                tutor_topic=tutor_topic,
+                first_weak_concept=first_weak_concept,
+                plan_primary_block=plan_primary_block,
+            )
     raise RuntimeError("Smart Study Router failed to build fallback recommendation")
+
+
+def _enrich_route_decision(
+    rec: SmartStudyRecommendation,
+    *,
+    surface: str,
+    tutor_topic: str | None = None,
+    first_weak_concept: str | None = None,
+    plan_primary_block: dict[str, Any] | None = None,
+) -> SmartStudyRecommendation:
+    """Fill derived RouteDecision fields (phase, topic_hint, origin, return_view, decision_id)."""
+    from dataclasses import replace
+
+    _topic = (tutor_topic or "").strip() or (first_weak_concept or "").strip()
+    if plan_primary_block and isinstance(plan_primary_block, dict):
+        _topic = str(plan_primary_block.get("concept") or "").strip() or _topic
+    _phase = smart_study_phase(rec)
+    _origin = surface
+    _return = "Mission Control" if surface == "home" else surface
+    _dec_id = compute_route_decision_id(
+        primary_nav=rec.primary_nav,
+        hint_kind=rec.hint_kind,
+        flashcard_due_n=rec.flashcard_due_n,
+        sm2_due_n=rec.sm2_due_n,
+        topic_hint=_topic,
+    )
+    return replace(
+        rec,
+        phase=_phase,
+        topic_hint=_topic,
+        origin=_origin,
+        return_view=_return,
+        decision_id=_dec_id,
+    )

@@ -138,7 +138,7 @@ def render_progress_home_tab_impl(md: dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _render_extras_section_a(md: dict[str, Any]) -> None:
+def _render_extras_section_a(md: dict[str, Any]) -> tuple[dict[str, Any], Any, str | None]:
     """Learner panel + adaptive plan + quiz mastery + activity timeline."""
     from app.knowledge_service import get_personalized_subgraph, knowledge_graph as kg
     from app.learner_model_service import get_personalized_learner_profile

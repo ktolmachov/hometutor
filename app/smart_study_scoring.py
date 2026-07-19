@@ -87,7 +87,7 @@ def _ssr_recommendation_for_kind(
     topic_t = str(tutor_topic or "").strip() or None
     weak = str(first_weak_concept or "").strip() or None
     plan_block = plan_primary_block if isinstance(plan_primary_block, dict) else None
-    plan_first = surface == "adaptive_plan" and plan_block is not None
+    plan_first = plan_block is not None
     hk = str(hint_kind or "").strip()
     if hk == "cards_due":
         if fc <= 0:

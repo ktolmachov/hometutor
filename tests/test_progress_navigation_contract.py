@@ -2,6 +2,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+import runpy
+
+import streamlit as st
+
+from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
 
 
 def test_sidebar_uses_pending_key_not_switch_page() -> None:
@@ -20,11 +25,29 @@ def test_orphan_alias_sets_pending_view_and_breadcrumb() -> None:
     )
     text = orphan_path.read_text(encoding="utf-8")
 
-    assert '"_pending_current_view"' in text
+    assert "PENDING_CURRENT_VIEW_KEY" in text
     assert '"Прогресс обучения"' in text
     assert '"home_breadcrumb_origin"' in text
     assert '"Mission Control"' in text
     assert 'st.switch_page("main.py")' in text
+
+
+def test_orphan_alias_runtime_sets_pending_view_and_switches_to_main(monkeypatch) -> None:
+    orphan_path = (
+        Path(__file__).resolve().parent.parent
+        / "app" / "ui" / "pages" / "3_Мой_прогресс.py"
+    )
+    state: dict[str, str] = {}
+    switched: list[str] = []
+
+    monkeypatch.setattr(st, "session_state", state)
+    monkeypatch.setattr(st, "switch_page", switched.append)
+
+    runpy.run_path(str(orphan_path))
+
+    assert state[PENDING_CURRENT_VIEW_KEY] == "Прогресс обучения"
+    assert state["home_breadcrumb_origin"] == "Mission Control"
+    assert switched == ["main.py"]
 
 
 def test_render_progress_home_tab_impl_no_dead_params() -> None:

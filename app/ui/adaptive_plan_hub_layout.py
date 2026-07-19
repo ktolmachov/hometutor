@@ -142,9 +142,11 @@ def render_adaptive_plan_hub(
     _steer_local_adp: str | None = None
     try:
         from app import user_state as _user_state_adp
-        from app.quiz_adaptive import get_weak_concepts as _get_weak_adp
+        from app.learner_state_scope import weak_concepts_for_kg as _weak_for_kg_adp
+        from app.knowledge_service import get_active_knowledge_graph as _get_kg_adp
         from app.spaced_repetition import count_due_reviews as _count_due_sm2
 
+        _kg_adp = _get_kg_adp()
         _fc_n = int(_user_state_adp.count_due_flashcards())
         _due_sm2 = int(_count_due_sm2())
         _t_snap = _user_state_adp.get_tutor_learning_resume()
@@ -156,7 +158,7 @@ def render_adaptive_plan_hub(
             _has_read_adp = _user_state_adp.get_latest_resume() is not None
         except Exception:  # noqa: BLE001 - optional local resume lookup must not hide the hub.
             _has_read_adp = False
-        _weak_adp = _get_weak_adp(threshold=60, limit=12)
+        _weak_adp = _weak_for_kg_adp(_kg_adp, threshold=60, limit=12)
         _steer_local_adp = _user_state_adp.get_smart_study_steering_preference() or None
     except Exception:  # noqa: BLE001 - optional SSR inputs must not block the plan hub.
         pass

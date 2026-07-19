@@ -27,8 +27,10 @@ from app.smart_study_recommendation import (
     _build_smart_study_recommendation_rules,
     apply_smart_study_steering_preference,
     apply_source_coverage_route_guard,
+    compute_route_decision_id,
     smart_study_due_total,
     smart_study_contrastive_explanation,
+    smart_study_phase,
     smart_study_why_not_others_ru,
 )
 from app.smart_study_recovery_ladder import (
@@ -127,6 +129,8 @@ __all__ = [
     "build_smart_study_recommendation",
     "smart_study_due_total",
     "smart_study_contrastive_explanation",
+    "smart_study_phase",
     "smart_study_why_not_others_ru",
     "apply_source_coverage_route_guard",
+    "compute_route_decision_id",
 ]

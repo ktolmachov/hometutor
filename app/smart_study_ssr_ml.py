@@ -75,7 +75,7 @@ def _ssr_ml_tier_allowed_hints(
         out.add("quiz_failed")
         return frozenset(out)
     plan_block = plan_primary_block if isinstance(plan_primary_block, dict) else None
-    plan_first = surface == "adaptive_plan" and plan_block is not None
+    plan_first = plan_block is not None
     if plan_first:
         out.add("adaptive_plan")
         return frozenset(out)
@@ -110,7 +110,7 @@ def _ssr_merge_ml_feature_profile(
     qf = _quiz_feedback_failed(quiz_feedback_status)
     weak = str(first_weak_concept or "").strip() or None
     plan_block = plan_primary_block if isinstance(plan_primary_block, dict) else None
-    backlog = 5.0 if (surface == "adaptive_plan" and plan_block is not None) else 0.0
+    backlog = 5.0 if plan_block is not None else 0.0
     now = datetime.now(timezone.utc)
     base: dict[str, Any] = {
         "time_since_last_review_hours": 48.0,

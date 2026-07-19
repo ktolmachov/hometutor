@@ -40,6 +40,9 @@ EVENT_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
     "retrieval_completed": ("source_count", "retrieval_mode", "latency_ms"),
     "answer_surfaced": ("confidence", "source_count", "total_answer_ms"),
     "quiz_attempt": ("quiz_kind", "topic", "correct", "difficulty_band"),
+    "route_offered": ("surface", "primary_nav", "hint_kind"),
+    "route_selected": ("surface", "primary_nav", "hint_kind", "accepted"),
+    "learning_action_started": ("surface", "primary_nav", "topic_hint"),
     "surface_breached_soft": (
         "surface",
         "variant",

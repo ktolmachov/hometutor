@@ -1,7 +1,9 @@
-"""Lecture route: clipped segments + gate quizzes (#19 P0-1 + P0-2).
+"""Lecture route: clipped segments + gate quizzes + prediction + persistence (#19 P0+P1).
 
-Groups media sections into 8-12 min segments, plays clipped audio, then shows
-a scoped gate quiz from the sections' konspekt text.
+Groups media sections into 8-12 min segments, plays clipped audio, shows a
+prediction question before listening, then a scoped gate quiz from the sections'
+konspekt text. Segment results are persisted via user_state_lecture so the
+«глубина лекции с подтверждением» metric survives restart.
 """
 
 from __future__ import annotations
@@ -191,8 +193,8 @@ def _resolve_audio_for_sidecar(sidecar: MediaSidecar) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-def _generate_gate_quiz(content: str, title: str) -> dict[str, Any] | None:
-    if len(content.strip()) < 120:
+def _generate_gate_quiz(content: str, title: str, *, num_questions: int = 5) -> dict[str, Any] | None:
+    if not content or not content.strip():
         return None
     from app.quiz_scoped import generate_scoped_quiz_from_content
     from app.quiz_adaptive import get_adaptive_difficulty
@@ -205,7 +207,7 @@ def _generate_gate_quiz(content: str, title: str) -> dict[str, Any] | None:
         content=content,
         subgraph={"topic_name": title, "key_concepts": [], "documents": []},
         adaptive_level=level,
-        num_questions=5,
+        num_questions=num_questions,
     )
 
 
@@ -251,6 +253,11 @@ def _init_gate_state(segments: list[LectureSegment], rows: list[dict[str, Any]])
             "show_gate": False,
             "gate_questions": None,
             "gate_last_content": "",
+            "prediction_shown": False,
+            "prediction_question": None,
+            "prediction_prompt": None,
+            "prediction_student_answer": None,
+            "gate_score": None,
         }
     return st.session_state[_GS_KEY]
 
@@ -301,10 +308,18 @@ def render_lecture_route(
                 gate["show_gate"] = False
                 gate["gate_questions"] = None
                 gate["gate_last_content"] = ""
+                gate["prediction_shown"] = False
+                gate["prediction_question"] = None
+                gate["prediction_prompt"] = None
+                gate["prediction_student_answer"] = None
+                gate["gate_score"] = None
                 st.rerun()
 
     seg = segments[cur]
     st.markdown(f"**Отрезок {cur+1}/{len(segments)}:** {seg.title or 'Без названия'} · {seg.duration_min} мин")
+
+    # P1: prediction question before listening
+    _render_prediction_question(seg, gate)
 
     if seg.audio_path and Path(seg.audio_path).exists():
         st.audio(str(seg.audio_path), start_time=int(seg.t_start),
@@ -355,6 +370,108 @@ def _collect_timecoded_sections(
     return sections
 
 
+def _render_prediction_question(
+    seg: LectureSegment,
+    gate: dict[str, Any],
+) -> None:
+    """P1: show one prediction question before the audio plays.
+    Student makes a guess; same question is included in the gate quiz.
+    """
+    if gate.get("show_gate") or gate.get("prediction_shown"):
+        return
+
+    if gate.get("prediction_question") is None:
+        with st.spinner("Формулирую вопрос-предсказание…"):
+            content = _content_for_segment(seg)
+            if not content or len(content.strip()) < 120:
+                gate["prediction_shown"] = True
+                gate["prediction_question"] = None
+                return
+            quiz = _generate_gate_quiz(content, seg.title or f"pred-{seg.index}", num_questions=1)
+            if quiz and quiz.get("questions"):
+                gate["prediction_question"] = quiz["questions"][0]
+                gate["prediction_prompt"] = quiz.get("motivation", "Попробуйте предсказать ответ до прослушивания.")
+        if gate["prediction_question"] is None:
+            gate["prediction_shown"] = True
+        st.rerun()
+
+    pq = gate["prediction_question"]
+    if not isinstance(pq, dict):
+        gate["prediction_shown"] = True
+        return
+
+    st.markdown("---")
+    st.markdown("### 🎯 Ставка: что вы уже знаете?")
+    if gate.get("prediction_prompt"):
+        st.caption(str(gate["prediction_prompt"]))
+    st.write(str(pq.get("question", "")))
+
+    options = pq.get("options") or []
+    if options:
+        choice = st.radio(
+            "Ваш ответ:",
+            options=options,
+            index=None,
+            key="lk_prediction_choice",
+            format_func=lambda x: str(x),
+        )
+        if choice is not None and st.button("Запомнить ставку", key="lk_prediction_submit", type="primary"):
+            gate["prediction_student_answer"] = choice
+            gate["prediction_shown"] = True
+            st.rerun()
+
+
+def _render_prediction_question(
+    seg: LectureSegment,
+    gate: dict[str, Any],
+) -> None:
+    """P1: show one prediction question before the audio plays.
+    Student makes a guess; same question is included in the gate quiz.
+    """
+    if gate.get("show_gate") or gate.get("prediction_shown"):
+        return
+
+    if gate.get("prediction_question") is None:
+        with st.spinner("Формулирую вопрос-предсказание…"):
+            content = _content_for_segment(seg)
+            if not content or len(content.strip()) < 120:
+                gate["prediction_shown"] = True
+                gate["prediction_question"] = None
+                return
+            quiz = _generate_gate_quiz(content, seg.title or f"pred-{seg.index}", num_questions=1)
+            if quiz and quiz.get("questions"):
+                gate["prediction_question"] = quiz["questions"][0]
+                gate["prediction_prompt"] = quiz.get("motivation", "Попробуйте предсказать ответ до прослушивания.")
+        if gate["prediction_question"] is None:
+            gate["prediction_shown"] = True
+        st.rerun()
+
+    pq = gate["prediction_question"]
+    if not isinstance(pq, dict):
+        gate["prediction_shown"] = True
+        return
+
+    st.markdown("---")
+    st.markdown("### 🎯 Ставка: что вы уже знаете?")
+    if gate.get("prediction_prompt"):
+        st.caption(str(gate["prediction_prompt"]))
+    st.write(str(pq.get("question", "")))
+
+    options = pq.get("options") or []
+    if options:
+        choice = st.radio(
+            "Ваш ответ:",
+            options=options,
+            index=None,
+            key="lk_prediction_choice",
+            format_func=lambda x: str(x),
+        )
+        if choice is not None and st.button("Запомнить ставку", key="lk_prediction_submit", type="primary"):
+            gate["prediction_student_answer"] = choice
+            gate["prediction_shown"] = True
+            st.rerun()
+
+
 def _render_gate(
     seg: LectureSegment,
     gate: dict[str, Any],
@@ -394,11 +511,13 @@ def _render_gate(
             st.success(f"✅ Правильно! {c}/{t} — следующий отрезок готов")
             st.caption("Чтобы записать прогресс и XP, нажмите «Завершить и сохранить прогресс» в квизе.")
             if st.button("Открыть следующий отрезок", key="lk_gate_continue", type="primary"):
+                gate["gate_score"] = c / t
                 _clear_gate_scoped_state(source_key, n_questions)
                 _advance_segment(gate, seg, correct=True)
                 st.rerun()
         else:
             st.error(f"Нужно больше правильных. Ваш результат: {c}/{t}")
+            gate["gate_score"] = c / t
             _render_gate_fallback(seg, gate, source_key=source_key, n_questions=n_questions)
     else:
         st.info(f"Ответьте на все {n_questions} вопросов ({results['answered']}/{n_questions})")
@@ -423,6 +542,31 @@ def _advance_segment(
     gate["show_gate"] = False
     gate["gate_questions"] = None
     gate["gate_last_content"] = ""
+
+    # P1: persist segment result so depth survives restart
+    try:
+        from app.user_state_lecture import upsert_lecture_segment_result
+        konspekt_path = ""
+        if seg.section_dicts:
+            konspekt_path = str(seg.section_dicts[0].get("media_path") or "")
+        predicted_correct = None
+        pred_answer = gate.get("prediction_student_answer")
+        pred_question = gate.get("prediction_question")
+        if pred_answer is not None and isinstance(pred_question, dict):
+            correct_answer = pred_question.get("correct_answer") or pred_question.get("answer")
+            if correct_answer is not None:
+                predicted_correct = str(pred_answer) == str(correct_answer)
+        gate_score = gate.get("gate_score")
+        upsert_lecture_segment_result(
+            konspekt_path=konspekt_path,
+            segment_index=seg.index,
+            passed=correct,
+            predicted_correct=predicted_correct,
+            gate_score=float(gate_score) if gate_score is not None else None,
+        )
+    except Exception:  # noqa: BLE001 — persistence is best-effort, never block UI
+        pass
+
     if correct and seg.index + 1 < gate["total"]:
         gate["current"] = seg.index + 1
 

@@ -1,0 +1,4 @@
+﻿{
+  "$schema": "https://app.kilo.ai/config.json",
+  "model": "llamacpp-local/qwen3-coder-next-q4ks"
+}

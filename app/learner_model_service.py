@@ -544,8 +544,8 @@ def get_emotional_heatmap_pivot(last_days: int = 30):
             for cid, node in kg.get_concepts().items()
             if isinstance(node, dict) and str(cid).strip()
         }
-    except Exception:  # noqa: BLE001 - graph may be unavailable in offline/test contexts
-        active_ids = set()
+    except Exception:  # noqa: BLE001 — graph may be unavailable; return None instead of leaking ghosts
+        return None
 
     _KNOWN_GLOBAL_CONCEPTS = {"global", "общая", "общий фон"}
 

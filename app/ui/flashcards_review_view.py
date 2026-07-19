@@ -1488,7 +1488,7 @@ def _render_flashcards_checkpoint(*, key_prefix: str) -> None:
     try:
         from app.ui.checkpoint import render_checkpoint
         from app.smart_study_router import build_smart_study_recommendation
-        from app.ui.resume_cards_smart_study import gather_smart_study_router_session_context
+        from app.ui.resume_cards_smart_study import gather_smart_study_router_session_context, _get_saved_plan_primary_block
     except Exception as _exc:  # noqa: BLE001 - optional checkpoint
         import logging as _logging  # noqa: BLE001
         _logging.getLogger(__name__).debug("checkpoint import failed: %s", _exc)
@@ -1499,6 +1499,7 @@ def _render_flashcards_checkpoint(*, key_prefix: str) -> None:
         import logging as _logging  # noqa: BLE001
         _logging.getLogger(__name__).debug("checkpoint context gather failed: %s", _exc)
         return
+    plan_block = _get_saved_plan_primary_block()
     rec = build_smart_study_recommendation(
         surface="flashcards_hub",
         flashcard_due_n=ctx.flashcard_due_n,
@@ -1509,7 +1510,7 @@ def _render_flashcards_checkpoint(*, key_prefix: str) -> None:
         has_last_answer_qa=ctx.has_last_answer_qa,
         has_reading_resume=ctx.has_reading,
         first_weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,
-        plan_primary_block=None,
+        plan_primary_block=plan_block,
     )
     render_checkpoint(
         rec,
@@ -1518,4 +1519,5 @@ def _render_flashcards_checkpoint(*, key_prefix: str) -> None:
         return_view="Mission Control",
         key_prefix=key_prefix,
         weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,
+        plan_block=plan_block,
     )

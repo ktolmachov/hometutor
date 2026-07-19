@@ -533,6 +533,13 @@ def render_tutor_micro_quiz_block(active: dict[str, Any], session_id: str) -> No
         if st.button("Закрыть мини-проверку", key=f"tutor_mq_close_{session_id[:8]}"):
             st.session_state.pop("tutor_micro_quiz_active", None)
             st.rerun()
+        # B1 checkpoint: after micro-quiz completion, show unified next-step gate
+        _render_micro_quiz_checkpoint(
+            session_id=session_id,
+            topic=topic,
+            quiz_feedback=fb if isinstance(fb, dict) else None,
+            key_prefix=f"tutor_mq_{session_id[:8]}",
+        )
         return
 
     _ensure_micro_quiz_receipt_baseline(f"tutor_mq_{session_id[:8]}", topic=topic)
@@ -615,3 +622,55 @@ def render_tutor_micro_quiz_block(active: dict[str, Any], session_id: str) -> No
                 sync_latency_budget_from_payload(full)
                 st.session_state["tutor_micro_quiz_active"] = active
                 st.rerun()
+
+
+def _render_micro_quiz_checkpoint(
+    *,
+    session_id: str,
+    topic: str | None = None,
+    quiz_feedback: dict | None = None,
+    key_prefix: str,
+) -> None:
+    """B1: after micro-quiz result, render unified checkpoint."""
+    try:
+        from app.ui.checkpoint import render_checkpoint
+        from app.smart_study_router import build_smart_study_recommendation
+        from app.ui.resume_cards_smart_study import gather_smart_study_router_session_context, _get_saved_plan_primary_block
+    except Exception as _exc:  # noqa: BLE001
+        import logging as _logging  # noqa: BLE001
+        _logging.getLogger(__name__).debug("checkpoint import failed: %s", _exc)
+        return
+    try:
+        ctx = gather_smart_study_router_session_context(index_stats=None)
+    except Exception as _exc:  # noqa: BLE001
+        import logging as _logging  # noqa: BLE001
+        _logging.getLogger(__name__).debug("checkpoint context gather failed: %s", _exc)
+        return
+    try:
+        qfs = str(quiz_feedback.get("status") or "").strip() or None if isinstance(quiz_feedback, dict) else None
+    except Exception:  # noqa: BLE001
+        qfs = None
+    plan_block = _get_saved_plan_primary_block()
+    rec = build_smart_study_recommendation(
+        surface="tutor_chat",
+        flashcard_due_n=ctx.flashcard_due_n,
+        sm2_due_n=ctx.sm2_due_n,
+        quiz_feedback_status=qfs,
+        has_tutor_resume=bool(ctx.effective_tutor_snap),
+        tutor_topic=ctx.tutor_topic or topic,
+        has_last_answer_qa=ctx.has_last_answer_qa,
+        has_reading_resume=ctx.has_reading,
+        first_weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,
+        plan_primary_block=plan_block,
+    )
+    render_checkpoint(
+        rec,
+        surface="tutor",
+        origin="tutor",
+        return_view="Mission Control",
+        key_prefix=key_prefix,
+        tutor_session_id=session_id,
+        tutor_topic=ctx.tutor_topic or topic,
+        weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,
+        plan_block=plan_block,
+    )

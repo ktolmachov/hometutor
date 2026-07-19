@@ -226,7 +226,6 @@ def render_smart_study_next_step_card(
                 if st.button(sec.label_ru, key=ss_key, width="stretch"):
                     _card.apply_smart_study_secondary_navigation(sec.action_id, topic_hint=slot_hint)
 
-        # ── What-if preview row (❓ buttons) ─────────────────────────────────
         if enable_what_if_preview and rec_render.secondaries:
             preview_cols = st.columns(min(4, n_sec))
             for idx2, (pcol, sec) in enumerate(zip(preview_cols, rec_render.secondaries)):
@@ -235,20 +234,12 @@ def render_smart_study_next_step_card(
                 with pcol:
                     is_open = st.session_state.get(state_key, False)
                     icon_label = "✕" if is_open else "❓"
-                    if st.button(
-                        icon_label,
-                        key=whatif_key,
-                        help=f"Посмотреть, что будет, если выбрать «{sec.label_ru}»",
-                        use_container_width=True,
-                    ):
-                        # Toggle: close other previews, open this one
+                    if st.button(icon_label, key=whatif_key,
+                                 help=f"Что если выбрать «{sec.label_ru}»"):
                         for other_sec in rec_render.secondaries:
-                            other_key = f"{key_prefix}_ssr_whatif_{other_sec.action_id}"
-                            st.session_state[other_key] = False
-                        st.session_state[state_key] = not st.session_state.get(state_key, False)
+                            st.session_state[f"{key_prefix}_ssr_whatif_{other_sec.action_id}"] = False
+                        st.session_state[state_key] = not is_open
                         st.rerun()
-
-            # ── Render active preview ─────────────────────────────────────────
             for sec in rec_render.secondaries:
                 state_key = f"{key_prefix}_ssr_whatif_{sec.action_id}"
                 if st.session_state.get(state_key, False):
@@ -258,10 +249,38 @@ def render_smart_study_next_step_card(
                     else:
                         st.info(
                             f"**Что если выбрать «{sec.label_ru}»:**  \n"
-                            f"Рекомендация: **{sim_result.counterfactual_primary_label_ru}**  \n"
+                            f"**{sim_result.counterfactual_primary_label_ru}**  \n"
                             f"{sim_result.reason_ru}"
                         )
-                    # Only show one preview at a time (first match found is shown)
                     break
 
+    _render_intent_palette(rec_render, key_prefix, slot_hint)
+
     st.html("</div></div>")
+
+
+def _render_intent_palette(
+    rec: SmartStudyRecommendation,
+    key_prefix: str,
+    topic_hint: str | None,
+) -> None:
+    """Closed palette: 7 user intents behind «Сменить направление»."""
+    from app.ui.learning_intents import INTENTS, apply_learning_intent
+
+    with st.expander("🔄 Сменить направление", expanded=False):
+        st.caption("Выберите, что вы хотите сделать прямо сейчас:")
+        cols = st.columns(4)
+        for i, intent in enumerate(INTENTS):
+            col_idx = i % 4
+            with cols[col_idx]:
+                if st.button(
+                    f"{intent.icon} {intent.label_ru}",
+                    key=f"{key_prefix}_intent_{intent.intent_id}",
+                    width="stretch",
+                    help=intent.sr_label,
+                ):
+                    apply_learning_intent(
+                        intent.intent_id,
+                        topic_hint=topic_hint or rec.topic_hint,
+                        return_view=rec.return_view or "Mission Control",
+                    )

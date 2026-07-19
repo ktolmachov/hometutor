@@ -1,0 +1,1454 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Серия №25: Ответ под присягой — Semantic Groundedness — hometutor</title>
+  <meta name="description" content="Разбор серии №25: семантическая достоверность ответа, SGAR, цепочка провенанса, разрыв cache-hit в проекте hometutor." />
+  <style>
+    :root {
+      --bg-primary: #0d1117;
+      --bg-secondary: #161b22;
+      --bg-tertiary: #1c2128;
+      --bg-card: #21262d;
+      --border: #30363d;
+      --border-accent: #484f58;
+      --text-primary: #e6edf3;
+      --text-secondary: #8b949e;
+      --text-muted: #6e7681;
+      --accent-blue: #58a6ff;
+      --accent-purple: #bc8cff;
+      --accent-green: #3fb950;
+      --accent-yellow: #d29922;
+      --accent-orange: #f0883e;
+      --accent-red: #f85149;
+      --accent-teal: #39d353;
+      --risk-high: #f85149;
+      --risk-mid: #f0883e;
+      --risk-low: #3fb950;
+      --tag-bg-high: rgba(248, 81, 73, 0.15);
+      --tag-bg-mid: rgba(240, 136, 62, 0.15);
+      --tag-bg-low: rgba(63, 185, 80, 0.15);
+      --tag-bg-blue: rgba(88, 166, 255, 0.12);
+      --tag-bg-purple: rgba(188, 140, 255, 0.12);
+      --shadow: 0 8px 24px rgba(1, 4, 9, 0.6);
+      --radius: 8px;
+      --radius-sm: 4px;
+      --font-mono: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Helvetica, Arial, sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    /* ── TOP NAV ─────────────────────────────────────── */
+    .topnav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(13, 17, 23, 0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      display: flex; align-items: center; gap: 20px;
+      height: 52px;
+    }
+    .topnav-brand { font-weight: 700; font-size: 13px; color: var(--accent-blue); white-space: nowrap; letter-spacing: 0.01em; }
+    .topnav-links { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; flex: 1; }
+    .topnav-links::-webkit-scrollbar { display: none; }
+    .topnav-links a {
+      color: var(--text-secondary); text-decoration: none; font-size: 12px;
+      padding: 5px 10px; border-radius: var(--radius-sm); white-space: nowrap;
+      transition: color 0.15s, background 0.15s;
+    }
+    .topnav-links a:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+    .topnav-commit {
+      font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);
+      white-space: nowrap; border: 1px solid var(--border); padding: 3px 8px;
+      border-radius: var(--radius-sm);
+    }
+
+    /* ── HERO ───────────────────────────────────────── */
+    .hero {
+      background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1117 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 56px 24px 48px; text-align: center;
+      position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content: ''; position: absolute; top: -60px; left: 50%; transform: translateX(-50%);
+      width: 600px; height: 300px;
+      background: radial-gradient(ellipse, rgba(88, 166, 255, 0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-series {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+      color: var(--accent-blue); background: var(--tag-bg-blue);
+      border: 1px solid rgba(88, 166, 255, 0.3);
+      padding: 5px 14px; border-radius: 20px; margin-bottom: 20px;
+    }
+    .hero h1 {
+      font-size: clamp(24px, 4vw, 36px); font-weight: 800; color: var(--text-primary);
+      line-height: 1.3; margin-bottom: 16px; letter-spacing: -0.02em;
+    }
+    .hero-sub { font-size: 15px; color: var(--text-secondary); max-width: 680px; margin: 0 auto 28px; }
+    .hero-meta { display: flex; align-items: center; justify-content: center; gap: 20px; flex-wrap: wrap; }
+    .meta-chip {
+      display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+      color: var(--text-secondary); background: var(--bg-secondary);
+      border: 1px solid var(--border); padding: 5px 12px; border-radius: 20px;
+    }
+    .meta-chip span { color: var(--text-primary); font-weight: 600; }
+
+    /* ── LAYOUT ─────────────────────────────────────── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+    .section { padding: 52px 0 0; }
+    .section-header {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 28px; padding-bottom: 16px; border-bottom: 1px solid var(--border);
+    }
+    .section-icon { font-size: 22px; flex-shrink: 0; }
+    .section-num {
+      font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);
+      background: var(--bg-card); border: 1px solid var(--border);
+      padding: 2px 8px; border-radius: var(--radius-sm);
+    }
+    .section h2 { font-size: 20px; font-weight: 700; color: var(--text-primary); }
+
+    /* ── CARDS ──────────────────────────────────────── */
+    .card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px 24px; margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 14px; font-weight: 700; color: var(--text-primary);
+      margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+    }
+    .card p, .card li { font-size: 14px; color: var(--text-secondary); line-height: 1.7; }
+    .card ul { padding-left: 20px; }
+    .card li { margin-bottom: 4px; }
+
+    /* ── RISK TAGS ──────────────────────────────────── */
+    .risk {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+      padding: 3px 10px; border-radius: 12px;
+    }
+    .risk-high { background: var(--tag-bg-high); color: var(--risk-high); border: 1px solid rgba(248,81,73,0.35); }
+    .risk-mid  { background: var(--tag-bg-mid);  color: var(--risk-mid);  border: 1px solid rgba(240,136,62,0.35); }
+    .risk-low  { background: var(--tag-bg-low);  color: var(--risk-low);  border: 1px solid rgba(63,185,80,0.35); }
+
+    .tag {
+      display: inline-flex; align-items: center; font-size: 11px; font-weight: 600;
+      padding: 2px 9px; border-radius: 12px; margin: 2px 2px 2px 0;
+    }
+    .tag-blue   { background: var(--tag-bg-blue);   color: var(--accent-blue);   border: 1px solid rgba(88,166,255,0.25); }
+    .tag-purple { background: var(--tag-bg-purple); color: var(--accent-purple); border: 1px solid rgba(188,140,255,0.25); }
+    .tag-green  { background: rgba(63,185,80,0.12); color: var(--accent-green);  border: 1px solid rgba(63,185,80,0.25); }
+    .tag-orange { background: rgba(240,136,62,0.12); color: var(--accent-orange); border: 1px solid rgba(240,136,62,0.25); }
+    .tag-red    { background: var(--tag-bg-high);   color: var(--accent-red);    border: 1px solid rgba(248,81,73,0.25); }
+    .tag-muted  { background: var(--bg-tertiary);   color: var(--text-muted);    border: 1px solid var(--border); }
+
+    /* ── TABLE ──────────────────────────────────────── */
+    .table-wrap {
+      overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); margin-bottom: 24px;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th {
+      background: var(--bg-tertiary); color: var(--text-muted);
+      font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+      padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    tbody tr { border-bottom: 1px solid var(--border); transition: background 0.15s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--bg-secondary); }
+    tbody td { padding: 10px 14px; color: var(--text-secondary); vertical-align: top; line-height: 1.6; }
+    tbody td code {
+      font-family: var(--font-mono); font-size: 11px; color: var(--accent-purple);
+      background: rgba(188,140,255,0.08); padding: 1px 5px; border-radius: 3px;
+    }
+
+    /* ── CODE BLOCK ─────────────────────────────────── */
+    .codeblock {
+      background: #010409; border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 16px 20px; font-family: var(--font-mono); font-size: 12px;
+      line-height: 1.7; color: #e6edf3; overflow-x: auto; margin-bottom: 16px;
+    }
+    .codeblock .cm { color: #6e7681; font-style: italic; }
+    .codeblock .kw { color: var(--accent-red); }
+    .codeblock .fn { color: var(--accent-blue); }
+    .codeblock .str { color: var(--accent-green); }
+    .codeblock .num { color: var(--accent-orange); }
+    .codeblock .hl { background: rgba(88,166,255,0.1); display: inline-block; width: 100%; border-left: 3px solid var(--accent-blue); padding-left: 8px; margin-left: -11px; }
+
+    /* ── CALLOUT ─────────────────────────────────────── */
+    .callout {
+      display: flex; gap: 14px; padding: 16px 20px; border-radius: var(--radius);
+      border-left: 3px solid; margin-bottom: 16px; background: var(--bg-secondary);
+    }
+    .callout-icon { font-size: 18px; flex-shrink: 0; line-height: 1.5; }
+    .callout-body { flex: 1; }
+    .callout-title { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+    .callout-text  { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+    .callout-danger  { border-color: var(--risk-high); background: rgba(248,81,73,0.06); }
+    .callout-danger .callout-title { color: var(--risk-high); }
+    .callout-warn    { border-color: var(--accent-yellow); background: rgba(210,153,34,0.06); }
+    .callout-warn .callout-title { color: var(--accent-yellow); }
+    .callout-info    { border-color: var(--accent-blue); background: rgba(88,166,255,0.06); }
+    .callout-info .callout-title { color: var(--accent-blue); }
+    .callout-success { border-color: var(--accent-green); background: rgba(63,185,80,0.06); }
+    .callout-success .callout-title { color: var(--accent-green); }
+
+    /* ── CHAIN ──────────────────────────────────────── */
+    .chain { display: flex; flex-direction: column; gap: 0; margin-bottom: 20px; }
+    .chain-step { display: flex; align-items: flex-start; gap: 0; }
+    .chain-left { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; width: 36px; }
+    .chain-dot {
+      width: 12px; height: 12px; border-radius: 50%;
+      border: 2px solid var(--accent-blue); background: var(--bg-primary);
+      flex-shrink: 0; margin-top: 5px;
+    }
+    .chain-dot-red { border-color: var(--risk-high); }
+    .chain-dot-orange { border-color: var(--accent-orange); }
+    .chain-dot-green { border-color: var(--accent-green); }
+    .chain-dot-purple { border-color: var(--accent-purple); }
+    .chain-dot-muted { border-color: var(--text-muted); }
+    .chain-line { width: 2px; flex: 1; min-height: 16px; background: var(--border); margin: 0 auto; }
+    .chain-content { flex: 1; padding: 2px 0 16px 12px; }
+    .chain-label { font-family: var(--font-mono); font-size: 12px; color: var(--accent-blue); font-weight: 600; }
+    .chain-label-red { color: var(--accent-red); }
+    .chain-label-green { color: var(--accent-green); }
+    .chain-label-orange { color: var(--accent-orange); }
+    .chain-desc { font-size: 13px; color: var(--text-secondary); margin-top: 2px; line-height: 1.5; }
+
+    /* ── PLAN GRID ───────────────────────────────────── */
+    .plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+    .plan-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .plan-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+    .plan-badge { font-family: var(--font-mono); font-size: 12px; font-weight: 800; padding: 4px 12px; border-radius: var(--radius-sm); }
+    .badge-p0 { background: rgba(248,81,73,0.2); color: #f85149; border: 1px solid rgba(248,81,73,0.4); }
+    .badge-p1 { background: rgba(240,136,62,0.2); color: #f0883e; border: 1px solid rgba(240,136,62,0.4); }
+    .badge-p2 { background: rgba(88,166,255,0.15); color: #58a6ff; border: 1px solid rgba(88,166,255,0.35); }
+    .plan-title { font-size: 14px; font-weight: 700; color: var(--text-primary); flex: 1; }
+    .plan-body { padding: 16px 18px; font-size: 13px; color: var(--text-secondary); }
+    .plan-row {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      gap: 8px; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+    }
+    .plan-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .plan-key { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; flex-shrink: 0; padding-top: 1px; }
+    .plan-val { font-size: 13px; color: var(--text-secondary); text-align: right; }
+    .plan-val code {
+      font-family: var(--font-mono); font-size: 11px; color: var(--accent-purple);
+      background: rgba(188,140,255,0.08); padding: 1px 5px; border-radius: 3px;
+    }
+
+    /* ── CONTRADICTION ───────────────────────────────── */
+    .contra-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    .contra-card {
+      background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 16px 20px; display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: center;
+    }
+    .contra-side { font-size: 13px; color: var(--text-secondary); }
+    .contra-title { font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
+    .contra-vs {
+      font-size: 11px; font-weight: 800; color: var(--text-muted); letter-spacing: 0.06em;
+      background: var(--bg-card); border: 1px solid var(--border); padding: 4px 10px;
+      border-radius: var(--radius-sm); text-align: center;
+    }
+    .contra-synth {
+      margin-top: 10px; font-size: 12px; color: var(--accent-green);
+      background: rgba(63,185,80,0.06); border: 1px solid rgba(63,185,80,0.2);
+      padding: 8px 12px; border-radius: var(--radius-sm); grid-column: 1 / -1;
+    }
+    .contra-synth strong { color: var(--accent-teal); }
+
+    /* ── DO NOT LIST ──────────────────────────────────── */
+    .donot-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+    .donot-list li {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 12px 16px; background: rgba(248,81,73,0.04);
+      border: 1px solid rgba(248,81,73,0.15); border-radius: var(--radius-sm);
+      font-size: 13px; color: var(--text-secondary); line-height: 1.5;
+    }
+    .donot-list li::before { content: '✗'; color: var(--risk-high); font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+
+    /* ── SNAPSHOT GRID ───────────────────────────────── */
+    .snapshot-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px; margin-bottom: 20px;
+    }
+    .snapshot-item { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+    .snapshot-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+    .snapshot-value { font-size: 13px; font-weight: 600; color: var(--text-primary); font-family: var(--font-mono); word-break: break-all; }
+
+    /* ── VERDICT TABLE ───────────────────────────────── */
+    .verdict-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 24px; }
+    .verdict-row {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 14px 18px; display: grid; grid-template-columns: 28px 1fr auto; gap: 12px; align-items: start;
+    }
+    .verdict-icon { font-size: 16px; margin-top: 1px; }
+    .verdict-body { flex: 1; }
+    .verdict-dim { font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
+    .verdict-detail { font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
+    .verdict-detail code {
+      font-family: var(--font-mono); font-size: 11px; color: var(--accent-purple);
+      background: rgba(188,140,255,0.08); padding: 1px 5px; border-radius: 3px;
+    }
+    .verdict-action { font-family: var(--font-mono); font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 12px; white-space: nowrap; }
+    .va-keep    { background: rgba(63,185,80,0.12); color: var(--accent-green); border: 1px solid rgba(63,185,80,0.3); }
+    .va-fix     { background: var(--tag-bg-high);   color: var(--accent-red);   border: 1px solid rgba(248,81,73,0.3); }
+    .va-offline { background: var(--tag-bg-purple); color: var(--accent-purple); border: 1px solid rgba(188,140,255,0.3); }
+    .va-surface { background: var(--tag-bg-mid);    color: var(--accent-orange); border: 1px solid rgba(240,136,62,0.3); }
+
+    /* ── QUALITY LADDER ──────────────────────────────── */
+    .ladder { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; }
+    .ladder-step {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 14px 18px; display: grid; grid-template-columns: 32px 1fr auto; gap: 12px; align-items: center;
+      transition: border-color 0.2s;
+    }
+    .ladder-step:hover { border-color: var(--border-accent); }
+    .ladder-step.current { border-color: var(--accent-blue); background: rgba(88,166,255,0.04); }
+    .ladder-step.planned { border-color: rgba(240,136,62,0.35); }
+    .ladder-num {
+      font-family: var(--font-mono); font-size: 13px; font-weight: 700;
+      color: var(--text-muted); text-align: center;
+    }
+    .ladder-step.current .ladder-num { color: var(--accent-blue); }
+    .ladder-step.planned .ladder-num { color: var(--accent-orange); }
+    .ladder-body { flex: 1; }
+    .ladder-title { font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 2px; }
+    .ladder-desc { font-size: 12px; color: var(--text-secondary); }
+    .ladder-status { font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 12px; white-space: nowrap; }
+    .ls-done    { background: rgba(63,185,80,0.12); color: var(--accent-green); border: 1px solid rgba(63,185,80,0.25); }
+    .ls-p0      { background: var(--tag-bg-high);   color: var(--accent-red);   border: 1px solid rgba(248,81,73,0.25); }
+    .ls-p1      { background: var(--tag-bg-mid);    color: var(--accent-orange); border: 1px solid rgba(240,136,62,0.25); }
+    .ls-p2      { background: var(--tag-bg-blue);   color: var(--accent-blue);  border: 1px solid rgba(88,166,255,0.25); }
+
+    /* ── SGAR BOX ────────────────────────────────────── */
+    .sgar-box {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 28px 28px 24px; margin-bottom: 24px;
+    }
+    .sgar-formula {
+      text-align: center; font-size: 15px; color: var(--text-secondary);
+      margin-bottom: 24px; padding: 18px; background: var(--bg-secondary);
+      border-radius: var(--radius-sm); border: 1px solid var(--border);
+      font-family: var(--font-mono);
+    }
+    .sgar-formula .fn { color: var(--accent-blue); font-weight: 700; font-size: 17px; }
+    .sgar-formula .eq { color: var(--text-muted); }
+    .sgar-formula .num-f { color: var(--accent-orange); }
+
+    /* ── MISC ───────────────────────────────────────── */
+    strong { color: var(--text-primary); }
+    .mt4  { margin-top: 4px; }
+    .mt8  { margin-top: 8px; }
+    .mt16 { margin-top: 16px; }
+    .mt24 { margin-top: 24px; }
+    .mb8  { margin-bottom: 8px; }
+    .mb16 { margin-bottom: 16px; }
+    .mb24 { margin-bottom: 24px; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+    /* ── FOOTER ─────────────────────────────────────── */
+    .footer { margin-top: 72px; border-top: 1px solid var(--border); padding: 32px 24px; text-align: center; }
+    .footer-text { font-size: 12px; color: var(--text-muted); line-height: 1.8; }
+    .footer-text a { color: var(--accent-blue); text-decoration: none; }
+
+    @media (max-width: 720px) {
+      .two-col { grid-template-columns: 1fr; }
+      .contra-card { grid-template-columns: 1fr; }
+      .topnav-commit { display: none; }
+      .verdict-row { grid-template-columns: 28px 1fr; }
+      .verdict-action { display: none; }
+    }
+
+    @media print {
+      .topnav { display: none; }
+      .hero { padding: 24px; }
+      .section { page-break-inside: avoid; }
+      body { font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══ TOP NAV ══════════════════════════════════════════════════════════ -->
+<nav class="topnav">
+  <div class="topnav-brand">📚 hometutor</div>
+  <div class="topnav-links">
+    <a href="#contract">§1 Суть</a>
+    <a href="#reality">§2 Реальность</a>
+    <a href="#tensions">§3 Противоречия</a>
+    <a href="#sample">§4 Семпл E2</a>
+    <a href="#verdicts">§5 Вердикты</a>
+    <a href="#northstar">§6 North Star</a>
+    <a href="#golden">§7 Золотой путь</a>
+    <a href="#plan">§8 План P0–P2</a>
+  </div>
+  <div class="topnav-commit">hometutor@07c8a2a · коммит #336</div>
+</nav>
+
+<!-- ══ HERO ═════════════════════════════════════════════════════════════ -->
+<div class="hero">
+  <div class="hero-series">🔬 Серия №25</div>
+  <h1>«Ответ под присягой»<br/>Semantic Groundedness</h1>
+  <p class="hero-sub">
+    Конец цепочке «citation means truth»: аудит провенанса, разрыв cache-hit,
+    отсутствие семантического entailment в live-пути и минимальный P0 без нового хранилища.
+  </p>
+  <div class="hero-meta">
+    <div class="meta-chip">📅 Дата: <span>2026-07-19</span></div>
+    <div class="meta-chip">🔖 HEAD: <span>07c8a2a</span></div>
+    <div class="meta-chip">📝 Коммит: <span>#336</span></div>
+    <div class="meta-chip">🧪 Eval cases: <span>15</span></div>
+    <div class="meta-chip">📊 SGAR: <span>не измерено (E2 missing)</span></div>
+    <div class="meta-chip">🛡️ E1: <span>верифицировано</span></div>
+    <div class="meta-chip">🔴 E2: <span>missing</span></div>
+  </div>
+</div>
+
+<!-- ══ MAIN CONTENT ══════════════════════════════════════════════════════ -->
+<div class="container">
+
+  <!-- §1 СУТЬ ─────────────────────────────────────────────────────────── -->
+  <section class="section" id="contract">
+    <div class="section-header">
+      <span class="section-icon">⚖️</span>
+      <span class="section-num">§1</span>
+      <h2>Суть — пользовательский контракт</h2>
+    </div>
+
+    <div class="callout callout-info">
+      <div class="callout-icon">💬</div>
+      <div class="callout-body">
+        <div class="callout-title">Контракт одним предложением</div>
+        <div class="callout-text" style="font-size: 15px; font-style: italic; color: var(--text-primary);">
+          «Каждое существенное утверждение ответа либо доказуемо следует из конкретного фрагмента учебного материала, который можно открыть и проверить, либо явно маркируется как недостаточно подкреплённое; если данных в корпусе нет — система говорит это прямо.»
+        </div>
+      </div>
+    </div>
+
+    <div class="two-col mt16">
+      <div class="card">
+        <div class="card-title">✅ Что студент видит сейчас</div>
+        <ul>
+          <li>Ответ с inline-цитатами <code>[1]</code>, <code>[2,3]</code></li>
+          <li>Карточки источников с файловым путём</li>
+          <li>Иногда: «В доступных материалах недостаточно информации…»</li>
+          <li>debug.citation_coverage в API-ответе</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-title">❌ Чего студент не может проверить</div>
+        <ul>
+          <li>Действительно ли <em>утверждение</em> следует из указанного чанка</li>
+          <li>Сохранены ли числа, единицы, отрицания точно</li>
+          <li>Не создал ли синтез нескольких источников новый непроверяемый факт</li>
+          <li>Прошёл ли ответ ту же проверку, что cache-miss</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout callout-warn mt8">
+      <div class="callout-icon">⚠️</div>
+      <div class="callout-body">
+        <div class="callout-title">Центральный разрыв разбора</div>
+        <div class="callout-text">
+          <strong>citation validity ≠ evidence binding ≠ semantic entailment.</strong>
+          Текущая система гарантирует, что <code>[2]</code> указывает на существующий источник в списке,
+          но не гарантирует, что текст чанка источника поддерживает конкретное утверждение рядом с маркером.
+          Провенанс-ледже не содержит текст чанка — его негде сравнивать с утверждением.
+        </div>
+      </div>
+    </div>
+
+    <div class="card mt16">
+      <div class="card-title">🔍 Уточнение области</div>
+      <p>
+        №5 исследовал устойчивость доставки ответа. №10 — видимость trace. №11 — сценарии использования.
+        №24 — честность mastery и качество квизов. Впервые: end-to-end связь
+        <strong>«утверждение ответа → цитата → реальный текст источника»</strong>.
+      </p>
+    </div>
+  </section>
+
+  <!-- §2 РЕАЛЬНОСТЬ ───────────────────────────────────────────────────── -->
+  <section class="section" id="reality">
+    <div class="section-header">
+      <span class="section-icon">🗺️</span>
+      <span class="section-num">§2</span>
+      <h2>Реальность — аудит end-to-end</h2>
+    </div>
+
+    <div class="callout callout-info mb24">
+      <div class="callout-icon">ℹ️</div>
+      <div class="callout-body">
+        <div class="callout-title">Уровень доказательности</div>
+        <div class="callout-text">Все факты в §2 — уровень E1: проверены в коде на HEAD 07c8a2a.
+        Номера строк указаны для навигации; функциональный anchor важнее номера строки.</div>
+      </div>
+    </div>
+
+    <div class="chain">
+      <div class="chain-step">
+        <div class="chain-left"><div class="chain-dot chain-dot-green"></div><div class="chain-line"></div></div>
+        <div class="chain-content">
+          <div class="chain-label chain-label-green">Вопрос → Retrieval (hybrid BM25 + vector, Chroma)</div>
+          <div class="chain-desc">
+            Приносит релевантные чанки в context window. Возвращает source-объекты с полями
+            <code>relative_path</code>, <code>cite_index</code>, <code>text</code>.
+            <strong>Гарантирует:</strong> релевантность по сходству. <strong>Не гарантирует:</strong>
+            что топ-чанк содержит конкретное утверждение, которое генерирует модель.
+          </div>
+        </div>
+      </div>
+      <div class="chain-step">
+        <div class="chain-left"><div class="chain-dot chain-dot-orange"></div><div class="chain-line"></div></div>
+        <div class="chain-content">
+          <div class="chain-label chain-label-orange">Generation (LLM) → inline citations [N]</div>
+          <div class="chain-desc">
+            Модель добавляет маркеры <code>[1]</code>, <code>[2,3]</code> в текст.
+            Промпт <code>qa@2.2</code> инструктирует цитировать источники.
+            <strong>Гарантирует:</strong> наличие маркеров по инструкции.
+            <strong>Не гарантирует:</strong> что процитированный чанк действительно поддерживает утверждение — это решение модели, а не верифицированный факт.
+          </div>
+        </div>
+      </div>
+      <div class="chain-step">
+        <div class="chain-left"><div class="chain-dot chain-dot-green"></div><div class="chain-line"></div></div>
+        <div class="chain-content">
+          <div class="chain-label chain-label-green">normalize_inline_numeric_citations</div>
+          <div class="chain-desc">
+            <code>app/query_response_postprocessing.py</code>: заменяет <code>[5]</code> → <code>[1]</code>
+            если <code>source_count == 4</code>. Исправляет выход за границы диапазона.
+            <strong>Гарантирует:</strong> индекс в диапазоне <code>1..len(sources)</code>.
+            <strong>Не гарантирует:</strong> что замена выбрала верный источник. Семантики нет.
+          </div>
+        </div>
+      </div>
+      <div class="chain-step">
+        <div class="chain-left"><div class="chain-dot chain-dot-orange"></div><div class="chain-line"></div></div>
+        <div class="chain-content">
+          <div class="chain-label chain-label-orange">_build_facts_from_text (grounded_answer.py:183)</div>
+          <div class="chain-desc">
+            Сегментирует ответ на блоки (параграфы / длинные предложения).
+            Для каждого блока парсит маркеры <code>[N]</code> → <code>CitationProvenance{cite_index, relative_path}</code>.
+            Если нет маркеров — <code>missing_provenance</code>. Если маркер вне диапазона — <code>invalid_cite_index:N</code>.
+            <strong>Гарантирует:</strong> структурную валидность провенанса.
+            <strong>Не гарантирует:</strong> что текст блока семантически следует из чанка по <code>relative_path</code>.
+          </div>
+        </div>
+      </div>
+      <div class="chain-step">
+        <div class="chain-left"><div class="chain-dot chain-dot-red"></div><div class="chain-line"></div></div>
+        <div class="chain-content">
+          <div class="chain-label chain-label-red">build_provenance_ledger (grounded_answer.py:218) — КЛЮЧЕВОЙ РАЗРЫВ</div>
+          <div class="chain-desc">
+            Строит список записей <code>{fact_text, cite_index, relative_path, provenance_type}</code>.
+            <strong>Отсутствует:</strong> поле <code>chunk_text</code> — текст самого чанка не включён в ledger.
+            Невозможно ни автоматически, ни вручную сравнить утверждение с источником без
+            дополнительного запроса к индексу.
+          </div>
+        </div>
+      </div>
+      <div class="chain-step">
+        <div class="chain-left"><div class="chain-dot chain-dot-red"></div><div class="chain-line"></div></div>
+        <div class="chain-content">
+          <div class="chain-label chain-label-red">apply_grounded_validation (grounded_answer.py:461) — CACHE-HIT BYPASS</div>
+          <div class="chain-desc">
+            Первая строка функции:
+            <code>if not settings.grounded_answer_contract_enabled or cache_hit:</code>
+            <code>return GroundedValidationResult(answer_text=answer_text, skipped=True)</code>
+            <br/>Все cache-hit ответы возвращаются <strong>без провенанс-проверки</strong>.
+            Дополнительные bypass: <code>answer_path_mode == "two_stage_early"</code> (строка 471),
+            <code>not sources</code> (строка 464), guardrail violation (строка 476–482).
+          </div>
+        </div>
+      </div>
+      <div class="chain-step">
+        <div class="chain-left"><div class="chain-dot chain-dot-purple"></div><div class="chain-line"></div></div>
+        <div class="chain-content">
+          <div class="chain-label">_citation_coverage (grounded_answer.py:247)</div>
+          <div class="chain-desc">
+            Вычисляет долю fact-блоков с хотя бы одной provenance: <code>cited/total</code>.
+            Добавляется в <code>debug.citation_coverage</code> в API-ответе.
+            <strong>Гарантирует:</strong> метрика полноты цитирования доступна операторам.
+            <strong>Не гарантирует:</strong> семантического entailment; не видна в UI студенту.
+          </div>
+        </div>
+      </div>
+      <div class="chain-step">
+        <div class="chain-left"><div class="chain-dot chain-dot-muted"></div><div class="chain-line"></div></div>
+        <div class="chain-content">
+          <div class="chain-label" style="color: var(--text-muted)">home_rag_integration_gate_v1 → CI</div>
+          <div class="chain-desc">
+            15 тест-кейсов в <code>eval_data/home_rag_gate/home_rag_cases_v1.json</code>.
+            Проверяет: keyword presence в ответе, source paths, citation index в bounds,
+            no-citation для OOC случаев.
+            <strong>Gate запускается с <code>GROUNDED_ANSWER_STRICT_QA=0</code></strong> (строка 184 скрипта) —
+            намеренно relaxed для integration тестирования.
+            <strong>Не в CI:</strong> <code>.github/workflows/ci.yml</code> запускает ruff, pytest,
+            arch_regression_guards. <code>home_rag_integration_gate_v1.py</code> не упоминается.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="font-size: 15px; font-weight: 700; color: var(--text-primary); margin-bottom: 16px;">Сводная таблица механизмов</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Механизм</th>
+            <th>Гарантирует</th>
+            <th>НЕ гарантирует</th>
+            <th>Обходится при</th>
+            <th>Вердикт</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>_build_facts_from_text</code></td>
+            <td>cite_index в bounds, provenance-объект</td>
+            <td>Semantic entailment</td>
+            <td>cache_hit, two_stage_early</td>
+            <td><span class="risk risk-low">оставить</span></td>
+          </tr>
+          <tr>
+            <td><code>build_provenance_ledger</code></td>
+            <td>Путь к файлу, fact_text</td>
+            <td>Текст чанка рядом с утверждением</td>
+            <td>Всегда (chunk_text не включён)</td>
+            <td><span class="risk risk-high">починить</span></td>
+          </tr>
+          <tr>
+            <td><code>normalize_inline_numeric_citations</code></td>
+            <td>Индексы в диапазоне</td>
+            <td>Корректность замены</td>
+            <td>—</td>
+            <td><span class="risk risk-low">оставить</span></td>
+          </tr>
+          <tr>
+            <td><code>apply_grounded_validation</code></td>
+            <td>Структурный провенанс</td>
+            <td>Semantic entailment; cache-hit</td>
+            <td>cache_hit, two_stage_early, OOC, guardrails</td>
+            <td><span class="risk risk-mid">починить bypass</span></td>
+          </tr>
+          <tr>
+            <td><code>home_rag_gate</code> (15 cases)</td>
+            <td>Keyword presence, cite bounds, OOC no-citation</td>
+            <td>Semantic entailment, numeric fidelity</td>
+            <td>Не в CI, не в reindex протоколе</td>
+            <td><span class="risk risk-high">подключить</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout callout-danger">
+      <div class="callout-icon">🔑</div>
+      <div class="callout-body">
+        <div class="callout-title">Главный E1-факт разбора</div>
+        <div class="callout-text">
+          Source-объект возвращаемый retrieval содержит поле <code>text</code> (текст чанка).
+          Функция <code>_sources_text()</code> в gate-скрипте это использует.
+          Но <code>build_provenance_ledger()</code> (grounded_answer.py:218–244) строит записи
+          из <code>fact.provenance</code> — цепочки <code>CitationProvenance</code>,
+          которые содержат только <code>cite_index</code> и <code>relative_path</code>.
+          Текст чанка при построении ledger-записи <strong>не передаётся и не сохраняется</strong>.
+          Пара <code>(утверждение, текст-источника)</code> недоступна нигде в API-ответе
+          для автоматической или ручной верификации.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- §3 ПРОТИВОРЕЧИЯ ─────────────────────────────────────────────────── -->
+  <section class="section" id="tensions">
+    <div class="section-header">
+      <span class="section-icon">⚡</span>
+      <span class="section-num">§3</span>
+      <h2>Противоречия</h2>
+    </div>
+
+    <div class="contra-grid">
+
+      <div class="contra-card">
+        <div class="contra-side">
+          <div class="contra-title">Полезный связный ответ</div>
+          Студент хочет объяснение, а не список атомарных фактов с отдельными цитатами на каждую фразу.
+        </div>
+        <div class="contra-vs">VS</div>
+        <div class="contra-side">
+          <div class="contra-title">Атомарно проверяемые утверждения</div>
+          Trustworthy ответ требует, чтобы каждое существенное утверждение можно было сопоставить с источником.
+        </div>
+        <div class="contra-synth"><strong>Синтез:</strong> Claim-level granularity нужна только для существенных утверждений. Вводные фразы, примеры и связки не требуют провенанса. Правило: «если утверждение можно запомнить и воспроизвести — оно существенно и требует цитаты».</div>
+      </div>
+
+      <div class="contra-card">
+        <div class="contra-side">
+          <div class="contra-title">Дешёвый детерминированный gate</div>
+          Citation index check, keyword presence — работают без LLM, быстро, в CI.
+        </div>
+        <div class="contra-vs">VS</div>
+        <div class="contra-side">
+          <div class="contra-title">Семантическая оценка entailment</div>
+          Настоящий entailment требует LLM-judge, который дорог, медленен и циркулярен для той же модели.
+        </div>
+        <div class="contra-synth"><strong>Синтез:</strong> Детерминированный gate — в P0 и CI. LLM-judge — только offline, только как proxy, явно помечен. Разделить инфраструктуру: structural CI gate + offline semantic eval sample. Не смешивать.</div>
+      </div>
+
+      <div class="contra-card">
+        <div class="contra-side">
+          <div class="contra-title">Высокая полнота ответа</div>
+          Студент хочет полный охват темы. Strict abstention при недостатке данных снижает полноту.
+        </div>
+        <div class="contra-vs">VS</div>
+        <div class="contra-side">
+          <div class="contra-title">Честный отказ вне корпуса</div>
+          Ответ с фактической ошибкой хуже отказа. Особенно критично в учебном контексте.
+        </div>
+        <div class="contra-synth"><strong>Синтез:</strong> <code>AbstainResponse</code> + <code>is_abstain_phrase</code> уже реализованы корректно. Приоритет: не тратить P0 на abstention — оно работает. Следующий шаг: валидировать abstention качество на offline-семпле (P1).</div>
+      </div>
+
+      <div class="contra-card">
+        <div class="contra-side">
+          <div class="contra-title">Скорость и cache</div>
+          <code>LLM_REQUEST_CACHE_PERSIST=true</code> по умолчанию. Cache-hit экономит время и деньги.
+        </div>
+        <div class="contra-vs">VS</div>
+        <div class="contra-side">
+          <div class="contra-title">Единый контракт groundedness</div>
+          Cache-hit ответ обходит <em>всю</em> grounded-validation. Разный контракт для одинакового вопроса.
+        </div>
+        <div class="contra-synth"><strong>Синтез:</strong> Validation на cache-hit не нужна повторно — ответ тот же. Нужна <em>observability</em>: флаг <code>grounding_skipped: "cache_hit"</code> в debug, чтобы оператор и eval видели, что провенанс не повторно проверялся. Это P0-B.</div>
+      </div>
+
+      <div class="contra-card">
+        <div class="contra-side">
+          <div class="contra-title">Фиксированный regression corpus</div>
+          15 кейсов home_rag_gate с синтетическим корпусом — стабильны и воспроизводимы.
+        </div>
+        <div class="contra-vs">VS</div>
+        <div class="contra-side">
+          <div class="contra-title">Живой пользовательский курс</div>
+          Реальный студент учится на своём data/. Синтетический корпус не покрывает специфику курса.
+        </div>
+        <div class="contra-synth"><strong>Синтез:</strong> Два отдельных layer: (1) синтетический gate для structural regression в CI, (2) живой E2 sample из реального data/ для semantic eval. Не заменять один другим.</div>
+      </div>
+
+      <div class="contra-card">
+        <div class="contra-side">
+          <div class="contra-title">Автоматическая оценка</div>
+          Полностью автоматизированный eval pipeline — воспроизводим, не требует человека.
+        </div>
+        <div class="contra-vs">VS</div>
+        <div class="contra-side">
+          <div class="contra-title">Независимая человеческая разметка</div>
+          Только человек может окончательно определить, является ли утверждение entailed из источника.
+        </div>
+        <div class="contra-synth"><strong>Синтез:</strong> Автоматика для structural проверок (всегда). LLM-judge как дешёвый proxy для offline batch. Человек — для валидации рубрики и calibration judge-а. Не заменять человека автоматикой при первом E2 замере.</div>
+      </div>
+
+    </div>
+
+    <div class="card mt16">
+      <div class="card-title">⚙️ Что проверяемо без LLM, что — только offline</div>
+      <div class="table-wrap" style="margin-bottom: 0">
+        <table>
+          <thead>
+            <tr><th>Проверка</th><th>Без LLM (детерминированно)</th><th>Требует offline LLM eval</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Citation index в bounds</td><td>✅ Сейчас</td><td>—</td></tr>
+            <tr><td>Abstain phrase detection</td><td>✅ is_abstain_phrase()</td><td>—</td></tr>
+            <tr><td>Citation completeness</td><td>✅ _citation_coverage()</td><td>—</td></tr>
+            <tr><td>Token overlap (claim, chunk)</td><td>✅ возможно после P0-A</td><td>—</td></tr>
+            <tr><td>Numeric exact match в источнике</td><td>✅ regex</td><td>—</td></tr>
+            <tr><td>Keyword presence в ответе</td><td>✅ home_rag_gate</td><td>—</td></tr>
+            <tr><td>Semantic entailment claim→chunk</td><td>❌</td><td>✅ offline proxy</td></tr>
+            <tr><td>Multi-source synthesis coherence</td><td>❌</td><td>✅ offline proxy</td></tr>
+            <tr><td>Конфликт источников обнаружен</td><td>❌</td><td>✅ offline proxy</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- §4 ЭТАЛОННЫЙ СЕМПЛ E2 ───────────────────────────────────────────── -->
+  <section class="section" id="sample">
+    <div class="section-header">
+      <span class="section-icon">🧪</span>
+      <span class="section-num">§4</span>
+      <h2>Эталонный семпл E2</h2>
+    </div>
+
+    <div class="callout callout-danger">
+      <div class="callout-icon">🔴</div>
+      <div class="callout-body">
+        <div class="callout-title">E2 STATUS: MISSING</div>
+        <div class="callout-text">
+          Живой прогон endpoint/provider в этой сессии технически недоступен.
+          Структурный proxy (E1-анализ кода) зафиксирован в §2. Масштаб проблемы на реальном курсе
+          можно установить только живым семплом. Cherry-pick запрещён.
+          Методология зафиксирована ниже для следующего выполнения.
+        </div>
+      </div>
+    </div>
+
+    <h3 style="font-size: 14px; font-weight: 700; color: var(--text-primary); margin: 20px 0 12px">Снимок условий (фиксируется до генерации)</h3>
+    <div class="snapshot-grid">
+      <div class="snapshot-item">
+        <div class="snapshot-label">Модель / профиль</div>
+        <div class="snapshot-value">balanced (local_strict fallback)</div>
+      </div>
+      <div class="snapshot-item">
+        <div class="snapshot-label">Промпт qa</div>
+        <div class="snapshot-value">qa@2.2 (app/prompts/_impl.py)</div>
+      </div>
+      <div class="snapshot-item">
+        <div class="snapshot-label">Промпт synthesis</div>
+        <div class="snapshot-value">synthesis@2.1</div>
+      </div>
+      <div class="snapshot-item">
+        <div class="snapshot-label">Retrieval</div>
+        <div class="snapshot-value">hybrid BM25+vector, top_k=5</div>
+      </div>
+      <div class="snapshot-item">
+        <div class="snapshot-label">Корпус</div>
+        <div class="snapshot-value">активный data/ пользователя</div>
+      </div>
+      <div class="snapshot-item">
+        <div class="snapshot-label">Cache</div>
+        <div class="snapshot-value">LLM_REQUEST_CACHE_PERSIST=true</div>
+      </div>
+      <div class="snapshot-item">
+        <div class="snapshot-label">HEAD</div>
+        <div class="snapshot-value">07c8a2a · #336</div>
+      </div>
+      <div class="snapshot-item">
+        <div class="snapshot-label">GROUNDED_ANSWER_STRICT_QA</div>
+        <div class="snapshot-value">true (в live, не в gate)</div>
+      </div>
+    </div>
+
+    <h3 style="font-size: 14px; font-weight: 700; color: var(--text-primary); margin: 20px 0 12px">Рубрика (фиксируется до генерации)</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>#</th><th>Критерий</th><th>Pass условие</th><th>Тип</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>R1</td><td>Выделены существенные claims</td><td>Evaluator выделяет ≥1 claim на нетривиальный ответ</td><td>deterministic</td></tr>
+          <tr><td>R2</td><td>Citation target существует</td><td>cite_index в источниках; relative_path не null</td><td>deterministic</td></tr>
+          <tr><td>R3</td><td>Entailment: claim ← chunk text</td><td>entailed / contradicted / insufficient_evidence</td><td>offline LLM proxy</td></tr>
+          <tr><td>R4</td><td>Числа, единицы, отрицания сохранены</td><td>Все числовые значения claim совпадают с chunk_text</td><td>regex + human</td></tr>
+          <tr><td>R5</td><td>Multi-source synthesis корректен</td><td>Синтез не вводит факт, отсутствующий в каждом источнике</td><td>offline LLM proxy</td></tr>
+          <tr><td>R6</td><td>Citation completeness</td><td>Каждый существенный claim имеет хотя бы одну цитату</td><td>deterministic</td></tr>
+          <tr><td>R7</td><td>Abstention correctness (OOC)</td><td>Вопрос вне корпуса → явный отказ, no citation</td><td>deterministic</td></tr>
+          <tr><td>R8</td><td>Answer usefulness</td><td>Ответ помогает студенту продвинуться, даже при частичном отказе</td><td>human only</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="font-size: 14px; font-weight: 700; color: var(--text-primary); margin: 20px 0 12px">Категории (5 × 3 = 15 ответов)</h3>
+    <div class="table-wrap mb16">
+      <table>
+        <thead>
+          <tr><th>Категория</th><th>Тип вопроса</th><th>Ключевой риск</th><th>Повторов</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>CAT-1</td><td>Прямой факт из одного источника</td><td>Hallucinated detail при правильной структуре</td><td>3</td></tr>
+          <tr><td>CAT-2</td><td>Синтез из нескольких источников</td><td>Fusion создаёт непроверяемый новый факт</td><td>3</td></tr>
+          <tr><td>CAT-3</td><td>Конфликтующие / неоднозначные источники</td><td>Система выбирает одну сторону без оговорки</td><td>3</td></tr>
+          <tr><td>CAT-4</td><td>Вопрос вне корпуса</td><td>Ответ вместо честного отказа</td><td>3</td></tr>
+          <tr><td>CAT-5</td><td>Числовой / citation / cache-hit trap</td><td>Число изменено; cache-hit без provenance</td><td>3</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout callout-info">
+      <div class="callout-icon">📋</div>
+      <div class="callout-body">
+        <div class="callout-title">Протокол сохранения результатов</div>
+        <div class="callout-text">
+          Для каждого ответа: raw output, retrieval context, citation payload, resolved source fragments,
+          итоговая разметка по R1–R8. Cache-hit и cache-miss варианты фиксируются отдельно для CAT-5.
+          Judge той же модели допустим только для R3/R5 offline и должен быть явно помечен как proxy.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- §5 ВЕРДИКТЫ ─────────────────────────────────────────────────────── -->
+  <section class="section" id="verdicts">
+    <div class="section-header">
+      <span class="section-icon">⚖️</span>
+      <span class="section-num">§5</span>
+      <h2>Вердикты</h2>
+    </div>
+
+    <div class="verdict-grid">
+      <div class="verdict-row">
+        <div class="verdict-icon">✅</div>
+        <div class="verdict-body">
+          <div class="verdict-dim">Citation Validity (структурный провенанс)</div>
+          <div class="verdict-detail">
+            <code>_build_facts_from_text</code> корректно проверяет cite_index в bounds источников.
+            <code>invalid_cite_index:N</code> — логируется. Структурная часть валидна.
+          </div>
+        </div>
+        <div class="verdict-action va-keep">оставить</div>
+      </div>
+
+      <div class="verdict-row">
+        <div class="verdict-icon">❌</div>
+        <div class="verdict-body">
+          <div class="verdict-dim">Evidence Binding (текст чанка рядом с утверждением)</div>
+          <div class="verdict-detail">
+            <code>build_provenance_ledger</code> не включает <code>chunk_text</code> из source-объекта.
+            Source-объект уже содержит <code>text</code> (подтверждено в gate-скрипте, строка 349).
+            Пара <code>(fact_text, chunk_text)</code> недоступна для offline-верификации.
+          </div>
+        </div>
+        <div class="verdict-action va-fix">починить</div>
+      </div>
+
+      <div class="verdict-row">
+        <div class="verdict-icon">🔬</div>
+        <div class="verdict-body">
+          <div class="verdict-dim">Semantic Entailment (claim ← chunk semantics)</div>
+          <div class="verdict-detail">
+            Не измерено, не реализовано в runtime. Runtime LLM-judge — kill switch.
+            Допустим только как offline eval proxy после P0-A (когда chunk_text доступен).
+            Масштаб проблемы устанавливается только живым E2 замером.
+          </div>
+        </div>
+        <div class="verdict-action va-offline">только offline</div>
+      </div>
+
+      <div class="verdict-row">
+        <div class="verdict-icon">🟡</div>
+        <div class="verdict-body">
+          <div class="verdict-dim">Citation Completeness (покрытие существенных claims)</div>
+          <div class="verdict-detail">
+            <code>_citation_coverage()</code> вычисляет <code>cited_facts/total_facts</code> и кладёт
+            в <code>debug.citation_coverage</code>. Метрика существует, но не видна студенту в UI
+            и не используется в качестве gate.
+          </div>
+        </div>
+        <div class="verdict-action va-surface">поверхность</div>
+      </div>
+
+      <div class="verdict-row">
+        <div class="verdict-icon">✅</div>
+        <div class="verdict-body">
+          <div class="verdict-dim">Abstention Correctness (отказ вне корпуса)</div>
+          <div class="verdict-detail">
+            <code>AbstainResponse</code> + <code>is_abstain_phrase()</code> + промпт-инструкция о недостатке данных.
+            15 eval-кейсов включают <code>no_evidence_refusal</code> тесты.
+            Механизм рабочий, нуждается в offline-валидации на реальном курсе (P1).
+          </div>
+        </div>
+        <div class="verdict-action va-keep">оставить</div>
+      </div>
+
+      <div class="verdict-row">
+        <div class="verdict-icon">❌</div>
+        <div class="verdict-body">
+          <div class="verdict-dim">Cache-Hit Parity (одинаковый контракт)</div>
+          <div class="verdict-detail">
+            Cache-hit обходит всю grounded-validation (grounded_answer.py:461).
+            Ответ возвращается с <code>skipped=True</code>, но без явного флага в debug.
+            Оператор и eval не могут отличить «grounded» от «skipped» без анализа кода.
+          </div>
+        </div>
+        <div class="verdict-action va-fix">починить</div>
+      </div>
+
+      <div class="verdict-row">
+        <div class="verdict-icon">✅</div>
+        <div class="verdict-body">
+          <div class="verdict-dim">Answer Usefulness (практическая польза)</div>
+          <div class="verdict-detail">
+            Цель системы — помочь студенту учиться, а не только цитировать.
+            Abstain + следующий полезный шаг: реализовано в промпте.
+            Не измеряется автоматически — только в E2 семпле по критерию R8.
+          </div>
+        </div>
+        <div class="verdict-action va-keep">оставить</div>
+      </div>
+    </div>
+
+    <h3 style="font-size: 15px; font-weight: 700; color: var(--text-primary); margin: 24px 0 12px">НЕ делать</h3>
+    <ul class="donot-list">
+      <li>Не добавлять runtime LLM-judge на каждый ответ — latency, cost, circular eval той же моделью, нет доказанной пользы</li>
+      <li>Не создавать новое DB/хранилище для eval — достаточно debug-поля в существующем API-ответе</li>
+      <li>Не считать наличие <code>cite_index</code> в bounds доказательством, что утверждение следует из источника</li>
+      <li>Не отключать существующий grounded guard — он работает, разрывы точечные</li>
+      <li>Не переделывать retrieval — retrieval не является источником semantic gap</li>
+      <li>Не назначать целевой SGAR-процент до получения живого E2 baseline</li>
+      <li>Не скрывать различие cache-hit/cache-miss в eval — фиксировать его явно</li>
+      <li>Не делать рефакторинг смежных модулей в рамках P0 write-set</li>
+    </ul>
+  </section>
+
+  <!-- §6 NORTH STAR ───────────────────────────────────────────────────── -->
+  <section class="section" id="northstar">
+    <div class="section-header">
+      <span class="section-icon">⭐</span>
+      <span class="section-num">§6</span>
+      <h2>Ценность и North Star — SGAR</h2>
+    </div>
+
+    <div class="sgar-box">
+      <div class="sgar-formula">
+        <div><span class="fn">SGAR</span><span class="eq"> = </span></div>
+        <div style="margin-top: 8px; font-size: 13px; color: var(--text-secondary);">
+          <span class="num-f">count(ответов, где каждый существенный claim entailed из источника И OOC обработан корректно)</span>
+        </div>
+        <div style="margin: 4px 0; border-top: 1px solid var(--border); padding-top: 4px; font-size: 13px; color: var(--text-secondary);">
+          <span class="num-f">count(оценённых ответов)</span>
+        </div>
+      </div>
+
+      <div class="callout callout-warn" style="margin-bottom: 0">
+        <div class="callout-icon">📊</div>
+        <div class="callout-body">
+          <div class="callout-title">Текущий статус SGAR</div>
+          <div class="callout-text">
+            <strong>NOT MEASURABLE</strong> — нет механизма семантического entailment в runtime или offline.
+            После P0-A (chunk_text в ledger): derivable как token-overlap proxy.
+            Живой baseline: только после выполнения E2 семпла.
+            Целевой процент не назначается до baseline.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="font-size: 14px; font-weight: 700; color: var(--text-primary); margin: 20px 0 12px">Диагностические метрики</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Метрика</th><th>Источник данных</th><th>Способ вычисления</th><th>Где видна</th><th>Статус</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Citation resolution rate</td>
+            <td>debug.citation_coverage</td>
+            <td><code>_citation_coverage()</code> → cited/total</td>
+            <td>API debug поле</td>
+            <td><span class="tag tag-green">wired-existing</span></td>
+          </tr>
+          <tr>
+            <td>Claim-level support rate</td>
+            <td>provenance ledger</td>
+            <td>cited_facts/total_facts после P0-A</td>
+            <td>API debug поле</td>
+            <td><span class="tag tag-orange">derivable (P0-A)</span></td>
+          </tr>
+          <tr>
+            <td>Token-overlap binding score</td>
+            <td>ledger (fact_text, chunk_text)</td>
+            <td>|tokens(claim)∩tokens(chunk)| / |tokens(claim)|</td>
+            <td>offline script output</td>
+            <td><span class="tag tag-orange">derivable (P0-A+P1)</span></td>
+          </tr>
+          <tr>
+            <td>Numeric fidelity</td>
+            <td>E2 sample</td>
+            <td>regex числа в claim vs chunk_text</td>
+            <td>offline eval report</td>
+            <td><span class="tag tag-red">planned (P1)</span></td>
+          </tr>
+          <tr>
+            <td>Abstention precision/recall</td>
+            <td>home_rag_gate + E2</td>
+            <td>no_evidence случаи в gate</td>
+            <td>gate MD-отчёт</td>
+            <td><span class="tag tag-red">planned (P1)</span></td>
+          </tr>
+          <tr>
+            <td>Cache-hit/cache-miss parity</td>
+            <td>response debug</td>
+            <td>grounding_skipped флаг</td>
+            <td>API debug поле</td>
+            <td><span class="tag tag-orange">planned (P0-B)</span></td>
+          </tr>
+          <tr>
+            <td>Semantic entailment (SGAR)</td>
+            <td>E2 sample + LLM judge</td>
+            <td>offline proxy по рубрике R3</td>
+            <td>offline eval report</td>
+            <td><span class="tag tag-red">not measurable</span></td>
+          </tr>
+          <tr>
+            <td>Eval latency</td>
+            <td>gate: latency_ms поле</td>
+            <td>существующее поле в gate rows</td>
+            <td>gate JSON отчёт</td>
+            <td><span class="tag tag-green">wired-existing</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🛤️ Минимальный путь к измеримому SGAR (без нового хранилища)</div>
+      <ol style="padding-left: 20px; font-size: 14px; color: var(--text-secondary); line-height: 2;">
+        <li><strong>P0-A:</strong> Добавить <code>chunk_text</code> в <code>build_provenance_ledger</code> → пара (claim, chunk) доступна</li>
+        <li><strong>P1:</strong> Скрипт <code>scripts/evidence_binding_check.py</code> → token-overlap proxy SGAR из API debug</li>
+        <li><strong>E2:</strong> Запустить 15 живых ответов по рубрике → первый baseline SGAR</li>
+        <li><strong>P2:</strong> Offline LLM-judge на E2 sample → уточнение proxy</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- §7 ЗОЛОТОЙ ПУТЬ ─────────────────────────────────────────────────── -->
+  <section class="section" id="golden">
+    <div class="section-header">
+      <span class="section-icon">🏆</span>
+      <span class="section-num">§7</span>
+      <h2>Золотой путь студента и лестница качества</h2>
+    </div>
+
+    <div class="callout callout-success mb24">
+      <div class="callout-icon">🎓</div>
+      <div class="callout-body">
+        <div class="callout-title">Золотой путь — один прогон студента</div>
+        <div class="callout-text">
+          Студент задаёт вопрос по своему курсу →
+          получает <strong>короткий полезный ответ</strong> с inline-цитатами →
+          видит <strong>проверяемые источники</strong> для каждого существенного утверждения →
+          открывает конкретный <strong>фрагмент учебного материала</strong> и может сам проверить →
+          если данных нет — система явно сообщает об этом и предлагает <strong>следующий полезный шаг</strong> →
+          при повторном вопросе (cache-hit) результат <strong>семантически не отличается</strong> от первого прогона.
+        </div>
+      </div>
+    </div>
+
+    <h3 style="font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 16px">Лестница качества (наблюдаемые уровни)</h3>
+    <div class="ladder">
+      <div class="ladder-step current">
+        <div class="ladder-num">L1</div>
+        <div class="ladder-body">
+          <div class="ladder-title">Структурная валидность — citation validity</div>
+          <div class="ladder-desc">Citation index в bounds. CitationProvenance с relative_path. Abstain при zero facts. <em>Текущее состояние.</em></div>
+        </div>
+        <div class="ladder-status ls-done">сейчас</div>
+      </div>
+
+      <div class="ladder-step planned">
+        <div class="ladder-num">L2</div>
+        <div class="ladder-body">
+          <div class="ladder-title">Снапшот источника — evidence pairing</div>
+          <div class="ladder-desc">Провенанс-ледже содержит chunk_text рядом с fact_text. Пара (утверждение, источник) видна в debug без запроса к индексу.</div>
+        </div>
+        <div class="ladder-status ls-p0">P0-A</div>
+      </div>
+
+      <div class="ladder-step planned">
+        <div class="ladder-num">L3</div>
+        <div class="ladder-body">
+          <div class="ladder-title">Cache-hit observability — parity flag</div>
+          <div class="ladder-desc">Ответы с cache_hit=True помечены <code>grounding_skipped: "cache_hit"</code> в debug. Eval видит разницу, не считает их grounded автоматически.</div>
+        </div>
+        <div class="ladder-status ls-p0">P0-B</div>
+      </div>
+
+      <div class="ladder-step">
+        <div class="ladder-num">L4</div>
+        <div class="ladder-body">
+          <div class="ladder-title">Token-overlap binding — детерминированный proxy</div>
+          <div class="ladder-desc">Offline скрипт вычисляет overlap score для каждой пары (fact_text, chunk_text) из ledger. Threshold TBD по E2 baseline. Без LLM.</div>
+        </div>
+        <div class="ladder-status ls-p1">P1</div>
+      </div>
+
+      <div class="ladder-step">
+        <div class="ladder-num">L5</div>
+        <div class="ladder-body">
+          <div class="ladder-title">Operator gate — home_rag_gate в протоколе</div>
+          <div class="ladder-desc">home_rag_integration_gate_v1 обязателен перед реиндексом и сменой модели/промпта. Задокументировано в operator runbook. 15 кейсов покрывают структурный regression.</div>
+        </div>
+        <div class="ladder-status ls-p1">P1</div>
+      </div>
+
+      <div class="ladder-step">
+        <div class="ladder-num">L6</div>
+        <div class="ladder-body">
+          <div class="ladder-title">Offline LLM-judge — semantic entailment proxy</div>
+          <div class="ladder-desc">LLM-judge оценивает рубрику R3/R5 на E2 sample. Результат — первый SGAR baseline. Judge той же модели помечен как proxy, не ground truth.</div>
+        </div>
+        <div class="ladder-status ls-p2">P2</div>
+      </div>
+    </div>
+
+    <div class="callout callout-info">
+      <div class="callout-icon">📏</div>
+      <div class="callout-body">
+        <div class="callout-title">Измеримость каждого уровня</div>
+        <div class="callout-text">
+          L1–L3: debug поля в API-ответе, проверяемые автоматически.
+          L4: output скрипта с score per claim.
+          L5: exit code gate-скрипта (0=PASS / 1=FAIL).
+          L6: eval отчёт с SGAR числом. Ни один уровень не требует нового DB.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- §8 ПЛАН P0–P2 ───────────────────────────────────────────────────── -->
+  <section class="section" id="plan">
+    <div class="section-header">
+      <span class="section-icon">🚀</span>
+      <span class="section-num">§8</span>
+      <h2>План P0–P2</h2>
+    </div>
+
+    <div class="callout callout-danger mb24">
+      <div class="callout-icon">⚡</div>
+      <div class="callout-body">
+        <div class="callout-title">P0 выбран только после E1. E2 — missing. Kill switch активен при нарушении любого из условий.</div>
+        <div class="callout-text">
+          P0-A и P0-B выбраны исходя из E1-фактов: chunk_text уже есть в source-объекте,
+          cache_hit bypass задокументирован в коде. Оба хода не требуют нового хранилища,
+          не добавляют runtime LLM, не отключают существующий guard.
+        </div>
+      </div>
+    </div>
+
+    <div class="plan-grid mb24">
+
+      <div class="plan-card">
+        <div class="plan-header">
+          <div class="plan-badge badge-p0">P0-A</div>
+          <div class="plan-title">chunk_text в провенанс-ледже</div>
+        </div>
+        <div class="plan-body">
+          <div class="plan-row">
+            <div class="plan-key">Боль</div>
+            <div class="plan-val">Пара (утверждение, текст источника) недоступна для offline-верификации</div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Изменение</div>
+            <div class="plan-val">В <code>build_provenance_ledger</code> добавить <code>sources</code> параметр; lookup chunk_text по cite_index; добавить поле в запись ledger</div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Write-set</div>
+            <div class="plan-val"><code>app/grounded_answer.py</code> + callers в <code>app/query_service.py</code></div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Acceptance</div>
+            <div class="plan-val">Каждая ledger-запись содержит непустой <code>chunk_text</code> когда source.text доступен</div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Тест</div>
+            <div class="plan-val">unit-тест в <code>tests/test_guardrails_invariants.py</code> или <code>test_query_response_postprocessing.py</code></div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Observability</div>
+            <div class="plan-val"><code>response.debug.provenance_ledger[*].chunk_text</code></div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Effort</div>
+            <div class="plan-val">~2ч</div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Dependency</div>
+            <div class="plan-val">Нет</div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Kill switch</div>
+            <div class="plan-val">Revert <code>build_provenance_ledger</code> если рост payload размера критичен</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="plan-card">
+        <div class="plan-header">
+          <div class="plan-badge badge-p0">P0-B</div>
+          <div class="plan-title">Cache-hit parity flag</div>
+        </div>
+        <div class="plan-body">
+          <div class="plan-row">
+            <div class="plan-key">Боль</div>
+            <div class="plan-val">Cache-hit обходит всю validation; eval не отличает grounded от skipped</div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Изменение</div>
+            <div class="plan-val">В <code>apply_grounded_validation</code> при cache_hit=True вернуть <code>GroundedValidationResult(..., debug={"grounding_skipped": "cache_hit"})</code></div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Write-set</div>
+            <div class="plan-val"><code>app/grounded_answer.py::apply_grounded_validation</code></div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Acceptance</div>
+            <div class="plan-val"><code>response.debug.grounding_skipped == "cache_hit"</code> при cache-hit ответе</div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Тест</div>
+            <div class="plan-val">unit-тест <code>apply_grounded_validation(cache_hit=True)</code> → <code>result.debug["grounding_skipped"]</code></div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Observability</div>
+            <div class="plan-val">API debug поле, логируется</div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Effort</div>
+            <div class="plan-val">~30 мин</div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Dependency</div>
+            <div class="plan-val">Нет</div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Kill switch</div>
+            <div class="plan-val">Revert 1 строки</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="plan-grid mb24">
+
+      <div class="plan-card">
+        <div class="plan-header">
+          <div class="plan-badge badge-p1">P1-A</div>
+          <div class="plan-title">Token-overlap evidence binding script</div>
+        </div>
+        <div class="plan-body">
+          <div class="plan-row">
+            <div class="plan-key">Боль</div>
+            <div class="plan-val">SGAR не измерим; нет proxy без LLM</div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Изменение</div>
+            <div class="plan-val">Новый <code>scripts/evidence_binding_check.py</code>: читает provenance_ledger из API debug, вычисляет token overlap per (fact_text, chunk_text), выводит score</div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Write-set</div>
+            <div class="plan-val"><code>scripts/evidence_binding_check.py</code> [NEW]</div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Dependency</div>
+            <div class="plan-val">P0-A (chunk_text в ledger)</div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Effort</div>
+            <div class="plan-val">~4ч</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="plan-card">
+        <div class="plan-header">
+          <div class="plan-badge badge-p1">P1-B</div>
+          <div class="plan-title">Operator protocol: home_rag_gate</div>
+        </div>
+        <div class="plan-body">
+          <div class="plan-row">
+            <div class="plan-key">Боль</div>
+            <div class="plan-val">Gate существует, но не зафиксирован как обязательный шаг перед реиндексом</div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Изменение</div>
+            <div class="plan-val">Добавить в operator runbook: <code>home_rag_integration_gate_v1.py --preflight-only</code> как обязательный preflight перед реиндексом и сменой LLM/промпта</div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Write-set</div>
+            <div class="plan-val"><code>docs/operator_runbook.md</code> или <code>docs/conventions_reference.md</code></div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Dependency</div>
+            <div class="plan-val">Нет (gate уже работает)</div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Effort</div>
+            <div class="plan-val">~1ч</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="plan-grid">
+      <div class="plan-card">
+        <div class="plan-header">
+          <div class="plan-badge badge-p2">P2</div>
+          <div class="plan-title">LLM-judge offline eval — первый SGAR baseline</div>
+        </div>
+        <div class="plan-body">
+          <div class="plan-row">
+            <div class="plan-key">Боль</div>
+            <div class="plan-val">SGAR не измерен живым замером</div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Изменение</div>
+            <div class="plan-val">Выполнить E2 семпл (15 ответов × 5 категорий). LLM-judge оценивает R3/R5. Результат — первый SGAR baseline. Judge той же модели — только proxy.</div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Write-set</div>
+            <div class="plan-val"><code>eval_data/sgar_baseline_v1.json</code> [NEW]</div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Dependency</div>
+            <div class="plan-val">P0-A + P1-A + доступный live endpoint</div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Effort</div>
+            <div class="plan-val">~1 рабочий день</div>
+          </div>
+          <div class="plan-row">
+            <div class="plan-key">Kill switch</div>
+            <div class="plan-val">Не добавлять в runtime CI до подтверждения пользы offline eval</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout callout-info mt24">
+      <div class="callout-icon">🔑</div>
+      <div class="callout-body">
+        <div class="callout-title">Kill switch P0</div>
+        <div class="callout-text">
+          Остановить P0-A если: payload размер API-ответа вырастает критически (chunk_text длинный).
+          Альтернатива: включать chunk_text только в debug mode / за флагом.
+          Остановить P0-B если: debug поле конфликтует с существующим GroundedValidationResult.debug schema.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BOTTOM SPACER -->
+  <div style="height: 60px;"></div>
+
+</div>
+
+<!-- ══ FOOTER ═════════════════════════════════════════════════════════════ -->
+<footer class="footer">
+  <div class="footer-text">
+    hometutor · Серия №25 · «Ответ под присягой» — Semantic Groundedness<br/>
+    HEAD: <code style="font-family:var(--font-mono); font-size:11px">07c8a2a8a1b4065e394cb0c70c6bca8f3a239156</code> · Коммит #336 · 2026-07-19<br/>
+    E1: верифицировано · E2: missing (live endpoint недоступен в сессии)<br/>
+    Visual verification not performed.<br/>
+    <span style="color: var(--text-muted);">Документ сгенерирован для внутреннего использования. Не является публичной документацией.</span>
+  </div>
+</footer>
+
+</body>
+</html>

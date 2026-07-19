@@ -579,7 +579,8 @@ def _render_interactive_quiz_tab() -> None:
     if focus_concept and focus_concept in sorted_concepts:
         sorted_concepts = [focus_concept] + [c for c in sorted_concepts if c != focus_concept]
     topic_guess = (
-        focus_label
+        st.session_state.pop("quiz_topic_hint", "").strip()
+        or focus_label
         or (", ".join(sorted_concepts[:12]) if concepts else "общая тема RAG и базы знаний")
     )
     concept_names = (

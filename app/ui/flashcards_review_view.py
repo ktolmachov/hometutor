@@ -641,7 +641,10 @@ def _render_review_completion(
         st.rerun()
 
     # B1 checkpoint: after review batch, show unified next-step gate
-    _render_flashcards_checkpoint(key_prefix="flashcards_review")
+    _render_flashcards_checkpoint(
+        key_prefix="flashcards_review",
+        completion_key=f"flashcards:{scope_signature}:{total}",
+    )
 
 
 def _record_review_rating(
@@ -1483,7 +1486,7 @@ def render_review(
     )
 
 
-def _render_flashcards_checkpoint(*, key_prefix: str) -> None:
+def _render_flashcards_checkpoint(*, key_prefix: str, completion_key: str | None = None) -> None:
     """B1: after flashcard review batch summary, render unified checkpoint."""
     try:
         from app.ui.checkpoint import render_checkpoint
@@ -1518,6 +1521,7 @@ def _render_flashcards_checkpoint(*, key_prefix: str) -> None:
         origin="flashcards",
         return_view=st.session_state.get("current_view", "Mission Control"),
         key_prefix=key_prefix,
+        completion_key=completion_key,
         weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,
         plan_block=plan_block,
     )

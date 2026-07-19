@@ -564,6 +564,7 @@ def _render_micro_quiz_checkpoint(
             st.session_state.get("current_view", "Mission Control"),
         ),
         key_prefix=key_prefix,
+        completion_key=f"tutor:mq:{session_id}:{topic or ''}:{key_prefix}",
         tutor_session_id=session_id,
         tutor_topic=ctx.tutor_topic or topic,
         weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,

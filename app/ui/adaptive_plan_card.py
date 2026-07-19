@@ -159,6 +159,10 @@ def apply_smart_study_primary_navigation(
 
     _emit_route_tape_events(rec)
 
+    rv = str(rec.return_view or "").strip()
+    if rv:
+        st.session_state["home_breadcrumb_origin"] = rv
+
     nav = rec.primary_nav
     sid = str(tutor_session_id or "").strip() or None
     tt = str(tutor_topic or "").strip() or None

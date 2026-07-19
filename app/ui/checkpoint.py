@@ -6,9 +6,12 @@ Re-invokes canonical Route Policy with updated signals. Shows:
   «Закончить» → navigate to return_view (caller's origin)
   «Вручную» → navigate to Mission Control (full manual access)
 
-Deduplication per completion instance: each render_checkpoint() call generates
-a fresh UUID stored alongside the checkpoint context. Two completions → two
-UUIDs → two tape events, even if key_prefix is the same.
+Instance identity: each call passes a ``completion_key`` unique per learning
+result (quiz_hash, msg_idx+batch, session+step). UUID rotates on new completion_key,
+stays stable on rerender. Two completions → two events, always.
+
+return_view is injected into the SSR recommendation and forwarded to
+primary/secondary/intent handlers so breadcrumbs survive checkpoint transitions.
 
 Stores privacy-safe context (ids, not text) in session_state.
 No auto-start, no background write — checkpoint is a user-initiated gate.
@@ -24,6 +27,7 @@ from app.smart_study_router import SmartStudyRecommendation
 
 _CHECKPOINT_CONTEXT_KEY = "_checkpoint_context"
 _CHECKPOINT_INSTANCE_KEY = "_checkpoint_instance_id"
+_CHECKPOINT_COMPLETION_KEY = "_checkpoint_completion_key"
 
 _emitted_checkpoint_instances: set[str] = set()
 
@@ -35,13 +39,23 @@ def store_checkpoint_context(
     return_view: str | None = None,
     decision_id: str | None = None,
     phase: str | None = None,
+    completion_key: str | None = None,
 ) -> None:
-    """Save checkpoint context. Generates stable instance UUID on first call;
-    reuse on rerenders so checkpoint_offered fires exactly once per completion."""
+    """Save checkpoint context. Generates a new instance UUID when completion_key
+    changes (new learning result). On rerenders of the same checkpoint, UUID is reused.
+
+    completion_key is the completion-level identity: quiz_hash, msg_idx, or batch_id.
+    It MUST differ between two distinct completions of the same surface.
+    """
+    prev_ck = st.session_state.get(_CHECKPOINT_COMPLETION_KEY)
+    new_ck = str(completion_key or "").strip() or None
+
     instance_id = st.session_state.get(_CHECKPOINT_INSTANCE_KEY)
-    if not instance_id:
+    if not instance_id or (prev_ck and prev_ck != new_ck):
         instance_id = str(uuid.uuid4())
         st.session_state[_CHECKPOINT_INSTANCE_KEY] = instance_id
+    st.session_state[_CHECKPOINT_COMPLETION_KEY] = new_ck
+
     st.session_state[_CHECKPOINT_CONTEXT_KEY] = {
         "topic_hint": str(topic_hint or "").strip() or None,
         "origin": str(origin or "").strip() or None,
@@ -61,13 +75,14 @@ def load_checkpoint_context() -> dict[str, str | None] | None:
 def clear_checkpoint_context() -> None:
     st.session_state.pop(_CHECKPOINT_CONTEXT_KEY, None)
     st.session_state.pop(_CHECKPOINT_INSTANCE_KEY, None)
+    st.session_state.pop(_CHECKPOINT_COMPLETION_KEY, None)
 
 
 def _emit_checkpoint_offered(rec: SmartStudyRecommendation, surface: str) -> None:
     """Emit session-tape checkpoint_offered once per checkpoint instance UUID.
 
-    Each render_checkpoint() call generates a new UUID via store_checkpoint_context,
-    so two completions on the same surface always produce two tape events.
+    UUID is stable across rerenders but rotates on new completion_key
+    (new learning result). Two completions always produce two events.
     """
     instance_id = str(st.session_state.get(_CHECKPOINT_INSTANCE_KEY) or "").strip()
     if not instance_id:
@@ -92,6 +107,29 @@ def _emit_checkpoint_offered(rec: SmartStudyRecommendation, surface: str) -> Non
         pass
 
 
+def _inject_return_view(
+    rec: SmartStudyRecommendation, origin: str, return_view: str
+) -> SmartStudyRecommendation:
+    """Return a copy of rec with origin/return_view set so SSR actions
+    (primary, secondary, intent palette) share the correct breadcrumb."""
+    return SmartStudyRecommendation(
+        hint_kind=rec.hint_kind,
+        primary_label_ru=rec.primary_label_ru,
+        why_now_ru=rec.why_now_ru,
+        primary_nav=rec.primary_nav,
+        secondaries=rec.secondaries,
+        route_pedagogy_ru=rec.route_pedagogy_ru,
+        ml_audit_ru=rec.ml_audit_ru,
+        flashcard_due_n=rec.flashcard_due_n,
+        sm2_due_n=rec.sm2_due_n,
+        phase=rec.phase,
+        topic_hint=rec.topic_hint,
+        origin=origin,
+        return_view=return_view,
+        decision_id=rec.decision_id,
+    )
+
+
 def render_checkpoint(
     rec: SmartStudyRecommendation,
     *,
@@ -99,6 +137,7 @@ def render_checkpoint(
     origin: str,
     return_view: str,
     key_prefix: str,
+    completion_key: str | None = None,
     tutor_session_id: str | None = None,
     tutor_topic: str | None = None,
     weak_concept: str | None = None,
@@ -110,8 +149,11 @@ def render_checkpoint(
     Renders SSR card with primary button + ≤2 alternatives + «Сменить направление»
     palette, plus «Закончить» (back to return_view) / «Вручную» (Mission Control).
 
-    ``on_finish`` — optional callable invoked when the user clicks finish or manual
-    (only on explicit action, not during render). Use for surface-specific cleanup.
+    ``completion_key`` — unique identity of this learning result (quiz_hash,
+    msg_idx, batch_id). Used for UUID rotation so two distinct completions
+    always produce two checkpoint_offered events.
+
+    ``on_finish`` — optional callable invoked on finish/manual click.
     """
     from app.ui.smart_study_next_step_card import render_smart_study_next_step_card
 
@@ -123,6 +165,7 @@ def render_checkpoint(
         return_view=return_view,
         decision_id=str(rec.decision_id),
         phase=str(rec.phase),
+        completion_key=completion_key,
     )
     _emit_checkpoint_offered(rec, surface)
 
@@ -130,9 +173,10 @@ def render_checkpoint(
     st.caption("Завершение шага")
 
     rec_capped = _cap_secondaries(rec)
+    rec_for_card = _inject_return_view(rec_capped, origin=origin, return_view=return_view)
 
     render_smart_study_next_step_card(
-        rec_capped,
+        rec_for_card,
         key_prefix=f"{key_prefix}_chkpt",
         primary_topic_hint=topic_hint,
         tutor_session_id=tutor_session_id,
@@ -167,33 +211,22 @@ def render_checkpoint(
 
 
 def _cap_secondaries(rec: SmartStudyRecommendation) -> SmartStudyRecommendation:
-    """Clamp secondaries to ≤2 for checkpoint display."""
     secs = rec.secondaries
     if len(secs) <= 2:
         return rec
     capped = tuple(secs[:2])
     return SmartStudyRecommendation(
-        hint_kind=rec.hint_kind,
-        primary_label_ru=rec.primary_label_ru,
-        why_now_ru=rec.why_now_ru,
-        primary_nav=rec.primary_nav,
-        secondaries=capped,
-        route_pedagogy_ru=rec.route_pedagogy_ru,
-        ml_audit_ru=rec.ml_audit_ru,
-        flashcard_due_n=rec.flashcard_due_n,
-        sm2_due_n=rec.sm2_due_n,
-        phase=rec.phase,
-        topic_hint=rec.topic_hint,
-        origin=rec.origin,
-        return_view=rec.return_view,
-        decision_id=rec.decision_id,
+        hint_kind=rec.hint_kind, primary_label_ru=rec.primary_label_ru,
+        why_now_ru=rec.why_now_ru, primary_nav=rec.primary_nav,
+        secondaries=capped, route_pedagogy_ru=rec.route_pedagogy_ru,
+        ml_audit_ru=rec.ml_audit_ru, flashcard_due_n=rec.flashcard_due_n,
+        sm2_due_n=rec.sm2_due_n, phase=rec.phase, topic_hint=rec.topic_hint,
+        origin=rec.origin, return_view=rec.return_view, decision_id=rec.decision_id,
     )
 
 
 def _navigate_to_return_view(return_view: str) -> None:
-    """Navigate back to return_view and clear checkpoint context."""
     from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
-
     rv = str(return_view or "").strip()
     if rv:
         st.session_state[PENDING_CURRENT_VIEW_KEY] = rv
@@ -202,9 +235,7 @@ def _navigate_to_return_view(return_view: str) -> None:
 
 
 def _navigate_manual() -> None:
-    """Navigate to Mission Control with full manual access — no forced route."""
     from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
-
     st.session_state[PENDING_CURRENT_VIEW_KEY] = "Mission Control"
     clear_checkpoint_context()
     st.rerun()

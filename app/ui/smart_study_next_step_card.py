@@ -224,6 +224,9 @@ def render_smart_study_next_step_card(
             ss_key = f"{key_prefix}_ss_{sec.action_id}"
             with col:
                 if st.button(sec.label_ru, key=ss_key, width="stretch"):
+                    rv = str(rec_render.return_view or "").strip()
+                    if rv:
+                        st.session_state["home_breadcrumb_origin"] = rv
                     _card.apply_smart_study_secondary_navigation(sec.action_id, topic_hint=slot_hint)
 
         if enable_what_if_preview and rec_render.secondaries:

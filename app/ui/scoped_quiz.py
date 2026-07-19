@@ -425,6 +425,7 @@ def _render_quiz_checkpoint_if_due(
         origin="quiz",
         return_view=st.session_state.get("current_view", "Mission Control"),
         key_prefix=source_key,
+        completion_key=f"quiz:{source_key}:{quiz_hash}",
         tutor_topic=topic_hint,
         weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,
         plan_block=plan_block,

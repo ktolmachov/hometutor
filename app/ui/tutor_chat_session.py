@@ -853,6 +853,7 @@ def _render_tutor_checkpoint(
             st.session_state.get("current_view", "Mission Control"),
         ),
         key_prefix=key_prefix,
+        completion_key=f"tutor:e11:{session_id}:{ctx.tutor_topic or topic or ''}",
         tutor_session_id=session_id,
         tutor_topic=ctx.tutor_topic or topic,
         weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,

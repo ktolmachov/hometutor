@@ -84,7 +84,7 @@
 - Четыре guard'а кодируют жёсткие границы: `scripts/check_config_access.py`, `check_dead_modules.py`, `check_requirements_imports.py`, `check_size_budget.py`.
 - Стражи запускаются на каждом CI (push/PR) через явный шаг «Architecture regression guards» в `.github/workflows/ci.yml` (в дополнение к общему `pytest tests/`). Также доступны в любом локальном запуске `pytest` (через `tests/test_architecture_guards.py`, параметризованный; `main()` должен вернуть 0). Нет запланированного ежедневного (cron/schedule) задания.
 - Агрегатор: `scripts/arch_regression_guards.py` (можно запускать standalone).
-- Бюджеты size (файлы/функции/линии) — no-growth; синхронизированы с HEAD (33/155/1952/361). Waiver'ы только явные (см. `app/prompts/_impl.py`).
+- Бюджеты size (файлы/функции/линии) — no-growth; синхронизированы с HEAD (33/156/1958/361). Waiver'ы только явные (см. `app/prompts/_impl.py`).
 - Если guard красный — фиксим структуру, не поднимаем потолок.
 
 ## Темы и шрифты (local-first)

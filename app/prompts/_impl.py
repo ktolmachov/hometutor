@@ -1947,7 +1947,7 @@ def infer_homework_level_from_message(text: str) -> str | None:
 AGENT_COMPOSITION_INTENT_PROMPTS: dict[str, str] = {
     "compose_session": (
         "Собери учебную сессию по теме «{topic}»: "
-        "подбери нужные инструменты (поиск, граф, конспект) и предложи план."
+        "подбери нужные инструменты (поиск, тьютор, квиз, карточки) и предложи план занятий."
     ),
     "find_gap_practice": (
         "Найди пробел в знаниях по теме «{topic}» через граф и дай практическое упражнение."

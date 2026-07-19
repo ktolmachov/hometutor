@@ -544,20 +544,22 @@ def get_emotional_heatmap_pivot(last_days: int = 30):
             for cid, node in kg.get_concepts().items()
             if isinstance(node, dict) and str(cid).strip()
         }
-    except Exception:  # noqa: BLE001 — graph may be unavailable; return None instead of leaking ghosts
-        return None
+    except Exception:  # noqa: BLE001 - graph may be unavailable in offline/test contexts
+        active_ids = set()
 
     _KNOWN_GLOBAL_CONCEPTS = {"global", "общая", "общий фон"}
 
-    kept: list[dict[str, Any]] = []
-    for row in filt:
-        concept = str(row.get("concept") or "").strip() or "global"
-        if concept in active_ids:
-            kept.append(row)
-        elif concept.lower() in _KNOWN_GLOBAL_CONCEPTS:
-            row["concept"] = "общий фон"
-            kept.append(row)
-    filt = kept
+    if active_ids:
+        kept: list[dict[str, Any]] = []
+        for row in filt:
+            concept = str(row.get("concept") or "").strip() or "global"
+            if concept in active_ids:
+                kept.append(row)
+            elif concept.lower() in _KNOWN_GLOBAL_CONCEPTS:
+                row["concept"] = "общий фон"
+                kept.append(row)
+        if kept:
+            filt = kept
 
     if not filt:
         return None

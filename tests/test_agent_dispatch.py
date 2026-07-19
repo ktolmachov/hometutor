@@ -61,6 +61,32 @@ class TestAgentDispatchSourceContracts:
         assert "подбери нужные инструменты" not in fn
         assert "AGENT_COMPOSITION_INTENT_PROMPTS" in fn
 
+    def test_composition_prompt_scenario_routing(self) -> None:
+        """P1 regression: each composition prompt must route to the correct scenario.
+        compose_session → STUDY_SESSION (no konspekt/graph markers)
+        find_gap_practice → GRAPH_GAP_FINDER
+        connect_graph_quiz → LIVING_KONSPEKT_COACH
+        """
+        from app.prompts import AGENT_COMPOSITION_INTENT_PROMPTS
+        from app.agent.scenarios import get_agent_scenario
+
+        scenarios = {}
+        for intent_id in ("compose_session", "find_gap_practice", "connect_graph_quiz"):
+            prompt = AGENT_COMPOSITION_INTENT_PROMPTS[intent_id].format(topic="Linear Algebra")
+            scenario = get_agent_scenario(prompt)
+            assert scenario is not None, f"{intent_id}: no scenario matched for prompt: {prompt!r}"
+            scenarios[intent_id] = scenario.scenario_id
+
+        assert scenarios["compose_session"] == "study_session", (
+            f"compose_session routed to {scenarios['compose_session']}, expected study_session"
+        )
+        assert scenarios["find_gap_practice"] == "graph_gap_finder", (
+            f"find_gap_practice routed to {scenarios['find_gap_practice']}, expected graph_gap_finder"
+        )
+        assert scenarios["connect_graph_quiz"] == "living_konspekt_coach", (
+            f"connect_graph_quiz routed to {scenarios['connect_graph_quiz']}, expected living_konspekt_coach"
+        )
+
     def test_global_nav_still_has_agent(self) -> None:
         """B4: agent still accessible via «Ещё» in global navigation."""
         src = (Path("app/ui/global_navigation.py")).read_text(encoding="utf-8")
@@ -98,6 +124,7 @@ class TestDispatchToAgentBehavioral:
         import app.config as _cfg
         monkeypatch.setattr(st, "session_state", {"_session_tape_id": "s1"})
         monkeypatch.setattr(st, "rerun", lambda: None)
+        monkeypatch.setattr("app.ui.learning_intents._tutor_setup", lambda: None)
 
         orig = _cfg._settings
         _cfg._settings = types.SimpleNamespace(agent_enabled=False)
@@ -118,6 +145,7 @@ class TestDispatchToAgentBehavioral:
         import app.config as _cfg
         monkeypatch.setattr(st, "session_state", {"_session_tape_id": "s1"})
         monkeypatch.setattr(st, "rerun", lambda: None)
+        monkeypatch.setattr("app.ui.learning_intents._tutor_setup", lambda: None)
 
         orig = _cfg._settings
         _cfg._settings = None
@@ -141,6 +169,7 @@ class TestSimpleIntentsNeverAgent:
         import app.config as _cfg
         monkeypatch.setattr(st, "session_state", {"_session_tape_id": "s1"})
         monkeypatch.setattr(st, "rerun", lambda: None)
+        monkeypatch.setattr("app.ui.learning_intents._tutor_setup", lambda: None)
 
         orig = _cfg._settings
         _cfg._settings = types.SimpleNamespace(agent_enabled=True)
@@ -161,6 +190,7 @@ class TestSimpleIntentsNeverAgent:
         import app.config as _cfg
         monkeypatch.setattr(st, "session_state", {"_session_tape_id": "s1"})
         monkeypatch.setattr(st, "rerun", lambda: None)
+        monkeypatch.setattr("app.ui.learning_intents._tutor_setup", lambda: None)
 
         orig = _cfg._settings
         _cfg._settings = types.SimpleNamespace(agent_enabled=True)
@@ -202,6 +232,7 @@ class TestSimpleIntentsNeverAgent:
         import app.config as _cfg
         monkeypatch.setattr(st, "session_state", {"_session_tape_id": "s1"})
         monkeypatch.setattr(st, "rerun", lambda: None)
+        monkeypatch.setattr("app.ui.learning_intents._tutor_setup", lambda: None)
 
         orig = _cfg._settings
         _cfg._settings = types.SimpleNamespace(agent_enabled=False)

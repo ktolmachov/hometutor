@@ -386,13 +386,16 @@ def _build_smart_study_recommendation_rules(
     plan_primary_block: dict[str, Any] | None = None,
 ) -> SmartStudyRecommendation:
     """Deterministic rule-only baseline for SSR."""
+    if surface == "adaptive_plan":
+        post_quiz_order = ("adaptive_plan", "tutor_resume", "answer_ready")
+    else:
+        post_quiz_order = ("tutor_resume", "answer_ready", "adaptive_plan")
+
     for hint_kind in (
         "cards_due",
         "sm2_due",
         "quiz_failed",
-        "adaptive_plan",
-        "tutor_resume",
-        "answer_ready",
+        *post_quiz_order,
         "mastery_stale",
         "safe_default",
     ):

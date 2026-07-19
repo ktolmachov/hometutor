@@ -313,17 +313,88 @@ def test_gather_context_when_all_weak_are_off_graph_falls_back_to_empty(monkeypa
 # ---------------------------------------------------------------------------
 
 
-def test_emit_route_offered_uses_session_decision_dedupe() -> None:
-    """Verify _emit_route_offered_if_needed source uses (session_id, decision_id) tuple for dedupe."""
-    source = (Path(__file__).parent.parent / "app" / "ui" / "smart_study_next_step_card.py").read_text(encoding="utf-8")
-    assert "sid, did" in source or "(sid, did)" in source
-    assert "dedupe_key" in source
-    assert "_emitted_route_ids.add(dedupe_key)" in source
-    assert "if not sid:\n            return" in source
+def _route_rec_for_tape(decision_id: str = "dec-1") -> SmartStudyRecommendation:
+    return SmartStudyRecommendation(
+        hint_kind="adaptive_plan",
+        primary_label_ru="Plan",
+        why_now_ru="Because",
+        primary_nav="plan_block_tutor",
+        secondaries=(SmartStudySecondaryAction("qa_sources", "Q&A"),),
+        phase="plan",
+        origin="home",
+        decision_id=decision_id,
+    )
 
 
-def test_emit_route_offered_skip_logic_no_session_id() -> None:
-    """_emit_route_offered_if_needed returns early when session_id is missing."""
-    source = (Path(__file__).parent.parent / "app" / "ui" / "smart_study_next_step_card.py").read_text(encoding="utf-8")
-    assert 'st.session_state.get("_session_tape_id"' in source
+def test_emit_route_offered_uses_session_decision_dedupe(monkeypatch) -> None:
+    from app import session_tape
+    from app.ui import smart_study_next_step_card as card
 
+    events: list[tuple[str, str, dict]] = []
+    monkeypatch.setattr(card.st, "session_state", {"_session_tape_id": "sid-1"})
+    monkeypatch.setattr(
+        session_tape,
+        "append_event",
+        lambda sid, event, payload: events.append((sid, event, payload)),
+    )
+    card._emitted_route_ids.clear()
+
+    rec = _route_rec_for_tape("dec-1")
+    card._emit_route_offered_if_needed(rec, "kp")
+    card._emit_route_offered_if_needed(rec, "kp")
+
+    assert len(events) == 1
+    assert events[0][0] == "sid-1"
+    assert events[0][1] == "route_offered"
+    assert events[0][2]["decision_id"] == "dec-1"
+    assert events[0][2]["phase"] == "plan"
+
+    monkeypatch.setattr(card.st, "session_state", {"_session_tape_id": "sid-2"})
+    card._emit_route_offered_if_needed(rec, "kp")
+    assert len(events) == 2
+    assert events[1][0] == "sid-2"
+
+
+def test_emit_route_offered_skip_logic_no_session_id(monkeypatch) -> None:
+    from app import session_tape
+    from app.ui import smart_study_next_step_card as card
+
+    events: list[tuple[str, str, dict]] = []
+    monkeypatch.setattr(card.st, "session_state", {})
+    monkeypatch.setattr(
+        session_tape,
+        "append_event",
+        lambda sid, event, payload: events.append((sid, event, payload)),
+    )
+    card._emitted_route_ids.clear()
+
+    card._emit_route_offered_if_needed(_route_rec_for_tape("dec-missing-sid"), "kp")
+
+    assert events == []
+    assert card._emitted_route_ids == set()
+
+
+def test_emit_route_offered_dedupe_only_after_append_succeeds(monkeypatch) -> None:
+    from app import session_tape
+    from app.ui import smart_study_next_step_card as card
+
+    events: list[tuple[str, str, dict]] = []
+    monkeypatch.setattr(card.st, "session_state", {"_session_tape_id": "sid-1"})
+    card._emitted_route_ids.clear()
+
+    def fail_append(_sid: str, _event: str, _payload: dict) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(session_tape, "append_event", fail_append)
+    rec = _route_rec_for_tape("dec-retry")
+    card._emit_route_offered_if_needed(rec, "kp")
+    assert card._emitted_route_ids == set()
+
+    monkeypatch.setattr(
+        session_tape,
+        "append_event",
+        lambda sid, event, payload: events.append((sid, event, payload)),
+    )
+    card._emit_route_offered_if_needed(rec, "kp")
+    assert len(events) == 1
+    assert ("sid-1", "dec-retry") in card._emitted_route_ids

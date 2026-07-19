@@ -31,7 +31,6 @@ def _emit_route_offered_if_needed(rec: SmartStudyRecommendation, key_prefix: str
     dedupe_key = (sid, did)
     if dedupe_key in _emitted_route_ids:
         return
-    _emitted_route_ids.add(dedupe_key)
     try:
         from app.session_tape import append_event
 
@@ -43,6 +42,7 @@ def _emit_route_offered_if_needed(rec: SmartStudyRecommendation, key_prefix: str
             "decision_id": did,
             "phase": str(rec.phase),
         })
+        _emitted_route_ids.add(dedupe_key)
     except Exception:  # noqa: BLE001 - tape must never block UI
         pass
 
@@ -83,6 +83,15 @@ def render_smart_study_next_step_card(
             steering=_uss.get_smart_study_steering_preference(),
             has_last_answer_qa=bool(_hq),
             defer_was_applied=defer_was_applied_for_steering,
+        )
+        from app.smart_study_recommendation import _enrich_route_decision as _enrich
+
+        rec_render = _enrich(
+            rec_render,
+            surface=str(rec.origin or "home"),
+            tutor_topic=tutor_topic,
+            first_weak_concept=weak_concept,
+            plan_primary_block=plan_block if isinstance(plan_block, dict) else None,
         )
 
     slot_hint = str(primary_topic_hint or tutor_topic or weak_concept or "").strip() or None

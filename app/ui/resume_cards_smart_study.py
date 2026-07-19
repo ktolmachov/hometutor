@@ -453,6 +453,8 @@ def render_smart_study_router_strip_from_session_context(
         qfx = ctx.effective_tutor_snap.get("quiz_feedback")
         if isinstance(qfx, dict):
             qf_status_home = str(qfx.get("status") or "").strip() or None
+    _plan_block = _get_saved_plan_primary_block()
+    _first_weak = ctx.weak_concepts[0] if ctx.weak_concepts else None
     ss_home = build_smart_study_recommendation(
         surface=surface,
         flashcard_due_n=ctx.flashcard_due_n,
@@ -462,8 +464,8 @@ def render_smart_study_router_strip_from_session_context(
         tutor_topic=ctx.tutor_topic,
         has_last_answer_qa=ctx.has_last_answer_qa,
         has_reading_resume=ctx.has_reading,
-        first_weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,
-        plan_primary_block=_get_saved_plan_primary_block(),
+        first_weak_concept=_first_weak,
+        plan_primary_block=_plan_block,
         **ladder_kwargs_for_build(
             current_anchor=ctx.tutor_topic,
             quiz_feedback_status=qf_status_home,
@@ -504,8 +506,8 @@ def render_smart_study_router_strip_from_session_context(
     from app.smart_study_recommendation import _enrich_route_decision as _enrich
 
     ss_final = _enrich(ss_steered, surface=surface, tutor_topic=ctx.tutor_topic,
-                       first_weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,
-                       plan_primary_block=None)
+                       first_weak_concept=_first_weak,
+                       plan_primary_block=_plan_block)
     ssr_evidence = build_smart_study_evidence_ledger_lines(
         flashcard_due_n=ctx.flashcard_due_n,
         sm2_due_n=ctx.sm2_due_n,

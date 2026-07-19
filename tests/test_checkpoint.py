@@ -96,6 +96,19 @@ class TestCheckpointInstanceLifecycle:
         id2 = st.session_state.get("_checkpoint_instance_id")
         assert id1 != id2, "New completion: different completion_key → new UUID"
 
+    def test_none_to_key_transition_generates_new_uuid(self, monkeypatch) -> None:
+        import streamlit as st
+        monkeypatch.setattr(st, "session_state", {})
+
+        from app.ui.checkpoint import store_checkpoint_context
+
+        store_checkpoint_context(completion_key=None)
+        id1 = st.session_state.get("_checkpoint_instance_id")
+
+        store_checkpoint_context(completion_key="quiz:hash1")
+        id2 = st.session_state.get("_checkpoint_instance_id")
+        assert id1 != id2, "None→key transition must generate new UUID"
+
     def test_two_completions_two_events(self, monkeypatch) -> None:
         import streamlit as st
         monkeypatch.setattr(st, "session_state", {"_session_tape_id": "s1"})
@@ -128,6 +141,45 @@ class TestCheckpointInstanceLifecycle:
         store_checkpoint_context(completion_key="quiz:v2")
         _emit_checkpoint_offered(rec, "quiz")
         assert call_count == 2, f"Checkpoint B suppressed (same decision_id {rec.decision_id})"
+
+        tape.append_event = original
+
+    def test_same_topic_different_msg_idx_two_events(self, monkeypatch) -> None:
+        """Two micro-quizzes in same session on same topic → two events."""
+        import streamlit as st
+        monkeypatch.setattr(st, "session_state", {"_session_tape_id": "s1"})
+
+        from app.smart_study_router import SmartStudyRecommendation
+        from app.ui.checkpoint import (
+            store_checkpoint_context, _emit_checkpoint_offered,
+            _emitted_checkpoint_instances,
+        )
+        _emitted_checkpoint_instances.clear()
+
+        rec = SmartStudyRecommendation(
+            hint_kind="quiz_failed", primary_label_ru="Разобрать", why_now_ru="",
+            primary_nav="quiz_recovery_tutor", secondaries=(),
+            decision_id="did-mq", phase="check",
+        )
+
+        call_count = 0
+        import app.session_tape as tape
+        original = tape.append_event
+        def counting(sid, evt, payload):
+            nonlocal call_count
+            call_count += 1
+        tape.append_event = counting
+
+        ck1 = f"tutor:mq:sid1:linear-algebra:{5}"
+        ck2 = f"tutor:mq:sid1:linear-algebra:{7}"
+
+        store_checkpoint_context(completion_key=ck1)
+        _emit_checkpoint_offered(rec, "tutor")
+        assert call_count == 1
+
+        store_checkpoint_context(completion_key=ck2)
+        _emit_checkpoint_offered(rec, "tutor")
+        assert call_count == 2, f"Same session/topic, different msg_idx: blocked. ck1={ck1}, ck2={ck2}"
 
         tape.append_event = original
 

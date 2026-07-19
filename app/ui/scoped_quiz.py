@@ -374,12 +374,14 @@ def render_scoped_self_check_quiz(
                 st.caption(f"🏆 Новый бейдж: {_lab}")
         saved_key = f"{source_key}_{quiz_hash}_quiz_saved"
         st.session_state[saved_key] = True
+        st.session_state[f"{source_key}_{quiz_hash}_attempt_id"] = row_id
         st.rerun()
 
     saved_key = f"{source_key}_{quiz_hash}_quiz_saved"
     if submitted_count >= total and total > 0 and st.session_state.get(saved_key):
         _render_quiz_checkpoint_if_due(
             source_key=source_key,
+            quiz_hash=quiz_hash,
             quiz_feedback_status="correct" if pct >= 80 else ("partial" if pct >= 50 else "incorrect"),
             topic_hint=str(meta.get("identifier") or meta.get("relative_path") or "").strip() or None,
         )
@@ -390,6 +392,7 @@ def _render_quiz_checkpoint_if_due(
     source_key: str,
     quiz_feedback_status: str | None = None,
     topic_hint: str | None = None,
+    quiz_hash: str | None = None,
 ) -> None:
     """B1: after quiz save completes, render unified checkpoint (no auto-start)."""
     try:
@@ -425,7 +428,7 @@ def _render_quiz_checkpoint_if_due(
         origin="quiz",
         return_view=st.session_state.get("current_view", "Mission Control"),
         key_prefix=source_key,
-        completion_key=f"quiz:{source_key}:{quiz_hash}",
+        completion_key=f"quiz:{source_key}:{quiz_hash or ''}:{st.session_state.get(f'{source_key}_{quiz_hash}_attempt_id', 0)}",
         tutor_topic=topic_hint,
         weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,
         plan_block=plan_block,

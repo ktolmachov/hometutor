@@ -238,6 +238,7 @@ def render_unified_auto_quiz_card(
                 topic=topic,
                 quiz_feedback=fb,
                 key_prefix=f"auto_quiz_u_{session_id[:12]}_{msg_idx}",
+                msg_idx=msg_idx,
             )
             return
 
@@ -431,6 +432,7 @@ def render_tutor_micro_quiz_block(active: dict[str, Any], session_id: str) -> No
             topic=topic,
             quiz_feedback=fb if isinstance(fb, dict) else None,
             key_prefix=f"tutor_mq_{session_id[:8]}",
+            msg_idx=int(active.get("msg_idx", 0)),
         )
         return
 
@@ -522,6 +524,7 @@ def _render_micro_quiz_checkpoint(
     topic: str | None = None,
     quiz_feedback: dict | None = None,
     key_prefix: str,
+    msg_idx: int | None = None,
 ) -> None:
     """B1: after micro-quiz result, render unified checkpoint."""
     try:
@@ -564,7 +567,7 @@ def _render_micro_quiz_checkpoint(
             st.session_state.get("current_view", "Mission Control"),
         ),
         key_prefix=key_prefix,
-        completion_key=f"tutor:mq:{session_id}:{topic or ''}:{key_prefix}",
+        completion_key=f"tutor:mq:{session_id}:{topic or ''}:{msg_idx or 0}",
         tutor_session_id=session_id,
         tutor_topic=ctx.tutor_topic or topic,
         weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,

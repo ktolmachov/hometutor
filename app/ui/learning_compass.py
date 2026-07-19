@@ -5,10 +5,13 @@ Example: «Понять agent-harness · объяснение · 9 мин ост
 
 Used on every learning surface (home, tutor, quiz, flashcards, plan) above the
 route shell / checkpoint card. One line, no raw agent/mode ids, honest reduction
-when data is missing — no synthetic defaults. Max one progress indicator.
+when data is missing — returns None, renders nothing. No synthetic defaults.
+All user-provided text is HTML-escaped before rendering.
 """
 
 from __future__ import annotations
+
+import html as _html
 
 from app.smart_study_router import SmartStudyRecommendation
 
@@ -28,12 +31,25 @@ _SSR_HINT_GOAL_RU: dict[str, str] = {
     "answer_ready": "Проверить ответ",
     "mastery_stale": "Освоить концепт",
     "adaptive_plan": "По плану",
-    "safe_default": "Начать занятие",
 }
 
 
 def _phase_label_ru(phase: str) -> str:
     return _SSR_PHASE_LABEL_RU.get(str(phase or "").strip(), "")
+
+
+def _safe_goal(goal_text: str | None, rec: SmartStudyRecommendation) -> str:
+    g = (goal_text or "").strip()
+    if not g:
+        g = _SSR_HINT_GOAL_RU.get(str(rec.hint_kind), "")
+    if not g and rec.topic_hint:
+        t = str(rec.topic_hint).strip()
+        g = t if len(t) <= 50 else f"{t[:47]}…"
+    if not g and rec.primary_label_ru:
+        g = str(rec.primary_label_ru).strip()
+        if len(g) > 50:
+            g = g[:47] + "…"
+    return _html.escape(g, quote=False)
 
 
 def build_learning_compass_html(
@@ -45,30 +61,19 @@ def build_learning_compass_html(
 ) -> str | None:
     """Build compact HTML for the learning compass line.
 
-    Returns None when there is nothing meaningful to show (honest reduction).
+    All user-provided text is HTML-escaped. Returns None when there
+    is nothing meaningful to show (honest reduction).
     """
     parts: list[str] = []
 
-    # ── цель ──
-    goal = (goal_text or "").strip()
-    if not goal:
-        goal = _SSR_HINT_GOAL_RU.get(str(rec.hint_kind), "")
-    if not goal and rec.topic_hint:
-        t = str(rec.topic_hint).strip()
-        goal = t if len(t) <= 50 else f"{t[:47]}…"
-    if not goal and rec.primary_label_ru:
-        goal = str(rec.primary_label_ru).strip()
-        if len(goal) > 50:
-            goal = goal[:47] + "…"
+    goal = _safe_goal(goal_text, rec)
     if goal:
         parts.append(goal)
 
-    # ── фаза ──
     phase = _phase_label_ru(rec.phase)
     if phase:
-        parts.append(phase)
+        parts.append(_html.escape(phase, quote=False))
 
-    # ── бюджет ──
     if time_budget_min is not None:
         try:
             t = int(time_budget_min)
@@ -77,10 +82,9 @@ def build_learning_compass_html(
         except (TypeError, ValueError):
             pass
 
-    # ── возврат ──
-    rp = (return_point or "").strip()
+    rp = str(return_point or "").strip()
     if rp:
-        parts.append(f"затем {rp}")
+        parts.append(f"затем {_html.escape(rp, quote=False)}")
 
     if not parts:
         return None

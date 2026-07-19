@@ -51,7 +51,7 @@ def store_checkpoint_context(
     new_ck = str(completion_key or "").strip() or None
 
     instance_id = st.session_state.get(_CHECKPOINT_INSTANCE_KEY)
-    if not instance_id or (prev_ck and prev_ck != new_ck):
+    if not instance_id or prev_ck != new_ck:
         instance_id = str(uuid.uuid4())
         st.session_state[_CHECKPOINT_INSTANCE_KEY] = instance_id
     st.session_state[_CHECKPOINT_COMPLETION_KEY] = new_ck

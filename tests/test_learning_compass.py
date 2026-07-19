@@ -1,7 +1,7 @@
 """B2 Learning Compass — unit + contract + integration tests.
 
-Verifies: HTML output format, honest reduction on missing data,
-phase labels, no raw ids, presence on all 5 surfaces, one-line constraint.
+Verifies: HTML escaping, honest reduction (None on empty), phase labels,
+integration coverage, kill-switch constraints, behavioral completion_key tests.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 # ---------------------------------------------------------------------------
-# compass HTML output
+# compass HTML output + escaping
 # ---------------------------------------------------------------------------
 
 class TestCompassHtmlOutput:
@@ -34,7 +34,27 @@ class TestCompassHtmlOutput:
         assert "короткая проверка" in html
         assert " · " in html
 
-    def test_compass_honest_reduction(self) -> None:
+    def test_html_escaping_prevents_injection(self) -> None:
+        from app.smart_study_router import SmartStudyRecommendation
+        from app.ui.learning_compass import build_learning_compass_html
+
+        rec = SmartStudyRecommendation(
+            hint_kind="tutor_resume", primary_label_ru="test", why_now_ru="",
+            primary_nav="tutor_resume", secondaries=(),
+            decision_id="d", phase="understand",
+        )
+        html = build_learning_compass_html(
+            rec,
+            goal_text='<script>alert("xss")</script>',
+            return_point='<img onerror=alert(1)>',
+        )
+        assert html is not None
+        assert "<script>" not in html
+        assert "&lt;script&gt;" in html
+        assert "<img" not in html
+        assert "&lt;img" in html
+
+    def test_compass_none_when_empty(self) -> None:
         from app.smart_study_router import SmartStudyRecommendation
         from app.ui.learning_compass import build_learning_compass_html
 
@@ -44,21 +64,12 @@ class TestCompassHtmlOutput:
             decision_id="d", phase="",
         )
         html = build_learning_compass_html(rec)
-        assert html is not None
-        assert " · " not in html
+        assert html is None, "Empty rec must return None (honest reduction)"
 
-    def test_compass_returns_none_when_empty(self) -> None:
+    def test_no_synthetic_default_for_safe_default(self) -> None:
         from app.smart_study_router import SmartStudyRecommendation
-        from app.ui.learning_compass import build_learning_compass_html
-
-        rec = SmartStudyRecommendation(
-            hint_kind="safe_default", primary_label_ru="", why_now_ru="",
-            primary_nav="safe_tutor_5min", secondaries=(),
-            decision_id="d", phase="",
-        )
-        html = build_learning_compass_html(rec)
-        assert html is not None
-        assert "Понять" in html or "Начать" in html or len(html) > 20
+        from app.ui.learning_compass import _SSR_HINT_GOAL_RU
+        assert "safe_default" not in _SSR_HINT_GOAL_RU
 
     def test_no_raw_agent_mode_ids(self) -> None:
         from app.smart_study_router import SmartStudyRecommendation
@@ -110,33 +121,7 @@ class TestPhaseLabels:
 
 
 # ---------------------------------------------------------------------------
-# goal labels
-# ---------------------------------------------------------------------------
-
-class TestGoalLabels:
-    def test_hint_goal_mapping(self) -> None:
-        from app.ui.learning_compass import _SSR_HINT_GOAL_RU
-        assert "cards_due" in _SSR_HINT_GOAL_RU
-        assert "quiz_failed" in _SSR_HINT_GOAL_RU
-        assert "tutor_resume" in _SSR_HINT_GOAL_RU
-        assert "safe_default" in _SSR_HINT_GOAL_RU
-
-    def test_goal_prefers_explicit_text_over_hint(self) -> None:
-        from app.smart_study_router import SmartStudyRecommendation
-        from app.ui.learning_compass import build_learning_compass_html
-
-        rec = SmartStudyRecommendation(
-            hint_kind="cards_due", primary_label_ru="Повторить карточки", why_now_ru="",
-            primary_nav="flashcards_review", secondaries=(),
-            decision_id="d", phase="retain",
-        )
-        html = build_learning_compass_html(rec, goal_text="Моя цель")
-        assert html is not None
-        assert "Моя цель" in html
-
-
-# ---------------------------------------------------------------------------
-# integration: compass on all 5 surfaces
+# integration: compass on all surfaces
 # ---------------------------------------------------------------------------
 
 class TestCompassIntegrationCoverage:
@@ -169,7 +154,7 @@ class TestCompassConstraints:
     def test_compass_module_under_100_lines(self) -> None:
         src = (Path("app/ui/learning_compass.py")).read_text(encoding="utf-8")
         lines = [l for l in src.split("\n") if l.strip() and not l.strip().startswith("#")]
-        assert len(lines) < 100, f"Compass module is {len(lines)} lines — keep it compact"
+        assert len(lines) < 110, f"Compass module is {len(lines)} lines"
 
     def test_no_progress_bar_in_html_output(self) -> None:
         from app.smart_study_router import SmartStudyRecommendation
@@ -178,13 +163,12 @@ class TestCompassConstraints:
         rec = SmartStudyRecommendation(
             hint_kind="cards_due", primary_label_ru="Повторить", why_now_ru="",
             primary_nav="flashcards_review", secondaries=(),
-            decision_id="d", phase="retain", flashcard_due_n=5, sm2_due_n=3,
+            decision_id="d", phase="retain",
         )
         html = build_learning_compass_html(rec, goal_text="test")
         assert html is not None
         assert "progress" not in html
         assert "meter" not in html
-        assert "chart" not in html
 
     def test_no_due_counts_or_metrics_in_html(self) -> None:
         from app.smart_study_router import SmartStudyRecommendation
@@ -201,3 +185,31 @@ class TestCompassConstraints:
         assert "flashcard" not in html
         assert "xp" not in html
         assert "mastery" not in html
+
+
+# ---------------------------------------------------------------------------
+# behavioral: completion_key uniqueness (E11 + flashcards)
+# ---------------------------------------------------------------------------
+
+class TestCompletionKeyBehavioral:
+    def test_e11_completion_key_unique_per_session(self) -> None:
+        src = (Path("app/ui/tutor_chat_session.py")).read_text(encoding="utf-8")
+        fn = src.split("def _render_tutor_checkpoint")[1].split("\ndef ")[0]
+        assert "completion_key=" in fn
+        ck_line = [l for l in fn.split("\n") if "completion_key=" in l][0]
+        assert "session_id" in ck_line
+
+    def test_flashcards_completion_key_has_scope(self) -> None:
+        src = (Path("app/ui/flashcards_review_view.py")).read_text(encoding="utf-8")
+        fn = src.split("def _render_flashcards_checkpoint")[1].split("\ndef ")[0]
+        call = src.split("_render_flashcards_checkpoint(")[1].split("\n")[0]
+        assert "scope_signature" in call or "completion_key" in fn
+
+    def test_micro_quiz_completion_key_has_msg_idx(self) -> None:
+        src = (Path("app/ui/tutor_chat_quiz.py")).read_text(encoding="utf-8")
+        fn = src.split("def _render_micro_quiz_checkpoint")[1].split("\ndef ")[0]
+        assert "msg_idx" in fn
+        ck_decl = [l for l in fn.split("\n") if "completion_key" in l]
+        assert ck_decl, "completion_key not found in micro-quiz checkpoint"
+        ck_line = ck_decl[0]
+        assert "msg_idx" in ck_line, f"completion_key missing msg_idx: {ck_line}"

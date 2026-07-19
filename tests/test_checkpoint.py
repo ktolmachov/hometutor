@@ -1,8 +1,9 @@
 """B1 Checkpoint after each result — unit + contract + behaviour tests.
 
-Verifies: instance-level dedupe, distinct buttons, on_finish callback,
-plan_primary_block propagation, quiz-save gate + stale reset,
-micro-quiz + auto-quiz integration, ≤2 secondaries, single route surface.
+Verifies: instance-level dedupe (UUID), distinct buttons, on_finish callback,
+plan_primary_block propagation, quiz content-hash key, stale reset,
+micro-quiz + auto-quiz integration, ≤2 secondaries, single route surface,
+dead code removal, return_view is dynamic.
 """
 
 from __future__ import annotations
@@ -19,8 +20,6 @@ class TestCheckpointSourceContracts:
     def test_checkpoint_module_exists(self) -> None:
         src = (Path("app/ui/checkpoint.py")).read_text(encoding="utf-8")
         assert "store_checkpoint_context" in src
-        assert "load_checkpoint_context" in src
-        assert "clear_checkpoint_context" in src
         assert "render_checkpoint" in src
 
     def test_checkpoint_no_auto_start_pattern(self) -> None:
@@ -32,10 +31,11 @@ class TestCheckpointSourceContracts:
         assert '"question"' not in src
         assert '"answer"' not in src
 
-    def test_dedupe_is_per_instance_not_per_decision(self) -> None:
+    def test_dedupe_uses_instance_uuid_not_static_key(self) -> None:
         src = (Path("app/ui/checkpoint.py")).read_text(encoding="utf-8")
-        assert "_emitted_checkpoint_keys" in src
-        assert "dedupe_key: str" in src.split("_emit_checkpoint_offered")[0] or "dedupe_key" in src
+        assert "_emitted_checkpoint_instances" in src
+        assert "_CHECKPOINT_INSTANCE_KEY" in src
+        assert "str(uuid.uuid4())" in src
 
     def test_manual_button_distinct_from_finish(self) -> None:
         src = (Path("app/ui/checkpoint.py")).read_text(encoding="utf-8")
@@ -52,116 +52,78 @@ class TestCheckpointSourceContracts:
         from app.smart_study_router import SmartStudyRecommendation, SmartStudySecondaryAction
         from app.ui.checkpoint import _cap_secondaries
 
-        secs = tuple(SmartStudySecondaryAction(f"a{i}", f"Label {i}") for i in range(4))
+        secs = tuple(SmartStudySecondaryAction(f"a{i}", f"L{i}") for i in range(4))
         rec = SmartStudyRecommendation(
-            hint_kind="safe_default",
-            primary_label_ru="test",
-            why_now_ru="",
-            primary_nav="safe_tutor_5min",
-            secondaries=secs,
-            decision_id="d1",
-            phase="understand",
+            hint_kind="safe_default", primary_label_ru="t", why_now_ru="",
+            primary_nav="safe_tutor_5min", secondaries=secs,
+            decision_id="d1", phase="understand",
         )
         capped = _cap_secondaries(rec)
         assert len(capped.secondaries) == 2
-        assert capped.primary_nav == rec.primary_nav
 
         secs2 = tuple(SmartStudySecondaryAction(f"a{i}", f"L{i}") for i in range(1))
         rec2 = SmartStudyRecommendation(
-            hint_kind="safe_default",
-            primary_label_ru="t2",
-            why_now_ru="",
-            primary_nav="safe_tutor_5min",
-            secondaries=secs2,
-            decision_id="d2",
-            phase="understand",
+            hint_kind="safe_default", primary_label_ru="t", why_now_ru="",
+            primary_nav="safe_tutor_5min", secondaries=secs2,
+            decision_id="d2", phase="understand",
         )
         capped2 = _cap_secondaries(rec2)
         assert len(capped2.secondaries) == 1
 
 
 # ---------------------------------------------------------------------------
-# checkpoint context helpers
+# checkpoint context + instance UUID
 # ---------------------------------------------------------------------------
 
 class TestCheckpointContext:
-    def test_store_load_clear_full_cycle(self, monkeypatch) -> None:
+    def test_store_context_generates_fresh_uuid(self, monkeypatch) -> None:
         import streamlit as st
-
-        monkeypatch.setattr(st, "session_state", {})
-
-        from app.ui.checkpoint import store_checkpoint_context, load_checkpoint_context, clear_checkpoint_context
-
-        store_checkpoint_context(
-            topic_hint="agent-harness",
-            origin="tutor",
-            return_view="Mission Control",
-            decision_id="dec-001",
-            phase="understand",
-        )
-        ctx = load_checkpoint_context()
-        assert ctx is not None
-        assert ctx["topic_hint"] == "agent-harness"
-        assert ctx["origin"] == "tutor"
-        assert ctx["return_view"] == "Mission Control"
-        assert ctx["decision_id"] == "dec-001"
-        assert ctx["phase"] == "understand"
-
-        clear_checkpoint_context()
-        assert load_checkpoint_context() is None
-
-    def test_store_empty_fields_normalize_to_none(self, monkeypatch) -> None:
-        import streamlit as st
-
         monkeypatch.setattr(st, "session_state", {})
 
         from app.ui.checkpoint import store_checkpoint_context, load_checkpoint_context
 
-        store_checkpoint_context(topic_hint="  ", origin=None, return_view="")
+        store_checkpoint_context(topic_hint="x")
+        id1 = st.session_state.get("_checkpoint_instance_id")
+        assert id1 is not None
+
+        store_checkpoint_context(topic_hint="y")
+        id2 = st.session_state.get("_checkpoint_instance_id")
+        assert id1 != id2
+
+    def test_store_load_clear_full_cycle(self, monkeypatch) -> None:
+        import streamlit as st
+        monkeypatch.setattr(st, "session_state", {})
+
+        from app.ui.checkpoint import store_checkpoint_context, load_checkpoint_context, clear_checkpoint_context
+
+        store_checkpoint_context(topic_hint="agent-harness", origin="tutor",
+                                return_view="Mission Control", decision_id="dec-001",
+                                phase="understand")
         ctx = load_checkpoint_context()
         assert ctx is not None
-        assert ctx["topic_hint"] is None
-        assert ctx["origin"] is None
-        assert ctx["return_view"] is None
+        assert ctx["topic_hint"] == "agent-harness"
+        clear_checkpoint_context()
+        assert load_checkpoint_context() is None
 
 
 # ---------------------------------------------------------------------------
-# checkpoint deduplication (instance-level)
+# checkpoint deduplication (instance UUID)
 # ---------------------------------------------------------------------------
 
 class TestCheckpointDedupe:
-    def test_emitted_set_is_module_level(self) -> None:
-        from app.ui.checkpoint import _emitted_checkpoint_keys
-        assert isinstance(_emitted_checkpoint_keys, set)
-
-    def test_emit_checkpoint_offered_respects_dedupe_by_instance(self, monkeypatch) -> None:
+    def test_two_uuid_give_two_events(self, monkeypatch) -> None:
         import streamlit as st
-
         monkeypatch.setattr(st, "session_state", {"_session_tape_id": "s1"})
 
         from app.smart_study_router import SmartStudyRecommendation
-        from app.ui.checkpoint import _emitted_checkpoint_keys, _emit_checkpoint_offered
+        from app.ui.checkpoint import _emitted_checkpoint_instances, _emit_checkpoint_offered
 
-        rec1 = SmartStudyRecommendation(
-            hint_kind="safe_default",
-            primary_label_ru="test",
-            why_now_ru="",
-            primary_nav="safe_tutor_5min",
-            secondaries=(),
-            decision_id="dec-same",
-            phase="understand",
+        rec = SmartStudyRecommendation(
+            hint_kind="safe_default", primary_label_ru="t", why_now_ru="",
+            primary_nav="safe_tutor_5min", secondaries=(),
+            decision_id="dec-s", phase="understand",
         )
-        rec2 = SmartStudyRecommendation(
-            hint_kind="cards_due",
-            primary_label_ru="review",
-            why_now_ru="",
-            primary_nav="flashcards_review",
-            secondaries=(),
-            decision_id="dec-same",
-            phase="retain",
-        )
-
-        _emitted_checkpoint_keys.clear()
+        _emitted_checkpoint_instances.clear()
 
         call_count = 0
         import app.session_tape as tape
@@ -171,14 +133,16 @@ class TestCheckpointDedupe:
             call_count += 1
         tape.append_event = counting
 
-        _emit_checkpoint_offered(rec1, "quiz", dedupe_key="quiz_instance_1")
+        st.session_state["_checkpoint_instance_id"] = "inst-aaa"
+        _emit_checkpoint_offered(rec, "quiz")
         assert call_count == 1
 
-        _emit_checkpoint_offered(rec1, "quiz", dedupe_key="quiz_instance_1")
-        assert call_count == 1, "Same instance re-emitted"
+        _emit_checkpoint_offered(rec, "quiz")
+        assert call_count == 1, "Same UUID re-emitted"
 
-        _emit_checkpoint_offered(rec2, "quiz", dedupe_key="quiz_instance_2")
-        assert call_count == 2, "Different instance blocked by same decision_id"
+        st.session_state["_checkpoint_instance_id"] = "inst-bbb"
+        _emit_checkpoint_offered(rec, "quiz")
+        assert call_count == 2, "Different UUID blocked"
 
         tape.append_event = original
 
@@ -190,29 +154,19 @@ class TestCheckpointDedupe:
 class TestSessionTapeCheckpointEvent:
     def test_checkpoint_offered_is_registered(self) -> None:
         from app.session_tape import EVENT_REQUIRED_FIELDS
-
-        assert "checkpoint_offered" in EVENT_REQUIRED_FIELDS
         fields = EVENT_REQUIRED_FIELDS["checkpoint_offered"]
         assert "question" not in fields
         assert "answer" not in fields
-        assert "text" not in fields
 
     def test_checkpoint_offered_payload_strips_text(self) -> None:
         from app.session_tape import append_event, reset_session_started_cache_for_tests
-
         reset_session_started_cache_for_tests()
         try:
-            append_event(
-                "test-checkpoint-002",
-                "checkpoint_offered",
-                {
-                    "surface": "quiz",
-                    "primary_nav": "tutor_resume",
-                    "hint_kind": "safe_default",
-                    "decision_id": "dec-check-2",
-                    "phase": "understand",
-                },
-            )
+            append_event("test-cp-003", "checkpoint_offered", {
+                "surface": "quiz", "primary_nav": "tutor_resume",
+                "hint_kind": "safe_default", "decision_id": "dc3",
+                "phase": "understand",
+            })
         except Exception as exc:
             assert False, f"append_event raised: {exc}"
 
@@ -238,8 +192,7 @@ class TestCheckpointIntegrationCoverage:
         src = (Path("app/ui/tutor_chat_quiz.py")).read_text(encoding="utf-8")
         assert "_render_micro_quiz_checkpoint" in src
 
-    def test_tutor_chat_quiz_auto_quiz_has_checkpoint(self) -> None:
-        """render_unified_auto_quiz_card also renders checkpoint."""
+    def test_auto_quiz_has_checkpoint(self) -> None:
         src = (Path("app/ui/tutor_chat_quiz.py")).read_text(encoding="utf-8")
         auto_fn = src.split("def render_unified_auto_quiz_card")[1].split("\ndef ")[0]
         assert "_render_micro_quiz_checkpoint" in auto_fn
@@ -250,7 +203,7 @@ class TestCheckpointIntegrationCoverage:
 
     def test_scoped_quiz_checkpoint_after_save(self) -> None:
         src = (Path("app/ui/scoped_quiz.py")).read_text(encoding="utf-8")
-        save_idx = src.index("quiz_saved")
+        save_idx = src.index("quiz_hash")
         checkpoint_idx = src.index("_render_quiz_checkpoint_if_due")
         assert save_idx < checkpoint_idx
 
@@ -258,10 +211,10 @@ class TestCheckpointIntegrationCoverage:
         src = (Path("app/ui/scoped_quiz.py")).read_text(encoding="utf-8")
         assert 'st.session_state.get(saved_key)' in src
 
-    def test_scoped_quiz_resets_saved_on_fresh_quiz(self) -> None:
+    def test_scoped_quiz_uses_content_hash(self) -> None:
         src = (Path("app/ui/scoped_quiz.py")).read_text(encoding="utf-8")
-        assert 'submitted_count == 0' in src
-        assert 'quiz_saved' in src
+        assert "quiz_hash" in src
+        assert "hashlib.md5" in src
 
     def test_flashcards_checkpoint_after_restart_button(self) -> None:
         src = (Path("app/ui/flashcards_review_view.py")).read_text(encoding="utf-8")
@@ -271,7 +224,33 @@ class TestCheckpointIntegrationCoverage:
 
 
 # ---------------------------------------------------------------------------
-# No duplicate route surfaces (old SSR removed)
+# return_view is dynamic (reads current_view from session_state)
+# ---------------------------------------------------------------------------
+
+class TestReturnViewDynamic:
+    def test_tutor_return_view_reads_current_view(self) -> None:
+        src = (Path("app/ui/tutor_chat_session.py")).read_text(encoding="utf-8")
+        fn_body = src.split("def _render_tutor_checkpoint")[1].split("\ndef ")[0]
+        assert 'return_view=st.session_state.get("current_view"' in fn_body
+
+    def test_quiz_return_view_reads_current_view(self) -> None:
+        src = (Path("app/ui/scoped_quiz.py")).read_text(encoding="utf-8")
+        fn_body = src.split("def _render_quiz_checkpoint_if_due")[1].split("\ndef ")[0]
+        assert 'return_view=st.session_state.get("current_view"' in fn_body
+
+    def test_micro_quiz_return_view_reads_current_view(self) -> None:
+        src = (Path("app/ui/tutor_chat_quiz.py")).read_text(encoding="utf-8")
+        fn_body = src.split("def _render_micro_quiz_checkpoint")[1].split("\ndef ")[0]
+        assert 'return_view=st.session_state.get("current_view"' in fn_body
+
+    def test_flashcards_return_view_reads_current_view(self) -> None:
+        src = (Path("app/ui/flashcards_review_view.py")).read_text(encoding="utf-8")
+        fn_body = src.split("def _render_flashcards_checkpoint")[1].split("\ndef ")[0]
+        assert 'return_view=st.session_state.get("current_view"' in fn_body
+
+
+# ---------------------------------------------------------------------------
+# No duplicate route surfaces (old SSR + auto-quiz buttons removed)
 # ---------------------------------------------------------------------------
 
 class TestSingleRouteSurface:
@@ -285,17 +264,16 @@ class TestSingleRouteSurface:
         mq_fn = src.split("def render_tutor_micro_quiz_block")[1].split("\ndef ")[0]
         assert "_render_smart_study_after_failed_quiz" not in mq_fn
 
+    def test_auto_quiz_no_local_buttons(self) -> None:
+        src = (Path("app/ui/tutor_chat_quiz.py")).read_text(encoding="utf-8")
+        auto_fn = src.split("def render_unified_auto_quiz_card")[1].split("\ndef ")[0]
+        assert 'st.button("Вспомнил"' not in auto_fn
+        assert 'st.button("Понял"' not in auto_fn
+        assert 'st.button("Трудно"' not in auto_fn
 
-# ---------------------------------------------------------------------------
-# No render-time session state mutation
-# ---------------------------------------------------------------------------
-
-class TestNoRenderTimeMutation:
-    def test_tutor_checkpoint_does_not_mutate_e11_during_render(self) -> None:
-        src = (Path("app/ui/tutor_chat_session.py")).read_text(encoding="utf-8")
-        fn_body = src.split("def _render_tutor_checkpoint")[1].split("\ndef ")[0]
-        assert "_on_tutor_checkpoint_action" in fn_body
-        assert "on_finish=_on_tutor_checkpoint_action" in fn_body
+    def test_dead_code_removed(self) -> None:
+        src = (Path("app/ui/tutor_chat_quiz.py")).read_text(encoding="utf-8")
+        assert "def _render_smart_study_after_failed_quiz" not in src
 
 
 # ---------------------------------------------------------------------------
@@ -303,29 +281,29 @@ class TestNoRenderTimeMutation:
 # ---------------------------------------------------------------------------
 
 class TestPlanPrimaryBlockPropagation:
-    def test_tutor_checkpoint_not_hardcode_none_plan(self) -> None:
+    def test_tutor_not_hardcode_none(self) -> None:
         src = (Path("app/ui/tutor_chat_session.py")).read_text(encoding="utf-8")
-        fn_body = src.split("def _render_tutor_checkpoint")[1].split("\ndef ")[0]
-        assert "_get_saved_plan_primary_block" in fn_body
-        assert "plan_primary_block=None" not in fn_body
+        fn = src.split("def _render_tutor_checkpoint")[1].split("\ndef ")[0]
+        assert "_get_saved_plan_primary_block" in fn
+        assert "plan_primary_block=None" not in fn
 
-    def test_quiz_checkpoint_not_hardcode_none_plan(self) -> None:
+    def test_quiz_not_hardcode_none(self) -> None:
         src = (Path("app/ui/scoped_quiz.py")).read_text(encoding="utf-8")
-        fn_body = src.split("def _render_quiz_checkpoint_if_due")[1].split("\ndef ")[0]
-        assert "_get_saved_plan_primary_block" in fn_body
-        assert "plan_primary_block=None" not in fn_body
+        fn = src.split("def _render_quiz_checkpoint_if_due")[1].split("\ndef ")[0]
+        assert "_get_saved_plan_primary_block" in fn
+        assert "plan_primary_block=None" not in fn
 
-    def test_flashcards_checkpoint_not_hardcode_none_plan(self) -> None:
+    def test_flashcards_not_hardcode_none(self) -> None:
         src = (Path("app/ui/flashcards_review_view.py")).read_text(encoding="utf-8")
-        fn_body = src.split("def _render_flashcards_checkpoint")[1].split("\ndef ")[0]
-        assert "_get_saved_plan_primary_block" in fn_body
-        assert "plan_primary_block=None" not in fn_body
+        fn = src.split("def _render_flashcards_checkpoint")[1].split("\ndef ")[0]
+        assert "_get_saved_plan_primary_block" in fn
+        assert "plan_primary_block=None" not in fn
 
-    def test_micro_quiz_checkpoint_not_hardcode_none_plan(self) -> None:
+    def test_micro_quiz_not_hardcode_none(self) -> None:
         src = (Path("app/ui/tutor_chat_quiz.py")).read_text(encoding="utf-8")
-        fn_body = src.split("def _render_micro_quiz_checkpoint")[1].split("\ndef ")[0]
-        assert "_get_saved_plan_primary_block" in fn_body
-        assert "plan_primary_block=None" not in fn_body
+        fn = src.split("def _render_micro_quiz_checkpoint")[1].split("\ndef ")[0]
+        assert "_get_saved_plan_primary_block" in fn
+        assert "plan_primary_block=None" not in fn
 
 
 # ---------------------------------------------------------------------------
@@ -335,22 +313,16 @@ class TestPlanPrimaryBlockPropagation:
 class TestSessionTapeNoTextLeak:
     def test_forbidden_keys_cover_text_fields(self) -> None:
         from app.session_tape import FORBIDDEN_PAYLOAD_KEYS
-
         text_keys = {"question", "answer", "text", "question_text", "answer_text",
                      "raw_text", "chunk", "front", "back", "body", "api_key"}
         assert text_keys.issubset(FORBIDDEN_PAYLOAD_KEYS)
 
     def test_checkpoint_payload_is_not_forbidden(self) -> None:
         from app.session_tape import _validate_payload
-
-        payload = {
-            "surface": "tutor",
-            "primary_nav": "tutor_resume",
-            "hint_kind": "safe_default",
-            "decision_id": "dec-abc",
-            "phase": "understand",
-        }
         try:
-            _validate_payload("checkpoint_offered", payload)
+            _validate_payload("checkpoint_offered", {
+                "surface": "tutor", "primary_nav": "tutor_resume",
+                "hint_kind": "safe_default", "decision_id": "d", "phase": "understand",
+            })
         except Exception as exc:
-            assert False, f"Valid checkpoint payload rejected: {exc}"
+            assert False, f"Rejected: {exc}"

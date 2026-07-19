@@ -12,6 +12,7 @@ from app.ui.quiz_panel import (
     short_feedback_explanation,
 )
 from app.ui_client import fetch_json
+import hashlib
 
 _LOOP_METRICS_LABEL = "five_min_loop"
 
@@ -198,8 +199,7 @@ def render_scoped_self_check_quiz(
                 st.caption(expl)
 
     total = len([x for x in questions if isinstance(x, dict)])
-    if submitted_count == 0:
-        st.session_state.pop(f"{source_key}_quiz_saved", None)
+    quiz_hash = hashlib.md5(str(questions).encode()).hexdigest()[:12]
     if submitted_count > 0:
         pct = int(100 * correct_submissions / submitted_count) if submitted_count else 0
         if pct >= 80:
@@ -365,11 +365,11 @@ def render_scoped_self_check_quiz(
                 import logging  # noqa: BLE001
                 logging.getLogger(__name__).debug("! caught exception: %s", _exc)
                 st.caption(f"🏆 Новый бейдж: {_lab}")
-        saved_key = f"{source_key}_quiz_saved"
+        saved_key = f"{source_key}_{quiz_hash}_quiz_saved"
         st.session_state[saved_key] = True
         st.rerun()
 
-    saved_key = f"{source_key}_quiz_saved"
+    saved_key = f"{source_key}_{quiz_hash}_quiz_saved"
     if submitted_count >= total and total > 0 and st.session_state.get(saved_key):
         _render_quiz_checkpoint_if_due(
             source_key=source_key,
@@ -416,7 +416,7 @@ def _render_quiz_checkpoint_if_due(
         rec,
         surface="quiz",
         origin="quiz",
-        return_view="Mission Control",
+        return_view=st.session_state.get("current_view", "Mission Control"),
         key_prefix=source_key,
         tutor_topic=topic_hint,
         weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,

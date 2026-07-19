@@ -848,7 +848,7 @@ def _render_tutor_checkpoint(
         rec,
         surface="tutor",
         origin="tutor",
-        return_view="Mission Control",
+        return_view=st.session_state.get("current_view", "Mission Control"),
         key_prefix=key_prefix,
         tutor_session_id=session_id,
         tutor_topic=ctx.tutor_topic or topic,

@@ -1516,7 +1516,7 @@ def _render_flashcards_checkpoint(*, key_prefix: str) -> None:
         rec,
         surface="flashcards",
         origin="flashcards",
-        return_view="Mission Control",
+        return_view=st.session_state.get("current_view", "Mission Control"),
         key_prefix=key_prefix,
         weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,
         plan_block=plan_block,

@@ -6,8 +6,9 @@ Re-invokes canonical Route Policy with updated signals. Shows:
   «Закончить» → navigate to return_view (caller's origin)
   «Вручную» → navigate to Mission Control (full manual access)
 
-Checks deduplication per checkpoint instance (session_id + key_prefix, not route decision),
-so two completions in one session each get their own tape event.
+Deduplication per completion instance: each render_checkpoint() call generates
+a fresh UUID stored alongside the checkpoint context. Two completions → two
+UUIDs → two tape events, even if key_prefix is the same.
 
 Stores privacy-safe context (ids, not text) in session_state.
 No auto-start, no background write — checkpoint is a user-initiated gate.
@@ -15,13 +16,16 @@ No auto-start, no background write — checkpoint is a user-initiated gate.
 
 from __future__ import annotations
 
+import uuid
+
 import streamlit as st
 
-from app.smart_study_router import SmartStudyRecommendation, SmartStudySecondaryAction
+from app.smart_study_router import SmartStudyRecommendation
 
 _CHECKPOINT_CONTEXT_KEY = "_checkpoint_context"
+_CHECKPOINT_INSTANCE_KEY = "_checkpoint_instance_id"
 
-_emitted_checkpoint_keys: set[tuple[str, str]] = set()
+_emitted_checkpoint_instances: set[str] = set()
 
 
 def store_checkpoint_context(
@@ -32,7 +36,8 @@ def store_checkpoint_context(
     decision_id: str | None = None,
     phase: str | None = None,
 ) -> None:
-    """Save checkpoint context in session_state (privacy-safe: ids, not text)."""
+    """Save checkpoint context + fresh instance UUID in session_state."""
+    instance_id = str(uuid.uuid4())
     st.session_state[_CHECKPOINT_CONTEXT_KEY] = {
         "topic_hint": str(topic_hint or "").strip() or None,
         "origin": str(origin or "").strip() or None,
@@ -40,6 +45,7 @@ def store_checkpoint_context(
         "decision_id": str(decision_id or "").strip() or None,
         "phase": str(phase or "").strip() or None,
     }
+    st.session_state[_CHECKPOINT_INSTANCE_KEY] = instance_id
 
 
 def load_checkpoint_context() -> dict[str, str | None] | None:
@@ -51,15 +57,19 @@ def load_checkpoint_context() -> dict[str, str | None] | None:
 
 def clear_checkpoint_context() -> None:
     st.session_state.pop(_CHECKPOINT_CONTEXT_KEY, None)
+    st.session_state.pop(_CHECKPOINT_INSTANCE_KEY, None)
 
 
-def _emit_checkpoint_offered(rec: SmartStudyRecommendation, surface: str, dedupe_key: str) -> None:
-    """Emit session-tape checkpoint_offered once per (session_id, dedupe_key).
+def _emit_checkpoint_offered(rec: SmartStudyRecommendation, surface: str) -> None:
+    """Emit session-tape checkpoint_offered once per checkpoint instance UUID.
 
-    dedupe_key is checkpoint-instance scoped (e.g. key_prefix), not route decision,
-    so two separate completions with the same route snapshot each get their own event.
+    Each render_checkpoint() call generates a new UUID via store_checkpoint_context,
+    so two completions on the same surface always produce two tape events.
     """
-    if not dedupe_key:
+    instance_id = str(st.session_state.get(_CHECKPOINT_INSTANCE_KEY) or "").strip()
+    if not instance_id:
+        return
+    if instance_id in _emitted_checkpoint_instances:
         return
     try:
         from app.session_tape import append_event
@@ -67,12 +77,6 @@ def _emit_checkpoint_offered(rec: SmartStudyRecommendation, surface: str, dedupe
         sid = str(st.session_state.get("_session_tape_id") or "").strip()
         if not sid:
             return
-    except Exception:  # noqa: BLE001 - tape must never block UI
-        return
-    dedupe = (sid, dedupe_key)
-    if dedupe in _emitted_checkpoint_keys:
-        return
-    try:
         append_event(sid, "checkpoint_offered", {
             "surface": surface,
             "primary_nav": str(rec.primary_nav),
@@ -80,7 +84,7 @@ def _emit_checkpoint_offered(rec: SmartStudyRecommendation, surface: str, dedupe
             "decision_id": str(rec.decision_id),
             "phase": str(rec.phase),
         })
-        _emitted_checkpoint_keys.add(dedupe)
+        _emitted_checkpoint_instances.add(instance_id)
     except Exception:  # noqa: BLE001 - tape must never block UI
         pass
 
@@ -103,11 +107,8 @@ def render_checkpoint(
     Renders SSR card with primary button + ≤2 alternatives + «Сменить направление»
     palette, plus «Закончить» (back to return_view) / «Вручную» (Mission Control).
 
-    ``on_finish`` — optional callable(return_view=...) invoked when the user clicks
-    finish or manual, before navigation. Use for cleaning up surface-specific state
-    (e.g. E11 loop flags). NOT invoked during render — only on explicit action.
-
-    Does NOT auto-start the next step.
+    ``on_finish`` — optional callable invoked when the user clicks finish or manual
+    (only on explicit action, not during render). Use for surface-specific cleanup.
     """
     from app.ui.smart_study_next_step_card import render_smart_study_next_step_card
 
@@ -120,7 +121,7 @@ def render_checkpoint(
         decision_id=str(rec.decision_id),
         phase=str(rec.phase),
     )
-    _emit_checkpoint_offered(rec, surface, dedupe_key=f"{key_prefix}_chkpt")
+    _emit_checkpoint_offered(rec, surface)
 
     st.markdown("---")
     st.caption("Завершение шага")

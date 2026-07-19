@@ -112,79 +112,6 @@ def _render_micro_quiz_progress_receipt_and_cta(
     baselines.pop(scope_key, None)
 
 
-def _render_smart_study_after_failed_quiz(
-    *,
-    session_id: str,
-    msg_idx: int,
-    quiz_feedback: dict[str, Any] | None,
-    topic_hint: str | None,
-    key_prefix: str,
-) -> None:
-    """US-20: после неверного ответа — актуальный SSR с живым статусом квиза (до записи в resume)."""
-    if not isinstance(quiz_feedback, dict):
-        return
-    st_norm = str(quiz_feedback.get("status") or "").strip().lower()
-    if st_norm in ("correct", "ok", "good", "right"):
-        return
-    try:
-        from app import user_state as _us
-        from app.spaced_repetition import count_due_reviews as _cdr
-        from app.ui.adaptive_plan_card import (
-            build_smart_study_recommendation,
-            render_smart_study_next_step_card,
-        )
-
-        fc_n = int(_us.count_due_flashcards())
-        due_n = int(_cdr())
-        qf = str(quiz_feedback.get("status") or "").strip() or None
-        tt = str(st.session_state.get("current_topic") or "").strip() or None
-        th = str(topic_hint or "").strip() or None
-        focus = th or tt
-        last_a = st.session_state.get("last_answer")
-        has_qa = bool(
-            isinstance(last_a, dict)
-            and (
-                str(last_a.get("question") or "").strip()
-                or str(last_a.get("answer") or "").strip()
-            )
-        )
-        from app.ui.resume_cards_smart_study import (
-            ladder_kwargs_for_build,
-            remember_ssr_primary_nav,
-            render_concept_recovery_ladder_status_ui,
-            seed_concept_recovery_ladder_on_quiz_failed,
-        )
-
-        seed_concept_recovery_ladder_on_quiz_failed(topic_anchor=focus)
-        render_concept_recovery_ladder_status_ui()
-        rec = build_smart_study_recommendation(
-            surface="tutor_chat",
-            flashcard_due_n=fc_n,
-            sm2_due_n=due_n,
-            quiz_feedback_status=qf,
-            has_tutor_resume=bool(focus),
-            tutor_topic=focus,
-            has_last_answer_qa=has_qa,
-            has_reading_resume=False,
-            first_weak_concept=None,
-            plan_primary_block=None,
-            **ladder_kwargs_for_build(
-                current_anchor=focus,
-                quiz_feedback_status=qf,
-            ),
-        )
-        remember_ssr_primary_nav(rec.primary_nav)
-        render_smart_study_next_step_card(
-            rec,
-            key_prefix=f"{key_prefix}_ssr_fail_{msg_idx}",
-            tutor_topic=focus,
-            weak_concept=th,
-            show_primary_button=True,
-        )
-    except Exception as exc:  # noqa: BLE001 - optional enrichment; не ломаем квиз.
-        logging.getLogger(__name__).debug("smart study after failed quiz: %s", exc)
-
-
 def render_unified_auto_quiz_card(
     auto_quiz: dict[str, Any],
     msg_idx: int,
@@ -213,14 +140,6 @@ def render_unified_auto_quiz_card(
     base = f"auto_quiz_u_{session_id[:12]}_{msg_idx}"
     sk = f"{base}_q0"
     state_keys = (f"{sk}_done", f"{sk}_fb", f"{sk}_full")
-
-    def _queue_followup(prompt: str | None = None) -> None:
-        if prompt and str(prompt).strip():
-            st.session_state["tutor_pending_prompt"] = str(prompt).strip()
-            st.session_state["tutor_pending_session_id"] = session_id
-        for k in state_keys:
-            st.session_state.pop(k, None)
-        st.rerun()
 
     if st.session_state.pop(f"{base}_confetti", None):
         st.balloons()
@@ -313,25 +232,6 @@ def render_unified_auto_quiz_card(
                     )
                 st.session_state.pop("tutor_e11_five_min_unified_msg_idx", None)
 
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                if st.button("Вспомнил", key=f"{base}_remembered", width='stretch'):
-                    _queue_followup(
-                        "Задай ещё один короткий вопрос для самопроверки по теме только что обсуждённого, "
-                        "чуть иначе и без повторения формулировки."
-                    )
-            with c2:
-                if st.button("Понял", key=f"{base}_got", width='stretch', type="secondary"):
-                    next_prompt = None
-                    if isinstance(rn, dict):
-                        next_prompt = str(rn.get("next_action") or "").strip() or None
-                    _queue_followup(next_prompt or "Следующий шаг")
-            with c3:
-                if st.button("Трудно", key=f"{base}_hard", width='stretch'):
-                    _queue_followup(
-                        "Объясни эту идею ещё раз проще, коротко, с одним наглядным примером, "
-                        "а потом задай один новый контрольный вопрос."
-                    )
             # B1: unified checkpoint after auto-quiz result
             _render_micro_quiz_checkpoint(
                 session_id=session_id,
@@ -659,7 +559,7 @@ def _render_micro_quiz_checkpoint(
         rec,
         surface="tutor",
         origin="tutor",
-        return_view="Mission Control",
+        return_view=st.session_state.get("current_view", "Mission Control"),
         key_prefix=key_prefix,
         tutor_session_id=session_id,
         tutor_topic=ctx.tutor_topic or topic,

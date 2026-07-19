@@ -83,6 +83,29 @@ EVENT_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
         "llm_source",
         "fallback_used",
     ),
+    "autopilot_started": (
+        "budget_min",
+        "surface",
+    ),
+    "autopilot_step": (
+        "decision_id",
+        "budget_remaining_min",
+        "latency_ms",
+        "surface",
+    ),
+    "autopilot_paused": (
+        "reason",
+        "budget_remaining_min",
+        "steps_completed",
+    ),
+    "autopilot_resumed": (
+        "budget_remaining_min",
+    ),
+    "autopilot_finished": (
+        "reason",
+        "budget_remaining_min",
+        "steps_completed",
+    ),
 }
 
 RESERVED_NOT_EMITTED = frozenset({"card_created", "dwell_ms"})

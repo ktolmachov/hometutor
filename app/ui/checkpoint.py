@@ -46,12 +46,18 @@ def store_checkpoint_context(
 
     completion_key is the completion-level identity: quiz_hash, msg_idx, or batch_id.
     It MUST differ between two distinct completions of the same surface.
+
+    B3: when autopilot is active and completion_key changes (new step reached),
+    autopilot.step_completed is called to decrement budget and prevent re-execution
+    on refresh.
     """
     prev_ck = st.session_state.get(_CHECKPOINT_COMPLETION_KEY)
+    prev_ck_existed = _CHECKPOINT_COMPLETION_KEY in st.session_state
     new_ck = str(completion_key or "").strip() or None
 
     instance_id = st.session_state.get(_CHECKPOINT_INSTANCE_KEY)
-    if not instance_id or prev_ck != new_ck:
+    is_new_checkpoint = not instance_id or prev_ck != new_ck
+    if is_new_checkpoint:
         instance_id = str(uuid.uuid4())
         st.session_state[_CHECKPOINT_INSTANCE_KEY] = instance_id
     st.session_state[_CHECKPOINT_COMPLETION_KEY] = new_ck
@@ -63,6 +69,14 @@ def store_checkpoint_context(
         "decision_id": str(decision_id or "").strip() or None,
         "phase": str(phase or "").strip() or None,
     }
+
+    if is_new_checkpoint and prev_ck_existed:
+        try:
+            from app.ui.autopilot import is_autopilot_active, step_completed
+            if is_autopilot_active():
+                step_completed(str(decision_id or ""), completion_key=str(new_ck or ""))
+        except Exception:  # noqa: BLE001 — autopilot is opt-in, never block checkpoint
+            pass
 
 
 def load_checkpoint_context() -> dict[str, str | None] | None:
@@ -176,10 +190,15 @@ def render_checkpoint(
     rec_for_card = _inject_return_view(rec_capped, origin=origin, return_view=return_view)
 
     # B2 compass: compact status line above route shell
+    _autopilot_budget = _autopilot_budget_min_for_compass()
     _render_compass_above_checkpoint(
         rec_for_card,
         return_point=_compass_return_point(return_view),
+        time_budget_min=_autopilot_budget,
     )
+
+    # B3 autopilot: status indicator when active
+    _render_autopilot_status()
 
     render_smart_study_next_step_card(
         rec_for_card,
@@ -199,6 +218,9 @@ def render_checkpoint(
         on_finish=on_finish,
     )
 
+    # B3 autopilot: activation widget when autopilot is inactive
+    _render_autopilot_activation(key_prefix=key_prefix, surface=surface)
+
 
 def _render_checkpoint_actions(
     *,
@@ -206,7 +228,99 @@ def _render_checkpoint_actions(
     return_view: str,
     on_finish: object = None,
 ) -> None:
-    """Render «Закончить» / «Вручную» buttons below the SSR card."""
+    """Render «Закончить» / «Вручную» buttons below the SSR card.
+    B3: when autopilot is active, shows «Пауза» / «Продолжить» / «Готово» / «Вручную».
+    """
+    try:
+        from app.ui.autopilot import is_autopilot_active, is_autopilot_paused, pause_autopilot, resume_autopilot, finish_autopilot
+        autopilot_active = is_autopilot_active()
+        autopilot_paused = is_autopilot_paused()
+    except Exception:  # noqa: BLE001 — autopilot is opt-in
+        autopilot_active = False
+        autopilot_paused = False
+
+    if autopilot_active:
+        _render_autopilot_actions(
+            key_prefix=key_prefix,
+            return_view=return_view,
+            paused=autopilot_paused,
+            on_finish=on_finish,
+            on_pause=pause_autopilot,
+            on_resume=resume_autopilot,
+            on_done=finish_autopilot,
+        )
+    else:
+        _render_default_checkpoint_actions(
+            key_prefix=key_prefix,
+            return_view=return_view,
+            on_finish=on_finish,
+        )
+
+
+def _render_autopilot_actions(
+    *,
+    key_prefix: str,
+    return_view: str,
+    paused: bool,
+    on_finish: object = None,
+    on_pause: object = None,
+    on_resume: object = None,
+    on_done: object = None,
+) -> None:
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if paused:
+            if st.button(
+                "▶ Продолжить",
+                key=f"{key_prefix}_chkpt_resume",
+                width="stretch",
+                type="primary",
+            ):
+                if callable(on_resume):
+                    on_resume()
+                st.rerun()
+        else:
+            if st.button(
+                "⏸ Пауза",
+                key=f"{key_prefix}_chkpt_pause",
+                width="stretch",
+                type="secondary",
+            ):
+                if callable(on_pause):
+                    on_pause()
+                st.rerun()
+    with col2:
+        if st.button(
+            "🖐 Вручную",
+            key=f"{key_prefix}_chkpt_manual_ap",
+            width="stretch",
+            type="secondary",
+        ):
+            if callable(on_finish):
+                on_finish()
+            if callable(on_done):
+                on_done("manual_override")
+            _navigate_manual()
+    with col3:
+        if st.button(
+            "✅ Готово",
+            key=f"{key_prefix}_chkpt_done",
+            width="stretch",
+            type="secondary",
+        ):
+            if callable(on_finish):
+                on_finish()
+            if callable(on_done):
+                on_done("user_finished")
+            _navigate_to_return_view(return_view)
+
+
+def _render_default_checkpoint_actions(
+    *,
+    key_prefix: str,
+    return_view: str,
+    on_finish: object = None,
+) -> None:
     col1, col2 = st.columns(2)
     with col1:
         if st.button(
@@ -272,18 +386,96 @@ def _compass_return_point(return_view: str) -> str | None:
     return _RETURN_MAP.get(rv, rv)
 
 
+def _autopilot_budget_min_for_compass() -> int | None:
+    try:
+        from app.ui.autopilot import is_autopilot_active, is_autopilot_paused, budget_remaining_min
+        if is_autopilot_active() and not is_autopilot_paused():
+            return budget_remaining_min()
+    except Exception:  # noqa: BLE001 — autopilot is opt-in
+        pass
+    return None
+
+
+def _render_autopilot_status() -> None:
+    """B3: show autopilot status indicator when active."""
+    try:
+        from app.ui.autopilot import is_autopilot_active, is_autopilot_paused, get_autopilot_state
+        if not is_autopilot_active():
+            return
+        state = get_autopilot_state()
+        budget_rem = state.get("budget_remaining_min", 0)
+        steps = state.get("steps_completed", 0)
+        paused = is_autopilot_paused()
+
+        if paused:
+            status_text = f"⏸ Автопилот на паузе · {budget_rem} мин осталось · {steps} шагов"
+            status_style = "opacity:0.85;color:var(--ink-muted,#888);"
+        else:
+            status_text = f"🤖 Автопилот · {budget_rem} мин осталось · {steps} шагов"
+            status_style = "opacity:0.85;color:var(--ink,#333);"
+
+        st.html(
+            f'<div data-testid="e2e-autopilot-status" '
+            f'style="font-size:0.82rem;margin:0.15rem 0 0.35rem 0;{status_style}">'
+            f"{status_text}</div>"
+        )
+    except Exception:  # noqa: BLE001 — autopilot is opt-in UI
+        pass
+
+
+def _render_autopilot_activation(*, key_prefix: str, surface: str = "Mission Control") -> None:
+    """B3: offer autopilot opt-in when autopilot is not active."""
+    try:
+        from app.ui.autopilot import is_autopilot_active, enable_autopilot
+        if is_autopilot_active():
+            return
+    except Exception:  # noqa: BLE001 — autopilot is opt-in
+        return
+
+    with st.expander("🤖 Включить автопилот", expanded=False):
+        st.caption("Автопилот предложит цепочку шагов по маршруту, но после каждого шага "
+                   "будет останавливаться. Вы сами решаете, продолжать или свернуть.")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("5 мин", key=f"{key_prefix}_ap_5", width="stretch", type="primary"):
+                try:
+                    from app.ui.autopilot import enable_autopilot
+                    enable_autopilot(5, entry_surface=surface)
+                except Exception:  # noqa: BLE001
+                    pass
+                st.rerun()
+        with col2:
+            if st.button("15 мин", key=f"{key_prefix}_ap_15", width="stretch"):
+                try:
+                    from app.ui.autopilot import enable_autopilot
+                    enable_autopilot(15, entry_surface=surface)
+                except Exception:  # noqa: BLE001
+                    pass
+                st.rerun()
+        with col3:
+            if st.button("25 мин", key=f"{key_prefix}_ap_25", width="stretch"):
+                try:
+                    from app.ui.autopilot import enable_autopilot
+                    enable_autopilot(25, entry_surface=surface)
+                except Exception:  # noqa: BLE001
+                    pass
+                st.rerun()
+
+
 def _render_compass_above_checkpoint(
     rec: SmartStudyRecommendation,
     *,
     return_point: str | None = None,
+    time_budget_min: int | None = None,
 ) -> None:
-    """B2: render compass line above the checkpoint's SSR card."""
+    """B2/B3: render compass line above the checkpoint's SSR card."""
     try:
         from app.ui.learning_compass import render_learning_compass
 
         render_learning_compass(
             rec,
             return_point=return_point,
+            time_budget_min=time_budget_min,
         )
     except Exception:  # noqa: BLE001 — compass is optional UI decoration
         pass

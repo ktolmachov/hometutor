@@ -205,11 +205,12 @@ class TestCompletionKeyBehavioral:
         call = src.split("_render_flashcards_checkpoint(")[1].split("\n")[0]
         assert "scope_signature" in call or "completion_key" in fn
 
-    def test_micro_quiz_completion_key_has_msg_idx(self) -> None:
+    def test_micro_quiz_completion_key_has_quiz_hash(self) -> None:
         src = (Path("app/ui/tutor_chat_quiz.py")).read_text(encoding="utf-8")
         fn = src.split("def _render_micro_quiz_checkpoint")[1].split("\ndef ")[0]
         assert "msg_idx" in fn
+        assert "quiz_data" in fn
         ck_decl = [l for l in fn.split("\n") if "completion_key" in l]
         assert ck_decl, "completion_key not found in micro-quiz checkpoint"
         ck_line = ck_decl[0]
-        assert "msg_idx" in ck_line, f"completion_key missing msg_idx: {ck_line}"
+        assert "qhash" in ck_line, f"completion_key missing quiz hash: {ck_line}"

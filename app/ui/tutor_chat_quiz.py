@@ -239,6 +239,7 @@ def render_unified_auto_quiz_card(
                 quiz_feedback=fb,
                 key_prefix=f"auto_quiz_u_{session_id[:12]}_{msg_idx}",
                 msg_idx=msg_idx,
+                quiz_data=qd,
             )
             return
 
@@ -433,6 +434,7 @@ def render_tutor_micro_quiz_block(active: dict[str, Any], session_id: str) -> No
             quiz_feedback=fb if isinstance(fb, dict) else None,
             key_prefix=f"tutor_mq_{session_id[:8]}",
             msg_idx=int(active.get("msg_idx", 0)),
+            quiz_data=qd,
         )
         return
 
@@ -525,6 +527,7 @@ def _render_micro_quiz_checkpoint(
     quiz_feedback: dict | None = None,
     key_prefix: str,
     msg_idx: int | None = None,
+    quiz_data: dict | None = None,
 ) -> None:
     """B1: after micro-quiz result, render unified checkpoint."""
     try:
@@ -546,6 +549,11 @@ def _render_micro_quiz_checkpoint(
     except Exception:  # noqa: BLE001
         qfs = None
     plan_block = _get_saved_plan_primary_block()
+    import hashlib
+    import json
+    qhash = hashlib.md5(
+        json.dumps(quiz_data or {}, sort_keys=True, ensure_ascii=False, default=str).encode()
+    ).hexdigest()[:8]
     rec = build_smart_study_recommendation(
         surface="tutor_chat",
         flashcard_due_n=ctx.flashcard_due_n,
@@ -567,7 +575,7 @@ def _render_micro_quiz_checkpoint(
             st.session_state.get("current_view", "Mission Control"),
         ),
         key_prefix=key_prefix,
-        completion_key=f"tutor:mq:{session_id}:{topic or ''}:{msg_idx or 0}",
+        completion_key=f"tutor:mq:{session_id}:{topic or ''}:{msg_idx or 0}:{qhash}",
         tutor_session_id=session_id,
         tutor_topic=ctx.tutor_topic or topic,
         weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,

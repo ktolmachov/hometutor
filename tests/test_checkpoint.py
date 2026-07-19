@@ -183,6 +183,45 @@ class TestCheckpointInstanceLifecycle:
 
         tape.append_event = original
 
+    def test_same_msg_idx_different_quiz_hash_two_events(self, monkeypatch) -> None:
+        """Two micro-quizzes in same session, same msg_idx, different quiz — two events."""
+        import streamlit as st
+        monkeypatch.setattr(st, "session_state", {"_session_tape_id": "s1"})
+
+        from app.smart_study_router import SmartStudyRecommendation
+        from app.ui.checkpoint import (
+            store_checkpoint_context, _emit_checkpoint_offered,
+            _emitted_checkpoint_instances,
+        )
+        _emitted_checkpoint_instances.clear()
+
+        rec = SmartStudyRecommendation(
+            hint_kind="quiz_failed", primary_label_ru="Разобрать", why_now_ru="",
+            primary_nav="quiz_recovery_tutor", secondaries=(),
+            decision_id="did-mq2", phase="check",
+        )
+
+        call_count = 0
+        import app.session_tape as tape
+        original = tape.append_event
+        def counting(sid, evt, payload):
+            nonlocal call_count
+            call_count += 1
+        tape.append_event = counting
+
+        ck1 = "tutor:mq:sid1:linear-algebra:0:abc12345"
+        ck2 = "tutor:mq:sid1:linear-algebra:0:def67890"
+
+        store_checkpoint_context(completion_key=ck1)
+        _emit_checkpoint_offered(rec, "tutor")
+        assert call_count == 1
+
+        store_checkpoint_context(completion_key=ck2)
+        _emit_checkpoint_offered(rec, "tutor")
+        assert call_count == 2, f"Same msg_idx, different quiz: blocked. ck1={ck1}, ck2={ck2}"
+
+        tape.append_event = original
+
     def test_clear_context_enables_fresh_uuid_on_return(self, monkeypatch) -> None:
         import streamlit as st
         monkeypatch.setattr(st, "session_state", {})
@@ -301,6 +340,28 @@ class TestCheckpointIntegrationCoverage:
     def test_scoped_quiz_checkpoint_gated_on_saved(self) -> None:
         src = (Path("app/ui/scoped_quiz.py")).read_text(encoding="utf-8")
         assert 'st.session_state.get(saved_key)' in src
+
+    def test_scoped_quiz_clears_stale_saved_attempt(self) -> None:
+        src = (Path("app/ui/scoped_quiz.py")).read_text(encoding="utf-8")
+        assert "def _clear_saved_quiz_attempt" in src
+        assert "_quiz_saved_key(source_key, quiz_hash)" in src
+        assert "_quiz_attempt_key(source_key, quiz_hash)" in src
+
+    def test_scoped_quiz_retry_and_resubmit_invalidate_saved_attempt(self) -> None:
+        src = (Path("app/ui/scoped_quiz.py")).read_text(encoding="utf-8")
+        retry_block = src.split('if route == "retry":')[1].split("st.rerun()")[0]
+        assert "_clear_saved_quiz_attempt(source_key, quiz_hash)" in retry_block
+
+        submit_block = src.split('if st.button("Ответить"')[1].split('with st.spinner("Проверяем ответ...")')[0]
+        assert "_clear_saved_quiz_attempt(source_key, quiz_hash)" in submit_block
+
+    def test_scoped_quiz_save_attempt_clears_stale_before_save(self) -> None:
+        src = (Path("app/ui/scoped_quiz.py")).read_text(encoding="utf-8")
+        save_block = src.split('if st.button("Завершить и сохранить прогресс"')[1]
+        clear_pos = save_block.index("_clear_saved_quiz_attempt(source_key, quiz_hash)")
+        save_pos = save_block.index("row_id = save_quiz_result")
+        assert clear_pos < save_pos
+        assert "if row_id is not None:" in save_block
 
     def test_scoped_quiz_has_content_hash_reset(self) -> None:
         src = (Path("app/ui/scoped_quiz.py")).read_text(encoding="utf-8")

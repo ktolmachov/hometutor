@@ -59,7 +59,26 @@ def _status_for_submission(*, is_correct: bool, hint_used: bool) -> str:
     return "incorrect"
 
 
-def _apply_feedback_cta(route: str, *, source_key: str, question_idx: int) -> None:
+def _quiz_saved_key(source_key: str, quiz_hash: str | None) -> str:
+    return f"{source_key}_{quiz_hash or ''}_quiz_saved"
+
+
+def _quiz_attempt_key(source_key: str, quiz_hash: str | None) -> str:
+    return f"{source_key}_{quiz_hash or ''}_attempt_id"
+
+
+def _clear_saved_quiz_attempt(source_key: str, quiz_hash: str | None) -> None:
+    st.session_state.pop(_quiz_saved_key(source_key, quiz_hash), None)
+    st.session_state.pop(_quiz_attempt_key(source_key, quiz_hash), None)
+
+
+def _apply_feedback_cta(
+    route: str,
+    *,
+    source_key: str,
+    question_idx: int,
+    quiz_hash: str | None = None,
+) -> None:
     _record_loop_transition(
         source_key=source_key,
         stage="question_feedback",
@@ -67,6 +86,7 @@ def _apply_feedback_cta(route: str, *, source_key: str, question_idx: int) -> No
         payload={"question_idx": question_idx},
     )
     if route == "retry":
+        _clear_saved_quiz_attempt(source_key, quiz_hash)
         st.session_state[f"{source_key}_next_cta_route"] = "retry"
         st.session_state.pop(f"{source_key}_scoped_{question_idx}", None)
         st.session_state.pop(f"{source_key}_result_{question_idx}", None)
@@ -163,6 +183,7 @@ def render_scoped_self_check_quiz(
             if choice is None:
                 st.warning("Выберите вариант ответа перед отправкой.")
             else:
+                _clear_saved_quiz_attempt(source_key, quiz_hash)
                 with st.spinner("Проверяем ответ..."):
                     is_correct = choice == ok_idx and ok_idx >= 0
                     status = _status_for_submission(
@@ -200,6 +221,7 @@ def render_scoped_self_check_quiz(
                     str(result.get("cta_route") or "retry"),
                     source_key=source_key,
                     question_idx=i,
+                    quiz_hash=quiz_hash,
                 )
         elif expl:
             # If not answered yet, keep explanation in expander
@@ -298,6 +320,7 @@ def render_scoped_self_check_quiz(
                     completion_route,
                     source_key=source_key,
                     question_idx=-1,
+                    quiz_hash=quiz_hash,
                 )
     else:
         st.caption(f"Отправьте ответы по вопросам выше ({total} вопросов).")
@@ -313,8 +336,10 @@ def render_scoped_self_check_quiz(
             import logging  # noqa: BLE001
             logging.getLogger(__name__).debug("! caught exception: %s", _exc)
             return
+        _clear_saved_quiz_attempt(source_key, quiz_hash)
         concept = str(meta.get("identifier") or "general").strip() or "general"
         score = float(correct_submissions) / float(total) if total else 0.0
+        row_id = None
         try:
             row_id = save_quiz_result(concept=concept, level="scoped_quiz", score=score)
             apply_quiz_outcome_to_learner_state(
@@ -372,12 +397,12 @@ def render_scoped_self_check_quiz(
                 import logging  # noqa: BLE001
                 logging.getLogger(__name__).debug("! caught exception: %s", _exc)
                 st.caption(f"🏆 Новый бейдж: {_lab}")
-        saved_key = f"{source_key}_{quiz_hash}_quiz_saved"
-        st.session_state[saved_key] = True
-        st.session_state[f"{source_key}_{quiz_hash}_attempt_id"] = row_id
+        if row_id is not None:
+            st.session_state[_quiz_saved_key(source_key, quiz_hash)] = True
+            st.session_state[_quiz_attempt_key(source_key, quiz_hash)] = row_id
         st.rerun()
 
-    saved_key = f"{source_key}_{quiz_hash}_quiz_saved"
+    saved_key = _quiz_saved_key(source_key, quiz_hash)
     if submitted_count >= total and total > 0 and st.session_state.get(saved_key):
         _render_quiz_checkpoint_if_due(
             source_key=source_key,
@@ -428,7 +453,7 @@ def _render_quiz_checkpoint_if_due(
         origin="quiz",
         return_view=st.session_state.get("current_view", "Mission Control"),
         key_prefix=source_key,
-        completion_key=f"quiz:{source_key}:{quiz_hash or ''}:{st.session_state.get(f'{source_key}_{quiz_hash}_attempt_id', 0)}",
+        completion_key=f"quiz:{source_key}:{quiz_hash or ''}:{st.session_state.get(_quiz_attempt_key(source_key, quiz_hash), 0)}",
         tutor_topic=topic_hint,
         weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,
         plan_block=plan_block,

@@ -6,7 +6,7 @@ a scoped gate quiz from the sections' konspekt text.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
@@ -52,7 +52,7 @@ def group_sections_into_segments(
         if ts is not None and te is not None and float(te) > float(ts):
             timed.append((float(ts), float(te), s))
 
-    timed.sort(key=lambda x: x[0])
+    timed.sort(key=lambda x: (_media_group_key(x[2]), x[0]))
 
     groups: list[list[dict[str, Any]]] = []
     grp: list[dict[str, Any]] = []
@@ -61,7 +61,7 @@ def group_sections_into_segments(
         if not grp:
             grp.append(s)
             grp_end = te
-        elif ts - grp_end <= 5.0:
+        elif _same_media_group(grp[-1], s) and ts - grp_end <= 5.0:
             grp.append(s)
             grp_end = te
         else:
@@ -98,6 +98,14 @@ def group_sections_into_segments(
             idx += 1
 
     return segments
+
+
+def _media_group_key(section: dict[str, Any]) -> str:
+    return f"{section.get('media_path') or ''}|{section.get('audio_path') or ''}"
+
+
+def _same_media_group(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    return _media_group_key(left) == _media_group_key(right)
 
 
 def _build_segment(
@@ -382,15 +390,16 @@ def _render_gate(
     if all_answered:
         c = results["correct"]
         t = n_questions
-        _clear_gate_scoped_state(source_key, n_questions)
         if t > 0 and c / t >= 0.6:
-            st.success(f"✅ Правильно! {c}/{t} — следующий отрезок открыт")
-            _advance_segment(gate, seg, correct=True)
+            st.success(f"✅ Правильно! {c}/{t} — следующий отрезок готов")
+            st.caption("Чтобы записать прогресс и XP, нажмите «Завершить и сохранить прогресс» в квизе.")
+            if st.button("Открыть следующий отрезок", key="lk_gate_continue", type="primary"):
+                _clear_gate_scoped_state(source_key, n_questions)
+                _advance_segment(gate, seg, correct=True)
+                st.rerun()
         else:
             st.error(f"Нужно больше правильных. Ваш результат: {c}/{t}")
-            _render_gate_fallback(seg, gate)
-        if st.button("Продолжить", key="lk_gate_continue", type="primary"):
-            st.rerun()
+            _render_gate_fallback(seg, gate, source_key=source_key, n_questions=n_questions)
     else:
         st.info(f"Ответьте на все {n_questions} вопросов ({results['answered']}/{n_questions})")
 
@@ -418,7 +427,13 @@ def _advance_segment(
         gate["current"] = seg.index + 1
 
 
-def _render_gate_fallback(seg: LectureSegment, gate: dict[str, Any]) -> None:
+def _render_gate_fallback(
+    seg: LectureSegment,
+    gate: dict[str, Any],
+    *,
+    source_key: str,
+    n_questions: int,
+) -> None:
     st.markdown("**Что можно сделать:**")
     c1, c2 = st.columns(2)
     text = str(gate.get("gate_last_content") or "")[:2000]
@@ -435,6 +450,7 @@ def _render_gate_fallback(seg: LectureSegment, gate: dict[str, Any]) -> None:
             st.rerun()
     with c2:
         if st.button("🔁 Переслушать отрезок", key="lk_gate_replay", width="stretch"):
+            _clear_gate_scoped_state(source_key, n_questions)
             gate["show_gate"] = False
             gate["gate_questions"] = None
             st.rerun()

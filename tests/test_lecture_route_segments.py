@@ -1,6 +1,9 @@
 """Tests for lecture route segment grouping (#19 P0-1)."""
 from __future__ import annotations
 
+import pytest
+
+from app.ui import living_konspekt_lecture_route as lecture_route
 from app.ui.living_konspekt_lecture_route import group_sections_into_segments
 
 
@@ -66,3 +69,44 @@ def test_segment_title_uses_first_three_labels() -> None:
     segs = group_sections_into_segments(sections, target_min=2.5)
     assert len(segs) == 2
     assert "Section A, Section B" in segs[0].title
+
+
+def test_sections_from_different_media_do_not_share_one_audio_clip() -> None:
+    sections = [
+        {"t_start": 0.0, "t_end": 300.0, "label": "A", "media_path": "a.md", "audio_path": "a.m4a"},
+        {"t_start": 301.0, "t_end": 600.0, "label": "B", "media_path": "b.md", "audio_path": "b.m4a"},
+    ]
+
+    segs = group_sections_into_segments(sections, target_min=20.0)
+
+    assert len(segs) == 2
+    assert segs[0].audio_path == "a.m4a"
+    assert segs[1].audio_path == "b.m4a"
+    assert {s["media_path"] for s in segs[0].section_dicts} == {"a.md"}
+    assert {s["media_path"] for s in segs[1].section_dicts} == {"b.md"}
+
+
+def test_gate_results_read_scoped_status_and_clear_all_gate_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    state = {
+        "gate_result_0": {"status": "correct"},
+        "gate_result_1": {"status": "incorrect"},
+        "gate_scoped_0": 2,
+        "gate_hint_0": True,
+        "gate_completion_metric_emitted": True,
+        "gate_next_cta_route": "progress",
+    }
+    monkeypatch.setattr(lecture_route.st, "session_state", state)
+
+    assert lecture_route._read_gate_results("gate", 2) == {
+        "total": 2,
+        "correct": 1,
+        "answered": 2,
+    }
+
+    lecture_route._clear_gate_scoped_state("gate", 2)
+
+    assert "gate_result_0" not in state
+    assert "gate_scoped_0" not in state
+    assert "gate_hint_0" not in state
+    assert "gate_completion_metric_emitted" not in state
+    assert "gate_next_cta_route" not in state

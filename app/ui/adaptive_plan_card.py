@@ -113,6 +113,30 @@ def apply_smart_study_secondary_navigation(action_id: str, *, topic_hint: str | 
         st.rerun()
         return
 
+def _emit_route_tape_events(rec: SmartStudyRecommendation) -> None:
+    """Emit session-tape route_selected + learning_action_started (privacy-safe)."""
+    try:
+        from app.session_tape import append_event
+
+        sid = str(st.session_state.get("_session_tape_id") or "").strip()
+        if not sid:
+            return
+        surface = rec.origin or "home"
+        append_event(sid, "route_selected", {
+            "surface": surface,
+            "primary_nav": str(rec.primary_nav),
+            "hint_kind": str(rec.hint_kind),
+            "accepted": True,
+        })
+        append_event(sid, "learning_action_started", {
+            "surface": surface,
+            "primary_nav": str(rec.primary_nav),
+            "decision_id": str(rec.decision_id),
+        })
+    except Exception:  # noqa: BLE001 - tape must never block navigation
+        pass
+
+
 def apply_smart_study_primary_navigation(
     rec: SmartStudyRecommendation,
     *,
@@ -130,6 +154,9 @@ def apply_smart_study_primary_navigation(
         import logging  # noqa: BLE001
 
         logging.getLogger(__name__).debug("ladder primary advance: %s", _exc)
+
+    _emit_route_tape_events(rec)
+
     nav = rec.primary_nav
     sid = str(tutor_session_id or "").strip() or None
     tt = str(tutor_topic or "").strip() or None

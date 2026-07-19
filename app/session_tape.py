@@ -42,7 +42,7 @@ EVENT_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
     "quiz_attempt": ("quiz_kind", "topic", "correct", "difficulty_band"),
     "route_offered": ("surface", "primary_nav", "hint_kind"),
     "route_selected": ("surface", "primary_nav", "hint_kind", "accepted"),
-    "learning_action_started": ("surface", "primary_nav", "topic_hint"),
+    "learning_action_started": ("surface", "primary_nav", "decision_id"),
     "surface_breached_soft": (
         "surface",
         "variant",

@@ -331,6 +331,25 @@ class SmartStudyRouterSessionContext:
     tutor_topic: str | None
 
 
+def _get_saved_plan_primary_block() -> dict | None:
+    """Retrieve the saved adaptive daily plan's primary block (cheap KV read, no regeneration)."""
+    try:
+        from datetime import datetime
+
+        from app.learning_plan_adaptive import get_saved_adaptive_daily_plan
+        from app.ui.adaptive_plan_card import get_primary_plan_block_from_plan
+
+        saved = get_saved_adaptive_daily_plan()
+        if not saved:
+            return None
+        today = datetime.now().date().isoformat()
+        if str(saved.get("date") or "") != today:
+            return None
+        return get_primary_plan_block_from_plan(saved)
+    except Exception:  # noqa: BLE001 - best-effort, must not break SSR
+        return None
+
+
 def gather_smart_study_router_session_context(
     *,
     index_stats: dict[str, Any] | None,
@@ -450,7 +469,7 @@ def render_smart_study_router_strip_from_session_context(
         has_last_answer_qa=ctx.has_last_answer_qa,
         has_reading_resume=ctx.has_reading,
         first_weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,
-        plan_primary_block=None,
+        plan_primary_block=_get_saved_plan_primary_block(),
         **ladder_kwargs_for_build(
             current_anchor=ctx.tutor_topic,
             quiz_feedback_status=qf_status_home,

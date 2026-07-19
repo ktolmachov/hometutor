@@ -207,13 +207,14 @@ def test_session_tape_learning_action_started_event() -> None:
         append_event(
             sid,
             "learning_action_started",
-            {"surface": "home", "primary_nav": "plan_block_tutor", "topic_hint": "agent-harness"},
+            {"surface": "home", "primary_nav": "plan_block_tutor", "decision_id": "abc123def456"},
             sessions_dir=sessions_dir,
         )
         tape_file = sessions_dir / f"{sid}.jsonl"
         data = json.loads(tape_file.read_text(encoding="utf-8").strip())
         assert data["event"] == "learning_action_started"
-        assert data["payload"]["topic_hint"] == "agent-harness"
+        assert data["payload"]["decision_id"] == "abc123def456"
+        assert "topic_hint" not in data["payload"]
 
 
 def test_session_tape_rejects_unknown_event() -> None:
@@ -242,3 +243,62 @@ def test_adaptive_plan_hub_uses_weak_concepts_for_kg() -> None:
     source = (Path(__file__).parent.parent / "app" / "ui" / "adaptive_plan_hub_layout.py").read_text(encoding="utf-8")
     assert "weak_concepts_for_kg" in source
     assert "from app.quiz_adaptive import get_weak_concepts" not in source
+
+
+def test_weak_concepts_for_kg_filters_off_graph_concepts(monkeypatch) -> None:
+    """Integration: weak_concepts_for_kg passes only concepts in active graph."""
+    from app import learner_state_scope as _lss
+
+    monkeypatch.setattr(
+        _lss, "active_concept_ids",
+        lambda kg: {"real-concept", "another-real"},
+    )
+    monkeypatch.setattr(
+        _lss, "get_weak_concepts",
+        lambda threshold, limit: ["TopicB", "real-concept", "fixture_x", "another-real"],
+    )
+    result = _lss.weak_concepts_for_kg(object(), threshold=60, limit=12)
+    assert "real-concept" in result
+    assert "another-real" in result
+    assert "TopicB" not in result
+    assert "fixture_x" not in result
+
+
+def test_gather_context_when_all_weak_are_off_graph_falls_back_to_empty(monkeypatch) -> None:
+    """When all weak concepts are off-graph, gather_context returns empty weak_concepts."""
+    from app import learner_state_scope as _lss
+    from app.ui import resume_cards_smart_study as _rcss
+
+    monkeypatch.setattr(
+        _lss, "active_concept_ids",
+        lambda kg: {"valid-a"},
+    )
+    monkeypatch.setattr(
+        _lss, "get_weak_concepts",
+        lambda threshold, limit: ["TopicB", "fixture_x"],
+    )
+    monkeypatch.setattr(
+        _rcss, "count_due_reviews_for_kg",
+        lambda kg: 0,
+    )
+    monkeypatch.setattr(
+        _rcss.user_state, "get_tutor_learning_resume",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        _rcss.user_state, "count_due_flashcards",
+        lambda: 0,
+    )
+    monkeypatch.setattr(
+        _rcss.user_state, "get_latest_resume",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        _rcss.st.session_state, "get",
+        lambda key, default=None: default,
+    )
+
+    ctx = _rcss.gather_smart_study_router_session_context(index_stats=None, flashcard_due_n=0)
+    assert ctx.weak_concepts == []
+    assert ctx.flashcard_due_n == 0
+    assert ctx.sm2_due_n == 0

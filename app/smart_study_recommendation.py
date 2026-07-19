@@ -410,13 +410,7 @@ def _build_smart_study_recommendation_rules(
             plan_primary_block=plan_primary_block,
         )
         if rec is not None:
-            return _enrich_route_decision(
-                rec,
-                surface=surface,
-                tutor_topic=tutor_topic,
-                first_weak_concept=first_weak_concept,
-                plan_primary_block=plan_primary_block,
-            )
+            return rec
     raise RuntimeError("Smart Study Router failed to build fallback recommendation")
 
 

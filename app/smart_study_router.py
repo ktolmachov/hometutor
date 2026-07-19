@@ -25,6 +25,7 @@ from app.smart_study_recommendation import (
     SmartStudyRouterHintKind,
     SmartStudySecondaryAction,
     _build_smart_study_recommendation_rules,
+    _enrich_route_decision,
     apply_smart_study_steering_preference,
     apply_source_coverage_route_guard,
     compute_route_decision_id,
@@ -103,12 +104,19 @@ Misroute policy runs after rule cascade and before ML hybrid; UI steering prefer
         retrieval_confidence=retrieval_confidence,
         source_evidence_count=source_evidence_count,
     )
-    return _apply_concept_recovery_ladder_overlay(
+    final = _apply_concept_recovery_ladder_overlay(
         guarded,
         quiz_feedback_status=quiz_feedback_status,
         concept_recovery_ladder_step=concept_recovery_ladder_step,
         concept_recovery_ladder_enabled=concept_recovery_ladder_enabled,
         tutor_topic=tutor_topic,
+    )
+    return _enrich_route_decision(
+        final,
+        surface=surface,
+        tutor_topic=tutor_topic,
+        first_weak_concept=first_weak_concept,
+        plan_primary_block=plan_primary_block,
     )
 
 

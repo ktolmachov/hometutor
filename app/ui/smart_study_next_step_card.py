@@ -14,6 +14,31 @@ from app.ui.adaptive_plan_llm_enrichment import _ssr_why_now_for_card, stream_ss
 from app.ui_preferences import feature_visible_by_id
 
 
+_emitted_route_ids: set[str] = set()
+
+
+def _emit_route_offered_if_needed(rec: SmartStudyRecommendation, key_prefix: str) -> None:
+    """Emit session-tape route_offered once per decision_id per process."""
+    did = str(rec.decision_id)
+    if not did or did in _emitted_route_ids:
+        return
+    _emitted_route_ids.add(did)
+    try:
+        from app.session_tape import append_event
+
+        sid = str(st.session_state.get("_session_tape_id") or "").strip()
+        if not sid:
+            return
+        surface = rec.origin or "home"
+        append_event(sid, "route_offered", {
+            "surface": surface,
+            "primary_nav": str(rec.primary_nav),
+            "hint_kind": str(rec.hint_kind),
+        })
+    except Exception:  # noqa: BLE001 - tape must never block UI
+        pass
+
+
 def render_smart_study_next_step_card(
     rec: SmartStudyRecommendation,
     *,
@@ -53,6 +78,9 @@ def render_smart_study_next_step_card(
         )
 
     slot_hint = str(primary_topic_hint or tutor_topic or weak_concept or "").strip() or None
+
+    _emit_route_offered_if_needed(rec_render, key_prefix)
+
     safe_primary = html_stdlib.escape(rec_render.primary_label_ru)
     safe_hint = html_stdlib.escape(str(rec_render.hint_kind))
     ladder_step_markup = ""

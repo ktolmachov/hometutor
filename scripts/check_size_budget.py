@@ -30,7 +30,9 @@ MAX_LARGE_FILES = 33  # files > FILE_LINE_LIMIT, excluding FILE_LINE_WAIVERS
 MAX_LONG_FUNCTIONS = 156
 # 2026-07-19 B4: +1 for apply_learning_intent which dispatches 10 intents
 # (7 simple + 3 composition). Splitting would add more helpers, not reduce count.
-MAX_FILE_LINES = 1952  # peak single-file size (still includes waived deposits)
+MAX_FILE_LINES = 1958  # peak single-file size (still includes waived deposits)
+# 2026-07-19 B4: +6 for AGENT_COMPOSITION_INTENT_PROMPTS in app/prompts/_impl.py
+# (waived deposit per FILE_LINE_WAIVERS — prompt-layer single-source rule).
 MAX_FUNCTION_LINES = 361
 FILE_LINE_LIMIT = 600
 FUNCTION_LINE_LIMIT = 80

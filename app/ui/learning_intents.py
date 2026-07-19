@@ -178,28 +178,13 @@ def apply_learning_intent(
         st.session_state["current_topic"] = topic or ""
 
     # ── B4 composition intents ──
-    elif intent_id == "compose_session":
+    elif intent_id in _COMPOSITION_INTENT_IDS:
+        from app.prompts import AGENT_COMPOSITION_INTENT_PROMPTS
+        topic_str = topic or "текущей"
+        prompt_template = AGENT_COMPOSITION_INTENT_PROMPTS.get(intent_id, "")
+        prompt = prompt_template.format(topic=topic_str) if prompt_template else ""
         dispatch_to_agent(
-            f"Собери учебную сессию по теме «{topic or 'текущей'}»: "
-            "подбери нужные инструменты (поиск, граф, конспект) и предложи план.",
-            topic_hint=topic,
-            return_view=return_view,
-            intent_id=intent_id,
-        )
-        return
-
-    elif intent_id == "find_gap_practice":
-        dispatch_to_agent(
-            f"Найди пробел в знаниях по теме «{topic or 'текущей'}» через граф и дай практическое упражнение.",
-            topic_hint=topic,
-            return_view=return_view,
-            intent_id=intent_id,
-        )
-        return
-
-    elif intent_id == "connect_graph_quiz":
-        dispatch_to_agent(
-            f"Свяжи конспект, граф знаний и квиз по теме «{topic or 'текущей'}» в одну учебную сессию.",
+            prompt,
             topic_hint=topic,
             return_view=return_view,
             intent_id=intent_id,

@@ -1940,3 +1940,19 @@ def infer_homework_level_from_message(text: str) -> str | None:
     ):
         return "hint"
     return None
+
+
+# ── B4 composition intent prompts (agent dispatch) ──────────────────────────
+
+AGENT_COMPOSITION_INTENT_PROMPTS: dict[str, str] = {
+    "compose_session": (
+        "Собери учебную сессию по теме «{topic}»: "
+        "подбери нужные инструменты (поиск, граф, конспект) и предложи план."
+    ),
+    "find_gap_practice": (
+        "Найди пробел в знаниях по теме «{topic}» через граф и дай практическое упражнение."
+    ),
+    "connect_graph_quiz": (
+        "Свяжи конспект, граф знаний и квиз по теме «{topic}» в одну учебную сессию."
+    ),
+}

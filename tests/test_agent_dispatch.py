@@ -45,6 +45,22 @@ class TestAgentDispatchSourceContracts:
         assert 'view:agent_session' in src
         assert 'agent_enabled' in src
 
+    def test_composition_prompts_in_prompt_layer(self) -> None:
+        """P1: composition prompts must live in app/prompts, not UI."""
+        from app.prompts import AGENT_COMPOSITION_INTENT_PROMPTS
+        assert "compose_session" in AGENT_COMPOSITION_INTENT_PROMPTS
+        assert "find_gap_practice" in AGENT_COMPOSITION_INTENT_PROMPTS
+        assert "connect_graph_quiz" in AGENT_COMPOSITION_INTENT_PROMPTS
+        for key in ("compose_session", "find_gap_practice", "connect_graph_quiz"):
+            assert "{topic}" in AGENT_COMPOSITION_INTENT_PROMPTS[key]
+
+    def test_composition_prompts_not_hardcoded_in_ui(self) -> None:
+        """P1: learning_intents.py must not contain hardcoded composition prompt text."""
+        src = (Path("app/ui/learning_intents.py")).read_text(encoding="utf-8")
+        fn = src.split("def apply_learning_intent")[1].split("\ndef ")[0]
+        assert "подбери нужные инструменты" not in fn
+        assert "AGENT_COMPOSITION_INTENT_PROMPTS" in fn
+
     def test_global_nav_still_has_agent(self) -> None:
         """B4: agent still accessible via «Ещё» in global navigation."""
         src = (Path("app/ui/global_navigation.py")).read_text(encoding="utf-8")

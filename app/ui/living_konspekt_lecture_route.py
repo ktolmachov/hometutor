@@ -1,22 +1,25 @@
 """Lecture route: clipped segments + gate quizzes (#19 P0-1 + P0-2).
 
 Groups media sections into 8-12 min segments, plays clipped audio, then shows
-a 1-2 question gate quiz from the sections' sidecar text.
+a scoped gate quiz from the sections' konspekt text.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
 import streamlit as st
 
 from app.media_sidecar import (
+    MediaSection,
     MediaSidecar,
     load_media_sidecar_for_konspekt,
     sidecar_stale_reasons,
 )
+from app.ui.session_state import PENDING_CURRENT_VIEW_KEY
 
 
 # ---------------------------------------------------------------------------
@@ -28,55 +31,35 @@ from app.media_sidecar import (
 class LectureSegment:
     index: int
     title: str
-    sections: list[dict[str, Any]]
+    section_dicts: list[dict[str, Any]]
     t_start: float
     t_end: float
     duration_min: float
-
-
-def _section_times(section: dict[str, Any]) -> tuple[float | None, float | None]:
-    ts = section.get("t_start")
-    te = section.get("t_end")
-    t_start = float(ts) if ts is not None else None
-    t_end = float(te) if te is not None else None
-    return t_start, t_end
-
-
-def _segment_title(sections: list[dict[str, Any]]) -> str:
-    labels = [
-        str(s.get("label") or "").strip()
-        for s in sections
-        if str(s.get("label") or "").strip()
-    ]
-    if labels:
-        return ", ".join(labels[:3]) + ("…" if len(labels) > 3 else "")
-    return f"Раздел {sections[0].get('section_id', '?')}" if sections else ""
+    audio_path: str | None
 
 
 def group_sections_into_segments(
     sections: list[dict[str, Any]],
     target_min: float = 10.0,
 ) -> list[LectureSegment]:
-    """Pure arithmetic: group timecoded sections into ~target_min segments.
-    Adjacent sections (gap ≤ 5s) form a group; a new segment starts when
-    cumulative duration reaches target or there's a significant gap."""
+    """Group timecoded sections into ~target_min segments.
+    Adjacent sections (gap ≤ 5s) form a group; new segment when cumulative
+    duration reaches target or a group boundary is crossed."""
     timed = []
     for s in sections:
-        ts, te = _section_times(s)
-        if ts is not None and te is not None and te > ts:
-            timed.append((ts, te, s))
+        ts = s.get("t_start")
+        te = s.get("t_end")
+        if ts is not None and te is not None and float(te) > float(ts):
+            timed.append((float(ts), float(te), s))
 
     timed.sort(key=lambda x: x[0])
 
-    # Pre-group: chain adjacent sections (gap ≤ 5s) then split by target duration
     groups: list[list[dict[str, Any]]] = []
     grp: list[dict[str, Any]] = []
-    grp_start = 0.0
     grp_end = 0.0
     for ts, te, s in timed:
         if not grp:
             grp.append(s)
-            grp_start = ts
             grp_end = te
         elif ts - grp_end <= 5.0:
             grp.append(s)
@@ -84,81 +67,115 @@ def group_sections_into_segments(
         else:
             groups.append(grp)
             grp = [s]
-            grp_start = ts
             grp_end = te
     if grp:
         groups.append(grp)
 
     segments: list[LectureSegment] = []
     idx = 0
-    buf: list[dict[str, Any]] = []
-    buf_start: float | None = None
-    buf_end: float = 0.0
-
-    def _flush() -> None:
-        nonlocal idx
-        if buf and buf_start is not None:
-            segments.append(LectureSegment(
-                index=idx,
-                title=_segment_title(buf),
-                sections=list(buf),
-                t_start=buf_start,
-                t_end=buf_end,
-                duration_min=round((buf_end - buf_start) / 60.0, 1),
-            ))
-            idx += 1
 
     for grp in groups:
+        buf: list[dict[str, Any]] = []
+        buf_start: float | None = None
+        buf_end: float = 0.0
+
         for s in grp:
-            ts, te = _section_times(s)
-            if ts is None or te is None:
-                continue
+            ts = float(s.get("t_start", 0))
+            te = float(s.get("t_end", 0))
             if buf_start is None:
                 buf_start = ts
             buf.append(s)
             buf_end = max(buf_end, te)
             dur = (buf_end - buf_start) / 60.0
             if dur >= target_min:
-                _flush()
+                segments.append(_build_segment(idx, buf, buf_start, buf_end))
+                idx += 1
                 buf = []
                 buf_start = None
                 buf_end = 0.0
-    _flush()
+        if buf and buf_start is not None:
+            segments.append(_build_segment(idx, buf, buf_start, buf_end))
+            idx += 1
 
     return segments
 
 
+def _build_segment(
+    idx: int,
+    buf: list[dict[str, Any]],
+    buf_start: float,
+    buf_end: float,
+) -> LectureSegment:
+    labels = [
+        str(s.get("label") or "").strip()
+        for s in buf
+        if str(s.get("label") or "").strip()
+    ]
+    title = ", ".join(labels[:3]) + ("…" if len(labels) > 3 else "") or f"Отрезок {idx+1}"
+    audio = str(buf[0].get("audio_path") or "") or None
+    return LectureSegment(
+        index=idx,
+        title=title,
+        section_dicts=list(buf),
+        t_start=buf_start,
+        t_end=buf_end,
+        duration_min=round((buf_end - buf_start) / 60.0, 1),
+        audio_path=audio,
+    )
+
+
 # ---------------------------------------------------------------------------
-# Content extraction for gate quiz
+# Content extraction (from konspekt markdown by line_start/line_end)
 # ---------------------------------------------------------------------------
 
 
 def _sidecar_text_for_section(
-    sidecar: MediaSidecar,
-    section_index: int,
+    md_path: str,
+    ms: MediaSection,
 ) -> str:
-    """Extract content text for one section from its sidecar, bounded to the section's line range."""
-    lines = []
-    section = sidecar.sections[section_index] if section_index < len(sidecar.sections) else None
-    ls = int(section.line_start) if section and section.line_start is not None else None
-    le = int(section.line_end) if section and section.line_end is not None else None
-    if ls is not None and le is not None and sidecar.transcript_lines:
-        for i, sl in enumerate(sidecar.transcript_lines):
-            if i >= ls and i <= le:
-                lines.append(sl.text)
-    return " ".join(lines)
+    """Extract content text from konspekt markdown. line_start is 1-indexed."""
+    try:
+        p = Path(md_path).resolve()
+        if not p.exists():
+            return ""
+        lines = p.read_text(encoding="utf-8").splitlines()
+        ls = max(0, int(ms.line_start) - 1)
+        le = min(len(lines), int(ms.line_end))
+        return " ".join(lines[ls:le])
+    except Exception:  # noqa: BLE001 - best-effort content extraction; gate degrades gracefully
+        return ""
 
 
-def _content_for_segment(
-    sidecar: MediaSidecar,
-    sections: list[dict[str, Any]],
-) -> str:
+def _content_for_segment(seg: LectureSegment) -> str:
     texts = []
-    for s in sections:
-        idx = int(s.get("_section_index") or -1)
-        if idx >= 0:
-            texts.append(_sidecar_text_for_section(sidecar, idx))
+    for sd in seg.section_dicts:
+        mp = str(sd.get("media_path") or "")
+        ms = sd.get("_ms")
+        if mp and ms is not None:
+            t = _sidecar_text_for_section(mp, ms)
+            if t:
+                texts.append(t)
     return " ".join(texts)
+
+
+# ---------------------------------------------------------------------------
+# Audio resolution
+# ---------------------------------------------------------------------------
+
+
+def _resolve_audio_for_sidecar(sidecar: MediaSidecar) -> str | None:
+    """Find audio sibling for the sidecar's local video source."""
+    try:
+        from app.media_audio import audio_for_local_video
+        from app.media_sidecar import LocalVideoSource
+
+        if isinstance(sidecar.video, LocalVideoSource):
+            audio_p = audio_for_local_video(sidecar.video)
+            if audio_p is not None and audio_p.exists():
+                return str(audio_p)
+    except Exception:  # noqa: BLE001 - audio is optional, route works without it
+        pass
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -167,37 +184,61 @@ def _content_for_segment(
 
 
 def _generate_gate_quiz(content: str, title: str) -> dict[str, Any] | None:
-    """1-2 question scoped quiz for the segment content."""
     if len(content.strip()) < 120:
         return None
     from app.quiz_scoped import generate_scoped_quiz_from_content
     from app.quiz_adaptive import get_adaptive_difficulty
 
     level = get_adaptive_difficulty("adaptive", title)
-    result = generate_scoped_quiz_from_content(
+    return generate_scoped_quiz_from_content(
         scope="document",
         identifier=title,
         title=title,
         content=content,
         subgraph={"topic_name": title, "key_concepts": [], "documents": []},
         adaptive_level=level,
-        num_questions=2,
+        num_questions=5,
     )
-    return result if result.get("questions") else None
+
+
+def _read_gate_results(source_key: str, n_questions: int) -> dict[str, Any]:
+    total = 0
+    correct = 0
+    for i in range(n_questions):
+        r = st.session_state.get(f"{source_key}_result_{i}")
+        if r is None:
+            continue
+        total += 1
+        if isinstance(r, dict) and r.get("status") == "correct":
+            correct += 1
+    return {"total": total, "correct": correct, "answered": total}
 
 
 # ---------------------------------------------------------------------------
-# UI: lecture route
+# State management
 # ---------------------------------------------------------------------------
 
 _GS_KEY = "lk_lecture_route_gate_state_v1"
 
 
-def _init_gate_state(n_segments: int) -> dict[str, Any]:
-    if _GS_KEY not in st.session_state:
+def _row_set_id(rows: list[dict[str, Any]]) -> str:
+    seed = "|".join(
+        f"{r.get('konspekt_md_abs') or ''}/{r.get('slug') or ''}/"
+        f"{r.get('line_start') or ''}/{r.get('konspekt_section_title') or ''}/"
+        f"{r.get('heading_text') or ''}/{r.get('row_key') or ''}/{r.get('title') or ''}"
+        for r in rows[:50]
+    )
+    return sha256(seed.encode()).hexdigest()[:8]
+
+
+def _init_gate_state(segments: list[LectureSegment], rows: list[dict[str, Any]]) -> dict[str, Any]:
+    rsid = _row_set_id(rows)
+    current = st.session_state.get(_GS_KEY, {})
+    if current.get("_row_set_id") != rsid:
         st.session_state[_GS_KEY] = {
+            "_row_set_id": rsid,
             "current": 0,
-            "total": n_segments,
+            "total": len(segments),
             "results": {},
             "show_gate": False,
             "gate_questions": None,
@@ -206,11 +247,15 @@ def _init_gate_state(n_segments: int) -> dict[str, Any]:
     return st.session_state[_GS_KEY]
 
 
+# ---------------------------------------------------------------------------
+# UI: lecture route
+# ---------------------------------------------------------------------------
+
+
 def render_lecture_route(
     konspekt_rows: list[dict[str, Any]],
-    audio_path: Path | None = None,
 ) -> None:
-    """Main entry: render the lecture route for Living Konspekt."""
+    """Main entry: render the lecture route tab in Living Konspekt."""
     if not konspekt_rows:
         st.info("Нет разделов конспекта для построения маршрута.")
         return
@@ -225,35 +270,39 @@ def render_lecture_route(
         st.info("Не удалось сгруппировать разделы в отрезки.")
         return
 
-    gate = _init_gate_state(len(segments))
+    gate = _init_gate_state(segments, konspekt_rows)
+    cur = gate["current"]
+    if cur >= gate["total"]:
+        gate["current"] = 0
+        cur = 0
 
     st.markdown("### 🗺️ Маршрут лекции")
-    st.caption(f"**{len(segments)} отрезков** по ~8–12 мин · нажмите на отрезок, чтобы начать")
+    st.caption(f"**{len(segments)} отрезков** по ~8–12 мин · слушайте и проверяйте себя")
 
     cols = st.columns(4)
     for i, seg in enumerate(segments):
         with cols[i % 4]:
             done = gate["results"].get(i, False)
             active = gate["current"] == i
+            disabled = not active and not done and i > gate["current"]
             icon = "✅" if done else ("▶️" if active else f"{i+1}")
             label = f"{icon} {seg.title[:20]}" if seg.title else f"{icon} Отрезок {i+1}"
             if st.button(label, key=f"lk_seg_btn_{i}", width="stretch",
-                         disabled=False if not done or active else False):
+                         disabled=disabled):
                 gate["current"] = i
                 gate["show_gate"] = False
                 gate["gate_questions"] = None
                 gate["gate_last_content"] = ""
                 st.rerun()
 
-    cur = gate["current"]
     seg = segments[cur]
     st.markdown(f"**Отрезок {cur+1}/{len(segments)}:** {seg.title or 'Без названия'} · {seg.duration_min} мин")
 
-    if audio_path and audio_path.exists():
-        st.audio(str(audio_path), start_time=int(seg.t_start),
+    if seg.audio_path and Path(seg.audio_path).exists():
+        st.audio(str(seg.audio_path), start_time=int(seg.t_start),
                  end_time=int(seg.t_end), format="audio/mp4")
     else:
-        st.caption("Аудио плеер недоступен")
+        st.caption("🎧 Аудио недоступно для этого отрезка")
 
     if not gate["show_gate"]:
         if st.button("✅ Я прослушал — проверить себя", key="lk_gate_show",
@@ -261,13 +310,12 @@ def render_lecture_route(
             gate["show_gate"] = True
             st.rerun()
     else:
-        _render_gate(seg, gate, konspekt_rows)
+        _render_gate(seg, gate)
 
 
 def _collect_timecoded_sections(
     konspekt_rows: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Extract sections with t_start/t_end from konspekt rows via sidecar."""
     from app.ui.living_konspekt_media import _media_section_for_row
 
     sections = []
@@ -277,7 +325,7 @@ def _collect_timecoded_sections(
             continue
         try:
             sidecar = load_media_sidecar_for_konspekt(Path(md_abs))
-        except Exception:
+        except Exception:  # noqa: BLE001 - best-effort sidecar load per row
             continue
         if sidecar is None or not sidecar.sections:
             continue
@@ -288,11 +336,12 @@ def _collect_timecoded_sections(
         if ms is None or ms.t_start is None or ms.low_confidence:
             continue
         sections.append({
-            "label": str(row.get("konspekt_section_title") or row.get("title") or "").strip(),
+            "label": str(row.get("konspekt_section_title") or row.get("title") or ms.heading or "").strip(),
             "t_start": ms.t_start,
             "t_end": ms.t_end if ms.t_end is not None else ms.t_start + 60.0,
             "media_path": md_abs,
-            "_section_index": ms.section_index,
+            "audio_path": _resolve_audio_for_sidecar(sidecar),
+            "_ms": ms,
             "_row": row,
         })
     return sections
@@ -301,64 +350,58 @@ def _collect_timecoded_sections(
 def _render_gate(
     seg: LectureSegment,
     gate: dict[str, Any],
-    konspekt_rows: list[dict[str, Any]],
 ) -> None:
     st.markdown("---")
     st.subheader("🔐 Ворота: проверка понимания")
 
+    source_key = "lk_lecture_gate"
+
     if gate.get("gate_questions") is None:
-        with st.spinner("Готовлю вопрос…"):
-            content = ""
-            for s in seg.sections:
-                md_abs = str(s.get("media_path") or "")
-                idx = int(s.get("_section_index") or -1)
-                if md_abs and idx >= 0:
-                    try:
-                        sidecar = load_media_sidecar_for_konspekt(Path(md_abs))
-                    except Exception:
-                        continue
-                    if sidecar:
-                        content += " " + _sidecar_text_for_section(sidecar, idx)
+        with st.spinner("Готовлю вопросы…"):
+            content = _content_for_segment(seg)
             gate["gate_last_content"] = content
-            quiz = _generate_gate_quiz(content, seg.title or f"segment-{seg.index}")
-            gate["gate_questions"] = quiz
+            gate["gate_questions"] = _generate_gate_quiz(content, seg.title or f"segment-{seg.index}")
         st.rerun()
 
     quiz = gate.get("gate_questions")
     if quiz is None or not isinstance(quiz, dict) or not quiz.get("questions"):
-        st.warning("Не удалось сгенерировать вопрос (слишком мало текста в отрезке).")
+        st.warning("Не удалось сгенерировать вопросы (мало текста в отрезке).")
         if st.button("Пропустить ворота", key="lk_gate_skip"):
             _advance_segment(gate, seg, correct=False)
             st.rerun()
         return
 
+    n_questions = len(quiz["questions"])
     from app.ui.scoped_quiz import render_scoped_self_check_quiz
 
-    st.caption(f"Вопрос по отрезку «{seg.title}» ({len(quiz['questions'])} вопросов)")
-    render_scoped_self_check_quiz(
-        quiz["questions"],
-        source_key="lk_lecture_gate",
-        quiz_meta=quiz,
-    )
+    st.caption(f"Вопросы по отрезку «{seg.title}» ({n_questions} вопросов)")
+    render_scoped_self_check_quiz(quiz["questions"], source_key=source_key, quiz_meta=quiz)
 
-    # After quiz self-check renders, check results
-    gate_key = "scoped_self_check_lk_lecture_gate_results"
-    results = st.session_state.get(gate_key, {})
-    if results.get("answered", 0) > 0:
-        c = results.get("correct", 0)
-        t = results.get("total", 0)
-        st.session_state.pop(gate_key, None)
-        if t > 0 and c / t >= 0.5:
-            from app.quiz_scoped import scoped_quiz_xp_reward
-
-            xp = scoped_quiz_xp_reward(c, t)
-            st.success(f"✅ Правильно! +{xp} XP")
-            _advance_segment(gate, seg, correct=True, xp=xp)
+    results = _read_gate_results(source_key, n_questions)
+    all_answered = results["total"] >= n_questions
+    if all_answered:
+        c = results["correct"]
+        t = n_questions
+        _clear_gate_scoped_state(source_key, n_questions)
+        if t > 0 and c / t >= 0.6:
+            st.success(f"✅ Правильно! {c}/{t} — следующий отрезок открыт")
+            _advance_segment(gate, seg, correct=True)
         else:
             st.error(f"Нужно больше правильных. Ваш результат: {c}/{t}")
-            _render_gate_fallback(seg)
+            _render_gate_fallback(seg, gate)
         if st.button("Продолжить", key="lk_gate_continue", type="primary"):
             st.rerun()
+    else:
+        st.info(f"Ответьте на все {n_questions} вопросов ({results['answered']}/{n_questions})")
+
+
+def _clear_gate_scoped_state(source_key: str, n: int) -> None:
+    for i in range(n):
+        st.session_state.pop(f"{source_key}_result_{i}", None)
+        st.session_state.pop(f"{source_key}_scoped_{i}", None)
+        st.session_state.pop(f"{source_key}_hint_{i}", None)
+    st.session_state.pop(f"{source_key}_completion_metric_emitted", None)
+    st.session_state.pop(f"{source_key}_next_cta_route", None)
 
 
 def _advance_segment(
@@ -366,7 +409,6 @@ def _advance_segment(
     seg: LectureSegment,
     *,
     correct: bool,
-    xp: int = 0,
 ) -> None:
     gate["results"][seg.index] = correct
     gate["show_gate"] = False
@@ -376,15 +418,15 @@ def _advance_segment(
         gate["current"] = seg.index + 1
 
 
-def _render_gate_fallback(seg: LectureSegment) -> None:
+def _render_gate_fallback(seg: LectureSegment, gate: dict[str, Any]) -> None:
     st.markdown("**Что можно сделать:**")
     c1, c2 = st.columns(2)
-    text = st.session_state.get("lk_lecture_route_gate_state_v1", {}).get("gate_last_content", "")
+    text = str(gate.get("gate_last_content") or "")[:2000]
     with c1:
         if st.button("💡 Объясни проще", key="lk_gate_simpler", width="stretch"):
             st.session_state["tutor_pending_prompt"] = (
                 f"Объясни тему отрезка «{seg.title}» проще и на интуитивном уровне. "
-                f"Вот текст отрезка:\n\n{text[:2000]}"
+                f"Вот текст отрезка:\n\n{text}"
             )
             st.session_state["tutor_pending_session_id"] = st.session_state.get("tutor_session_id")
             st.session_state["tutor_cta_action"] = "lecture_gate_simpler"
@@ -393,9 +435,6 @@ def _render_gate_fallback(seg: LectureSegment) -> None:
             st.rerun()
     with c2:
         if st.button("🔁 Переслушать отрезок", key="lk_gate_replay", width="stretch"):
-            st.session_state["lk_lecture_route_gate_state_v1"]["show_gate"] = False
-            st.session_state["lk_lecture_route_gate_state_v1"]["gate_questions"] = None
+            gate["show_gate"] = False
+            gate["gate_questions"] = None
             st.rerun()
-
-
-from app.ui.session_state import PENDING_CURRENT_VIEW_KEY

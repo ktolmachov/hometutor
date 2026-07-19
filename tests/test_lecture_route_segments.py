@@ -47,14 +47,15 @@ def test_sections_without_timecodes_are_ignored() -> None:
     assert len(segs) == 1
 
 
-def test_out_of_order_sections_are_sorted() -> None:
+def test_out_of_order_sections_sorted_with_gap_separates() -> None:
     sections = [
         {"t_start": 600.0, "t_end": 800.0, "label": "B"},
         {"t_start": 0.0, "t_end": 300.0, "label": "A"},
     ]
     segs = group_sections_into_segments(sections)
-    assert len(segs) == 1
+    assert len(segs) == 2
     assert segs[0].t_start == 0.0
+    assert segs[1].t_start == 600.0
 
 
 def test_segment_title_uses_first_three_labels() -> None:

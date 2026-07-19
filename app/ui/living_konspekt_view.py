@@ -485,7 +485,6 @@ def _reader_media_renderer(row: dict[str, Any], is_first: bool) -> None:
 
 def render_living_konspekt_view() -> None:
     from app.ui.reindex_poll import poll_reindex_status
-
     ensure_workbench_hydrated()
     ensure_project_goal_hydrated()
     poll_reindex_status()
@@ -494,7 +493,6 @@ def render_living_konspekt_view() -> None:
         "Собирайте разделы лекций из графа/карточек, проверяйте актуальность и готовьте промпт "
         "для глубокого изучения — всё локально, облако только по вашей ссылке.",
     )
-
     rows = get_workbench_rows()
     st.caption(
         f"В корзине: {len(rows)} раздел(ов) · автосохраняется локально и переживает перезапуск; "
@@ -510,8 +508,8 @@ def render_living_konspekt_view() -> None:
         )
         return
 
-    tab_sections, tab_reader, tab_memory, tab_export, tab_next = st.tabs(
-        ["🧩 Разделы", "📖 Читать", "🧠 Память", "📚 Сохранить", "🌐 Дальше"]
+    tab_sections, tab_reader, tab_memory, tab_export, tab_next, tab_lecture = st.tabs(
+        ["🧩 Разделы", "📖 Читать", "🧠 Память", "📚 Сохранить", "🌐 Дальше", "🎧 Маршрут"]
     )
     with tab_sections:
         _render_all_lesson_videos_panel(rows)
@@ -563,3 +561,5 @@ def render_living_konspekt_view() -> None:
         render_course_coverage_panel(rows)
         st.divider()
         render_deep_study_panel(rows)
+    with tab_lecture:
+        from app.ui.living_konspekt_lecture_route import render_lecture_route; render_lecture_route(rows)

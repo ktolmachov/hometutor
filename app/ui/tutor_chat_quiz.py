@@ -286,14 +286,6 @@ def render_unified_auto_quiz_card(
                 cta_key=f"{sk}_progress_cta",
             )
 
-            _render_smart_study_after_failed_quiz(
-                session_id=session_id,
-                msg_idx=msg_idx,
-                quiz_feedback=fb,
-                topic_hint=topic,
-                key_prefix=f"auto_quiz_u_{session_id[:12]}_{msg_idx}",
-            )
-
             _e11_unified_target = st.session_state.get("tutor_e11_five_min_unified_msg_idx")
             if _e11_unified_target is not None and int(_e11_unified_target) == int(msg_idx):
                 try:
@@ -340,6 +332,13 @@ def render_unified_auto_quiz_card(
                         "Объясни эту идею ещё раз проще, коротко, с одним наглядным примером, "
                         "а потом задай один новый контрольный вопрос."
                     )
+            # B1: unified checkpoint after auto-quiz result
+            _render_micro_quiz_checkpoint(
+                session_id=session_id,
+                topic=topic,
+                quiz_feedback=fb,
+                key_prefix=f"auto_quiz_u_{session_id[:12]}_{msg_idx}",
+            )
             return
 
         _ensure_micro_quiz_receipt_baseline(sk, topic=topic)
@@ -523,17 +522,10 @@ def render_tutor_micro_quiz_block(active: dict[str, Any], session_id: str) -> No
             recommended_next=rn if isinstance(rn, dict) else None,
             cta_key=f"tutor_mq_progress_cta_{session_id[:8]}",
         )
-        _render_smart_study_after_failed_quiz(
-            session_id=session_id,
-            msg_idx=int(active.get("msg_idx", 0)),
-            quiz_feedback=fb if isinstance(fb, dict) else None,
-            topic_hint=topic,
-            key_prefix=f"tutor_mq_{session_id[:8]}",
-        )
         if st.button("Закрыть мини-проверку", key=f"tutor_mq_close_{session_id[:8]}"):
             st.session_state.pop("tutor_micro_quiz_active", None)
             st.rerun()
-        # B1 checkpoint: after micro-quiz completion, show unified next-step gate
+        # B1 checkpoint: unified next-step gate (replaces failed-quiz SSR)
         _render_micro_quiz_checkpoint(
             session_id=session_id,
             topic=topic,

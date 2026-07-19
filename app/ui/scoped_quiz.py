@@ -198,6 +198,8 @@ def render_scoped_self_check_quiz(
                 st.caption(expl)
 
     total = len([x for x in questions if isinstance(x, dict)])
+    if submitted_count == 0:
+        st.session_state.pop(f"{source_key}_quiz_saved", None)
     if submitted_count > 0:
         pct = int(100 * correct_submissions / submitted_count) if submitted_count else 0
         if pct >= 80:

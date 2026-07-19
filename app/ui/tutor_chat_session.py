@@ -840,8 +840,9 @@ def _render_tutor_checkpoint(
         plan_primary_block=plan_block,
     )
 
-    st.session_state["tutor_e11_loop_active"] = False
-    st.session_state.pop("tutor_e11_loop_origin", None)
+    def _on_tutor_checkpoint_action():
+        st.session_state["tutor_e11_loop_active"] = False
+        st.session_state.pop("tutor_e11_loop_origin", None)
 
     render_checkpoint(
         rec,
@@ -853,6 +854,7 @@ def _render_tutor_checkpoint(
         tutor_topic=ctx.tutor_topic or topic,
         weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,
         plan_block=plan_block,
+        on_finish=_on_tutor_checkpoint_action,
     )
 
 

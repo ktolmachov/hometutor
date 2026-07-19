@@ -3,22 +3,25 @@
 Re-invokes canonical Route Policy with updated signals. Shows:
   primary → continue as proposed
   secondary → change direction (intent palette, ≤2 alternatives)
-  «Закончить» → navigate to return_view
-  «Вручную» → navigate to Mission Control (full access, no forced route)
+  «Закончить» → navigate to return_view (caller's origin)
+  «Вручную» → navigate to Mission Control (full manual access)
 
-Stores privacy-safe context (ids, not question/answer text) in session_state.
-No new view, no new mode, no auto-start — checkpoint is a user-initiated gate.
+Checks deduplication per checkpoint instance (session_id + key_prefix, not route decision),
+so two completions in one session each get their own tape event.
+
+Stores privacy-safe context (ids, not text) in session_state.
+No auto-start, no background write — checkpoint is a user-initiated gate.
 """
 
 from __future__ import annotations
 
 import streamlit as st
 
-from app.smart_study_router import SmartStudyRecommendation
+from app.smart_study_router import SmartStudyRecommendation, SmartStudySecondaryAction
 
 _CHECKPOINT_CONTEXT_KEY = "_checkpoint_context"
 
-_emitted_checkpoint_ids: set[tuple[str, str]] = set()
+_emitted_checkpoint_keys: set[tuple[str, str]] = set()
 
 
 def store_checkpoint_context(
@@ -50,10 +53,13 @@ def clear_checkpoint_context() -> None:
     st.session_state.pop(_CHECKPOINT_CONTEXT_KEY, None)
 
 
-def _emit_checkpoint_offered(rec: SmartStudyRecommendation, surface: str) -> None:
-    """Emit session-tape checkpoint_offered once per (session_id, decision_id)."""
-    did = str(rec.decision_id)
-    if not did:
+def _emit_checkpoint_offered(rec: SmartStudyRecommendation, surface: str, dedupe_key: str) -> None:
+    """Emit session-tape checkpoint_offered once per (session_id, dedupe_key).
+
+    dedupe_key is checkpoint-instance scoped (e.g. key_prefix), not route decision,
+    so two separate completions with the same route snapshot each get their own event.
+    """
+    if not dedupe_key:
         return
     try:
         from app.session_tape import append_event
@@ -63,18 +69,18 @@ def _emit_checkpoint_offered(rec: SmartStudyRecommendation, surface: str) -> Non
             return
     except Exception:  # noqa: BLE001 - tape must never block UI
         return
-    dedupe_key = (sid, did)
-    if dedupe_key in _emitted_checkpoint_ids:
+    dedupe = (sid, dedupe_key)
+    if dedupe in _emitted_checkpoint_keys:
         return
     try:
         append_event(sid, "checkpoint_offered", {
             "surface": surface,
             "primary_nav": str(rec.primary_nav),
             "hint_kind": str(rec.hint_kind),
-            "decision_id": did,
+            "decision_id": str(rec.decision_id),
             "phase": str(rec.phase),
         })
-        _emitted_checkpoint_ids.add(dedupe_key)
+        _emitted_checkpoint_keys.add(dedupe)
     except Exception:  # noqa: BLE001 - tape must never block UI
         pass
 
@@ -90,11 +96,17 @@ def render_checkpoint(
     tutor_topic: str | None = None,
     weak_concept: str | None = None,
     plan_block: dict | None = None,
+    on_finish: object = None,
 ) -> None:
     """Unified checkpoint after learning step completion.
 
-    Renders SSR card with primary button + «Сменить направление» palette,
-    plus «Закончить» (back to return_view) / «Вручную» (Mission Control full access).
+    Renders SSR card with primary button + ≤2 alternatives + «Сменить направление»
+    palette, plus «Закончить» (back to return_view) / «Вручную» (Mission Control).
+
+    ``on_finish`` — optional callable(return_view=...) invoked when the user clicks
+    finish or manual, before navigation. Use for cleaning up surface-specific state
+    (e.g. E11 loop flags). NOT invoked during render — only on explicit action.
+
     Does NOT auto-start the next step.
     """
     from app.ui.smart_study_next_step_card import render_smart_study_next_step_card
@@ -108,13 +120,15 @@ def render_checkpoint(
         decision_id=str(rec.decision_id),
         phase=str(rec.phase),
     )
-    _emit_checkpoint_offered(rec, surface)
+    _emit_checkpoint_offered(rec, surface, dedupe_key=f"{key_prefix}_chkpt")
 
     st.markdown("---")
     st.caption("Завершение шага")
 
+    rec_capped = _cap_secondaries(rec)
+
     render_smart_study_next_step_card(
-        rec,
+        rec_capped,
         key_prefix=f"{key_prefix}_chkpt",
         primary_topic_hint=topic_hint,
         tutor_session_id=tutor_session_id,
@@ -133,6 +147,8 @@ def render_checkpoint(
             width="stretch",
             type="secondary",
         ):
+            if callable(on_finish):
+                on_finish()
             _navigate_to_return_view(return_view)
     with col2:
         if st.button(
@@ -141,7 +157,33 @@ def render_checkpoint(
             width="stretch",
             type="secondary",
         ):
+            if callable(on_finish):
+                on_finish()
             _navigate_manual()
+
+
+def _cap_secondaries(rec: SmartStudyRecommendation) -> SmartStudyRecommendation:
+    """Clamp secondaries to ≤2 for checkpoint display."""
+    secs = rec.secondaries
+    if len(secs) <= 2:
+        return rec
+    capped = tuple(secs[:2])
+    return SmartStudyRecommendation(
+        hint_kind=rec.hint_kind,
+        primary_label_ru=rec.primary_label_ru,
+        why_now_ru=rec.why_now_ru,
+        primary_nav=rec.primary_nav,
+        secondaries=capped,
+        route_pedagogy_ru=rec.route_pedagogy_ru,
+        ml_audit_ru=rec.ml_audit_ru,
+        flashcard_due_n=rec.flashcard_due_n,
+        sm2_due_n=rec.sm2_due_n,
+        phase=rec.phase,
+        topic_hint=rec.topic_hint,
+        origin=rec.origin,
+        return_view=rec.return_view,
+        decision_id=rec.decision_id,
+    )
 
 
 def _navigate_to_return_view(return_view: str) -> None:

@@ -209,7 +209,7 @@ def _render_learning_progress_tab() -> None:
     tab_main, tab_extended = st.tabs(["Главное", "Расширенные"])
 
     with tab_main:
-        render_progress_home_tab_impl(md=md, stats=stats, qs=qs)
+        render_progress_home_tab_impl(md=md)
 
     with tab_extended:
         expand_personalization, focus_section = _consume_progress_focus_section(st.session_state)

@@ -2,4 +2,6 @@
 
 import streamlit as st
 
-st.switch_page("app/ui/main.py")
+st.session_state["_pending_current_view"] = "Прогресс обучения"
+st.session_state["home_breadcrumb_origin"] = "Mission Control"
+st.switch_page("main.py")

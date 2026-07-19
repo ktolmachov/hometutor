@@ -124,11 +124,7 @@ def _render_home_heatmap_and_radar(md: dict[str, Any]) -> None:
         st.info("Нет рекомендации (пустой граф или нет данных).")
 
 
-def render_progress_home_tab_impl(
-    md: dict[str, Any],
-    stats: dict[str, Any],
-    qs: dict[str, Any],
-) -> None:
+def render_progress_home_tab_impl(md: dict[str, Any]) -> None:
     """Вкладка «Главное»: следующий шаг, heatmap, radar, геймификация-кратко, weekly narrative."""
     from app.ui.weekly_study_narrative_ui import render_weekly_study_narrative_block
 
@@ -163,9 +159,9 @@ def _render_extras_section_a(md: dict[str, Any]) -> None:
     return plan, profile, _sid
 
 
-def _render_extras_section_b(md: dict[str, Any], plan: dict, profile: Any) -> None:
+def _render_extras_section_b(md: dict[str, Any], profile: Any) -> None:
     """Quiz mastery summary + activity timeline + KG personalized subgraph."""
-    from app.knowledge_service import get_personalized_subgraph, knowledge_graph as kg
+    from app.knowledge_service import knowledge_graph as kg
 
     st.subheader("Quiz mastery (сводка)")
     cm = md["concepts_mastered"]
@@ -182,8 +178,6 @@ def _render_extras_section_b(md: dict[str, Any], plan: dict, profile: Any) -> No
 
     rec = md.get("next_recommendation") or {}
     rec_topic = str(rec.get("topic") or "").strip() or None
-    weak = plan.get("weak_spots") or []
-    _sub = get_personalized_subgraph(seed_topic=rec_topic, limit=14, kg=kg)
 
     _timeline = build_quiz_activity_timeline(md.get("quiz_mastery_rows"))
     if _timeline is not None:
@@ -410,15 +404,15 @@ def _render_extras_section_f(md: dict[str, Any]) -> None:
 
 def render_progress_extended_extras(md: dict[str, Any]) -> None:
     """Дополнительный контент из бывшей orphan page для вкладки «Расширенные»."""
-    from app.learning_plan_service import plan_service
+    from app.ui_preferences import feature_visible_by_id
 
     plan, profile, _sid = _render_extras_section_a(md)
-    _render_extras_section_b(md, plan, profile)
+    _render_extras_section_b(md, profile)
     _render_extras_section_c(md)
     _render_extras_section_d(md, plan)
     _render_extras_section_e(md)
     _render_extras_section_f(md)
 
-    if md.get("reading_topics"):
+    if md.get("reading_topics") and feature_visible_by_id("panel:debug_summary"):
         st.subheader("Чтение по темам (reading_status)")
         st.dataframe(md["reading_topics"], width='stretch', hide_index=True)

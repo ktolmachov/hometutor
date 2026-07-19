@@ -15,6 +15,7 @@ APP_DIR = ROOT / "app"
 ALLOWED = {
     APP_DIR / "config.py",
     APP_DIR / "ingestion_env_diag.py",
+    APP_DIR / "user_state_db.py",
 }
 
 

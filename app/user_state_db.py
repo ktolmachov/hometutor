@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import re
 import sqlite3
 import sys
@@ -287,8 +288,13 @@ def _resolve_state_db_path() -> str:
     """Путь к state-БД: базовый файл, либо per-user поддиректория при активном auth-контексте.
 
     uid=None (auth выключен / фоновые задачи / тесты без логина) → старый путь, без изменений
-    поведения. uid задан → `<base_dir>/users/<uid>/<base_name>`, физическая изоляция прогресса
+    поведения. uid задан → ``<base_dir>/users/<uid>/<base_name>``, физическая изоляция прогресса
     между пользователями без переписывания схемы таблиц (см. docs/compliance_upgrade_plan.md §A3).
+
+    Pytest guard: при активном ``PYTEST_CURRENT_TEST`` проверяется, что путь НЕ разрешается
+    в production-дерево ``data/``. Если разрешается — ``RuntimeError``.
+    ``tests/conftest.py`` обеспечивает изоляцию через ``HOME_RAG_DATA_DIR``;
+    этот gate — последний рубеж.
     """
     raw = (get_settings().user_state_db or "").strip() or str(
         Path(__file__).resolve().parent.parent / "data" / "user_state.db"
@@ -297,7 +303,21 @@ def _resolve_state_db_path() -> str:
     uid = (get_current_user_id() or "").strip()
     if uid and re.fullmatch(r"[A-Za-z0-9_-]{1,128}", uid):
         return str(base.parent / "users" / uid / base.name)
-    return str(base)
+
+    resolved = str(base)
+
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        _data_root = (Path(__file__).resolve().parent.parent / "data").resolve()
+        try:
+            Path(resolved).resolve().relative_to(_data_root)
+            raise RuntimeError(
+                "user_state_db resolves to production data dir under pytest. "
+                "Ensure tests/conftest.py sets HOME_RAG_DATA_DIR to a temp path."
+            )
+        except ValueError:
+            pass
+
+    return resolved
 
 
 def _connect() -> sqlite3.Connection:

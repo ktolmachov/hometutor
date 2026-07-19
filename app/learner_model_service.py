@@ -10,9 +10,10 @@ from __future__ import annotations
 import json
 import logging
 import statistics
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Literal, Optional
 
+import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.adaptive_plan import AdaptiveDailyPlan
@@ -521,11 +522,13 @@ def save_emotional_snapshot(
 
 
 def get_emotional_heatmap_pivot(last_days: int = 30):
-    """DataFrame concept×date для Plotly или ``None``, если данных нет."""
-    from datetime import timedelta
+    """DataFrame concept×date для Plotly или ``None``, если данных нет.
 
-    import pandas as pd
-
+    Фильтрует концепты по активному графу знаний: посторонние идентификаторы
+    (фикстуры, тестовые концепты) не попадают в тепловую карту.
+    «global» / «общая» / прочие внеграфовые концепты агрегируются в одну строку
+    «общий фон».
+    """
     rows = load_emotional_heatmap_rows()
     if not rows:
         return None
@@ -533,6 +536,28 @@ def get_emotional_heatmap_pivot(last_days: int = 30):
     filt = [r for r in rows if str(r.get("date") or "") >= cutoff]
     if not filt:
         return None
+
+    try:
+        kg = get_active_knowledge_graph()
+        active_ids: set[str] = {
+            str(cid).strip()
+            for cid, node in kg.get_concepts().items()
+            if isinstance(node, dict) and str(cid).strip()
+        }
+    except Exception:
+        active_ids = set()
+
+    _KNOWN_GLOBAL_CONCEPTS = {"global", "общая", "общий фон"}
+
+    for row in filt:
+        concept = str(row.get("concept") or "").strip() or "global"
+        if active_ids and concept not in active_ids:
+            row["concept"] = "общий фон"
+
+    if active_ids:
+        allowed = active_ids | {"общий фон"}
+        filt = [r for r in filt if str(r.get("concept") or "").strip() in allowed]
+
     df = pd.DataFrame(filt)
     if df.empty or "concept" not in df.columns or "date" not in df.columns:
         return None

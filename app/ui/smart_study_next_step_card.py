@@ -14,26 +14,34 @@ from app.ui.adaptive_plan_llm_enrichment import _ssr_why_now_for_card, stream_ss
 from app.ui_preferences import feature_visible_by_id
 
 
-_emitted_route_ids: set[str] = set()
+_emitted_route_ids: set[tuple[str, str]] = set()
 
 
 def _emit_route_offered_if_needed(rec: SmartStudyRecommendation, key_prefix: str) -> None:
-    """Emit session-tape route_offered once per decision_id per process."""
+    """Emit session-tape route_offered once per (session_id, decision_id)."""
     did = str(rec.decision_id)
-    if not did or did in _emitted_route_ids:
+    if not did:
         return
-    _emitted_route_ids.add(did)
     try:
-        from app.session_tape import append_event
-
         sid = str(st.session_state.get("_session_tape_id") or "").strip()
         if not sid:
             return
+    except Exception:  # noqa: BLE001 - tape must never block UI
+        return
+    dedupe_key = (sid, did)
+    if dedupe_key in _emitted_route_ids:
+        return
+    _emitted_route_ids.add(dedupe_key)
+    try:
+        from app.session_tape import append_event
+
         surface = rec.origin or "home"
         append_event(sid, "route_offered", {
             "surface": surface,
             "primary_nav": str(rec.primary_nav),
             "hint_kind": str(rec.hint_kind),
+            "decision_id": did,
+            "phase": str(rec.phase),
         })
     except Exception:  # noqa: BLE001 - tape must never block UI
         pass

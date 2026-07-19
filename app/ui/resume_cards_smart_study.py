@@ -332,21 +332,15 @@ class SmartStudyRouterSessionContext:
 
 
 def _get_saved_plan_primary_block() -> dict | None:
-    """Retrieve the saved adaptive daily plan's primary block (cheap KV read, no regeneration)."""
     try:
         from datetime import datetime
-
         from app.learning_plan_adaptive import get_saved_adaptive_daily_plan
         from app.ui.adaptive_plan_card import get_primary_plan_block_from_plan
-
         saved = get_saved_adaptive_daily_plan()
-        if not saved:
-            return None
-        today = datetime.now().date().isoformat()
-        if str(saved.get("date") or "") != today:
+        if not saved or str(saved.get("date") or "") != datetime.now().date().isoformat():
             return None
         return get_primary_plan_block_from_plan(saved)
-    except Exception:  # noqa: BLE001 - best-effort, must not break SSR
+    except Exception:  # noqa: BLE001
         return None
 
 
@@ -507,6 +501,11 @@ def render_smart_study_router_strip_from_session_context(
         has_last_answer_qa=ctx.has_last_answer_qa,
         defer_was_applied=defer_ss_home,
     )
+    from app.smart_study_recommendation import _enrich_route_decision as _enrich
+
+    ss_final = _enrich(ss_steered, surface=surface, tutor_topic=ctx.tutor_topic,
+                       first_weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,
+                       plan_primary_block=None)
     ssr_evidence = build_smart_study_evidence_ledger_lines(
         flashcard_due_n=ctx.flashcard_due_n,
         sm2_due_n=ctx.sm2_due_n,
@@ -520,7 +519,7 @@ def render_smart_study_router_strip_from_session_context(
         include_all=False,
     )
     render_smart_study_next_step_card(
-        ss_steered,
+        ss_final,
         key_prefix=key_prefix,
         primary_topic_hint=qa_topic_hint,
         tutor_session_id=sid_for_ssr or None,
@@ -531,7 +530,7 @@ def render_smart_study_router_strip_from_session_context(
         auto_apply_saved_steering=False,
     )
     render_smart_study_trust_controls(
-        ss_steered,
+        ss_final,
         key_prefix=key_prefix,
         trust_branch_applied=trust_ss_home,
         defer_applied=defer_ss_home,

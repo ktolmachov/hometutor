@@ -122,12 +122,14 @@ def _emit_route_tape_events(rec: SmartStudyRecommendation) -> None:
         if not sid:
             return
         surface = rec.origin or "home"
-        append_event(sid, "route_selected", {
+        base_payload = {
             "surface": surface,
             "primary_nav": str(rec.primary_nav),
             "hint_kind": str(rec.hint_kind),
-            "accepted": True,
-        })
+            "decision_id": str(rec.decision_id),
+            "phase": str(rec.phase),
+        }
+        append_event(sid, "route_selected", dict(base_payload, accepted=True))
         append_event(sid, "learning_action_started", {
             "surface": surface,
             "primary_nav": str(rec.primary_nav),

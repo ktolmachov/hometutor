@@ -184,6 +184,14 @@ tutor, quiz, flashcards, Smart Study Router, Knowledge Graph и эксплуат
 Процессные материалы — backlog, user stories, сценарные манифесты, генератор demo-документа —
 живут в соседнем репозитории **[`hometutor-studio`](https://github.com/ktolmachov/hometutor-studio)**.
 
+## Эволюционные разборы
+
+Серия исследовательских разборов архитектуры и качества продукта (без изменения runtime-кода):
+
+| Разбор | Тема | analysis | implementation | outcome |
+|--------|------|----------|----------------|---------|
+| №24 Quiz Quality & Mastery Honesty | Качество квизов и честность mastery; VLQR | ✅ 2026-07-19 ([doc/next/24_quiz_quality_mastery_honesty.html](doc/next/24_quiz_quality_mastery_honesty.html), [plan](doc/next/quiz_quality_mastery_honesty_plan.md)) | ⬜ P0a+P0b planned | ⬜ pending live sample |
+
 ## Maintenance
 
 ```powershell

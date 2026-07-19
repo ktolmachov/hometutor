@@ -166,7 +166,8 @@ def test_session_tape_route_offered_event() -> None:
         append_event(
             sid,
             "route_offered",
-            {"surface": "home", "primary_nav": "plan_block_tutor", "hint_kind": "adaptive_plan"},
+            {"surface": "home", "primary_nav": "plan_block_tutor", "hint_kind": "adaptive_plan",
+             "decision_id": "abc123", "phase": "plan"},
             sessions_dir=sessions_dir,
         )
         tape_file = sessions_dir / f"{sid}.jsonl"
@@ -176,6 +177,7 @@ def test_session_tape_route_offered_event() -> None:
         assert data["event"] == "route_offered"
         assert data["payload"]["surface"] == "home"
         assert data["payload"]["primary_nav"] == "plan_block_tutor"
+        assert data["payload"]["decision_id"] == "abc123"
         assert "question" not in str(data["payload"])
         assert "text" not in str(data["payload"])
 
@@ -189,13 +191,15 @@ def test_session_tape_route_selected_event() -> None:
         append_event(
             sid,
             "route_selected",
-            {"surface": "home", "primary_nav": "plan_block_tutor", "hint_kind": "adaptive_plan", "accepted": True},
+            {"surface": "home", "primary_nav": "plan_block_tutor", "hint_kind": "adaptive_plan",
+             "decision_id": "abc456", "phase": "plan", "accepted": True},
             sessions_dir=sessions_dir,
         )
         tape_file = sessions_dir / f"{sid}.jsonl"
         data = json.loads(tape_file.read_text(encoding="utf-8").strip())
         assert data["event"] == "route_selected"
         assert data["payload"]["accepted"] is True
+        assert data["payload"]["decision_id"] == "abc456"
 
 
 def test_session_tape_learning_action_started_event() -> None:
@@ -302,3 +306,24 @@ def test_gather_context_when_all_weak_are_off_graph_falls_back_to_empty(monkeypa
     assert ctx.weak_concepts == []
     assert ctx.flashcard_due_n == 0
     assert ctx.sm2_due_n == 0
+
+
+# ---------------------------------------------------------------------------
+# Runtime telemetry: verify events emitted by render functions
+# ---------------------------------------------------------------------------
+
+
+def test_emit_route_offered_uses_session_decision_dedupe() -> None:
+    """Verify _emit_route_offered_if_needed source uses (session_id, decision_id) tuple for dedupe."""
+    source = (Path(__file__).parent.parent / "app" / "ui" / "smart_study_next_step_card.py").read_text(encoding="utf-8")
+    assert "sid, did" in source or "(sid, did)" in source
+    assert "dedupe_key" in source
+    assert "_emitted_route_ids.add(dedupe_key)" in source
+    assert "if not sid:\n            return" in source
+
+
+def test_emit_route_offered_skip_logic_no_session_id() -> None:
+    """_emit_route_offered_if_needed returns early when session_id is missing."""
+    source = (Path(__file__).parent.parent / "app" / "ui" / "smart_study_next_step_card.py").read_text(encoding="utf-8")
+    assert 'st.session_state.get("_session_tape_id"' in source
+

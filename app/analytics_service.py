@@ -63,7 +63,7 @@ def build_forgetting_curve_points(*, concept_ids: set[str] | None = None) -> lis
     """
     rows = _spaced_rows(concept_ids=concept_ids)
     if not rows:
-        return [{"day": float(d), "retention": max(0.05, 1.0 - d * 0.06)} for d in range(15)]
+        return []
 
     points: list[dict[str, float]] = []
     for d in range(15):
@@ -78,12 +78,22 @@ def build_forgetting_curve_points(*, concept_ids: set[str] | None = None) -> lis
     return points
 
 
+def _quiz_result_total() -> int:
+
+    def _work(conn):
+        row = conn.execute("SELECT COUNT(*) FROM quiz_results").fetchone()
+        return int(row[0]) if row else 0
+
+    return _with_db(_work)
+
+
 def get_advanced_analytics() -> dict[str, Any]:
     """Сводка для API и Streamlit: heatmap-данные, кривая, ROI-текст, рекомендация."""
     import pandas as pd
 
     kg = get_active_knowledge_graph()
     concept_ids = active_concept_ids(kg)
+    total_raw = _quiz_result_total()
     rows = _quiz_result_rows(concept_ids=concept_ids)
     gam: dict[str, Any] = {}
     try:
@@ -153,6 +163,9 @@ def get_advanced_analytics() -> dict[str, Any]:
         "gamification": gam,
         "weak_concepts": weak,
         "learner_state_diagnostics": diagnostics,
+        "has_quiz_data": bool(rows),
+        "total_quiz_results": total_raw,
+        "scoped_quiz_results": len(rows),
     }
 
 

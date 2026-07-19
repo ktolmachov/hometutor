@@ -14,6 +14,7 @@ import streamlit as st
 from app.analytics_service import get_advanced_analytics
 from app.ui.adaptive_plan_widgets import render_adaptive_daily_plan_section
 from app.ui.auth_gate import require_ui_auth_or_stop
+from app.ui_preferences import feature_visible_by_id
 
 st.set_page_config(page_title="Аналитика", layout="wide")
 require_ui_auth_or_stop()
@@ -23,6 +24,53 @@ st.title("Аналитика")
 render_adaptive_daily_plan_section(key_prefix="analytics_adp")
 
 data = get_advanced_analytics()
+
+diag = data.get("learner_state_diagnostics") or {}
+if diag and feature_visible_by_id("panel:expert_controls"):
+    st.subheader("Lineage и Archive")
+    cur = diag.get("current_lineage") or {}
+    synced = diag.get("synced_lineage") or {}
+    archive_counts = diag.get("archive_counts") or {}
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Текущий generation", cur.get("generation_id") or "—")
+    c2.metric("Archive rows", int(archive_counts.get("total") or 0))
+    c3.metric("Миграция", synced.get("migrated_at") or "—")
+
+    live_counts = diag.get("live_counts") or {}
+    st.caption(
+        "Live state: "
+        f"quiz_results={int(live_counts.get('quiz_results') or 0)}, "
+        f"quiz_mastery={int(live_counts.get('quiz_mastery') or 0)}, "
+        f"spaced_repetition={int(live_counts.get('spaced_repetition') or 0)}"
+    )
+
+    if diag.get("has_archived_state"):
+        reasons = diag.get("archive_reasons") or {}
+        if reasons:
+            st.write(
+                "Архивные причины: "
+                + ", ".join(f"{key}={int(value)}" for key, value in reasons.items())
+            )
+        recent = diag.get("recent_archive") or []
+        if recent:
+            st.dataframe(recent, width='stretch', hide_index=True)
+
+if not data.get("has_quiz_data"):
+    total_raw = data.get("total_quiz_results", 0)
+    if total_raw > 0:
+        scoped = data.get("scoped_quiz_results", 0)
+        st.info(
+            f"Нет пригодных quiz_results для активного графа знаний "
+            f"(в таблице {total_raw} записей, из них {scoped} относятся к концептам "
+            f"текущего индекса). Heatmap и ROI-оценка недоступны — "
+            f"пройдите несколько квизов или интерактивных тестов."
+        )
+    else:
+        st.info(
+            "Недостаточно данных quiz_results — heatmap и ROI-оценка недоступны. "
+            "Пройдите несколько квизов или интерактивных тестов. "
+            "Кривая удержания (SM-2) и геймификация показываются независимо."
+        )
 
 st.subheader("ROI времени (эвристика)")
 st.markdown(data.get("time_roi_text") or "—")
@@ -76,33 +124,3 @@ if fc:
 wc = data.get("weak_concepts") or []
 if wc:
     st.caption("Слабые концепты: " + ", ".join(str(w) for w in wc[:12]))
-
-diag = data.get("learner_state_diagnostics") or {}
-if diag:
-    st.subheader("Lineage и Archive")
-    cur = diag.get("current_lineage") or {}
-    synced = diag.get("synced_lineage") or {}
-    archive_counts = diag.get("archive_counts") or {}
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Текущий generation", cur.get("generation_id") or "—")
-    c2.metric("Archive rows", int(archive_counts.get("total") or 0))
-    c3.metric("Миграция", synced.get("migrated_at") or "—")
-
-    live_counts = diag.get("live_counts") or {}
-    st.caption(
-        "Live state: "
-        f"quiz_results={int(live_counts.get('quiz_results') or 0)}, "
-        f"quiz_mastery={int(live_counts.get('quiz_mastery') or 0)}, "
-        f"spaced_repetition={int(live_counts.get('spaced_repetition') or 0)}"
-    )
-
-    if diag.get("has_archived_state"):
-        reasons = diag.get("archive_reasons") or {}
-        if reasons:
-            st.write(
-                "Архивные причины: "
-                + ", ".join(f"{key}={int(value)}" for key, value in reasons.items())
-            )
-        recent = diag.get("recent_archive") or []
-        if recent:
-            st.dataframe(recent, width='stretch', hide_index=True)

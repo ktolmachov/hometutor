@@ -273,6 +273,57 @@ class TestDepthSummaryDenominator:
         assert summary[0]["depth_pct"] == 20.0
 
 
+# ── migration: old schema → new schema ───────────────────────────────────────
+
+class TestLectureMigration:
+    @staticmethod
+    def _old_schema_db():
+        import sqlite3
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            """CREATE TABLE lecture_segment_progress (
+                konspekt_path TEXT NOT NULL,
+                segment_index INTEGER NOT NULL,
+                passed INTEGER NOT NULL DEFAULT 0,
+                predicted_correct INTEGER DEFAULT NULL,
+                gate_score REAL,
+                completed_at TEXT NOT NULL,
+                PRIMARY KEY (konspekt_path, segment_index)
+            )"""
+        )
+        return conn
+
+    def test_migration_adds_total_segments(self, monkeypatch) -> None:
+        """P3: prove that _ensure_table adds total_segments to an old-schema table."""
+        conn = self._old_schema_db()
+        monkeypatch.setattr("app.user_state_lecture._with_db", lambda fn, **kw: fn(conn))
+
+        from app.user_state_lecture import upsert_lecture_segment_result, get_lecture_depth_summary
+
+        upsert_lecture_segment_result(
+            konspekt_path="/test/migration.md", segment_index=0, passed=True, total_segments=5
+        )
+        summary = get_lecture_depth_summary()
+        assert len(summary) == 1
+        assert summary[0]["total_segments"] == 5, f"migration failed: got {summary[0]}"
+
+    def test_migration_idempotent(self, monkeypatch) -> None:
+        """P3: calling _ensure_table twice must not raise."""
+        conn = self._old_schema_db()
+        monkeypatch.setattr("app.user_state_lecture._with_db", lambda fn, **kw: fn(conn))
+
+        from app.user_state_lecture import upsert_lecture_segment_result
+        upsert_lecture_segment_result(
+            konspekt_path="/test/mig2.md", segment_index=0, passed=True, total_segments=3
+        )
+        # second call — must not raise
+        upsert_lecture_segment_result(
+            konspekt_path="/test/mig2.md", segment_index=1, passed=False, total_segments=3
+        )
+        # success if we got here
+
+
     def test_no_new_storage_schema_outside_user_state(self) -> None:
         """Kill switch: no ad-hoc SQLite outside user_state_lecture."""
         src = (Path("app/ui/living_konspekt_lecture_route.py")).read_text(encoding="utf-8")

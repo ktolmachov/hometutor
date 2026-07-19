@@ -210,9 +210,31 @@ def render_progress_home_tab_impl(md: dict[str, Any]) -> None:
     _render_home_mastery_one_number(md)
     _render_home_my_trail()
     _render_home_my_path(md)
+    _render_lecture_depth_metric()
     _render_home_handoff_context_and_cta()
     _render_home_heatmap_and_radar(md)
     render_weekly_study_narrative_block(key_prefix="progress_home")
+
+
+def _render_lecture_depth_metric() -> None:
+    """P1: show «глубина лекции с подтверждением» for konspekts with segment progress."""
+    try:
+        from app.user_state_lecture import get_lecture_depth_summary
+        summaries = get_lecture_depth_summary()
+    except Exception:  # noqa: BLE001 — progress metric is best-effort
+        return
+    if not summaries:
+        return
+    for s in summaries[:3]:
+        fname = str(s.get("konspekt_path", "")).rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+        if not fname:
+            fname = "лекция"
+        import streamlit as st
+        st.html(
+            f'<div style="font-size:0.82rem;opacity:0.85;margin:0.15rem 0;">'
+            f"🎧 {fname}: {s['passed_count']}/{s['total_stored']} отрезков "
+            f"({s['depth_pct']}%)</div>"
+        )
 
 
 # ---------------------------------------------------------------------------

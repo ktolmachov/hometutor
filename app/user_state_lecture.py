@@ -67,6 +67,7 @@ def upsert_lecture_segment_result(
                 ts,
             ),
         )
+        conn.commit()
 
     try:
         _with_db(_work, write=True)
@@ -105,6 +106,42 @@ def get_lecture_segment_results(konspekt_path: str) -> list[dict[str, Any]]:
         return _with_db(_read)
     except Exception:  # noqa: BLE001
         logger.warning("lecture_segment_read_failed", exc_info=True)
+        return []
+
+
+def get_lecture_depth_summary() -> list[dict[str, Any]]:
+    """Return one summary row per konspekt with lecture segment progress.
+    Used by the progress dashboard to show «глубина лекции» metrics.
+    """
+
+    def _read(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+        _ensure_table(conn)
+        rows = conn.execute(
+            """
+            SELECT konspekt_path,
+                   COUNT(*) AS total_stored,
+                   SUM(CASE WHEN passed THEN 1 ELSE 0 END) AS passed_count,
+                   MAX(completed_at) AS last_at
+            FROM lecture_segment_progress
+            GROUP BY konspekt_path
+            ORDER BY last_at DESC
+            """
+        ).fetchall()
+        return [
+            {
+                "konspekt_path": r[0],
+                "total_stored": r[1],
+                "passed_count": r[2],
+                "depth_pct": round(r[2] / r[1] * 100, 1) if r[1] else 0.0,
+                "last_completed_at": r[3],
+            }
+            for r in rows
+        ]
+
+    try:
+        return _with_db(_read)
+    except Exception:  # noqa: BLE001
+        logger.warning("lecture_depth_summary_failed", exc_info=True)
         return []
 
 

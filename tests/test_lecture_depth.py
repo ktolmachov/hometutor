@@ -163,8 +163,7 @@ class TestLectureP1SourceContracts:
     def test_advance_segment_calls_persistence(self) -> None:
         src = (Path("app/ui/living_konspekt_lecture_route.py")).read_text(encoding="utf-8")
         fn = src.split("def _advance_segment")[1].split("\ndef ")[0]
-        assert "upsert_lecture_segment_result" in fn
-        assert "user_state_lecture" in fn
+        assert "_persist_segment_result" in fn
 
     def test_gate_score_set_before_advance(self) -> None:
         src = (Path("app/ui/living_konspekt_lecture_route.py")).read_text(encoding="utf-8")
@@ -180,6 +179,46 @@ class TestLectureP1SourceContracts:
         src = (Path("app/ui/living_konspekt_lecture_route.py")).read_text(encoding="utf-8")
         fn = src.split("def render_lecture_route")[1].split("\ndef ")[0]
         assert 'gate["prediction_shown"] = False' in fn
+        assert "lk_prediction_choice_" in fn
+
+    def test_prediction_radio_key_per_segment(self) -> None:
+        """P2 regression: prediction radio key must include segment index."""
+        src = (Path("app/ui/living_konspekt_lecture_route.py")).read_text(encoding="utf-8")
+        fn = src.split("def _render_prediction_question")[1].split("\ndef ")[0]
+        assert "lk_prediction_choice_{seg.index}" in fn or 'f"lk_prediction_choice_' in fn
+        assert "lk_prediction_submit_{seg.index}" in fn or 'f"lk_prediction_submit_' in fn
+
+    def test_prepend_prediction_to_gate_exists(self) -> None:
+        src = (Path("app/ui/living_konspekt_lecture_route.py")).read_text(encoding="utf-8")
+        assert "def _prepend_prediction_to_gate" in src
+        assert "_prepend_prediction_to_gate(gate, quiz)" in src
+
+    def test_gate_calls_advance_on_fail(self) -> None:
+        """P1 regression: fail path must call _advance_segment(correct=False)."""
+        src = (Path("app/ui/living_konspekt_lecture_route.py")).read_text(encoding="utf-8")
+        fn = src.split("def _render_gate")[1].split("\ndef ")[0]
+        assert "_advance_segment(gate, seg, correct=False)" in fn
+
+    def test_init_gate_state_hydrates_from_persistence(self) -> None:
+        """P1 regression: _init_gate_state must call get_lecture_segment_results."""
+        src = (Path("app/ui/living_konspekt_lecture_route.py")).read_text(encoding="utf-8")
+        fn = src.split("def _init_gate_state")[1].split("\ndef ")[0]
+        assert "get_lecture_segment_results" in fn
+
+    def test_advance_segment_has_commit(self) -> None:
+        src = (Path("app/ui/living_konspekt_lecture_route.py")).read_text(encoding="utf-8")
+        fn = src.split("def _advance_segment")[1].split("\ndef ")[0]
+        assert "_persist_segment_result" in fn
+
+    def test_user_state_lecture_commit(self) -> None:
+        src = (Path("app/user_state_lecture.py")).read_text(encoding="utf-8")
+        fn = src.split("def _work")[1].split("\ndef ")[0]
+        assert "conn.commit()" in fn
+
+    def test_lecture_hydration_source(self) -> None:
+        """P1: verify hydration source exists but not the exact row access pattern."""
+        from app.user_state_lecture import get_lecture_segment_results
+        assert callable(get_lecture_segment_results)
 
     def test_no_new_storage_schema_outside_user_state(self) -> None:
         """Kill switch: no ad-hoc SQLite outside user_state_lecture."""

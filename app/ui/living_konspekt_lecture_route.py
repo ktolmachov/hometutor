@@ -245,11 +245,31 @@ def _init_gate_state(segments: list[LectureSegment], rows: list[dict[str, Any]])
     rsid = _row_set_id(rows)
     current = st.session_state.get(_GS_KEY, {})
     if current.get("_row_set_id") != rsid:
+        results: dict[int, bool] = {}
+        # P1: hydrate from persisted segment progress so depth survives restart
+        try:
+            from app.user_state_lecture import get_lecture_segment_results
+            konspekt_path = ""
+            if rows:
+                konspekt_path = str(rows[0].get("konspekt_md_abs") or "")
+            if konspekt_path:
+                persisted = get_lecture_segment_results(konspekt_path)
+                for r in persisted:
+                    if r.get("passed") is True:
+                        results[r["segment_index"]] = True
+        except Exception:  # noqa: BLE001 — hydration is best-effort
+            pass
+        # set current to the first segment that hasn't been passed
+        first_unpassed = 0
+        for i in range(len(segments)):
+            if not results.get(i):
+                first_unpassed = i
+                break
         st.session_state[_GS_KEY] = {
             "_row_set_id": rsid,
-            "current": 0,
+            "current": first_unpassed,
             "total": len(segments),
-            "results": {},
+            "results": results,
             "show_gate": False,
             "gate_questions": None,
             "gate_last_content": "",
@@ -313,6 +333,7 @@ def render_lecture_route(
                 gate["prediction_prompt"] = None
                 gate["prediction_student_answer"] = None
                 gate["gate_score"] = None
+                st.session_state.pop(f"lk_prediction_choice_{i}", None)
                 st.rerun()
 
     seg = segments[cur]
@@ -370,6 +391,23 @@ def _collect_timecoded_sections(
     return sections
 
 
+def _prepend_prediction_to_gate(
+    gate: dict[str, Any],
+    quiz: dict[str, Any],
+) -> None:
+    """P1: prepend the prediction question to gate quiz so the same item
+    appears before AND after listening. Idempotent: no-op if already prepended."""
+    pq = gate.get("prediction_question")
+    if not isinstance(pq, dict) or not pq.get("question"):
+        return
+    questions = quiz.get("questions")
+    if not questions:
+        return
+    if questions[0] is pq:
+        return
+    quiz["questions"] = [pq] + list(questions)
+
+
 def _render_prediction_question(
     seg: LectureSegment,
     gate: dict[str, Any],
@@ -412,61 +450,12 @@ def _render_prediction_question(
             "Ваш ответ:",
             options=options,
             index=None,
-            key="lk_prediction_choice",
+            key=f"lk_prediction_choice_{seg.index}",
             format_func=lambda x: str(x),
         )
-        if choice is not None and st.button("Запомнить ставку", key="lk_prediction_submit", type="primary"):
-            gate["prediction_student_answer"] = choice
-            gate["prediction_shown"] = True
-            st.rerun()
-
-
-def _render_prediction_question(
-    seg: LectureSegment,
-    gate: dict[str, Any],
-) -> None:
-    """P1: show one prediction question before the audio plays.
-    Student makes a guess; same question is included in the gate quiz.
-    """
-    if gate.get("show_gate") or gate.get("prediction_shown"):
-        return
-
-    if gate.get("prediction_question") is None:
-        with st.spinner("Формулирую вопрос-предсказание…"):
-            content = _content_for_segment(seg)
-            if not content or len(content.strip()) < 120:
-                gate["prediction_shown"] = True
-                gate["prediction_question"] = None
-                return
-            quiz = _generate_gate_quiz(content, seg.title or f"pred-{seg.index}", num_questions=1)
-            if quiz and quiz.get("questions"):
-                gate["prediction_question"] = quiz["questions"][0]
-                gate["prediction_prompt"] = quiz.get("motivation", "Попробуйте предсказать ответ до прослушивания.")
-        if gate["prediction_question"] is None:
-            gate["prediction_shown"] = True
-        st.rerun()
-
-    pq = gate["prediction_question"]
-    if not isinstance(pq, dict):
-        gate["prediction_shown"] = True
-        return
-
-    st.markdown("---")
-    st.markdown("### 🎯 Ставка: что вы уже знаете?")
-    if gate.get("prediction_prompt"):
-        st.caption(str(gate["prediction_prompt"]))
-    st.write(str(pq.get("question", "")))
-
-    options = pq.get("options") or []
-    if options:
-        choice = st.radio(
-            "Ваш ответ:",
-            options=options,
-            index=None,
-            key="lk_prediction_choice",
-            format_func=lambda x: str(x),
-        )
-        if choice is not None and st.button("Запомнить ставку", key="lk_prediction_submit", type="primary"):
+        if choice is not None and st.button(
+            "Запомнить ставку", key=f"lk_prediction_submit_{seg.index}", type="primary"
+        ):
             gate["prediction_student_answer"] = choice
             gate["prediction_shown"] = True
             st.rerun()
@@ -496,6 +485,9 @@ def _render_gate(
             st.rerun()
         return
 
+    # P1: prepend prediction question so student sees the same item after listening
+    _prepend_prediction_to_gate(gate, quiz)
+
     n_questions = len(quiz["questions"])
     from app.ui.scoped_quiz import render_scoped_self_check_quiz
 
@@ -518,6 +510,9 @@ def _render_gate(
         else:
             st.error(f"Нужно больше правильных. Ваш результат: {c}/{t}")
             gate["gate_score"] = c / t
+            # P1: persist failed result without destroying gate state needed by fallback
+            gate["results"][seg.index] = False
+            _persist_segment_result(gate, seg, correct=False)
             _render_gate_fallback(seg, gate, source_key=source_key, n_questions=n_questions)
     else:
         st.info(f"Ответьте на все {n_questions} вопросов ({results['answered']}/{n_questions})")
@@ -532,18 +527,13 @@ def _clear_gate_scoped_state(source_key: str, n: int) -> None:
     st.session_state.pop(f"{source_key}_next_cta_route", None)
 
 
-def _advance_segment(
+def _persist_segment_result(
     gate: dict[str, Any],
     seg: LectureSegment,
     *,
     correct: bool,
 ) -> None:
-    gate["results"][seg.index] = correct
-    gate["show_gate"] = False
-    gate["gate_questions"] = None
-    gate["gate_last_content"] = ""
-
-    # P1: persist segment result so depth survives restart
+    """P1: persist segment result without touching gate UI state."""
     try:
         from app.user_state_lecture import upsert_lecture_segment_result
         konspekt_path = ""
@@ -566,6 +556,21 @@ def _advance_segment(
         )
     except Exception:  # noqa: BLE001 — persistence is best-effort, never block UI
         pass
+
+
+def _advance_segment(
+    gate: dict[str, Any],
+    seg: LectureSegment,
+    *,
+    correct: bool,
+) -> None:
+    gate["results"][seg.index] = correct
+    gate["show_gate"] = False
+    gate["gate_questions"] = None
+    gate["gate_last_content"] = ""
+
+    # P1: persist segment result so depth survives restart
+    _persist_segment_result(gate, seg, correct=correct)
 
     if correct and seg.index + 1 < gate["total"]:
         gate["current"] = seg.index + 1

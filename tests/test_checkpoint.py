@@ -220,6 +220,12 @@ class TestCheckpointIntegrationCoverage:
         fn = src.split("def _render_tutor_checkpoint")[1].split("\ndef ")[0]
         assert "completion_key" in fn
 
+    def test_tutor_e11_completion_key_uses_message_index(self) -> None:
+        src = (Path("app/ui/tutor_chat_session.py")).read_text(encoding="utf-8")
+        fn = src.split("def _render_e11_loop_fallback")[1].split("\ndef ")[0]
+        assert "last_assistant_message_index" in fn
+        assert "completion_key=f\"tutor:e11:{session_id}:{topic}:{msg_idx}\"" in fn
+
     def test_scoped_quiz_has_completion_key(self) -> None:
         src = (Path("app/ui/scoped_quiz.py")).read_text(encoding="utf-8")
         fn = src.split("def _render_quiz_checkpoint_if_due")[1].split("\ndef ")[0]
@@ -234,6 +240,11 @@ class TestCheckpointIntegrationCoverage:
         src = (Path("app/ui/flashcards_review_view.py")).read_text(encoding="utf-8")
         fn = src.split("def _render_flashcards_checkpoint")[1].split("\ndef ")[0]
         assert "completion_key" in fn
+
+    def test_flashcards_completion_key_uses_queue_nonce(self) -> None:
+        src = (Path("app/ui/flashcards_review_view.py")).read_text(encoding="utf-8")
+        fn = src.split("def _render_review_completion")[1].split("\ndef ")[0]
+        assert "flashcards_review_queue_nonce" in fn
 
     def test_scoped_quiz_checkpoint_gated_on_saved(self) -> None:
         src = (Path("app/ui/scoped_quiz.py")).read_text(encoding="utf-8")

@@ -643,7 +643,10 @@ def _render_review_completion(
     # B1 checkpoint: after review batch, show unified next-step gate
     _render_flashcards_checkpoint(
         key_prefix="flashcards_review",
-        completion_key=f"flashcards:{scope_signature}:{total}",
+        completion_key=(
+            f"flashcards:{scope_signature}:{total}:"
+            f"{st.session_state.get('flashcards_review_queue_nonce', 0)}"
+        ),
     )
 
 

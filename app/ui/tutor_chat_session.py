@@ -451,6 +451,7 @@ def _render_e11_loop_fallback(session_id: str) -> None:
     history_now = session_store.get(session_id)
     if not any(getattr(m, "role", None) == "assistant" for m in history_now):
         return
+    msg_idx = continuity_bridge.last_assistant_message_index(history_now)
     topic = str(st.session_state.get("current_topic") or "").strip()
     with st.container(border=True):
         st.caption("Завершение 5-минутной сессии")
@@ -458,6 +459,7 @@ def _render_e11_loop_fallback(session_id: str) -> None:
             session_id=session_id,
             topic=topic,
             key_prefix="tutor_e11_fallback",
+            completion_key=f"tutor:e11:{session_id}:{topic}:{msg_idx}",
         )
 
 
@@ -802,6 +804,7 @@ def _render_tutor_checkpoint(
     session_id: str,
     topic: str | None = None,
     key_prefix: str,  # noqa: ARG001 - used by checkpoint button keys
+    completion_key: str | None = None,
 ) -> None:
     """B1: after tutor micro-step completion, render unified checkpoint."""
     import logging as _logging  # noqa: BLE001
@@ -853,7 +856,7 @@ def _render_tutor_checkpoint(
             st.session_state.get("current_view", "Mission Control"),
         ),
         key_prefix=key_prefix,
-        completion_key=f"tutor:e11:{session_id}:{ctx.tutor_topic or topic or ''}",
+        completion_key=completion_key or f"tutor:e11:{session_id}:{ctx.tutor_topic or topic or ''}:{key_prefix}",
         tutor_session_id=session_id,
         tutor_topic=ctx.tutor_topic or topic,
         weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,

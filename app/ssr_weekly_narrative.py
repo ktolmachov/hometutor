@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
-from app.quiz_adaptive import get_weak_concepts
 from app.knowledge_graph import get_active_knowledge_graph
 from app.learner_state_scope import weak_concepts_for_kg
 from app.user_state_weekly_narrative import (
@@ -204,8 +203,8 @@ def _collect_production_signals(now_utc: datetime | None) -> WeeklyNarrativeSign
     try:
         kg = get_active_knowledge_graph()
         weak = tuple(weak_concepts_for_kg(kg, threshold=60, limit=3))
-    except Exception:
-        weak = tuple(get_weak_concepts(threshold=60, limit=3))
+    except Exception:  # noqa: BLE001 — graph unavailable: use empty tuple, don't leak raw concepts
+        weak = ()
     dominant = aggregate_dominant_ssr_routes_7d(now_utc=now_utc)
     return WeeklyNarrativeSignals(
         event_count=event_count,

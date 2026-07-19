@@ -38,10 +38,9 @@ _KNOWN_FIXTURE_PATTERNS = frozenset({
     "legacytopic",
     "test_",
     "fixture_",
-    "global",
-    "общая",
-    "t",  # single-letter fixture concept
 })
+
+_SINGLE_TOKEN_FIXTURES = frozenset({"t"})
 
 _GHOST_TABLES = ("quiz_mastery", "spaced_repetition", "quiz_results")
 
@@ -62,6 +61,8 @@ def _is_fixture_concept(concept: str) -> bool:
     c = concept.strip().lower()
     if not c:
         return False
+    if c in _SINGLE_TOKEN_FIXTURES:
+        return True
     for pat in _KNOWN_FIXTURE_PATTERNS:
         if pat in c:
             return True
@@ -170,7 +171,7 @@ def execute_cleanup(db_path: Path, active_ids: set[str]) -> dict[str, int]:
                     deleted["app_kv_emotional_heatmap"] = len(heatmap_data) - len(cleaned)
 
         conn.execute("COMMIT")
-    except Exception:
+    except Exception:  # noqa: BLE001 — rollback must catch any error to prevent partial cleanup
         conn.execute("ROLLBACK")
         raise
     finally:
@@ -194,7 +195,7 @@ def get_active_graph_ids() -> set[str]:
             for cid, node in kg.get_concepts().items()
             if isinstance(node, dict) and str(cid).strip()
         }
-    except Exception:
+    except Exception:  # noqa: BLE001 — graph load may fail; empty set = no cleanup, safe
         return set()
 
 

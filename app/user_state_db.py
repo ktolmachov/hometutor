@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 import re
 import sqlite3
 import sys
@@ -291,22 +290,24 @@ def _resolve_state_db_path() -> str:
     поведения. uid задан → ``<base_dir>/users/<uid>/<base_name>``, физическая изоляция прогресса
     между пользователями без переписывания схемы таблиц (см. docs/compliance_upgrade_plan.md §A3).
 
-    Pytest guard: при активном ``PYTEST_CURRENT_TEST`` проверяется, что путь НЕ разрешается
-    в production-дерево ``data/``. Если разрешается — ``RuntimeError``.
+    Pytest guard: при активном pytest-сеансе проверяется, что финальный путь НЕ разрешается
+    в production-дерево ``data/`` — включая per-user подпути. Если разрешается — ``RuntimeError``.
     ``tests/conftest.py`` обеспечивает изоляцию через ``HOME_RAG_DATA_DIR``;
     этот gate — последний рубеж.
     """
+    from app.config import is_pytest_active
+
     raw = (get_settings().user_state_db or "").strip() or str(
         Path(__file__).resolve().parent.parent / "data" / "user_state.db"
     )
     base = Path(raw)
     uid = (get_current_user_id() or "").strip()
     if uid and re.fullmatch(r"[A-Za-z0-9_-]{1,128}", uid):
-        return str(base.parent / "users" / uid / base.name)
+        resolved = str(base.parent / "users" / uid / base.name)
+    else:
+        resolved = str(base)
 
-    resolved = str(base)
-
-    if os.environ.get("PYTEST_CURRENT_TEST"):
+    if is_pytest_active():
         _data_root = (Path(__file__).resolve().parent.parent / "data").resolve()
         try:
             Path(resolved).resolve().relative_to(_data_root)

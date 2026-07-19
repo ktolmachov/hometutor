@@ -883,3 +883,12 @@ def reset_settings_cache() -> None:
     global _settings, _retrieval_settings
     _settings = None
     _retrieval_settings = None
+
+
+def is_pytest_active() -> bool:
+    """``True`` when running inside a pytest session.
+
+    ``config.py`` is explicitly allowed to access ``os.environ`` for runtime
+    detection; downstream modules must call this instead of raw ``os`` access.
+    """
+    return bool(os.environ.get("PYTEST_CURRENT_TEST"))

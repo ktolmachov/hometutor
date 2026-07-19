@@ -46,6 +46,17 @@ class TestPytestGuardRedirectsToTemp:
             with pytest.raises(RuntimeError, match="production data dir"):
                 _resolve_state_db_path()
 
+    def test_guard_raises_on_production_per_user_path(self, monkeypatch) -> None:
+        """Guard fires even when per-user path branch is taken (was a bypass)."""
+        data_root = (Path(__file__).resolve().parent.parent / "data").resolve()
+        prod_db = str(data_root / "user_state.db")
+
+        with patch("app.user_state_db.get_settings") as mock_settings, \
+             patch("app.user_state_db.get_current_user_id", return_value="test-user"):
+            mock_settings.return_value.user_state_db = prod_db
+            with pytest.raises(RuntimeError, match="production data dir"):
+                _resolve_state_db_path()
+
     def test_config_isolation_data_dir_is_temp(self) -> None:
         from app.config import get_settings
 
@@ -121,7 +132,8 @@ class TestEmotionalHeatmapFilter:
                 f"'общий фон' aggregate row missing: {index_concepts}"
             )
 
-    def test_pivot_without_active_graph_keeps_all(self) -> None:
+    def test_pivot_without_active_graph_returns_none(self) -> None:
+        """Graph error → return None, don't leak fixture concepts."""
         from app.learner_model_service import (
             EMOTIONAL_HEATMAP_KV_KEY,
             get_emotional_heatmap_pivot,
@@ -137,14 +149,11 @@ class TestEmotionalHeatmapFilter:
 
         with patch("app.learner_model_service.get_active_knowledge_graph", side_effect=Exception("no graph")):
             pivot = get_emotional_heatmap_pivot(last_days=30)
-            if pivot is not None and not pivot.empty:
-                index_concepts = {str(c).strip().lower() for c in pivot.index}
-                assert "topicb" in index_concepts, "Without graph, all concepts pass through"
-                assert "global" in index_concepts, "global should remain without graph"
+            assert pivot is None, "Graph error → must return None, not leak ghosts"
 
 
 class TestWeeklyNarrativeWeakConcepts:
-    """Weekly narrative uses graph-scoped weak concepts."""
+    """Weekly narrative uses graph-scoped weak concepts; never leaks raw on error."""
 
     def test_signals_use_weak_concepts_for_kg(self) -> None:
         from app.ssr_weekly_narrative import _collect_production_signals

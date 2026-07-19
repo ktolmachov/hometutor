@@ -544,19 +544,23 @@ def get_emotional_heatmap_pivot(last_days: int = 30):
             for cid, node in kg.get_concepts().items()
             if isinstance(node, dict) and str(cid).strip()
         }
-    except Exception:
-        active_ids = set()
+    except Exception:  # noqa: BLE001 — graph may be unavailable; return None instead of leaking ghosts
+        return None
 
     _KNOWN_GLOBAL_CONCEPTS = {"global", "общая", "общий фон"}
 
+    kept: list[dict[str, Any]] = []
     for row in filt:
         concept = str(row.get("concept") or "").strip() or "global"
-        if active_ids and concept not in active_ids:
+        if concept in active_ids:
+            kept.append(row)
+        elif concept.lower() in _KNOWN_GLOBAL_CONCEPTS:
             row["concept"] = "общий фон"
+            kept.append(row)
+    filt = kept
 
-    if active_ids:
-        allowed = active_ids | {"общий фон"}
-        filt = [r for r in filt if str(r.get("concept") or "").strip() in allowed]
+    if not filt:
+        return None
 
     df = pd.DataFrame(filt)
     if df.empty or "concept" not in df.columns or "date" not in df.columns:

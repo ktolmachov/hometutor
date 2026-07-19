@@ -36,8 +36,12 @@ def store_checkpoint_context(
     decision_id: str | None = None,
     phase: str | None = None,
 ) -> None:
-    """Save checkpoint context + fresh instance UUID in session_state."""
-    instance_id = str(uuid.uuid4())
+    """Save checkpoint context. Generates stable instance UUID on first call;
+    reuse on rerenders so checkpoint_offered fires exactly once per completion."""
+    instance_id = st.session_state.get(_CHECKPOINT_INSTANCE_KEY)
+    if not instance_id:
+        instance_id = str(uuid.uuid4())
+        st.session_state[_CHECKPOINT_INSTANCE_KEY] = instance_id
     st.session_state[_CHECKPOINT_CONTEXT_KEY] = {
         "topic_hint": str(topic_hint or "").strip() or None,
         "origin": str(origin or "").strip() or None,
@@ -45,7 +49,6 @@ def store_checkpoint_context(
         "decision_id": str(decision_id or "").strip() or None,
         "phase": str(phase or "").strip() or None,
     }
-    st.session_state[_CHECKPOINT_INSTANCE_KEY] = instance_id
 
 
 def load_checkpoint_context() -> dict[str, str | None] | None:

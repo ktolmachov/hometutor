@@ -12,6 +12,7 @@ from app.ui.quiz_panel import (
     short_feedback_explanation,
 )
 from app.ui_client import fetch_json
+import json
 import hashlib
 
 _LOOP_METRICS_LABEL = "five_min_loop"
@@ -103,6 +104,13 @@ def render_scoped_self_check_quiz(
     if not questions:
         return
     meta = quiz_meta if isinstance(quiz_meta, dict) else {}
+    quiz_hash = hashlib.md5(
+        json.dumps(questions, sort_keys=True, ensure_ascii=False, default=str).encode()
+    ).hexdigest()[:12]
+    _stored_hash = st.session_state.get(f"{source_key}_quiz_content_hash")
+    if _stored_hash and _stored_hash != quiz_hash:
+        _reset_quiz_state_for_source(source_key)
+    st.session_state[f"{source_key}_quiz_content_hash"] = quiz_hash
     mot = (meta.get("motivation") or "").strip()
     if mot:
         st.info(mot)
@@ -199,7 +207,6 @@ def render_scoped_self_check_quiz(
                 st.caption(expl)
 
     total = len([x for x in questions if isinstance(x, dict)])
-    quiz_hash = hashlib.md5(str(questions).encode()).hexdigest()[:12]
     if submitted_count > 0:
         pct = int(100 * correct_submissions / submitted_count) if submitted_count else 0
         if pct >= 80:
@@ -422,3 +429,15 @@ def _render_quiz_checkpoint_if_due(
         weak_concept=ctx.weak_concepts[0] if ctx.weak_concepts else None,
         plan_block=plan_block,
     )
+
+
+def _reset_quiz_state_for_source(source_key: str) -> None:
+    """Clear stale quiz answer/results when quiz content hash changes."""
+    for i in range(20):
+        st.session_state.pop(f"{source_key}_result_{i}", None)
+        st.session_state.pop(f"{source_key}_scoped_{i}", None)
+        st.session_state.pop(f"{source_key}_submit_{i}", None)
+        st.session_state.pop(f"{source_key}_hint_{i}", None)
+    st.session_state.pop(f"{source_key}_completion_metric_emitted", None)
+    st.session_state.pop(f"{source_key}_next_cta_route", None)
+    st.session_state.pop(f"{source_key}_quiz_content_hash", None)

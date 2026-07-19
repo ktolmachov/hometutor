@@ -31,11 +31,13 @@ class TestCheckpointSourceContracts:
         assert '"question"' not in src
         assert '"answer"' not in src
 
-    def test_dedupe_uses_instance_uuid_not_static_key(self) -> None:
+    def test_dedupe_uses_stable_instance_uuid(self) -> None:
         src = (Path("app/ui/checkpoint.py")).read_text(encoding="utf-8")
         assert "_emitted_checkpoint_instances" in src
         assert "_CHECKPOINT_INSTANCE_KEY" in src
-        assert "str(uuid.uuid4())" in src
+        fn_body = src.split("def store_checkpoint_context")[1].split("\ndef ")[0]
+        assert 'if not instance_id:' in fn_body
+        assert "uuid.uuid4()" in fn_body
 
     def test_manual_button_distinct_from_finish(self) -> None:
         src = (Path("app/ui/checkpoint.py")).read_text(encoding="utf-8")
@@ -76,11 +78,11 @@ class TestCheckpointSourceContracts:
 # ---------------------------------------------------------------------------
 
 class TestCheckpointContext:
-    def test_store_context_generates_fresh_uuid(self, monkeypatch) -> None:
+    def test_store_context_reuses_uuid_on_rerender(self, monkeypatch) -> None:
         import streamlit as st
         monkeypatch.setattr(st, "session_state", {})
 
-        from app.ui.checkpoint import store_checkpoint_context, load_checkpoint_context
+        from app.ui.checkpoint import store_checkpoint_context
 
         store_checkpoint_context(topic_hint="x")
         id1 = st.session_state.get("_checkpoint_instance_id")
@@ -88,7 +90,7 @@ class TestCheckpointContext:
 
         store_checkpoint_context(topic_hint="y")
         id2 = st.session_state.get("_checkpoint_instance_id")
-        assert id1 != id2
+        assert id1 == id2, "UUID must be stable across rerenders (not fresh each call)"
 
     def test_store_load_clear_full_cycle(self, monkeypatch) -> None:
         import streamlit as st
@@ -228,20 +230,20 @@ class TestCheckpointIntegrationCoverage:
 # ---------------------------------------------------------------------------
 
 class TestReturnViewDynamic:
-    def test_tutor_return_view_reads_current_view(self) -> None:
+    def test_tutor_return_view_uses_breadcrumb(self) -> None:
         src = (Path("app/ui/tutor_chat_session.py")).read_text(encoding="utf-8")
         fn_body = src.split("def _render_tutor_checkpoint")[1].split("\ndef ")[0]
-        assert 'return_view=st.session_state.get("current_view"' in fn_body
+        assert "home_breadcrumb_origin" in fn_body
 
     def test_quiz_return_view_reads_current_view(self) -> None:
         src = (Path("app/ui/scoped_quiz.py")).read_text(encoding="utf-8")
         fn_body = src.split("def _render_quiz_checkpoint_if_due")[1].split("\ndef ")[0]
         assert 'return_view=st.session_state.get("current_view"' in fn_body
 
-    def test_micro_quiz_return_view_reads_current_view(self) -> None:
+    def test_micro_quiz_return_view_uses_breadcrumb(self) -> None:
         src = (Path("app/ui/tutor_chat_quiz.py")).read_text(encoding="utf-8")
         fn_body = src.split("def _render_micro_quiz_checkpoint")[1].split("\ndef ")[0]
-        assert 'return_view=st.session_state.get("current_view"' in fn_body
+        assert "home_breadcrumb_origin" in fn_body
 
     def test_flashcards_return_view_reads_current_view(self) -> None:
         src = (Path("app/ui/flashcards_review_view.py")).read_text(encoding="utf-8")
@@ -274,6 +276,40 @@ class TestSingleRouteSurface:
     def test_dead_code_removed(self) -> None:
         src = (Path("app/ui/tutor_chat_quiz.py")).read_text(encoding="utf-8")
         assert "def _render_smart_study_after_failed_quiz" not in src
+
+
+# ---------------------------------------------------------------------------
+# Quiz content hash — state reset on new quiz
+# ---------------------------------------------------------------------------
+
+class TestQuizContentHash:
+    def test_scoped_quiz_has_content_hash_reset(self) -> None:
+        src = (Path("app/ui/scoped_quiz.py")).read_text(encoding="utf-8")
+        assert "_quiz_content_hash" in src
+        assert "_reset_quiz_state_for_source" in src
+
+    def test_reset_clears_results_and_answers(self) -> None:
+        src = (Path("app/ui/scoped_quiz.py")).read_text(encoding="utf-8")
+        fn_body = src.split("def _reset_quiz_state_for_source")[1].split("\ndef ")[0]
+        assert "_result_" in fn_body
+        assert "_scoped_" in fn_body
+        assert "completion_metric_emitted" in fn_body
+
+
+# ---------------------------------------------------------------------------
+# Tutor breadcrumb for return_view
+# ---------------------------------------------------------------------------
+
+class TestTutorBreadcrumb:
+    def test_tutor_uses_home_breadcrumb_origin(self) -> None:
+        src = (Path("app/ui/tutor_chat_session.py")).read_text(encoding="utf-8")
+        fn_body = src.split("def _render_tutor_checkpoint")[1].split("\ndef ")[0]
+        assert "home_breadcrumb_origin" in fn_body
+
+    def test_micro_quiz_uses_home_breadcrumb_origin(self) -> None:
+        src = (Path("app/ui/tutor_chat_quiz.py")).read_text(encoding="utf-8")
+        fn_body = src.split("def _render_micro_quiz_checkpoint")[1].split("\ndef ")[0]
+        assert "home_breadcrumb_origin" in fn_body
 
 
 # ---------------------------------------------------------------------------

@@ -559,7 +559,10 @@ def _render_micro_quiz_checkpoint(
         rec,
         surface="tutor",
         origin="tutor",
-        return_view=st.session_state.get("current_view", "Mission Control"),
+        return_view=st.session_state.get(
+            "home_breadcrumb_origin",
+            st.session_state.get("current_view", "Mission Control"),
+        ),
         key_prefix=key_prefix,
         tutor_session_id=session_id,
         tutor_topic=ctx.tutor_topic or topic,
